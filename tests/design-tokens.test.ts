@@ -30,6 +30,9 @@ const TEXT_PAIRS: Array<[text: string, background: string]> = [
   ["fg-on-nav-current", "nav-current"],
   ["surface", "fg"], // tooltip
   ["neutral", "neutral-subtle"], // status badge
+  ["success", "success-subtle"], // status badge: connected
+  ["warning", "warning-subtle"], // status badge: needs attention
+  ["warning", "surface"],
   ["danger", "surface"], // error message
   ["fg-on-nav-warning", "nav"], // error message on the sidebar
   ["fg-on-nav-warning", "nav-hover"],

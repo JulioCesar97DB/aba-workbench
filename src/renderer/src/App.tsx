@@ -2,6 +2,7 @@ import { CSPProvider } from "@base-ui/react/csp-provider";
 import { createHashRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
 import { AppInfoProvider } from "./app-info.tsx";
+import { ConnectionsProvider } from "./connections.tsx";
 import { TooltipProvider } from "./components/Tooltip.tsx";
 import { CaseIndex, CaseRoute, ReportScreen, ReportSectionScreen, StepScreen } from "./screens/Case.tsx";
 import { DevCheck } from "./screens/DevCheck.tsx";
@@ -49,9 +50,11 @@ export function App() {
     // Base UI's own <style> tags would break the content security policy; none is needed.
     <CSPProvider disableStyleElements>
       <AppInfoProvider>
-        <TooltipProvider>
-          <RouterProvider router={router} />
-        </TooltipProvider>
+        <ConnectionsProvider>
+          <TooltipProvider>
+            <RouterProvider router={router} />
+          </TooltipProvider>
+        </ConnectionsProvider>
       </AppInfoProvider>
     </CSPProvider>
   );

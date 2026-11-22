@@ -8,6 +8,7 @@ import { CASE_STEPS, casePath, StepLabel } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { NavItem, SectionNavItem } from "../components/NavItem.tsx";
 import { Tooltip } from "../components/Tooltip.tsx";
+import { useConnections } from "../connections.tsx";
 import { useLanguage } from "../language.tsx";
 import { Eyebrow } from "./WorkArea.tsx";
 
@@ -119,6 +120,36 @@ function SidebarFrame({ top, children, footerExtra }: { top: ReactNode; children
   );
 }
 
+/**
+ * The AI connections in one line, from the same state as Settings, linking there. A
+ * connection that needs attention (a sign-in that ended, a key Anthropic refuses) says so.
+ */
+function AiConnectionStatus() {
+  const { t } = useTranslation();
+  const { connections } = useConnections();
+  const chatgpt = connections?.problem ? null : connections?.chatgpt.state;
+  const claude = connections?.problem ? null : connections?.claude.state;
+  const attention = chatgpt === "needs-attention" || claude === "needs-attention";
+  const label = attention
+    ? t("ai.needsAttention")
+    : chatgpt === "connected" && claude === "connected"
+      ? t("ai.connectedBoth")
+      : chatgpt === "connected"
+        ? t("ai.connectedChatgpt")
+        : claude === "connected"
+          ? t("ai.connectedClaude")
+          : t("ai.notConnected");
+  return (
+    <Link
+      to="/settings"
+      data-testid="ai-status"
+      className={`rounded-sm underline-offset-2 hover:underline ${attention ? "font-medium text-fg-on-nav-warning" : "text-fg-on-nav-muted"}`}
+    >
+      {label}
+    </Link>
+  );
+}
+
 function SidebarFooter({ extra }: { extra?: ReactNode }) {
   const { t } = useTranslation();
   const { language, savedLanguage, changeLanguage } = useLanguage();
@@ -131,7 +162,7 @@ function SidebarFooter({ extra }: { extra?: ReactNode }) {
     <div className="flex flex-col gap-2">
       {extra}
       <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-fg-on-nav-muted">
-        <span>{t("ai.notConnected")}</span>
+        <AiConnectionStatus />
         <div role="group" aria-label={t("nav.languageLabel")} className="flex gap-0.5">
           {SWITCH_ORDER.map((option) => (
             <Tooltip key={option} content={t(`languages.${option}`)} lang={option}>
