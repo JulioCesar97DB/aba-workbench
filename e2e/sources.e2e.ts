@@ -580,7 +580,7 @@ test("a change that could not be saved is still reported after a reload, and Try
   }
 });
 
-test("the packaged app's menu has no Reload or developer tools, and keeps Edit (owner's decision)", async ({ app }, testInfo) => {
+test("the packaged app's menu has no Reload or developer tools, its window cannot open them, and it keeps Edit (owner's decision)", async ({ app }, testInfo) => {
   const page = await app.firstWindow();
   await expect(heading(page)).toBeVisible();
   const menu = await app.evaluate(({ Menu }) => {
@@ -602,6 +602,14 @@ test("the packaged app's menu has no Reload or developer tools, and keeps Edit (
     for (const role of developmentOnly) expect(menu.roles).not.toContain(role);
     expect(menu.accelerators.filter((key) => /\+R$/i.test(key))).toEqual([]);
     if (process.platform === "darwin") expect(menu.roles).toContain("about");
+    // Not by any path: the window's developer tools are switched off, so even the main process cannot open them.
+    const devTools = await app.evaluate(async ({ BrowserWindow }) => {
+      const contents = BrowserWindow.getAllWindows()[0].webContents;
+      contents.openDevTools();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return contents.isDevToolsOpened();
+    });
+    expect(devTools).toBe(false);
   } else {
     // A development build keeps them.
     for (const role of developmentOnly) expect(menu.roles).toContain(role);

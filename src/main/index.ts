@@ -164,6 +164,8 @@ function createWindow(): void {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // No developer tools in the packaged app, by any path (owner's decision, 2026-11-22; src/main/app-menu.ts).
+      devTools: !app.isPackaged,
     },
   });
   mainWindow = window;
