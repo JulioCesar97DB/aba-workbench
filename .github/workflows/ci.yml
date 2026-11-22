@@ -47,6 +47,14 @@ jobs:
           # Only runs on dev and main save the store; pull requests restore it.
           save-cache: ${{ github.event_name == 'push' }}
 
+      # Shows which Node.js and pnpm the later steps use, so the log proves that
+      # the version from .nvmrc, not the runner's preinstalled one, runs them.
+      - name: Show Node.js and pnpm versions
+        run: |
+          command -v node
+          node --version
+          pnpm --version
+
       - name: Lint
         run: pnpm lint
 
