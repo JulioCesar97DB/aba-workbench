@@ -1,9 +1,26 @@
+# dependencies
 node_modules/
+.pnp
+.pnp.*
+
+# next.js
 .next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# env files: keys live only in .env.local, never committed
 .env
 .env.*
 !.env.example
+
+# vercel
+.vercel
+
+# misc
 .DS_Store
-out/
+*.pem
 coverage/
 *.log
+tmp/
