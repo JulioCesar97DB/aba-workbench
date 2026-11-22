@@ -26,10 +26,6 @@ export const SECTIONS = {
 
 export type SectionId = keyof typeof SECTIONS;
 
-export function isSectionId(value: unknown): value is SectionId {
-  return typeof value === "string" && Object.hasOwn(SECTIONS, value);
-}
-
 interface RulesFile {
   id: string;
   version: string;

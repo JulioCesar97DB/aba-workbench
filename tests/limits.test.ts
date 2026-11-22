@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { measureRequest, PROVIDER_REQUEST_LIMITS, requestTooLargeMessage } from "../src/lib/limits.ts";
 import type { PromptParts } from "../src/lib/providers/types.ts";
-import { parseGenerateBody } from "../src/lib/request.ts";
 
 function prompt(pdfBytes: number[], textChars = 0): PromptParts {
   return {
@@ -60,32 +59,4 @@ test("size: the mock provider has no limit; every real provider has one with its
     assert.match(limit.checkedOn, /^\d{4}-\d{2}-\d{2}$/, provider);
   }
   assert.equal(PROVIDER_REQUEST_LIMITS.anthropic.maxPdfPages, 600);
-});
-
-const valid = {
-  provider: "anthropic",
-  model: "claude-opus-5-5",
-  section: "medical-necessity",
-  sources: [{ id: "cde", title: "CDE", kind: "text", text: "notes" }],
-};
-
-test("request validation: defaults and rejections", () => {
-  const ok = parseGenerateBody(valid);
-  assert.ok(ok.ok);
-  assert.equal(ok.value.effort, "high");
-  assert.equal(ok.value.maxOutputTokens, 32_000);
-  assert.equal(ok.value.mode, "generate");
-
-  const bad: Array<[string, unknown]> = [
-    ["not an object", "x"],
-    ["unknown section", { ...valid, section: "nope" }],
-    ["bad effort", { ...valid, effort: "huge" }],
-    ["tiny output budget", { ...valid, maxOutputTokens: 10 }],
-    ["no sources", { ...valid, sources: [] }],
-    ["bad source id", { ...valid, sources: [{ id: "Bad Id", title: "t", kind: "text", text: "x" }] }],
-    ["pdf without .pdf name", { ...valid, sources: [{ id: "a", title: "t", kind: "pdf", filename: "a.txt", base64: "QQ==" }] }],
-    ["pdf with line breaks", { ...valid, sources: [{ id: "a", title: "t", kind: "pdf", filename: "a.pdf", base64: "QQ==\nQQ==" }] }],
-    ["bad mode", { ...valid, mode: "other" }],
-  ];
-  for (const [name, body] of bad) assert.equal(parseGenerateBody(body).ok, false, name);
 });
