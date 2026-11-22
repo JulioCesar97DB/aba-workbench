@@ -6,6 +6,17 @@ import { IPC_CHANNELS, type AbaApi, type Connections, type GenerationUpdate } fr
  * nothing else: never ipcRenderer itself, and never an IPC event object (whose sender
  * would hand the interface a way to send any message).
  */
+/*
+ * The main process asks for the interface's saves before the window closes
+ * (src/main/close-guard.ts). The preload always answers, at once when the interface has
+ * not set its listener (nothing of it is loaded, so nothing is waiting).
+ */
+let flushListener: (() => Promise<{ ok: boolean }>) | null = null;
+ipcRenderer.on(IPC_CHANNELS.flushSaves, (_event, requestId: unknown) => {
+  const flushing = flushListener ? flushListener().then((result) => ({ ok: result.ok === true }), () => ({ ok: false })) : Promise.resolve({ ok: true });
+  void flushing.then((result) => ipcRenderer.send(IPC_CHANNELS.savesFlushed, requestId, result));
+});
+
 const api: AbaApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getAppInfo),
   startMockGeneration: (generationId) => ipcRenderer.invoke(IPC_CHANNELS.startMockGeneration, generationId),
@@ -36,6 +47,23 @@ const api: AbaApi = {
     ipcRenderer.on(IPC_CHANNELS.connectionsChanged, handler);
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.connectionsChanged, handler);
+    };
+  },
+  addTextSource: (caseId, input) => ipcRenderer.invoke(IPC_CHANNELS.addTextSource, caseId, input),
+  changeSource: (caseId, sourceId, change) => ipcRenderer.invoke(IPC_CHANNELS.changeSource, caseId, sourceId, change),
+  removeSource: (caseId, sourceId) => ipcRenderer.invoke(IPC_CHANNELS.removeSource, caseId, sourceId),
+  restoreSource: (caseId, sourceId) => ipcRenderer.invoke(IPC_CHANNELS.restoreSource, caseId, sourceId),
+  readSourceText: (caseId, sourceId) => ipcRenderer.invoke(IPC_CHANNELS.readSourceText, caseId, sourceId),
+  choosePdfs: (caseId) => ipcRenderer.invoke(IPC_CHANNELS.choosePdfs, caseId),
+  addDroppedPdf: (caseId, pdf) => ipcRenderer.invoke(IPC_CHANNELS.addDroppedPdf, caseId, pdf),
+  addFolderPdf: (caseId, fileName) => ipcRenderer.invoke(IPC_CHANNELS.addFolderPdf, caseId, fileName),
+  openSourcePdf: (caseId, sourceId) => ipcRenderer.invoke(IPC_CHANNELS.openSourcePdf, caseId, sourceId),
+  listFailedSaves: () => ipcRenderer.invoke(IPC_CHANNELS.listFailedSaves),
+  retryFailedSave: (id) => ipcRenderer.invoke(IPC_CHANNELS.retryFailedSave, id),
+  onFlushSaves: (listener) => {
+    flushListener = listener;
+    return () => {
+      if (flushListener === listener) flushListener = null;
     };
   },
   onGenerationUpdate: (listener) => {

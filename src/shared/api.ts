@@ -1,4 +1,5 @@
 import type { GenerationEvent } from "../lib/generation-events.ts";
+import type { AddPdfsResult, CaseSources, DroppedPdf, FailedSave, NewTextSource, ReadSourceTextResult, SourceChange, SourceSaveResult } from "./sources.ts";
 
 /*
  * The contract between the interface (renderer) and the main process. The preload
@@ -120,6 +121,8 @@ export interface CaseFile {
 /** An opened case. */
 export interface CaseDetail extends CaseSummary {
   files: CaseFile[];
+  /** Its sources (src/shared/sources.ts), and the PDFs in its folder again. */
+  sources: CaseSources;
 }
 
 /**
@@ -352,6 +355,39 @@ export interface AbaApi {
    * and starts with no saved connections. The interface asks the user to confirm first.
    */
   startOverConnections(): Promise<StartOverResult>;
+  /*
+   * A case's sources (src/shared/sources.ts). Each change is saved at once and answers
+   * with the case's sources as saved. Nothing is deleted: removing a source marks it.
+   */
+  /** Adds a pasted text. */
+  addTextSource(caseId: string, input: NewTextSource): Promise<SourceSaveResult>;
+  /** Changes a source's type, title, date or (a pasted text's) text. */
+  changeSource(caseId: string, sourceId: string, change: SourceChange): Promise<SourceSaveResult>;
+  /** Removes a source from the case (marked removed; its text and its PDF are kept). */
+  removeSource(caseId: string, sourceId: string): Promise<SourceSaveResult>;
+  /** Makes a removed source one of the case's sources again. */
+  restoreSource(caseId: string, sourceId: string): Promise<SourceSaveResult>;
+  /** A pasted text's whole text. */
+  readSourceText(caseId: string, sourceId: string): Promise<ReadSourceTextResult>;
+  /** Opens the system's file dialog; the PDFs chosen are copied into the case's folder and added. */
+  choosePdfs(caseId: string): Promise<AddPdfsResult>;
+  /** Copies a PDF dropped onto the window (its bytes, never a path) into the case's folder and adds it. */
+  addDroppedPdf(caseId: string, pdf: DroppedPdf): Promise<AddPdfsResult>;
+  /** Adds a PDF already in the case's folder (put there in Finder or Explorer) as a source. */
+  addFolderPdf(caseId: string, fileName: string): Promise<AddPdfsResult>;
+  /** Opens a PDF source's copy in the system's PDF viewer. False when it is not in the folder any more. */
+  openSourcePdf(caseId: string, sourceId: string): Promise<boolean>;
+  /**
+   * Before the window closes or the app quits, the main process asks the interface to
+   * save everything still waiting; `listener` answers once nothing is under way, `ok`
+   * false when a change could not be saved (src/main/close-guard.ts). Returns the
+   * function that stops listening.
+   */
+  onFlushSaves(listener: () => Promise<{ ok: boolean }>): () => void;
+  /** The changes to sources that could not be saved, kept by the main process while the app runs (a reload does not forget them). */
+  listFailedSaves(): Promise<FailedSave[]>;
+  /** Runs a change that could not be saved again. */
+  retryFailedSave(id: string): Promise<SourceSaveResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -381,6 +417,19 @@ export const IPC_CHANNELS = {
   openChatGptUsage: "connections:chatgpt-usage",
   dismissChatGptWelcome: "connections:chatgpt-welcome-seen",
   startOverConnections: "connections:start-over",
+  addTextSource: "sources:add-text",
+  changeSource: "sources:change",
+  removeSource: "sources:remove",
+  restoreSource: "sources:restore",
+  readSourceText: "sources:read-text",
+  choosePdfs: "sources:choose-pdfs",
+  addDroppedPdf: "sources:add-dropped-pdf",
+  addFolderPdf: "sources:add-folder-pdf",
+  openSourcePdf: "sources:open-pdf",
+  flushSaves: "saves:flush",
+  savesFlushed: "saves:flushed",
+  listFailedSaves: "saves:list-failed",
+  retryFailedSave: "saves:retry-failed",
 } as const;
 
 /** Generation ids are UUIDs (crypto.randomUUID()); anything else is refused. */

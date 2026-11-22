@@ -8,6 +8,8 @@ import { CaseIndex, CaseRoute, ReportScreen, ReportSectionScreen, StepScreen } f
 import { DevCheck } from "./screens/DevCheck.tsx";
 import { Home } from "./screens/Home.tsx";
 import { NotFound } from "./screens/NotFound.tsx";
+import { SourcesScreen } from "./screens/Sources.tsx";
+import { SourceTextScreen } from "./screens/SourceText.tsx";
 import { SettingsScreen } from "./screens/Settings.tsx";
 import { AppShell } from "./shell/AppShell.tsx";
 
@@ -31,7 +33,9 @@ const router = createHashRouter([
         element: <CaseRoute />,
         children: [
           { index: true, element: <CaseIndex /> },
-          { path: "sources", element: <StepScreen step="sources" /> },
+          { path: "sources", element: <SourcesScreen /> },
+          { path: "sources/text/:sourceId", element: <SourceTextScreen /> },
+          { path: "sources/new/:type", element: <SourceTextScreen /> },
           { path: "behaviors", element: <StepScreen step="behaviors" /> },
           { path: "interventions", element: <StepScreen step="interventions" /> },
           { path: "report", element: <ReportScreen /> },

@@ -11,6 +11,16 @@ export function casePath(caseId: string, step: CaseStep = "sources", sectionId?:
   return sectionId ? `/cases/${caseId}/${step}/${sectionId}` : `/cases/${caseId}/${step}`;
 }
 
+/** A pasted text of the case, to read and edit. */
+export function sourceTextPath(caseId: string, sourceId: string): string {
+  return `/cases/${caseId}/sources/text/${sourceId}`;
+}
+
+/** A new pasted text of a type. */
+export function newTextPath(caseId: string, type: string): string {
+  return `/cases/${caseId}/sources/new/${type}`;
+}
+
 /** Behaviors and Interventions are clinical terms: English in both languages. */
 const ENGLISH_STEPS: Partial<Record<CaseStep, string>> = {
   behaviors: TERMS.behaviors,

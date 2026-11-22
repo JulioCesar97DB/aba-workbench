@@ -15,7 +15,23 @@ import {
   type UnreadableFolder,
   type UnreadableReason,
 } from "../shared/api.ts";
+import { guessPdfType, MAX_SOURCES, type AddPdfsResult, type CaseSources, type PdfProblem, type ReadSourceTextResult, type SourceSaveResult } from "../shared/sources.ts";
 import { CASE_FILE_NAME, ClientAgeSchema, MAX_CASE_FILE_BYTES, MAX_LISTED_FILES, newCaseData, nextUpdatedAt, readCaseFile, serializeCaseFile, type CaseData } from "./case-file.ts";
+import { checkDroppedPdf, copyPdfIntoFolder, findSamePdf, isPdfFile, readChosenPdf, type LoadedPdf } from "./case-pdfs.ts";
+import {
+  addPdfSource,
+  addTextSource,
+  caseSources,
+  changeSource,
+  DroppedPdfSchema,
+  FolderPdfNameSchema,
+  NewTextSourceSchema,
+  setRemoved,
+  SourceChangeSchema,
+  SourceIdSchema,
+  SourceInputError,
+  sourceText,
+} from "./case-sources.ts";
 import { caseFolderNames } from "./case-folder-name.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { finishInterruptedSave, isLeftBehind, isTemporaryFileOf, writeFileDurably } from "./durable-write.ts";
@@ -175,6 +191,37 @@ function newestFirst(a: { data: CaseData; name: string }, b: { data: CaseData; n
   return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
 }
 
+/** What withCase found: the case could not be used, nothing was saved (with work's answer), it was saved, or saving failed. */
+type CaseWork<T> =
+  | { kind: "unavailable" }
+  | { kind: "unchanged"; value: T; sources: CaseSources }
+  | { kind: "saved"; sources: CaseSources }
+  | { kind: "failed"; outcome: "not-saved" | "case-full"; sources: CaseSources };
+
+function checkCaseId(caseId: unknown): string {
+  if (!isCaseId(caseId)) throw new Error("Refused: not a case id.");
+  return caseId;
+}
+
+function checkSourceId(sourceId: unknown): string {
+  if (!SourceIdSchema.safeParse(sourceId).success) throw new Error("Refused: not a source id.");
+  return sourceId as string;
+}
+
+/** Adding PDFs: what was added and what was not, with the case's sources as they are now. */
+function pdfsOutcome(result: CaseWork<null>, added: string[], problems: Array<{ name: string; problem: PdfProblem }>, copied: string[] = []): AddPdfsResult {
+  switch (result.kind) {
+    case "saved":
+    case "unchanged":
+      return { outcome: "done", sources: result.sources, added: result.kind === "saved" ? added : [], problems };
+    case "failed":
+      // A copy stays in the folder (nothing is deleted): say where it is.
+      return copied.length > 0 ? { outcome: "copied-not-added", files: copied, sources: result.sources } : { outcome: result.outcome };
+    default:
+      return { outcome: "case-unavailable" };
+  }
+}
+
 export class CaseLibrary {
   /** Each case's folder, by id, as last listed, and the cases folder that listing read. */
   private folders = new Map<string, string>();
@@ -183,6 +230,33 @@ export class CaseLibrary {
   private unreadableNames = new Set<string>();
   /** Saves of one case run one after another. */
   private queues = new Map<string, Promise<unknown>>();
+  /** Changes to one case's sources, by case id, in the order they were asked for (withCase). */
+  private caseCalls = new Map<string, Promise<unknown>>();
+  /** Case work under way or waiting: saves, changes to sources, PDFs being copied. */
+  private active = 0;
+  /** Each case's label, as last read: what a change that could not be saved is shown under. */
+  private labels = new Map<string, string>();
+
+  /** A case's label as last read, or null. */
+  labelOf(caseId: string): string | null {
+    return this.labels.get(caseId) ?? null;
+  }
+
+  /** Whether case work is under way: quitting waits for it (src/main/index.ts). */
+  get busy(): boolean {
+    return this.active > 0;
+  }
+
+  /** Resolves true once no case work is under way, or false after `timeoutMs`. */
+  async idle(timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (this.active > 0) {
+      const left = deadline - Date.now();
+      if (left <= 0) return false;
+      await Promise.race([Promise.allSettled([...this.caseCalls.values(), ...this.queues.values()]), new Promise((resolve) => setTimeout(resolve, Math.min(left, 50)))]);
+    }
+    return true;
+  }
   private readonly options: Required<CaseLibraryOptions>;
 
   constructor(options: CaseLibraryOptions) {
@@ -259,6 +333,7 @@ export class CaseLibrary {
       else if (folders.has(read.data.id)) unreadable.push({ folderName: name, reason: "duplicate" });
       else {
         folders.set(read.data.id, path.join(folder, name));
+        this.labels.set(read.data.id, read.data.label);
         cases.push({ data: read.data, name });
       }
     }
@@ -342,6 +417,7 @@ export class CaseLibrary {
       this.listedFolder = folder;
     }
     this.folders.set(data.id, caseFolder);
+    this.labels.set(data.id, data.label);
     return { outcome: "created", case: caseSummary(data) };
   }
 
@@ -394,7 +470,11 @@ export class CaseLibrary {
         data = { ...data, files: files.map((file) => ({ ...byName.get(file.name), ...file })) };
         data = await this.write(folder, data);
       }
-      const detail: CaseDetail = { ...caseSummary(data), files: data.files.map(({ name, bytes, modifiedAt }) => ({ name, bytes, modifiedAt })) };
+      const detail: CaseDetail = {
+        ...caseSummary(data),
+        files: data.files.map(({ name, bytes, modifiedAt }) => ({ name, bytes, modifiedAt })),
+        sources: caseSources(data, files),
+      };
       return { outcome: "opened", case: detail };
     });
     return result;
@@ -421,6 +501,247 @@ export class CaseLibrary {
       if (saved !== "moved") return saved;
     }
     return null;
+  }
+
+  /*
+   * Sources (src/main/case-sources.ts). Each change runs in the case's save queue: the
+   * data file is read as on disk, changed, and written durably, so two quick changes
+   * never lose one another. The PDFs in the folder are looked at again each time, so the
+   * answer always says which are there.
+   */
+
+  async addTextSource(caseId: unknown, input: unknown): Promise<SourceSaveResult> {
+    const id = checkCaseId(caseId);
+    const parsed = NewTextSourceSchema.safeParse(input);
+    if (!parsed.success) throw new Error("Refused: a pasted text needs a known type, a text, and optionally a title and a date.");
+    const sourceId = this.options.newId();
+    return this.saveSource(id, sourceId, (data, now) => addTextSource(data, parsed.data, { id: sourceId, now }));
+  }
+
+  async changeSource(caseId: unknown, sourceId: unknown, change: unknown): Promise<SourceSaveResult> {
+    const id = checkCaseId(caseId);
+    const source = checkSourceId(sourceId);
+    const parsed = SourceChangeSchema.safeParse(change);
+    if (!parsed.success) throw new Error("Refused: a change gives a known type, a title, a date or a text.");
+    return this.saveSource(id, source, (data, now) => changeSource(data, source, parsed.data, now));
+  }
+
+  /** Removes a source from the case (`removed`), or restores it: only a mark, nothing is deleted. */
+  async setSourceRemoved(caseId: unknown, sourceId: unknown, removed: boolean): Promise<SourceSaveResult> {
+    const id = checkCaseId(caseId);
+    const source = checkSourceId(sourceId);
+    return this.saveSource(id, source, (data, now) => setRemoved(data, source, removed, now));
+  }
+
+  async readSourceText(caseId: unknown, sourceId: unknown): Promise<ReadSourceTextResult> {
+    const id = checkCaseId(caseId);
+    const source = checkSourceId(sourceId);
+    const result = await this.withCase(id, async (data) => ({ save: null, value: sourceText(data, source) }));
+    if (result.kind !== "unchanged") return { outcome: "case-unavailable" };
+    return result.value === null ? { outcome: "source-not-found" } : { outcome: "read", text: result.value };
+  }
+
+  /**
+   * Copies PDFs into the case's folder and adds each as a source, in one save. Each
+   * PDF's bytes are loaded only once the case's queue reaches them. A PDF whose exact
+   * bytes are already in the folder is not copied again: it becomes a source if no source
+   * uses that file, and is reported as already added (or removed) otherwise.
+   */
+  async addPdfs(caseId: unknown, pdfs: ReadonlyArray<{ name: string; load: () => Promise<LoadedPdf> }>): Promise<AddPdfsResult> {
+    const id = checkCaseId(caseId);
+    const added: string[] = [];
+    const copied: string[] = [];
+    const problems: Array<{ name: string; problem: PdfProblem }> = [];
+    const result = await this.withCase(id, async (data, folder, files) => {
+      let next = data;
+      const now = this.nextTime(data);
+      let known = files;
+      for (const pdf of pdfs) {
+        const loaded = await pdf.load();
+        if (!loaded.ok) {
+          problems.push({ name: pdf.name, problem: loaded.problem });
+          continue;
+        }
+        if (next.sources.length >= MAX_SOURCES) {
+          problems.push({ name: pdf.name, problem: "too-many-sources" });
+          continue;
+        }
+        const same = await findSamePdf(folder, loaded.bytes, known);
+        const user = same === null ? undefined : next.sources.find((source) => source.kind === "pdf" && source.file === same);
+        if (user) {
+          problems.push({ name: pdf.name, problem: user.removedAt ? "already-removed" : "already-added" });
+          continue;
+        }
+        let fileName = same;
+        if (fileName === null) {
+          try {
+            fileName = await copyPdfIntoFolder(folder, pdf.name, loaded.bytes);
+            copied.push(fileName);
+          } catch (error) {
+            this.options.log(`A PDF could not be copied into a case (${(error as Error).message}).`);
+            problems.push({ name: pdf.name, problem: "not-copied" });
+            continue;
+          }
+          known = [...known, { name: fileName, bytes: loaded.bytes.byteLength, modifiedAt: now }];
+        }
+        const sourceId = this.options.newId();
+        next = addPdfSource(next, { id: sourceId, file: fileName, bytes: loaded.bytes.byteLength, type: guessPdfType(pdf.name), now });
+        added.push(sourceId);
+      }
+      return { save: added.length > 0 ? next : null, value: null };
+    });
+    return pdfsOutcome(result, added, problems, copied);
+  }
+
+  /** PDFs the user chose in the system's dialog: read, never changed. */
+  async addChosenPdfs(caseId: unknown, files: readonly string[]): Promise<AddPdfsResult> {
+    return this.addPdfs(
+      caseId,
+      files.map((file) => ({ name: path.basename(file), load: () => readChosenPdf(file) })),
+    );
+  }
+
+  /** A PDF dropped onto the window: its name and bytes, checked here again. */
+  async addDroppedPdf(caseId: unknown, pdf: unknown): Promise<AddPdfsResult> {
+    const parsed = DroppedPdfSchema.safeParse(pdf);
+    if (!parsed.success) throw new Error("Refused: a dropped PDF is a name and at most 200 MB of bytes.");
+    const { name, data } = parsed.data;
+    return this.addPdfs(caseId, [{ name, load: async () => checkDroppedPdf(data) }]);
+  }
+
+  /** A PDF already at the top of the case's folder (put there in Finder or Explorer), added as a source as it is. */
+  async addFolderPdf(caseId: unknown, fileName: unknown): Promise<AddPdfsResult> {
+    const id = checkCaseId(caseId);
+    const parsed = FolderPdfNameSchema.safeParse(fileName);
+    if (!parsed.success) throw new Error("Refused: not a file name.");
+    const name = parsed.data;
+    const added: string[] = [];
+    const problems: Array<{ name: string; problem: PdfProblem }> = [];
+    const result = await this.withCase(id, async (data, folder, files) => {
+      const refuse = (problem: PdfProblem) => {
+        problems.push({ name, problem });
+        return { save: null, value: null };
+      };
+      const entry = files.find((file) => file.name === name);
+      if (!entry) return refuse("cannot-read");
+      const user = data.sources.find((source) => source.kind === "pdf" && source.file === name);
+      if (user) return refuse(user.removedAt ? "already-removed" : "already-added");
+      if (data.sources.length >= MAX_SOURCES) return refuse("too-many-sources");
+      // Read only to check it is a PDF; the file stays exactly as it is.
+      const loaded = await readChosenPdf(path.join(folder, name));
+      if (!loaded.ok) return refuse(loaded.problem);
+      const sourceId = this.options.newId();
+      added.push(sourceId);
+      return { save: addPdfSource(data, { id: sourceId, file: name, bytes: loaded.bytes.byteLength, type: guessPdfType(name), now: this.nextTime(data) }), value: null };
+    });
+    return pdfsOutcome(result, added, problems);
+  }
+
+  /**
+   * The path of a PDF source's copy, to open it in the system's viewer: only a plain
+   * file at the top of the case's folder, named ".pdf", whose first bytes are a PDF's.
+   * A data file copied or received from elsewhere could name any file ("report.command"),
+   * which the system would run rather than show; such a file is never handed over.
+   */
+  async sourcePdfPath(caseId: unknown, sourceId: unknown): Promise<string | null> {
+    const id = checkCaseId(caseId);
+    const source = checkSourceId(sourceId);
+    const result = await this.withCase(id, async (data, folder) => {
+      const entry = data.sources.find((item) => item.id === source);
+      if (entry?.kind !== "pdf" || !/\.pdf$/i.test(entry.file)) return { save: null, value: null };
+      const file = path.join(folder, entry.file);
+      if (path.dirname(file) !== folder) return { save: null, value: null };
+      return { save: null, value: (await isPdfFile(file)) ? file : null };
+    });
+    return result.kind === "unchanged" ? result.value : null;
+  }
+
+  /** The time a change records: now, or a millisecond after the case's last save if the clock says otherwise. */
+  private nextTime(data: CaseData): string {
+    return nextUpdatedAt(data.updatedAt, this.options.now());
+  }
+
+  /** One change to one source, saved, answered with the case's sources as saved. */
+  private async saveSource(caseId: string, sourceId: string, change: (data: CaseData, now: string) => CaseData | null): Promise<SourceSaveResult> {
+    const result = await this.withCase(caseId, async (data) => {
+      const next = change(data, this.nextTime(data));
+      return { save: next, value: next === null ? ("source-not-found" as const) : null };
+    });
+    switch (result.kind) {
+      case "saved":
+        return { outcome: "saved", sources: result.sources, sourceId };
+      case "unchanged":
+        return { outcome: "source-not-found" };
+      case "failed":
+        return { outcome: result.outcome };
+      default:
+        return { outcome: "case-unavailable" };
+    }
+  }
+
+  /**
+   * Runs `work` on a case as it is on disk now, in its save queue, with its folder and
+   * the PDFs in it. When `work` gives data to save, it is written durably with a new
+   * updatedAt and the PDFs found in the folder (refused, never cut short, when the file
+   * would be larger than MAX_CASE_FILE_BYTES). A case that is gone, damaged, from a newer
+   * version, or in a cases folder that cannot be used, is never written to. An input
+   * `work` refuses (SourceInputError) is thrown as a refusal.
+   */
+  private withCase<T>(caseId: string, work: (data: CaseData, folder: string, files: CaseFile[]) => Promise<{ save: CaseData | null; value: T }>): Promise<CaseWork<T>> {
+    // In line before anything is awaited, so changes run in the order they were asked for:
+    // two quick saves of a text never land older-last.
+    this.active++;
+    const run = (this.caseCalls.get(caseId) ?? Promise.resolve()).then(() => this.withCaseNow(caseId, work)).finally(() => this.active--);
+    this.caseCalls.set(
+      caseId,
+      run.catch(() => undefined),
+    );
+    return run;
+  }
+
+  private async withCaseNow<T>(caseId: string, work: (data: CaseData, folder: string, files: CaseFile[]) => Promise<{ save: CaseData | null; value: T }>): Promise<CaseWork<T>> {
+    const { folder: casesFolder, state } = await this.folderInfo();
+    if (state !== "ready" && state !== "not-writable") return { kind: "unavailable" };
+    for (const relist of [false, true]) {
+      const folder = await this.caseFolder(caseId, casesFolder, { relist });
+      if (!folder) return { kind: "unavailable" };
+      const outcome = await this.queued(folder, async (): Promise<CaseWork<T> | "moved"> => {
+        const read = await readCaseFolder(folder);
+        if (read.kind === "unreadable" && read.reason === "not-a-case") return "moved";
+        if (read.kind === "unreadable") return { kind: "unavailable" };
+        if (read.data.id !== caseId) return "moved";
+        this.labels.set(caseId, read.data.label);
+        const scan = async (fallback: CaseFile[]) => scanCaseFiles(folder).catch(() => fallback);
+        const before = await scan(read.data.files);
+        let done: { save: CaseData | null; value: T };
+        try {
+          done = await work(read.data, folder, before);
+        } catch (error) {
+          if (error instanceof SourceInputError) throw new Error(error.message, { cause: error });
+          throw error;
+        }
+        if (done.save === null) return { kind: "unchanged", value: done.value, sources: caseSources(read.data, before) };
+        // A PDF the work copied in is in the folder now.
+        const files = await scan(before);
+        const byName = new Map(done.save.files.map((file) => [file.name, file]));
+        const next: CaseData = {
+          ...done.save,
+          files: files.map((file) => ({ ...byName.get(file.name), ...file })),
+          updatedAt: nextUpdatedAt(read.data.updatedAt, this.options.now()),
+        };
+        const text = serializeCaseFile(next);
+        if (Buffer.byteLength(text, "utf8") > MAX_CASE_FILE_BYTES) return { kind: "failed", outcome: "case-full", sources: caseSources(read.data, files) };
+        try {
+          await this.options.writeFile(path.join(folder, CASE_FILE_NAME), text);
+        } catch (error) {
+          this.options.log(`A case could not be saved (${(error as Error).message}).`);
+          return { kind: "failed", outcome: "not-saved", sources: caseSources(read.data, files) };
+        }
+        return { kind: "saved", sources: caseSources(next, files) };
+      });
+      if (outcome !== "moved") return outcome;
+    }
+    return { kind: "unavailable" };
   }
 
   /**
@@ -459,7 +780,8 @@ export class CaseLibrary {
   }
 
   private queued<T>(folder: string, work: () => Promise<T>): Promise<T> {
-    const run = (this.queues.get(folder) ?? Promise.resolve()).then(work);
+    this.active++;
+    const run = (this.queues.get(folder) ?? Promise.resolve()).then(work).finally(() => this.active--);
     this.queues.set(
       folder,
       run.catch(() => undefined),

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import {
   IPC_CHANNELS,
+  isCaseId,
   type AppInfo,
   type CaseList,
   type CasesFolderInfo,
@@ -17,7 +18,9 @@ import {
   type Settings,
   type StartOverResult,
 } from "../shared/api.ts";
+import type { AddPdfsResult, FailedSave, ReadSourceTextResult, SourceSaveResult } from "../shared/sources.ts";
 import type { CaseLibrary } from "./cases.ts";
+import type { FailedSaves } from "./failed-saves.ts";
 import type { ConnectionService } from "./connections.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { runDevCheckGeneration } from "./dev-check.ts";
@@ -32,6 +35,8 @@ export function registerIpc(options: {
   rulesDir: string;
   settings: SettingsStore;
   cases: CaseLibrary;
+  /** Changes to sources that could not be saved (src/main/failed-saves.ts); every change goes through it. */
+  failedSaves: FailedSaves;
   connections: ConnectionService;
   isTrustedSender: (event: IpcMainInvokeEvent) => boolean;
 }): void {
@@ -245,6 +250,88 @@ export function registerIpc(options: {
     await shell.openExternal(CHATGPT_USAGE_URL);
   });
 
+  /*
+   * A case's sources. CaseLibrary checks every argument (ids, the change, a dropped
+   * PDF's name and size). The only paths here are the ones the system's file dialog
+   * gives, which the user chose, and the case's own copy of a PDF, to open it.
+   */
+  const sourceCall = <T>(work: () => Promise<T>, message: string): Promise<T> =>
+    work().catch((error: unknown) => {
+      throw safeError(error, message);
+    });
+
+  ipcMain.handle(IPC_CHANNELS.addTextSource, (event, caseId: unknown, input: unknown): Promise<SourceSaveResult> => {
+    assertTrusted(event);
+    return sourceCall(() => options.failedSaves.save(caseId, { kind: "add-text", input }), "The text could not be added.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.changeSource, (event, caseId: unknown, sourceId: unknown, change: unknown): Promise<SourceSaveResult> => {
+    assertTrusted(event);
+    return sourceCall(() => options.failedSaves.save(caseId, { kind: "change", sourceId: sourceId as string, change: change as Record<string, unknown> }), "The source could not be saved.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.removeSource, (event, caseId: unknown, sourceId: unknown): Promise<SourceSaveResult> => {
+    assertTrusted(event);
+    return sourceCall(() => options.failedSaves.save(caseId, { kind: "removed", sourceId: sourceId as string, removed: true }), "The source could not be removed.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.restoreSource, (event, caseId: unknown, sourceId: unknown): Promise<SourceSaveResult> => {
+    assertTrusted(event);
+    return sourceCall(() => options.failedSaves.save(caseId, { kind: "removed", sourceId: sourceId as string, removed: false }), "The source could not be restored.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.listFailedSaves, (event): FailedSave[] => {
+    assertTrusted(event);
+    return options.failedSaves.list();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.retryFailedSave, (event, id: unknown): Promise<SourceSaveResult> => {
+    assertTrusted(event);
+    return sourceCall(() => options.failedSaves.retry(id), "The change could not be saved.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.readSourceText, (event, caseId: unknown, sourceId: unknown): Promise<ReadSourceTextResult> => {
+    assertTrusted(event);
+    return sourceCall(() => options.cases.readSourceText(caseId, sourceId), "The text could not be read.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.choosePdfs, async (event, caseId: unknown): Promise<AddPdfsResult> => {
+    assertTrusted(event);
+    // Refused before any dialog opens.
+    if (!isCaseId(caseId)) throw new Error("Refused: not a case id.");
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { language } = await options.settings.get();
+    const words = PDF_DIALOG[language];
+    const dialogOptions: Electron.OpenDialogOptions = {
+      title: words.title,
+      message: words.title,
+      buttonLabel: words.button,
+      defaultPath: app.getPath("home"),
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+      properties: ["openFile", "multiSelections", "dontAddToRecent"],
+    };
+    const result = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions);
+    if (result.canceled || result.filePaths.length === 0) return { outcome: "cancelled" };
+    return sourceCall(() => options.cases.addChosenPdfs(caseId, result.filePaths.slice(0, 100)), "The PDFs could not be added.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.addDroppedPdf, (event, caseId: unknown, pdf: unknown): Promise<AddPdfsResult> => {
+    assertTrusted(event);
+    return sourceCall(() => options.cases.addDroppedPdf(caseId, pdf), "The PDF could not be added.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.addFolderPdf, (event, caseId: unknown, fileName: unknown): Promise<AddPdfsResult> => {
+    assertTrusted(event);
+    return sourceCall(() => options.cases.addFolderPdf(caseId, fileName), "The PDF could not be added.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.openSourcePdf, async (event, caseId: unknown, sourceId: unknown): Promise<boolean> => {
+    assertTrusted(event);
+    const file = await sourceCall(() => options.cases.sourcePdfPath(caseId, sourceId), "The PDF could not be opened.");
+    if (!file) return false;
+    return (await shell.openPath(file)) === "";
+  });
+
   ipcMain.handle(IPC_CHANNELS.startMockGeneration, (event, generationId: unknown): void => {
     assertTrusted(event);
     const sender = event.sender;
@@ -269,6 +356,12 @@ export function registerIpc(options: {
 
 /** Where ChatGPT shows its usage and each app's access to the user's plan (OpenAI's UI guidelines). */
 export const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
+
+/** The PDF dialog's words, in the screen language. */
+const PDF_DIALOG: Record<Language, { title: string; button: string }> = {
+  en: { title: "Choose PDFs to add to this case", button: "Add" },
+  es: { title: "Elige los PDF que quieres agregar a este caso", button: "Agregar" },
+};
 
 /** The folder dialog's words, in the screen language (the main process draws that dialog). */
 const FOLDER_DIALOG: Record<Language, { title: string; button: string }> = {
