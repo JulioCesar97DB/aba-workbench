@@ -11,11 +11,10 @@ export interface Phase0Args {
   cases: string[] | null;
   budgetUsd: number;
   prewarm: boolean;
-  baseUrl: string | null;
 }
 
 const BOOLEAN_FLAGS = new Set(["mock", "no-prewarm"]);
-const VALUE_FLAGS = new Set(["only", "case", "budget", "base-url"]);
+const VALUE_FLAGS = new Set(["only", "case", "budget"]);
 
 /** Accepts --name=value and --name value; anything unknown or malformed throws. */
 export function parseArgs(argv: string[]): Phase0Args {
@@ -53,7 +52,6 @@ export function parseArgs(argv: string[]): Phase0Args {
     cases: list(values.get("case")),
     budgetUsd,
     prewarm: !flags.has("no-prewarm"),
-    baseUrl: values.get("base-url") ?? null,
   };
 }
 
