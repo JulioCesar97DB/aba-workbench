@@ -99,7 +99,9 @@ export function requestTooLargeMessage(provider: ProviderId, size: RequestSize):
     return `This request is ${megabytes(size.requestBytes)}; ${limit.label}. ${WHAT_TO_DO}`;
   }
   if (size.encodedFileBytes <= limit.maxBytes) return null;
-  return `The PDFs in this request are ${megabytes(size.fileBytes)}, ${megabytes(size.encodedFileBytes)} as sent; ${limit.label}. ${WHAT_TO_DO}`;
+  // Said in this order so the numbers do not seem to contradict the limit: the files may
+  // be under 50 MB on disk and still over it once encoded for sending.
+  return `The PDFs in this request are ${megabytes(size.fileBytes)}; sent to OpenAI they become ${megabytes(size.encodedFileBytes)}, over its ${limit.maxBytes / 1_000_000} MB limit for files in one request. ${WHAT_TO_DO}`;
 }
 
 /** For a provider's own "request too large" error (HTTP 413), when it comes anyway. */

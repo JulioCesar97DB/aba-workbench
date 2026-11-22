@@ -44,9 +44,12 @@ test("size: OpenAI's limit is on the files as sent (base64), 50 MB together", ()
   assert.equal(requestTooLargeMessage("openai", measureRequest(prompt([37_500_000]))), null);
   assert.notEqual(requestTooLargeMessage("openai", measureRequest(prompt([37_500_003]))), null);
   assert.equal(requestTooLargeMessage("openai", size(500_000_000, 1, maxBytes)), null, "the rest of the request does not count");
-  const message = requestTooLargeMessage("openai", size(0, 46_000_000, 61_333_336)) ?? "";
-  assert.match(message, /The PDFs in this request are 46\.0 MB, 61\.3 MB as sent/);
-  assert.match(message, /50 MB of files/);
+  // The reviewer's case: 40 MB of PDFs, over the limit only once encoded.
+  const message = requestTooLargeMessage("openai", size(0, 40_000_000, 53_333_336)) ?? "";
+  assert.equal(
+    message,
+    "The PDFs in this request are 40.0 MB; sent to OpenAI they become 53.3 MB, over its 50 MB limit for files in one request. Remove a PDF, or paste the text of a report instead of attaching its PDF.",
+  );
   assert.match(message, /Remove a PDF, or paste the text/);
 });
 
