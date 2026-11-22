@@ -2,6 +2,8 @@ import { app, BrowserWindow } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { CaseLibrary } from "./cases.ts";
+import { defaultCasesFolder } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
 import { resolveRulesDir } from "./paths.ts";
 import { APP_ORIGIN, registerAppScheme, serveRenderer } from "./protocol.ts";
@@ -28,11 +30,32 @@ let mainWindow: BrowserWindow | null = null;
 // system's preferred languages (read only when first needed, after the app is ready).
 const settings = new SettingsStore(path.join(app.getPath("userData"), SETTINGS_FILE_NAME), () => ({
   language: defaultLanguage(app.getPreferredSystemLanguages()),
+  casesFolder: null,
 }));
+
+/**
+ * The folder the default cases folder goes in: Documents. The window tests start the app
+ * with --documents-folder=<a temporary folder> so that no test ever reads or writes the
+ * real Documents folder. It only moves the default; a folder chosen in Settings wins.
+ */
+function documentsFolder(): string {
+  const override = app.commandLine.getSwitchValue("documents-folder");
+  return override && path.isAbsolute(override) ? override : app.getPath("documents");
+}
+
+// The cases, in the folder chosen in Settings or in Documents/ABA Workbench.
+const cases = new CaseLibrary({
+  location: async () => {
+    const fallback = defaultCasesFolder(documentsFolder());
+    const chosen = (await settings.get()).casesFolder;
+    return { folder: chosen ?? fallback, isDefault: chosen === null || chosen === fallback };
+  },
+});
 
 registerIpc({
   rulesDir,
   settings,
+  cases,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
 });
 

@@ -37,7 +37,21 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
     };
   });
   expect(seen).toEqual({
-    api: ["cancelGeneration", "getAppInfo", "getSettings", "onGenerationUpdate", "setLanguage", "startMockGeneration"],
+    api: [
+      "cancelGeneration",
+      "chooseCasesFolder",
+      "createCase",
+      "getAppInfo",
+      "getCasesFolder",
+      "getSettings",
+      "listCases",
+      "onGenerationUpdate",
+      "openCase",
+      "setLanguage",
+      "showCasesFolder",
+      "showUnreadableFolder",
+      "startMockGeneration",
+    ],
     require: "undefined",
     process: "undefined",
     popupBlocked: true,
