@@ -615,3 +615,33 @@ test("the packaged app's menu has no Reload or developer tools, its window canno
     for (const role of developmentOnly) expect(menu.roles).toContain(role);
   }
 });
+
+test("the header's buttons stay put as the save state changes, so a click lands where it was aimed (a narrow window)", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const { app, page, caseFolder } = await openSources(launch, home);
+  // The header wraps at this width, as on a smaller screen.
+  await resize(app, 1024, 700);
+  const area = await newText(page, "CDE", "First part.");
+  // A long title, so the header wraps and the buttons sit after the save state.
+  await page.getByRole("textbox", { name: "Title (optional)" }).fill("CDE, psychologist's report from the developmental clinic");
+  await area.click();
+  await expect(heading(page)).toHaveText("CDE, psychologist's report from the developmental clinic");
+  await expect(page.getByText("All changes saved")).toBeVisible();
+  const back = page.getByRole("link", { name: "Back to sources" });
+  const saved = await back.boundingBox();
+  // A save that fails clears "All changes saved": the button must not move for it.
+  chmodSync(caseFolder, 0o555);
+  try {
+    await area.press("ControlOrMeta+End");
+    await area.pressSequentially(" Second part.");
+    await expect(page.getByRole("alert").filter({ hasText: "could not be saved" })).toBeVisible();
+    expect(await back.boundingBox()).toEqual(saved);
+  } finally {
+    chmodSync(caseFolder, 0o755);
+  }
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByText("All changes saved")).toBeVisible();
+  expect(await back.boundingBox()).toEqual(saved);
+  await back.click();
+  await expect(heading(page)).toHaveText("Sources");
+});

@@ -216,10 +216,20 @@ export function SourcesScreen() {
  * every typing pause. Only a failure is announced (SaveFailure, role="alert").
  */
 export function SaveStatus() {
+  const { t } = useTranslation();
   const { state } = useCaseSaves();
+  // Every label takes the same place, as wide as the longest: the buttons beside it never
+  // move as the state changes (a click on "Back to sources" would land where it was).
+  // The two labels are drawn hidden (::before, ::after) only to size it, so the page holds the text once.
   return (
-    <p className="flex items-center self-center px-1 text-sm text-fg-muted">
-      <SaveStatusText state={state} />
+    <p
+      data-saving={t("sources.saving")}
+      data-saved={t("sources.saved")}
+      className="grid items-center self-center px-1 text-sm text-fg-muted before:invisible before:col-start-1 before:row-start-1 before:content-[attr(data-saving)] after:invisible after:col-start-1 after:row-start-1 after:content-[attr(data-saved)]"
+    >
+      <span className="col-start-1 row-start-1">
+        <SaveStatusText state={state} />
+      </span>
     </p>
   );
 }
