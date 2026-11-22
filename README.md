@@ -17,6 +17,7 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)).
 | `pnpm build` | Builds the main process, the preload and the interface into `out/`. |
 | `pnpm preview` | Starts the built app from `out/`. |
 | `pnpm package` | Builds, then packages an unpacked app for the current platform into `dist/` (`dist/mac-arm64/ABA Workbench.app`, `dist/win-unpacked/ABA Workbench.exe`). No installer and no signing yet. |
+| `pnpm test:e2e` | Builds the app and drives its window with Playwright: it starts, the development check shows, a mock generation streams to completion. Needs a display (`xvfb-run` on a Linux machine without one). `pnpm test:e2e:packaged` runs the same tests on the app from `pnpm package`. |
 | `pnpm lint` / `pnpm typecheck` | ESLint; TypeScript for the Node side and for the interface, separately. |
 | `pnpm test` | Unit tests (`node:test`): the provider layer, the rules, the spending cap and the main process's logic. No keys, no network, no window. |
 | `pnpm phase0 --mock` | The Phase 0 run on the mock provider: no key, no cost. Without `--mock` it calls the real providers with the keys in `.env.phase0` (see [docs/phase0/REPORT.md](docs/phase0/REPORT.md)). |
@@ -34,6 +35,7 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)).
 | `fixtures/cases/` | Two invented cases. |
 | `scripts/` | `phase0.mts` and its spending cap, and the fixture PDF renderer. |
 | `tests/` | Unit tests. |
+| `e2e/` | Window tests (Playwright, Electron). |
 
 How the processes fit together, what the interface may call and how the app is hardened: [docs/desktop.md](docs/desktop.md).
 

@@ -1,6 +1,6 @@
 # Phase 0 research notes (handoff, 2026-11-21)
 
-> **Note (2026-11-22):** historical. The project has since moved from Next.js on Vercel to an Electron desktop app (see [../desktop.md](../desktop.md)); the Vercel notes below no longer apply.
+> **Note (2026-11-22):** historical. The project has since moved from Next.js on Vercel to an Electron desktop app (see [../desktop.md](../desktop.md)); the Vercel notes below, the 4.5 MB body limit included, no longer apply. Requests are now checked against each provider's documented limit (../desktop.md, "Size of a request").
 
 Research gathered before the build, kept so later phases don't repeat it.
 

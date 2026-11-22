@@ -47,8 +47,31 @@ Not done yet, by decision: Electron fuses, code signing, installers, automatic u
 
 ## macOS and Windows
 
-The code builds paths with `node:path` and URLs with `node:url`; the only platform branches are Electron's usual ones in `src/main/index.ts` (on macOS the app stays open with no window; the Dock icon reopens one), each marked. `tests/main-process.test.ts` checks the rules folder and the app:// path checks with Windows paths as well as macOS ones. Everything here was run on macOS (Apple silicon) only; nothing has been run on Windows yet.
+The code builds paths with `node:path` and URLs with `node:url`; the only platform branches are Electron's usual ones in `src/main/index.ts` (on macOS the app stays open with no window; the Dock icon reopens one), each marked. `tests/main-process.test.ts` checks the rules folder and the app:// path checks with Windows paths as well as macOS ones. Locally everything was run on macOS (Apple silicon) only; CI runs every check, the window tests included, on Windows and Linux as well.
 
 ## Size of a request
 
-The 4.5 MB cap on a request (`src/lib/limits.ts`) came from Vercel and has no reason left in a desktop app. What replaces it is open with the owner; until then it stays a plain function with its limit in one place.
+Before anything is sent, `runGeneration` checks the request against its provider's documented limit (`src/lib/limits.ts`, one entry per provider next to its source; checked 2026-11-22). Over the limit, the generation ends with a `request_too_large` error whose message gives the request's size, the limit, and what to do: remove a PDF, or paste the text of a report instead of attaching its PDF. `pnpm phase0` runs the same check for every case before it spends anything.
+
+| Provider | Documented limit | What is counted |
+| --- | --- | --- |
+| Claude | 128 MB per Messages request ([request size limits](https://platform.claude.com/docs/en/api/overview#request-size-limits), [PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support)) | The whole request: rules, sources with PDFs as base64, section request. |
+| OpenAI | 50 MB of files per request, each file under 50 MB ([file inputs](https://developers.openai.com/api/docs/guides/file-inputs)) | The PDFs as sent, in base64. The page does not say whether a base64 file counts at its file size or its encoded size, so the stricter reading is used: about 37.5 MB of PDF fills it. |
+
+Megabytes are decimal (1,000,000 bytes); the pages do not say which, and decimal is the smaller.
+
+**Claude's page limit.** Claude reads at most 600 PDF pages in one request, or 100 when the request's context window is under 1M tokens; both models this project uses (Opus 5.5, Fable 5.2) have 1M-token windows, so 600 applies. Pages are not counted before sending: a reliable count needs a PDF parser (in current PDFs the page objects usually sit inside compressed object streams, and a regex count can also double-count pages kept from earlier revisions). Instead, when Claude refuses a request whose error names PDFs and pages, the message explains the 600-page limit and what to do, and keeps Claude's own words; Anthropic's documentation does not give the exact wording of that error. A 413 from either provider gets the same kind of message.
+
+The 4.5 MB cap that Phase 0 had was Vercel's request limit; it no longer exists (owner's decision, 2026-11-22).
+
+## Tests
+
+- `pnpm test`: unit tests with `node:test`, no window, no keys, no network. They cover the provider layer, the rules, the size limits, the spending cap and the main process's logic (rules folder, app:// paths, IPC sender checks, the generation registry).
+- `pnpm test:e2e`: builds the app and drives its window with Playwright's Electron support (`e2e/`): the app starts, the development check shows, the interface has `window.aba` and no Node.js, and a mock generation streams to completion with the rules found. Each test starts the app with a temporary profile. It needs a display; on a Linux machine without one, run it under `xvfb-run`.
+- `pnpm test:e2e:packaged`: the same tests against the unpacked app from `pnpm package`.
+
+No test calls a real provider: the only generation the interface can start is the mock.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs the same steps on Linux (`ubuntu-24.04`), Windows (`windows-2025`) and macOS (`macos-26`), with `fail-fast` off: install, lint, typecheck, unit tests, build, `pnpm phase0 --mock` and the window tests. On Linux the window tests run under `xvfb-run`, after a step that lets Chromium's sandbox use unprivileged user namespaces (Ubuntu 24.04 restricts them through AppArmor). No secrets; the token can only read the repository. It does not package the app.

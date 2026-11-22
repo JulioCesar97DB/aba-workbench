@@ -1,6 +1,6 @@
 # Phase 0: report
 
-> **Note (2026-11-22):** this is the historical record of Phase 0, when aba-workbench was a Next.js site meant for Vercel. The project has since moved to an Electron desktop app: the route handlers described below are gone, and `pnpm phase0` now calls the provider layer directly, with no server. See [../desktop.md](../desktop.md) and the README for the project as it is now.
+> **Note (2026-11-22):** this is the historical record of Phase 0, when aba-workbench was a Next.js site meant for Vercel. The project has since moved to an Electron desktop app: the route handlers described below are gone, and `pnpm phase0` now calls the provider layer directly, with no server. The 4.5 MB request cap discussed below was replaced the same day by each provider's documented limit (Claude 128 MB per request, OpenAI 50 MB of files), checked before sending. See [../desktop.md](../desktop.md) and the README for the project as it is now.
 
 Date: November 22, 2026. Branch `JulioCesar97DB/phase-0`, not pushed and with no pull request (that comes after the review).
 
@@ -172,7 +172,7 @@ Other tests the cases carry: Mateo's interview is in Spanish (the output must co
 1. **Claude cache lifetime.** The 5-minute cache costs 1.25 times the input to write; the 1-hour one, 2 times. If she lets more than 5 minutes pass between sections, the 5-minute cache expires and the next section pays the full input again. (a) 5 minutes (current), (b) 1 hour, or (c) decide in Phase 1 by measuring her real pace? When the runs are done, the cache write and read tokens of each call will be in the `.json` files.
 2. **Missing-data markers.** (a) Only `[MISSING: ...]` and `[CHECK: ...]` inside the text (current), (b) a separate list of gaps below the text, or (c) both?
 3. **Default model if quality ties.** If Opus 5.5 or Sol write as well as Fable 5.2 or Astra, (a) do we keep the most capable as the default, as decided, or (b) the one that costs half or a quarter?
-4. **The 4.5 MB cap with the local app.** Vercel no longer imposes it. (a) Keep it as it is, (b) raise it to a value that covers her real PDFs (if she tells us how much a typical Vineland-3 and BASC-3 weigh, just the size), or (c) remove it?
+4. **The 4.5 MB cap with the local app.** *(Answered 2026-11-22: replaced by each provider's documented limit; see ../desktop.md.)* Vercel no longer imposes it. (a) Keep it as it is, (b) raise it to a value that covers her real PDFs (if she tells us how much a typical Vineland-3 and BASC-3 weigh, just the size), or (c) remove it?
 5. **Reading the instruments.** `rules/instruments.md` explains how to read the Vineland-3 and the BASC-3 PRQ (means, standard deviations, the direction of each scale). It does not come from the payers. (a) Does the BCBA review it now, or (b) in Phase 1?
 
 ## How to reproduce
