@@ -26,7 +26,7 @@ const popupClasses = {
   center:
     "fixed top-1/2 left-1/2 w-[min(28rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-border bg-surface p-5 text-fg shadow-popup transition-[opacity,scale] data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
   sheet:
-    "fixed inset-y-0 left-0 flex w-[min(20rem,calc(100vw-3rem))] flex-col overflow-y-auto shadow-popup transition-transform data-ending-style:-translate-x-full data-starting-style:-translate-x-full",
+    "fixed inset-y-0 left-0 flex w-[min(20rem,calc(100vw-3rem))] flex-col overflow-hidden shadow-popup transition-transform data-ending-style:-translate-x-full data-starting-style:-translate-x-full",
 };
 
 export function Dialog({ trigger, title, children, variant = "center", open, onOpenChange, popupClassName, titleHidden }: DialogProps) {

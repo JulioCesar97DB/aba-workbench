@@ -103,12 +103,15 @@ export function CaseSidebar({ caseId, caseName, caseDetail }: { caseId: string; 
   );
 }
 
+/** The case (or brand) on top, the lists in the middle, scrolling on their own when the window is short, and the footer always in view. */
 function SidebarFrame({ top, children, footerExtra }: { top: ReactNode; children: ReactNode; footerExtra?: ReactNode }) {
   return (
-    <div className="flex min-h-full flex-col gap-[18px] px-3.5 py-[18px]">
-      {top}
-      {children}
-      <SidebarFooter extra={footerExtra} />
+    <div className="flex h-full min-h-0 flex-col gap-[18px] py-[18px]">
+      <div className="px-3.5">{top}</div>
+      <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-3.5">{children}</div>
+      <div className="px-3.5">
+        <SidebarFooter extra={footerExtra} />
+      </div>
     </div>
   );
 }
@@ -117,7 +120,7 @@ function SidebarFooter({ extra }: { extra?: ReactNode }) {
   const { t } = useTranslation();
   const { language, changeLanguage } = useLanguage();
   return (
-    <div className="mt-auto flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       {extra}
       <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-fg-on-nav-muted">
         <span>{t("ai.notConnected")}</span>

@@ -15,7 +15,7 @@ export function AppShell({ sidebar, children }: { sidebar: ReactNode; children?:
   return (
     <div className="flex h-dvh overflow-hidden">
       <SkipLink />
-      <div data-surface="nav" className="hidden w-sidebar shrink-0 overflow-y-auto bg-nav text-fg-on-nav md:block">
+      <div data-surface="nav" className="hidden w-sidebar shrink-0 bg-nav text-fg-on-nav md:block">
         {sidebar}
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
@@ -72,7 +72,7 @@ function NarrowBar({ sidebar }: { sidebar: ReactNode }) {
       >
         <div
           data-surface="nav"
-          className="flex min-h-full flex-col"
+          className="flex min-h-0 flex-1 flex-col"
           // Following a link closes the panel.
           onClickCapture={(event) => {
             if ((event.target as Element).closest("a")) setOpen(false);

@@ -37,6 +37,8 @@
   }
   [data-surface="nav"] {
     --focus-ring: var(--color-focus-on-nav);
+    /* A scrollbar that belongs on the dark sidebar, where one shows. */
+    scrollbar-color: var(--color-border-control) var(--color-nav);
   }
 
   ::selection {
