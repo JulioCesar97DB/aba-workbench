@@ -9,6 +9,7 @@ import {
   type GenerateOptions,
   type ModelOption,
   type Provider,
+  type ProviderCredential,
   type ProviderDeps,
   type TokenUsage,
   type UsageAttempt,
@@ -28,6 +29,12 @@ const SERVER_SIDE_FALLBACKS = {
   betas: ["server-side-fallback-2026-07-01"],
   fallbacks: "default",
 } as const satisfies { betas: Anthropic.Beta.AnthropicBeta[]; fallbacks: "default" };
+
+/** Claude takes only an API key: Anthropic does not let other apps offer Claude.ai sign-in. */
+function apiKeyOf(credential: ProviderCredential): string {
+  if (credential.kind !== "api-key") throw new ProviderError("unsupported_credential", "Claude needs an API key.");
+  return credential.apiKey;
+}
 
 function makeClient(apiKey: string, deps: ProviderDeps): Anthropic {
   // The key arrives with the request and lives only in this client object. Every
@@ -162,13 +169,13 @@ export function toProviderError(error: unknown): ProviderError | null {
 }
 
 export function createAnthropicProvider(deps: ProviderDeps = {}): Provider {
-  const client = (apiKey: string) => makeClient(apiKey, deps);
+  const client = (credential: ProviderCredential) => makeClient(apiKeyOf(credential), deps);
   return {
     id: "anthropic",
 
-    async listModels(apiKey, signal) {
+    async listModels(credential, signal) {
       const models: ModelOption[] = [];
-      for await (const model of client(apiKey).models.list({ limit: 100 }, { signal })) {
+      for await (const model of client(credential).models.list({ limit: 100 }, { signal })) {
         if (model.lifecycle === "retired") continue;
         models.push({ id: model.id, label: model.display_name, createdAt: model.created_at });
       }
@@ -176,7 +183,7 @@ export function createAnthropicProvider(deps: ProviderDeps = {}): Provider {
     },
 
     async *generate(options): AsyncIterable<GenerateEvent> {
-      const stream = client(options.apiKey).beta.messages.stream(buildParams(options), { signal: options.signal });
+      const stream = client(options.credential).beta.messages.stream(buildParams(options), { signal: options.signal });
       for await (const event of stream) {
         if (event.type === "content_block_start") {
           const block = event.content_block;
@@ -213,7 +220,7 @@ export function createAnthropicProvider(deps: ProviderDeps = {}): Provider {
     async prewarm(options) {
       // max_tokens 0 runs prefill only: it writes the cache up to the last breakpoint
       // (the end of the sources) and returns no content. Same settings as the real call.
-      const message = await client(options.apiKey).beta.messages.create(
+      const message = await client(options.credential).beta.messages.create(
         { ...buildParams(options, false), max_tokens: 0 },
         { signal: options.signal },
       );

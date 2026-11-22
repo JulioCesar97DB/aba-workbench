@@ -22,8 +22,21 @@ export interface PromptParts {
   task: string;
 }
 
+/**
+ * How a request proves who it is for. "api-key": the user's own key for the provider
+ * (Claude in the app; both providers in development and in pnpm phase0). "chatgpt": the
+ * access token of Sign in with ChatGPT, which spends the user's ChatGPT plan (OpenAI
+ * only); its requests follow OpenAI's rules for that flow (openai.ts).
+ */
+export type ProviderCredential = { kind: "api-key"; apiKey: string } | { kind: "chatgpt"; accessToken: string };
+
+export function apiKeyCredential(apiKey: string): ProviderCredential {
+  return { kind: "api-key", apiKey };
+}
+
 export interface GenerateOptions {
-  apiKey: string;
+  /** Passed to the provider's client and nowhere else: never logged, never in an error. */
+  credential: ProviderCredential;
   model: string;
   effort: Effort;
   maxOutputTokens: number;
@@ -92,7 +105,8 @@ export interface ProviderDeps {
 
 export interface Provider {
   id: ProviderId;
-  listModels(apiKey: string, signal: AbortSignal): Promise<ModelOption[]>;
+  /** The models this credential can use. A free call, so it also proves the credential works. */
+  listModels(credential: ProviderCredential, signal: AbortSignal): Promise<ModelOption[]>;
   generate(options: GenerateOptions): AsyncIterable<GenerateEvent>;
   /** Writes the cacheable prefix (system + sources) without generating text. */
   prewarm(options: GenerateOptions): Promise<TokenUsage>;

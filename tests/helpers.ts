@@ -29,7 +29,7 @@ export const PDF_BASE64 = Buffer.from("%PDF-1.4 invented test file").toString("b
 
 export function options(model: string): GenerateOptions {
   return {
-    apiKey: "test-key-not-real",
+    credential: { kind: "api-key", apiKey: "test-key-not-real" },
     model,
     effort: "high",
     maxOutputTokens: 32_000,

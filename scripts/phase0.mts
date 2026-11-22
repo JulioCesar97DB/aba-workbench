@@ -22,7 +22,7 @@ import { measureRequest, requestTooLargeMessage, type RequestSize } from "../src
 import { costUsd, generationCostUsd, PRICES_CHECKED_ON } from "../src/lib/pricing.ts";
 import { getProvider, rankModels, toSafeError } from "../src/lib/providers/index.ts";
 import { mockProvider } from "../src/lib/providers/mock.ts";
-import type { Provider, SourceDocument, TokenUsage, UsageAttempt } from "../src/lib/providers/types.ts";
+import { apiKeyCredential, type Provider, type ProviderCredential, type SourceDocument, type TokenUsage, type UsageAttempt } from "../src/lib/providers/types.ts";
 import { buildPrompt } from "../src/lib/rules.ts";
 import {
   countPdfPages,
@@ -113,8 +113,9 @@ function providerFor(m: ModelUnderTest): Provider {
   return provider;
 }
 
-function apiKeyFor(m: ModelUnderTest): string {
-  return m.keyVar ? (process.env[m.keyVar] ?? "") : "";
+/** Phase 0 always uses API keys (from .env.phase0); the app's ChatGPT sign-in is not used here. */
+function credentialFor(m: ModelUnderTest): ProviderCredential {
+  return apiKeyCredential(m.keyVar ? (process.env[m.keyVar] ?? "") : "");
 }
 
 interface StreamResult {
@@ -142,7 +143,7 @@ async function callGenerate(m: ModelUnderTest, c: CaseFixture, mode: "generate" 
   };
   const events = runGeneration({
     provider: providerFor(m),
-    apiKey: apiKeyFor(m),
+    credential: credentialFor(m),
     model: m.model,
     section: SECTION,
     effort: m.effort,
@@ -219,7 +220,7 @@ async function main() {
     let ids: string[] = [];
     let error: { code: string; message: string } | null = null;
     try {
-      ids = rankModels(m.provider, await providerFor(m).listModels(apiKeyFor(m), NO_CANCEL)).map((x) => x.id);
+      ids = rankModels(m.provider, await providerFor(m).listModels(credentialFor(m), NO_CANCEL)).map((x) => x.id);
     } catch (e) {
       const safe = toSafeError(e);
       error = { code: safe.code, message: safe.message };
