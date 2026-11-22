@@ -1,4 +1,4 @@
-import { open, rename, rm } from "node:fs/promises";
+import { open, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 /*
@@ -40,6 +40,30 @@ export async function writeFileDurably(file: string, text: string): Promise<void
     throw error;
   }
   await flushFolder(path.dirname(file));
+}
+
+/**
+ * Removes the temporary files an earlier run left next to `file` when it stopped
+ * mid-save (a crash, a power cut): exactly "<name>.<process id>.tmp", never anything
+ * else. They are full or partial copies of the file and would otherwise stay for good,
+ * since each run's temporary name holds its own process id. Only one copy of the app
+ * runs at a time (src/main/index.ts), and the caller runs this where no save of `file`
+ * is in flight, so none of them is in use. Failures are ignored.
+ */
+export async function removeStaleTemporaryFiles(file: string): Promise<void> {
+  const folder = path.dirname(file);
+  const base = path.basename(file);
+  let names: string[];
+  try {
+    names = await readdir(folder);
+  } catch {
+    return;
+  }
+  const own = path.basename(temporaryFileFor(file));
+  for (const name of names) {
+    if (name === own || !name.startsWith(`${base}.`) || !/^\.[0-9]+\.tmp$/.test(name.slice(base.length))) continue;
+    await rm(path.join(folder, name), { force: true }).catch(() => undefined);
+  }
 }
 
 async function flushFolder(folder: string): Promise<void> {

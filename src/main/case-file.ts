@@ -28,10 +28,14 @@ export const MAX_LISTED_FILES = 10_000;
 /** UTC only, as the app writes it ("2026-11-22T15:00:00.000Z"). */
 const TimestampSchema = z.iso.datetime();
 
+/** The age the interface sends for a new case: nothing else is accepted. */
 export const ClientAgeSchema = z.strictObject({
   years: z.int().min(0).max(MAX_CLIENT_AGE_YEARS),
   months: z.int().min(0).max(11).optional(),
 });
+
+/** The age as stored: a key a later version adds is kept, like everywhere else in the file. */
+const StoredClientAgeSchema = z.looseObject(ClientAgeSchema.shape);
 
 /** A label is stored already checked: reading refuses one that checkCaseLabel would change. */
 const StoredLabelSchema = z
@@ -53,7 +57,7 @@ const CaseFileSchema = z.looseObject({
   schemaVersion: z.literal(CASE_SCHEMA_VERSION),
   id: z.string().refine(isCaseId),
   label: StoredLabelSchema,
-  clientAge: ClientAgeSchema.optional(),
+  clientAge: StoredClientAgeSchema.optional(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
   files: z.array(FileEntrySchema).max(MAX_LISTED_FILES),
@@ -95,14 +99,77 @@ export function migrateCaseData(
 
 export type ReadCaseFileResult = { ok: true; data: CaseData; migratedFrom: number | null } | { ok: false; problem: CaseFileProblem };
 
-/** Reads a data file's text. Never throws: a file it cannot use is "damaged" or "newer-version". */
-export function readCaseFile(text: string): ReadCaseFileResult {
+/**
+ * Whether JSON.parse kept everything in `text`, so a save would write back all of it.
+ * It does not when an object repeats a key (the last one wins) or a number cannot be held
+ * exactly (beyond 2^53 for a whole number, or beyond the largest number at all). `text`
+ * must already be valid JSON. A file that fails this is damaged and never written to.
+ */
+export function parsesWithoutLoss(text: string): boolean {
+  const stack: Array<{ keys: Set<string> | null; expectKey: boolean }> = [];
+  let i = 0;
+  while (i < text.length) {
+    const char = text[i];
+    if (char === '"') {
+      let end = i + 1;
+      while (text[end] !== '"') end += text[end] === "\\" ? 2 : 1;
+      const top = stack.at(-1);
+      if (top?.keys && top.expectKey) {
+        const key = JSON.parse(text.slice(i, end + 1)) as string;
+        if (top.keys.has(key)) return false;
+        top.keys.add(key);
+        top.expectKey = false;
+      }
+      i = end + 1;
+    } else if (char === "{" || char === "[") {
+      stack.push({ keys: char === "{" ? new Set() : null, expectKey: char === "{" });
+      i++;
+    } else if (char === "}" || char === "]") {
+      stack.pop();
+      i++;
+    } else if (char === ",") {
+      const top = stack.at(-1);
+      if (top?.keys) top.expectKey = true;
+      i++;
+    } else if (char === "-" || (char >= "0" && char <= "9")) {
+      let end = i + 1;
+      while (end < text.length && /[0-9.eE+-]/.test(text[end])) end++;
+      const token = text.slice(i, end);
+      const value = Number(token);
+      if (!Number.isFinite(value) || (/^-?[0-9]+$/.test(token) && !Number.isSafeInteger(value))) return false;
+      i = end;
+    } else {
+      i++;
+    }
+  }
+  return true;
+}
+
+/** Decodes a data file's bytes. Null when they are not valid UTF-8: nothing is replaced or guessed. */
+export function decodeCaseFile(bytes: Uint8Array): string | null {
+  try {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads a data file. Never throws: a file it cannot use is "damaged" or "newer-version".
+ * Bytes that are not valid UTF-8 (a file saved as Latin-1, say), repeated keys and
+ * numbers JSON cannot hold exactly make it damaged, so it is never rewritten with less
+ * than it held.
+ */
+export function readCaseFile(input: string | Uint8Array): ReadCaseFileResult {
+  const text = typeof input === "string" ? input : decodeCaseFile(input);
+  if (text === null) return { ok: false, problem: "damaged" };
   let json: unknown;
   try {
     json = JSON.parse(text);
   } catch {
     return { ok: false, problem: "damaged" };
   }
+  if (!parsesWithoutLoss(text)) return { ok: false, problem: "damaged" };
   const migrated = migrateCaseData(json);
   if (!migrated.ok) return migrated;
   const parsed = CaseFileSchema.safeParse(migrated.data);
@@ -124,7 +191,7 @@ export function newCaseData(options: { id: string; label: string; clientAge: Cli
     schemaVersion: CASE_SCHEMA_VERSION,
     id: options.id,
     label: options.label,
-    ...(options.clientAge ? { clientAge: options.clientAge } : {}),
+    ...(options.clientAge ? { clientAge: { ...options.clientAge } } : {}),
     createdAt: time,
     updatedAt: time,
     files: (options.files ?? []).map((file) => ({ ...file })),

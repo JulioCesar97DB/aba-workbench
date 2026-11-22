@@ -21,6 +21,15 @@ const rulesDir = resolveRulesDir({ isPackaged: app.isPackaged, resourcesPath: pr
 const preloadPath = fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
 const rendererDir = fileURLToPath(new URL("../renderer", import.meta.url));
 
+/*
+ * One copy of the app at a time, per profile. A second copy would have its own save
+ * queues and could write the same case or settings file as the first, the last rename
+ * winning; it would also take the first's temporary files for leftovers of a crash
+ * (src/main/durable-write.ts). A second start shows the window already open and quits.
+ */
+const isFirstInstance = app.requestSingleInstanceLock();
+if (!isFirstInstance) app.quit();
+
 hardenWebContents();
 registerAppScheme();
 
@@ -86,7 +95,15 @@ function createWindow(): void {
   void window.loadURL(devServerUrl ?? `${APP_ORIGIN}/index.html`);
 }
 
+app.on("second-instance", () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+
 app.whenReady().then(() => {
+  if (!isFirstInstance) return;
   denyAllPermissions();
   serveRenderer(rendererDir);
   if (!existsSync(path.join(rulesDir, "assessment.md"))) {

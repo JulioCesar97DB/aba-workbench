@@ -1,7 +1,9 @@
 import { test as base, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import electronBinary from "electron";
 import type { Language } from "../src/shared/api.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -125,9 +127,12 @@ export async function stubFolderDialog(app: ElectronApplication, folder: string 
   }, folder);
 }
 
-/** Replaces "Show in Finder / Explorer": records what would be shown instead of opening a window. */
-export async function stubFileManager(app: ElectronApplication): Promise<() => Promise<string[]>> {
-  await app.evaluate(({ shell }) => {
+/**
+ * Replaces "Show in Finder / Explorer": records what would be shown instead of opening a
+ * window. With `fail`, opening a folder answers as the system does when it cannot.
+ */
+export async function stubFileManager(app: ElectronApplication, { fail = false } = {}): Promise<() => Promise<string[]>> {
+  await app.evaluate(({ shell }, failing) => {
     const shown: string[] = [];
     (globalThis as unknown as { shownInFileManager: string[] }).shownInFileManager = shown;
     shell.showItemInFolder = (item: string) => {
@@ -135,10 +140,33 @@ export async function stubFileManager(app: ElectronApplication): Promise<() => P
     };
     shell.openPath = async (item: string) => {
       shown.push(item);
-      return "";
+      return failing ? "The folder could not be opened." : "";
     };
-  });
+  }, fail);
   return () => app.evaluate(() => [...(globalThis as unknown as { shownInFileManager: string[] }).shownInFileManager]);
+}
+
+/**
+ * Starts another copy of the app on the same profile, outside Playwright, and waits for it
+ * to end: its exit code, or "still running" (it is then stopped) after `timeoutMs`.
+ */
+export async function startSecondCopy(project: string, profile: string, documents: string, timeoutMs = 20_000): Promise<number | null | "still running"> {
+  const args = [`--user-data-dir=${profile}`, `--documents-folder=${documents}`];
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) => name !== "ELECTRON_RENDERER_URL" && value !== undefined)) as Record<string, string>;
+  const child =
+    project === "packaged"
+      ? spawn(packagedExecutable(), args, { env, stdio: "ignore" })
+      : spawn(electronBinary as unknown as string, [root, ...args], { cwd: root, env, stdio: "ignore" });
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve("still running");
+    }, timeoutMs);
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      resolve(code);
+    });
+  });
 }
 
 /** Shows a screen by its address (the part after #), as a link inside the app would. */

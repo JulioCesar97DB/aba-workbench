@@ -39,6 +39,16 @@ test("strings: each translation keeps the same placeholders and English terms", 
   }
 });
 
+test("strings: US English spelling, and macOS's own name for its settings pane", () => {
+  for (const [key, value] of english) {
+    assert.doesNotMatch(value, /\b(recognis|organis|colour|behaviour)/i, `${key} uses US spelling`);
+    assert.doesNotMatch(value, /Files and Folders/, `${key}: macOS calls the pane "Files & Folders"`);
+  }
+  assert.match(en.casesFolder["not-allowed-mac"], /Files & Folders/);
+  // Windows' file manager is "Explorador de archivos" in Spanish.
+  assert.equal(es.casesFolder.showWindows, "Mostrar en el Explorador de archivos");
+});
+
 test("strings: the only tag is <term></term>, and it is balanced", () => {
   for (const [language, strings] of [["en", english], ["es", spanish]] as const) {
     for (const [key, value] of strings) {

@@ -129,9 +129,10 @@ export interface CaseDetail extends CaseSummary {
  * - "newer-version": a newer version of the app wrote it; updating the app opens it.
  * - "duplicate": its data file has the same id as another case's (a copied folder).
  * - "cannot-read": the system did not let the app read it.
+ * - "link": a link (alias, shortcut target) to a folder elsewhere, which the app never follows.
  * The app never changes such a folder.
  */
-export type UnreadableReason = "not-a-case" | "damaged" | "newer-version" | "duplicate" | "cannot-read";
+export type UnreadableReason = "not-a-case" | "damaged" | "newer-version" | "duplicate" | "cannot-read" | "link";
 
 export interface UnreadableFolder {
   /** The folder's name inside the cases folder (not a path), to show and to reveal it. */
@@ -195,7 +196,7 @@ export interface AbaApi {
   createCase(input: NewCaseInput): Promise<CreateCaseResult>;
   /** Reads a case, and saves its list of PDFs if the folder's PDFs changed. */
   openCase(caseId: string): Promise<OpenCaseResult>;
-  /** Shows a folder that could not be opened in Finder or Explorer, selected. False when it is gone. */
+  /** Shows a folder Home last listed as unreadable in Finder or Explorer, selected. False for any other name, or when it is gone. */
   showUnreadableFolder(folderName: string): Promise<boolean>;
 }
 

@@ -4,3 +4,4 @@
 "NSDownloadsFolderUsageDescription" = "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there.";
 "NSRemovableVolumesUsageDescription" = "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there.";
 "NSNetworkVolumesUsageDescription" = "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there.";
+"NSFileProviderDomainUsageDescription" = "ABA Workbench keeps your cases in the folder you chose in Settings, which your cloud storage app manages. It needs your permission to open and save them there.";

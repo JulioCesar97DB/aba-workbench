@@ -29,7 +29,9 @@ mac:
   # No code signing yet, even if a signing identity is in the keychain.
   identity: null
   # macOS asks the user before an app opens Documents (and the Desktop, Downloads, an
-  # external or a network drive, where a chosen cases folder may be), showing this text.
+  # external or a network drive, or a folder a cloud storage app such as OneDrive, Dropbox
+  # or Google Drive manages through a File Provider, where a chosen cases folder may be),
+  # showing this text.
   # Its Spanish (and English) words are in packaging/macos/<language>.lproj/InfoPlist.strings,
   # which macOS uses in place of these when the system is in that language.
   extendInfo:
@@ -38,6 +40,7 @@ mac:
     NSDownloadsFolderUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there."
     NSRemovableVolumesUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there."
     NSNetworkVolumesUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there."
+    NSFileProviderDomainUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings, which your cloud storage app manages. It needs your permission to open and save them there."
   extraResources:
     - from: packaging/macos
       to: .

@@ -83,8 +83,16 @@ function CasesFolderSection() {
   const [folder, setFolder] = useState<CasesFolderInfo | null>(null);
   const [message, setMessage] = useState<{ text: string; problem: boolean } | null>(null);
   useEffect(() => {
-    window.aba.getCasesFolder().then(setFolder, () => setFolder(null));
-  }, []);
+    window.aba.getCasesFolder().then(setFolder, () => {
+      setFolder(null);
+      setMessage({ text: t("casesFolder.readFailed"), problem: true });
+    });
+  }, [t]);
+
+  async function show() {
+    const shown = await window.aba.showCasesFolder().catch(() => false);
+    setMessage(shown ? null : { text: t("casesFolder.showFailed"), problem: true });
+  }
 
   async function choose() {
     try {
@@ -122,7 +130,7 @@ function CasesFolderSection() {
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => void choose()}>{t("casesFolder.choose")}</Button>
-        <Button disabled={!canShow} focusableWhenDisabled onClick={() => void window.aba.showCasesFolder()}>
+        <Button disabled={!canShow} focusableWhenDisabled onClick={() => void show()}>
           {showLabel}
         </Button>
       </div>

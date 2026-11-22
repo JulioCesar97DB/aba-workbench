@@ -29,7 +29,7 @@ function errorCode(error: unknown): string | undefined {
 
 /**
  * Whether the app can use `folder` as its cases folder, without changing anything (on
- * Windows, a write check makes one empty file and removes it).
+ * Windows, with `probeWrite`, a write check makes one empty file and removes it).
  *
  * - "ready": a folder the app can read and write.
  * - "not-created-yet": the default folder, not made yet; Documents is there.
@@ -39,7 +39,12 @@ function errorCode(error: unknown): string | undefined {
  *   answer to "allow access to the Documents folder" being no (EPERM).
  * - "not-writable": the app can read it but cannot save into it.
  */
-export async function inspectCasesFolder(folder: string, isDefault: boolean, platform: NodeJS.Platform = process.platform): Promise<CasesFolderState> {
+export async function inspectCasesFolder(
+  folder: string,
+  isDefault: boolean,
+  platform: NodeJS.Platform = process.platform,
+  { probeWrite = true }: { probeWrite?: boolean } = {},
+): Promise<CasesFolderState> {
   let info;
   try {
     info = await stat(folder);
@@ -59,7 +64,7 @@ export async function inspectCasesFolder(folder: string, isDefault: boolean, pla
     if (code === "EPERM" || code === "EACCES") return "not-allowed";
     throw error;
   }
-  return (await canWrite(folder, platform)) ? "ready" : "not-writable";
+  return (await canWrite(folder, platform, probeWrite)) ? "ready" : "not-writable";
 }
 
 async function isFolder(folder: string): Promise<boolean> {
@@ -72,9 +77,11 @@ async function isFolder(folder: string): Promise<boolean> {
 
 /**
  * On macOS and Linux the permission bits answer it. On Windows they do not (access
- * rights, Controlled folder access): there the only reliable check is to make a file.
+ * rights, Controlled folder access): there the only reliable check is to make a file,
+ * done only when `probe` is set (choosing a folder, creating a case). Without it, a
+ * readable folder on Windows counts as writable until a save says otherwise.
  */
-async function canWrite(folder: string, platform: NodeJS.Platform): Promise<boolean> {
+async function canWrite(folder: string, platform: NodeJS.Platform, probe: boolean): Promise<boolean> {
   if (platform !== "win32") {
     try {
       await access(folder, constants.W_OK);
@@ -83,15 +90,16 @@ async function canWrite(folder: string, platform: NodeJS.Platform): Promise<bool
       return false;
     }
   }
-  const probe = path.join(folder, `${WRITE_CHECK_PREFIX}${process.pid}${TEMPORARY_SUFFIX}`);
+  if (!probe) return true;
+  const probeFile = path.join(folder, `${WRITE_CHECK_PREFIX}${process.pid}${TEMPORARY_SUFFIX}`);
   try {
-    const handle = await open(probe, "wx");
+    const handle = await open(probeFile, "wx");
     await handle.close();
-    await rm(probe, { force: true });
+    await rm(probeFile, { force: true });
     return true;
   } catch (error) {
     if (errorCode(error) === "EEXIST") {
-      await rm(probe, { force: true }).catch(() => undefined);
+      await rm(probeFile, { force: true }).catch(() => undefined);
       return true;
     }
     return false;

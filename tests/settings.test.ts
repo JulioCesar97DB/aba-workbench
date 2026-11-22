@@ -151,3 +151,13 @@ test("settings store: remembers the cases folder with the language, and refuses 
   // Changing the language keeps the folder.
   assert.deepEqual(await store.setLanguage("es"), { language: "es", casesFolder: folder });
 });
+
+test("S3: a settings save cut short in an earlier run leaves no temporary copy after the next start", async () => {
+  const file = tempFile(serializeSettings(EN));
+  const folder = path.dirname(file);
+  writeFileSync(`${file}.99999.tmp`, "{ half");
+  writeFileSync(`${file}.backup`, "kept");
+  const store = new SettingsStore(file, () => DEFAULTS, () => undefined);
+  assert.deepEqual(await store.get(), EN);
+  assert.deepEqual(readdirSync(folder).sort(), [SETTINGS_FILE_NAME, `${SETTINGS_FILE_NAME}.backup`].sort());
+});

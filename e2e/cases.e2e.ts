@@ -1,7 +1,7 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { defaultCasesFolder, expect, goTo, SAMPLE_CASE, seedCase, stubFileManager, stubFolderDialog, test } from "./app.ts";
+import { defaultCasesFolder, expect, goTo, SAMPLE_CASE, seedCase, startSecondCopy, stubFileManager, stubFolderDialog, test } from "./app.ts";
 
 /*
  * Cases as a user meets them: creating one, finding it in the list, opening it after a
@@ -264,7 +264,48 @@ test("the packaged app on macOS says why it asks for Documents, in English and S
   const plist = readFileSync(path.join(resources, "..", "Info.plist"), "utf8");
   expect(plist).toContain("<key>NSDocumentsFolderUsageDescription</key>");
   expect(plist).toContain("ABA Workbench keeps your cases in a folder inside Documents.");
+  expect(plist).toContain("<key>NSFileProviderDomainUsageDescription</key>");
   expect(readFileSync(path.join(resources, "es.lproj", "InfoPlist.strings"), "utf8")).toContain("dentro de Documentos");
   expect(readFileSync(path.join(resources, "es_419.lproj", "InfoPlist.strings"), "utf8")).toContain("dentro de Documentos");
   expect(readFileSync(path.join(resources, "en.lproj", "InfoPlist.strings"), "utf8")).toContain("inside Documents");
+});
+
+test("a second start of the app on the same profile quits and leaves the first one as it was", async ({ launch, documents, profile }, testInfo) => {
+  seedCase(defaultCasesFolder(documents));
+  const app = await launch();
+  const page = await openApp(app);
+  await expect(page.getByRole("link", { name: SAMPLE_CASE.label })).toBeVisible();
+  // Two copies would each have their own save queue and could overwrite each other's saves.
+  expect(await startSecondCopy(testInfo.project.name, profile, documents)).toBe(0);
+  expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+  await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
+  await expect(heading(page)).toHaveText("Sources");
+});
+
+test("Settings says so when the cases folder cannot be shown or checked", async ({ app }) => {
+  const page = await openApp(app);
+  await stubFileManager(app, { fail: true });
+  await goTo(page, "/settings");
+  const section = page.getByRole("region", { name: "Cases folder" });
+  // The default folder exists once a case is made; make one so "Show" is available.
+  await goTo(page, "/");
+  await page.getByRole("button", { name: "New case" }).click();
+  await page.getByRole("dialog", { name: "New case" }).getByRole("textbox", { name: "Label" }).fill("Ana");
+  await page.getByRole("dialog", { name: "New case" }).getByRole("button", { name: "Create case" }).click();
+  await expect(heading(page)).toHaveText("Sources");
+  await goTo(page, "/settings");
+  const showLabel = process.platform === "darwin" ? "Show in Finder" : process.platform === "win32" ? "Show in Explorer" : "Show in file manager";
+  await section.getByRole("button", { name: showLabel }).click();
+  await expect(section.getByRole("status")).toHaveText("The cases folder could not be shown. It may have been moved, or it is not available.");
+
+  // The main process cannot answer where the cases are: Settings says so instead of showing nothing.
+  await app.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler("cases-folder:get");
+    ipcMain.handle("cases-folder:get", () => {
+      throw new Error("Simulated failure");
+    });
+  });
+  await goTo(page, "/");
+  await goTo(page, "/settings");
+  await expect(section.getByRole("status")).toHaveText("Where your cases are kept could not be checked. Try again in a moment.");
 });

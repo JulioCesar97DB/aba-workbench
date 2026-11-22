@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, migrateCaseData, newCaseData, nextUpdatedAt, readCaseFile, serializeCaseFile, type CaseData } from "../src/main/case-file.ts";
+import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, migrateCaseData, newCaseData, nextUpdatedAt, parsesWithoutLoss, readCaseFile, serializeCaseFile, type CaseData } from "../src/main/case-file.ts";
 import { caseFolderName, caseFolderNames, folderNameKey, MAX_FOLDER_NAME_LENGTH } from "../src/main/case-folder-name.ts";
 import { CaseLibrary, readCaseFolder, scanCaseFiles } from "../src/main/cases.ts";
 import { DEFAULT_CASES_FOLDER_NAME, defaultCasesFolder, inspectCasesFolder } from "../src/main/cases-folder.ts";
@@ -96,7 +96,6 @@ test("case file: anything that is not a valid version 1 file is damaged, never a
     JSON.stringify({ ...good, clientAge: { years: 4, months: 12 } }),
     JSON.stringify({ ...good, clientAge: { years: -1 } }),
     JSON.stringify({ ...good, clientAge: { years: 4.5 } }),
-    JSON.stringify({ ...good, clientAge: { years: 4, weeks: 2 } }),
     JSON.stringify({ ...good, clientAge: "4 years" }),
     JSON.stringify({ ...good, createdAt: "yesterday" }),
     JSON.stringify({ ...good, updatedAt: undefined }),
@@ -541,6 +540,9 @@ test("cases: an unreadable folder can be found to reveal it; anything else canno
   mkdirSync(path.join(folder, "Not a case"));
   writeFileSync(path.join(folder, "a file"), "");
   const { lib } = library(folder);
+  // Nothing is revealed before Home has listed it as unreadable.
+  assert.equal(await lib.unreadableFolderPath("Not a case"), null);
+  await lib.list();
   assert.equal(await lib.unreadableFolderPath("Not a case"), path.join(folder, "Not a case"));
   assert.equal(await lib.unreadableFolderPath("a file"), null);
   assert.equal(await lib.unreadableFolderPath("gone"), null);
@@ -554,3 +556,196 @@ function snapshot(folder: string): string[] {
   }
   return out.sort();
 }
+
+/* Review round 1 */
+
+/** The data file's text with its label written in Latin-1, as an older Windows Notepad saved files: "Niño" is the bytes 4e 69 f1 6f. */
+function latin1CaseFile(): Buffer {
+  const text = serializeCaseFile(sample({ label: "Niño" }));
+  return Buffer.from(text, "latin1");
+}
+
+test("B1: a data file that is not valid UTF-8 is damaged, and opening never rewrites it", async () => {
+  const bytes = latin1CaseFile();
+  assert.deepEqual(readCaseFile(bytes), { ok: false, problem: "damaged" });
+  // The same file in UTF-8 is a good case.
+  assert.equal(readCaseFile(Buffer.from(serializeCaseFile(sample({ label: "Niño" })), "utf8")).ok, true);
+
+  const folder = tempFolder();
+  mkdirSync(path.join(folder, "Niño"));
+  writeFileSync(path.join(folder, "Niño", CASE_FILE_NAME), bytes);
+  writeFileSync(path.join(folder, "Niño", "a.pdf"), "%PDF");
+  const { lib } = library(folder);
+  const list = await lib.list();
+  assert.deepEqual(list.cases, []);
+  assert.deepEqual(list.unreadable, [{ folderName: "Niño", reason: "damaged" }]);
+  assert.deepEqual(await lib.open(ID), { outcome: "not-found" });
+  assert.equal(await lib.update(ID, (data) => data), null);
+  assert.ok(readFileSync(path.join(folder, "Niño", CASE_FILE_NAME)).equals(bytes), "the original bytes are kept");
+});
+
+test("B1: a data file JSON would read with less than it holds is damaged and never rewritten", async () => {
+  const good = JSON.parse(serializeCaseFile(sample()));
+  const goodText = serializeCaseFile(sample());
+  // A repeated key (JSON.parse keeps the last), at the top or deeper.
+  const repeated = goodText.replace('"label": "M.F. initial assessment",', '"label": "First",\n  "label": "M.F. initial assessment",');
+  assert.notEqual(repeated, goodText);
+  assert.deepEqual(readCaseFile(repeated), { ok: false, problem: "damaged" });
+  assert.deepEqual(readCaseFile(JSON.stringify({ ...good, notes: { a: 1 } }).replace('{"a":1}', '{"a":1,"a":2}')), { ok: false, problem: "damaged" });
+  // Numbers that cannot be held exactly, in a key a later version might add.
+  for (const number of ["12345678901234567890", "-9007199254740993", "1e400"]) {
+    assert.deepEqual(readCaseFile(goodText.replace('"files": []', `"files": [], "later": ${number}`)), { ok: false, problem: "damaged" }, number);
+  }
+  // What it reads whole stays readable: keys repeated in different objects, escapes, decimals.
+  assert.equal(parsesWithoutLoss('{"a":{"x":1},"b":{"x":1.5e3},"c":"\\"x\\"","d":[{"x":-0.25},{"x":9007199254740991}]}'), true);
+
+  const folder = tempFolder();
+  mkdirSync(path.join(folder, "Repeated"));
+  writeFileSync(path.join(folder, "Repeated", CASE_FILE_NAME), repeated);
+  writeFileSync(path.join(folder, "Repeated", "a.pdf"), "%PDF");
+  const { lib } = library(folder);
+  assert.deepEqual((await lib.list()).unreadable, [{ folderName: "Repeated", reason: "damaged" }]);
+  assert.deepEqual(await lib.open(ID), { outcome: "not-found" });
+  assert.equal(readFileSync(path.join(folder, "Repeated", CASE_FILE_NAME), "utf8"), repeated);
+});
+
+test("S1: after the cases folder changes, a case in the old folder can no longer be read or written by its id", async () => {
+  const oldFolder = tempFolder();
+  const newFolder = tempFolder();
+  let current = oldFolder;
+  const { lib } = library(oldFolder, { location: async () => ({ folder: current, isDefault: false }) });
+  const created = await lib.create({ label: "Ana" });
+  assert.ok(created.outcome === "created");
+  await lib.list();
+  const file = path.join(oldFolder, "Ana", CASE_FILE_NAME);
+  const before = readFileSync(file, "utf8");
+
+  current = newFolder;
+  writeFileSync(path.join(oldFolder, "Ana", "new.pdf"), "%PDF");
+  assert.deepEqual(await lib.open(created.case.id), { outcome: "not-found" });
+  assert.equal(await lib.update(created.case.id, (data) => ({ ...data, label: "Changed" })), null);
+  assert.equal(readFileSync(file, "utf8"), before);
+
+  // Back to the old folder: it opens there again.
+  current = oldFolder;
+  assert.equal((await lib.open(created.case.id)).outcome, "opened");
+});
+
+test("S2: a case folder renamed while the app is open still opens, without going back to Home", async () => {
+  const folder = tempFolder();
+  const { lib } = library(folder);
+  const created = await lib.create({ label: "Old name" });
+  assert.ok(created.outcome === "created");
+  await lib.list();
+  renameSync(path.join(folder, "Old name"), path.join(folder, "New name"));
+  const opened = await lib.open(created.case.id);
+  assert.equal(opened.outcome, "opened");
+  // update finds it too after a second rename.
+  renameSync(path.join(folder, "New name"), path.join(folder, "Third name"));
+  assert.ok(await lib.update(created.case.id, (data) => ({ ...data, label: "Renamed" })));
+  assert.equal(JSON.parse(readFileSync(path.join(folder, "Third name", CASE_FILE_NAME), "utf8")).label, "Renamed");
+  // Gone for good: not found, nothing made.
+  rmSync(path.join(folder, "Third name"), { recursive: true });
+  assert.deepEqual(await lib.open(created.case.id), { outcome: "not-found" });
+  assert.deepEqual(readdirSync(folder), []);
+});
+
+test("S3: temporary copies a crash left behind are removed when the case is opened, and nothing else is", async () => {
+  const folder = tempFolder();
+  const { lib } = library(folder);
+  const created = await lib.create({ label: "Ana" });
+  assert.ok(created.outcome === "created");
+  const caseFolder = path.join(folder, "Ana");
+  for (const name of ["aba-case.json.99999.tmp", "aba-case.json.1.tmp", "aba-case.json.12a.tmp", "aba-case.json.tmp", "notes.99999.tmp", "a.pdf"]) {
+    writeFileSync(path.join(caseFolder, name), "{ half a fi");
+  }
+  assert.equal((await lib.open(created.case.id)).outcome, "opened");
+  assert.deepEqual(readdirSync(caseFolder).sort(), ["a.pdf", "aba-case.json", "aba-case.json.12a.tmp", "aba-case.json.tmp", "notes.99999.tmp"].sort());
+
+  // An unreadable case's folder is never cleaned: the app does not change it at all.
+  mkdirSync(path.join(folder, "Broken"));
+  writeFileSync(path.join(folder, "Broken", CASE_FILE_NAME), "{ half");
+  writeFileSync(path.join(folder, "Broken", "aba-case.json.99999.tmp"), "{ whole?");
+  await lib.list();
+  assert.deepEqual(readdirSync(path.join(folder, "Broken")).sort(), [CASE_FILE_NAME, "aba-case.json.99999.tmp"].sort());
+});
+
+test("M1: an unknown key inside clientAge is kept on save; the interface sees only years and months", async () => {
+  const text = serializeCaseFile(sample()).replace('"months": 2', '"months": 2,\n    "note": "x"');
+  const read = readCaseFile(text);
+  assert.ok(read.ok);
+  assert.deepEqual(JSON.parse(serializeCaseFile(read.data)).clientAge, { years: 4, months: 2, note: "x" });
+
+  const folder = tempFolder();
+  mkdirSync(path.join(folder, "Ana"));
+  writeFileSync(path.join(folder, "Ana", CASE_FILE_NAME), text);
+  writeFileSync(path.join(folder, "Ana", "a.pdf"), "%PDF");
+  const { lib } = library(folder);
+  const opened = await lib.open(ID);
+  assert.ok(opened.outcome === "opened");
+  assert.deepEqual(opened.case.clientAge, { years: 4, months: 2 });
+  assert.deepEqual(JSON.parse(readFileSync(path.join(folder, "Ana", CASE_FILE_NAME), "utf8")).clientAge, { years: 4, months: 2, note: "x" });
+});
+
+test("M2: newest first compares times, not text, and ties go by folder name", async () => {
+  const folder = tempFolder();
+  const write = (name: string, id: string, createdAt: string) => {
+    mkdirSync(path.join(folder, name));
+    writeFileSync(path.join(folder, name, CASE_FILE_NAME), serializeCaseFile({ ...sample({ id, label: name }), createdAt, updatedAt: createdAt }));
+  };
+  write("older", "11111111-1111-4111-8111-111111111111", "2026-11-22T15:00:00.5Z");
+  write("newer", "22222222-2222-4222-8222-222222222222", "2026-11-22T15:00:00.55Z");
+  write("b tie", "33333333-3333-4333-8333-333333333333", "2026-11-01T00:00:00Z");
+  write("a tie", "44444444-4444-4444-8444-444444444444", "2026-11-01T00:00:00.000Z");
+  const { lib } = library(folder);
+  assert.deepEqual(
+    (await lib.list()).cases.map((c) => c.label),
+    ["newer", "older", "a tie", "b tie"],
+  );
+});
+
+test("M3: a link to a folder is shown as unreadable, never followed", { skip: process.platform === "win32" }, async () => {
+  const folder = tempFolder();
+  const elsewhere = tempFolder();
+  mkdirSync(path.join(elsewhere, "Real case"));
+  writeFileSync(path.join(elsewhere, "Real case", CASE_FILE_NAME), serializeCaseFile(sample()));
+  symlinkSync(path.join(elsewhere, "Real case"), path.join(folder, "Linked case"));
+  // A link to a file, like a loose file, is not a folder: not listed.
+  writeFileSync(path.join(elsewhere, "note.txt"), "x");
+  symlinkSync(path.join(elsewhere, "note.txt"), path.join(folder, "note link"));
+  const { lib } = library(folder);
+  const list = await lib.list();
+  assert.deepEqual(list.cases, []);
+  assert.deepEqual(list.unreadable, [{ folderName: "Linked case", reason: "link" }]);
+  assert.deepEqual(await lib.open(ID), { outcome: "not-found" });
+  // Revealing it shows the link itself.
+  assert.equal(await lib.unreadableFolderPath("Linked case"), path.join(folder, "Linked case"));
+});
+
+test("M4: only folders the last listing showed as unreadable can be revealed", async () => {
+  const folder = tempFolder();
+  const { lib } = library(folder);
+  const created = await lib.create({ label: "Ana" });
+  assert.ok(created.outcome === "created");
+  mkdirSync(path.join(folder, ".git"));
+  mkdirSync(path.join(folder, "Scans"));
+  await lib.list();
+  assert.equal(await lib.unreadableFolderPath("Ana"), null);
+  assert.equal(await lib.unreadableFolderPath(".git"), null);
+  assert.equal(await lib.unreadableFolderPath("Scans"), path.join(folder, "Scans"));
+});
+
+test("M6: listing never makes Windows' write check; creating a case does", { skip: process.platform === "win32" || isPosixRoot }, async () => {
+  const folder = tempFolder();
+  chmodSync(folder, 0o555);
+  try {
+    // platform "win32": the write check is a file made and removed, which this folder refuses.
+    const { lib } = library(folder, { platform: "win32" });
+    assert.equal((await lib.list()).folder.state, "ready");
+    assert.equal((await lib.folderInfo()).state, "ready");
+    assert.deepEqual(await lib.create({ label: "Ana" }), { outcome: "folder-problem", problem: "not-writable" });
+    assert.equal(await inspectCasesFolder(folder, false, "win32"), "not-writable");
+  } finally {
+    chmodSync(folder, 0o755);
+  }
+});
