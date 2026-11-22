@@ -1,195 +1,195 @@
-# Fase 0: informe
+# Phase 0: report
 
-Fecha: 22 de noviembre de 2026. Rama `JulioCesar97DB/phase-0`, sin push ni pull request (se hace después de la revisión).
+Date: November 22, 2026. Branch `JulioCesar97DB/phase-0`, not pushed and with no pull request (that comes after the review).
 
-## Lo principal
+## Summary
 
-- **La fase 0 cierra como base técnica, sin generaciones reales, por decisión del dueño (22/11/2026).** Él prefiere construir primero la infraestructura y la app, y probar la salida de la IA después. Las corridas reales, los costos medidos y la elección de las dos mejores salidas quedan para un paso posterior: están aplazadas, no bloqueadas. Todo está listo para hacerlas con un solo comando (ver "Cómo reproducirlo").
-- **Lo construido y probado sin llaves:**
-  - la ruta propia que habla con Claude y OpenAI;
-  - la lista de modelos;
-  - el envío de PDFs y la caché;
-  - el manejo de rechazos, con el *fallback* de Anthropic encendido;
-  - el tope de tamaño;
-  - las reglas de redacción y los dos casos inventados;
-  - el script `pnpm phase0` con su tope de gasto.
+- **Phase 0 closes as a technical base, without real generations, by the owner's decision (2026-11-22).** He prefers to build the infrastructure and the app first and to test the AI output afterwards. The real runs, the measured costs and the pick of the two best outputs are left for a later step: they are postponed, not blocked. Everything is ready to run them with a single command (see "How to reproduce").
+- **Built and tested without keys:**
+  - our own route that talks to Claude and OpenAI;
+  - the model list;
+  - PDF input and the cache;
+  - refusal handling, with Anthropic's *fallback* turned on;
+  - the size cap;
+  - the writing rules and the two invented cases;
+  - the `pnpm phase0` script with its spending cap.
 
-  `pnpm install`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (23 pruebas) y `pnpm phase0 --mock` pasan.
-- **Las dos salidas para que la BCBA juzgue la calidad:** se eligen cuando se hagan las corridas reales.
-- **Gasto real: 0,00 USD** (Anthropic 0, OpenAI 0). La corrida completa se estima en unos 2,6 USD para los dos casos y los cuatro modelos. El script nunca empieza una llamada que, en el peor caso, pueda pasar el tope (5 USD por defecto), y se detiene si no puede saber cuánto costó algo.
-- **El producto será una app local, no una web en Vercel** (decisión del dueño, 22/11/2026). Por eso los límites de Vercel (300 s, plan, 4,5 MB) ya no restringen el producto. El análisis queda abajo como referencia y el tope de tamaño sigue en el código.
+  `pnpm install`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (23 tests) and `pnpm phase0 --mock` pass.
+- **The two outputs for the BCBA to judge quality:** they will be picked when the real runs are done.
+- **Real spend: 0.00 USD** (Anthropic 0, OpenAI 0). The full run is estimated at about 2.6 USD for the two cases and the four models. The script never starts a call that, in the worst case, could pass the cap (5 USD by default), and it stops if it cannot know what something cost.
+- **The product will be a local app, not a website on Vercel** (owner's decision, 2026-11-22). So Vercel's limits (300 s, plan, 4.5 MB) no longer constrain the product. The analysis stays below as reference and the size cap stays in the code.
 
-## Qué funciona y qué no, por proveedor
+## What works and what doesn't, per provider
 
-"Probado" quiere decir que lo ejecuté o que hay una prueba automática que lo cubre. Las pruebas usan un `fetch` falso, así que revisan la petición exacta que cada SDK mandaría, sin red ni llaves. Lo que necesita la API real está en la última fila.
+"Tested" means I ran it or an automated test covers it. The tests use a fake `fetch`, so they check the exact request each SDK would send, with no network and no keys. What needs the real API is in the last row.
 
-| Pieza | Claude (`@anthropic-ai/sdk` 1.12) | OpenAI (`openai` 7.62, Responses API) |
+| Piece | Claude (`@anthropic-ai/sdk` 1.12) | OpenAI (`openai` 7.62, Responses API) |
 | --- | --- | --- |
-| Generación con streaming por `POST /api/generate` | Probado: forma de la petición por modelo (pruebas) y tubería completa (simulador). | Igual |
-| Lista de modelos (`GET /api/models`) | Construido. Con llave falsa responde 401 con un mensaje propio. | Igual. El mensaje de error de OpenAI nunca se reenvía. |
-| PDFs | Probado: los bytes del PDF llegan sin cambios a la petición hacia Anthropic (bloque `document` en base64, nada queda guardado en el proveedor). | Probado igual (`input_file` con `file_data`). |
-| Caché del prefijo (reglas + fuentes del caso) | Probado que la petición lleva exactamente dos puntos de corte (tras las reglas y tras las fuentes) y que la instrucción de la sección no se cachea. Caché de 5 minutos. El precalentamiento manda `max_tokens: 0` sin la instrucción. | Probado: reglas en un mensaje `developer` (nunca en `instructions`), dos puntos de corte explícitos, caché de 30 minutos y precalentamiento con `prewarm: true`. |
-| Rechazos | Probado: el evento `refusal` lleva `discard: true`, lo que obliga a quien lo reciba a descartar todo el texto de esa generación. Además `done` trae `complete: false`. | Igual |
-| Texto cortado por límite de salida | Probado: `max_tokens` da `complete: false`. | Probado: `incomplete` da `complete: false`. |
-| La llave no se guarda ni se registra | Va en el encabezado `x-provider-key`. Nada en el código escribe la llave ni el cuerpo en logs. El registro del SDK está apagado (`logLevel: "off"`), así que ni `ANTHROPIC_LOG` ni `OPENAI_LOG` pueden activarlo. El servidor que arranca el script corre sin llaves (ver "Decisiones"). | Igual |
-| Peticiones de más de 4,5 MB | Probado: la ruta responde 413 con el mensaje "pega el texto en vez del PDF", también cuando el cuerpo llega en trozos sin `Content-Length`. El script falla antes de enviar. | Igual |
-| Lo que solo se ve con la API real | Que el modelo lea bien los PDF, que la caché realmente se use, que el fallback responda como dice la documentación, los tiempos, los costos y la calidad del texto. | Lo mismo, más el comportamiento de los puntos de corte explícitos. |
+| Streaming generation through `POST /api/generate` | Tested: request shape per model (tests) and the full pipeline (mock). | Same |
+| Model list (`GET /api/models`) | Built. With a fake key it answers 401 with our own message. | Same. OpenAI's error message is never forwarded. |
+| PDFs | Tested: the PDF bytes reach the request to Anthropic unchanged (base64 `document` block; nothing is stored at the provider). | Tested the same way (`input_file` with `file_data`). |
+| Prefix cache (rules + the case's sources) | Tested that the request carries exactly two breakpoints (after the rules and after the sources) and that the section request is not cached. 5-minute cache. The pre-warm sends `max_tokens: 0` without the section request. | Tested: rules in a `developer` message (never in `instructions`), two explicit breakpoints, 30-minute cache and pre-warm with `prewarm: true`. |
+| Refusals | Tested: the `refusal` event carries `discard: true`, which obliges whoever receives it to discard all text from that generation. `done` also carries `complete: false`. | Same |
+| Text cut off by the output limit | Tested: `max_tokens` gives `complete: false`. | Tested: `incomplete` gives `complete: false`. |
+| The key is never stored or logged | It travels in the `x-provider-key` header. Nothing in the code writes the key or the body to logs. SDK logging is off (`logLevel: "off"`), so neither `ANTHROPIC_LOG` nor `OPENAI_LOG` can turn it on. The server the script starts runs without keys (see "Decisions"). | Same |
+| Requests over 4.5 MB | Tested: the route answers 413 with the "paste the text instead of the PDF" message, also when the body arrives in chunks without `Content-Length`. The script fails before sending. | Same |
+| What only the real API shows | That the model reads the PDFs well, that the cache is actually used, that the fallback answers as documented, the timings, the costs and the quality of the text. | The same, plus how the explicit breakpoints behave. |
 
-**Fallback de Anthropic (beta).** Es una función en beta (`server-side-fallback-2026-07-01`) que el dueño decidió encender. Si el modelo pedido se niega por política, Anthropic repite la petición en el modelo que recomienda para ese tipo de rechazo, dentro de la misma llamada. Cada salida guarda qué modelo escribió el texto (`servedModel`), si hubo fallback y cuántos tokens usó cada intento.
+**Anthropic's fallback (beta).** It is a beta feature (`server-side-fallback-2026-07-01`) that the owner decided to turn on. If the requested model declines on policy grounds, Anthropic re-runs the request on the model it recommends for that kind of refusal, inside the same call. Each output records which model wrote the text (`servedModel`), whether there was a fallback and how many tokens each attempt used.
 
-Cada intento se cobra a su precio. Están tabulados los dos modelos a los que el fallback puede pasar (`claude-opus-5` y `claude-opus-4-8`). Si Anthropic respondiera con otro modelo, el script se detiene en vez de contarlo como cero. Algunos rechazos no tienen fallback y siguen llegando como rechazo.
+Each attempt is charged at its own price. The two models the fallback can switch to (`claude-opus-5` and `claude-opus-4-8`) are priced. If Anthropic answered with another model, the script stops instead of counting it as zero. Some refusals have no fallback and still arrive as refusals.
 
-El interruptor único es la constante `SERVER_SIDE_FALLBACKS` en `src/lib/providers/anthropic.ts`.
+The single switch is the `SERVER_SIDE_FALLBACKS` constant in `src/lib/providers/anthropic.ts`.
 
-## Costo
+## Cost
 
-**Gastado: 0 USD.**
+**Spent: 0 USD.**
 
-**Tamaño medido de cada petición** (casos inventados, PDFs generados desde HTML):
+**Measured size of each request** (invented cases, PDFs generated from HTML):
 
-| Caso | PDFs (sin codificar) | Cuerpo completo de la petición |
+| Case | PDFs (not encoded) | Full request body |
 | --- | --- | --- |
-| Mateo | 200.160 bytes (2 PDF: Vineland-3 de 2 páginas y PRQ de 1) | 283.830 bytes (0,28 MB) |
-| Sofía | 202.851 bytes (2 PDF, 3 páginas) | 288.398 bytes (0,29 MB) |
+| Mateo | 200,160 bytes (2 PDFs: a 2-page Vineland-3 and a 1-page PRQ) | 283,830 bytes (0.28 MB) |
+| Sofía | 202,851 bytes (2 PDFs, 3 pages) | 288,398 bytes (0.29 MB) |
 
-**Estimación por sección (no medida).** Supuestos:
-- Unos 14.500 tokens de entrada. De ellos, unos 13.000 son prefijo cacheable: 3.100 de reglas, 4.300 de notas del caso y unos 6.000 de los dos PDF, que suman tres páginas y cuentan texto e imagen. Los otros 1.200 son la instrucción de la sección.
-- Unos 8.000 tokens de salida: unos 2.000 de texto (900 a 1.500 palabras) más unos 6.000 de razonamiento. **Este es el número más incierto**: el razonamiento puede ir de 3.000 a 15.000 tokens.
+**Estimate per section (not measured).** Assumptions:
+- About 14,500 input tokens. About 13,000 of them are cacheable prefix: 3,100 of rules, 4,300 of case notes and about 6,000 for the two PDFs, which add up to three pages and count text and image. The other 1,200 are the section request.
+- About 8,000 output tokens: about 2,000 of text (900 to 1,500 words) plus about 6,000 of reasoning. **This is the most uncertain number**: reasoning can range from 3,000 to 15,000 tokens.
 
-| Modelo | Precio por millón (entrada / escritura en caché / lectura de caché / salida) | Primera sección (escribe la caché) | Secciones siguientes (leen la caché) |
+| Model | Price per million (input / cache write / cache read / output) | First section (writes the cache) | Later sections (read the cache) |
 | --- | --- | --- | --- |
-| claude-opus-5-5 | 4 / 5 / 0,20 / 20 | ~0,23 USD | ~0,17 USD |
-| claude-fable-5-2 | 8 / 10 / 0,20 / 40 | ~0,46 USD | ~0,33 USD |
-| gpt-6.2-sol | 2 / 2,50 / 0,10 / 10 | ~0,12 USD | ~0,08 USD |
-| gpt-6.2-astra | 8 / 10 / 0,40 / 40 | ~0,46 USD | ~0,34 USD |
+| claude-opus-5-5 | 4 / 5 / 0.20 / 20 | ~0.23 USD | ~0.17 USD |
+| claude-fable-5-2 | 8 / 10 / 0.20 / 40 | ~0.46 USD | ~0.33 USD |
+| gpt-6.2-sol | 2 / 2.50 / 0.10 / 10 | ~0.12 USD | ~0.08 USD |
+| gpt-6.2-astra | 8 / 10 / 0.40 / 40 | ~0.46 USD | ~0.34 USD |
 
-La salida domina el costo; la caché ahorra poco en comparación porque el prefijo es corto.
+Output dominates the cost; caching saves little by comparison because the prefix is short.
 
-**Estimación por assessment completo (no medida).** Supuestos: 9 secciones narrativas del largo de Medical Necessity, y los 12 comportamientos, 15 habilidades de reemplazo y 20 intervenciones en grupos de unos 5 por llamada (unas 10 llamadas de salida parecida). En total, unas 19 llamadas que comparten el mismo prefijo en caché.
-- claude-opus-5-5: ~3,2 USD
-- claude-fable-5-2: ~6,4 USD
-- gpt-6.2-sol: ~1,6 USD
-- gpt-6.2-astra: ~6,5 USD
+**Estimate per full assessment (not measured).** Assumptions: 9 narrative sections as long as Medical Necessity, plus the 12 behaviors, 15 replacement skills and 20 interventions in groups of about 5 per call (about 10 calls with similar output). In total, about 19 calls sharing the same cached prefix.
+- claude-opus-5-5: ~3.2 USD
+- claude-fable-5-2: ~6.4 USD
+- gpt-6.2-sol: ~1.6 USD
+- gpt-6.2-astra: ~6.5 USD
 
-Con el margen de incertidumbre del razonamiento, cualquiera de estas cifras puede ser la mitad o el doble. Si ella deja pasar más de 5 minutos entre secciones, la caché de Claude vence y se vuelve a escribir. Eso cuesta unos 0,07 USD más por vez en Opus y 0,13 USD en Fable.
+With the uncertainty in reasoning, any of these figures can be half or double. If she lets more than 5 minutes pass between sections, Claude's cache expires and is written again. That costs about 0.07 USD more each time on Opus and 0.13 USD on Fable.
 
-**La corrida pendiente y su tope.** Antes de cada llamada, el script calcula su peor caso:
-- toda la entrada al precio de escritura en caché, dos veces porque hay precalentamiento;
-- los 32.000 tokens de salida permitidos;
-- en Claude, un intento completo más en el modelo de fallback.
+**The pending run and its cap.** Before each call, the script computes its worst case:
+- all input at the cache-write price, twice because there is a pre-warm;
+- the 32,000 output tokens allowed;
+- on Claude, one more full attempt on the fallback model.
 
-Solo empieza la llamada si ese peor caso cabe en lo que queda del tope. Para estos casos, el peor caso es de 1,79 USD en Opus, 2,64 en Fable, 0,43 en Sol y 1,70 en Astra. Si una llamada termina sin decir cuánto costó, o la respondió un modelo sin precio, se le carga su peor caso y la corrida se detiene. Un `--budget` que no sea un número positivo detiene el script antes de empezar.
+The call starts only if that worst case fits in what is left of the cap. For these cases the worst case is 1.79 USD on Opus, 2.64 on Fable, 0.43 on Sol and 1.70 on Astra. If a call ends without saying what it cost, or a model without a price answered it, its worst case is charged and the run stops. A `--budget` that is not a positive number stops the script before it starts.
 
-Con los costos estimados caben las 8 llamadas, en unos 2,6 USD. Si las llamadas reales costaran el doble de lo estimado, la de Fable en el caso de Sofía se saltaría para no arriesgar el tope. Se puede correr sola después con `--only claude-fable-5-2 --case case-b-sofia`.
+With the estimated costs all 8 calls fit, at about 2.6 USD. If the real calls cost double the estimate, the Fable call on Sofía's case would be skipped so as not to risk the cap. It can be run on its own afterwards with `--only claude-fable-5-2 --case case-b-sofia`.
 
-Los precios están en `src/lib/pricing.ts`, fechados el 21/11/2026, con su fuente.
+Prices are in `src/lib/pricing.ts`, dated 2026-11-21, with their source.
 
-## Vercel: límites para respuestas largas (referencia)
+## Vercel: limits for long responses (reference)
 
-> **Nota (22/11/2026):** el dueño decidió que aba-workbench será una app local, que corre en la computadora de quien la usa, y no una web alojada en Vercel. Con esa decisión, el límite de 4,5 MB por petición, la elección de plan y el corte a los 300 s ya no restringen el producto. El código no cambia: la app Next.js y sus rutas siguen igual, y el tope de 4,5 MB sigue en el código (ver la pregunta 4).
+> **Note (2026-11-22):** the owner decided that aba-workbench will be a local app, running on the user's computer, and not a website hosted on Vercel. With that decision, the 4.5 MB per-request limit, the choice of plan and the 300 s cutoff no longer constrain the product. The code does not change: the Next.js app and its routes stay the same, and the 4.5 MB cap stays in the code (see question 4).
 
-Según la documentación de Vercel (actualizada en agosto de 2026), con *Fluid compute*, que viene activado por defecto:
+According to Vercel's documentation (updated August 2026), with *Fluid compute*, which is on by default:
 
-| Plan | Duración por defecto | Máxima |
+| Plan | Default duration | Maximum |
 | --- | --- | --- |
 | Hobby | 300 s | 300 s |
-| Pro / Enterprise | 300 s | 800 s (1.800 s en beta, configurando cada función) |
+| Pro / Enterprise | 300 s | 800 s (1,800 s in beta, configured per function) |
 
-- **El streaming no alarga el límite.** La duración incluye el tiempo de mandar la respuesta, también por streaming. Al pasarse, Vercel corta y devuelve `504 FUNCTION_INVOCATION_TIMEOUT`.
-- **Para una sección que tarda unos minutos.** En Hobby todo tendría que terminar en 5 minutos. Un modelo grande puede pasar uno o dos minutos pensando antes de escribir. La ruta declara `maxDuration = 300` (`src/app/api/generate/route.ts`).
-- **Conexiones que parecen inactivas.** Mientras el modelo piensa no sale texto. La ruta manda una línea de "sigo vivo" cada 15 segundos. Sirve igual en local.
-- **Tamaño de la petición: 4,5 MB.** Antes de mandar se mide el tamaño, y si pasa de 4,5 MB se pide pegar el texto en lugar del PDF (`src/lib/limits.ts`). Un informe real de Q-global puede pesar más que los de prueba, y el base64 añade un 33 %.
+- **Streaming does not extend the limit.** The duration includes the time to send the response, also when it streams. Past it, Vercel cuts the function and returns `504 FUNCTION_INVOCATION_TIMEOUT`.
+- **For a section that takes a few minutes.** On Hobby everything would have to finish within 5 minutes. A large model can spend one or two minutes thinking before writing. The route declares `maxDuration = 300` (`src/app/api/generate/route.ts`).
+- **Connections that look idle.** While the model thinks, no text goes out. The route sends a "still alive" line every 15 seconds. It works the same locally.
+- **Request size: 4.5 MB.** The size is measured before sending, and above 4.5 MB the user is asked to paste the text instead of the PDF (`src/lib/limits.ts`). A real Q-global report can weigh more than the test ones, and base64 adds 33%.
 
-No se desplegó nada.
+Nothing was deployed.
 
-## Qué modelo dejaría por defecto en cada proveedor
+## Which model I would make the default on each provider
 
-Sin salidas reales no puedo recomendar con datos. Por ahora:
+Without real outputs I cannot recommend with data. For now:
 
-- **Claude:** `claude-fable-5-2`, que es lo decidido ("el más capaz"). Opus 5.5 cuesta la mitad. Si escribe Medical Necessity igual de bien, propondría Opus 5.5 como predeterminado.
-- **OpenAI:** `gpt-6.2-astra`, el más capaz según su documentación. `gpt-6.2-sol` cuesta un cuarto y OpenAI lo presenta como el equilibrio entre calidad y costo; aplica la misma regla que con Claude.
+- **Claude:** `claude-fable-5-2`, which is what was decided ("the most capable"). Opus 5.5 costs half. If it writes Medical Necessity just as well, I would propose Opus 5.5 as the default.
+- **OpenAI:** `gpt-6.2-astra`, the most capable according to its documentation. `gpt-6.2-sol` costs a quarter and OpenAI presents it as the balance between quality and cost; the same rule as with Claude applies.
 
-El orden "más capaz primero" vive en `src/lib/providers/index.ts` (`MOST_CAPABLE_FIRST`), porque los proveedores no ordenan sus listas por capacidad.
+The "most capable first" order lives in `src/lib/providers/index.ts` (`MOST_CAPABLE_FIRST`), because the providers don't order their lists by capability.
 
-## Revisión de las salidas contra su estructura
+## Checking the outputs against her structure
 
-Pendiente, junto con las corridas reales. Con las salidas en la mano voy a revisar cada una contra la estructura de ella:
+Pending, together with the real runs. With the outputs in hand I will check each one against her structure:
 
-1. Primer párrafo: nombra todas las fuentes (CDE, Vineland-3, BASC-3 PRQ, cuestionarios FBA, entrevista, observaciones con fechas, IEP si existe) y las áreas con déficit.
-2. Segundo párrafo: puntajes del Vineland-3 con percentiles y niveles, tal como vienen en el informe.
-3. Un párrafo por área, con evidencia del CDE, los padres y la observación directa, y qué hará ABA para esa área.
-4. Cierre: por qué todo esto sostiene la necesidad médica y cómo ABA mejorará esos déficits.
+1. First paragraph: names all the sources (CDE, Vineland-3, BASC-3 PRQ, FBA questionnaires, interview, observations with dates, IEP if there is one) and the areas with deficits.
+2. Second paragraph: Vineland-3 scores with percentiles and levels, exactly as they appear in the report.
+3. One paragraph per area, with evidence from the CDE, the parents and direct observation, and what ABA will do for that area.
+4. Closing: why all of this supports medical necessity and how ABA will improve those deficits.
 
-Además revisaré "nada inventado" contra las lagunas dejadas a propósito en cada caso (también están en cada `case.json`, que no se manda al modelo):
+I will also check "nothing invented" against the gaps planted on purpose in each case (they are also in each `case.json`, which is not sent to the model):
 
-| Caso | Laguna sembrada | Qué debería hacer una buena salida | ¿La anticipa alguna regla? |
+| Case | Planted gap | What a good output should do | Does a rule anticipate it? |
 | --- | --- | --- | --- |
-| Mateo, 4 años | El Vineland-3 no trae el percentil de Socialización (puntaje 64). | Marcar `[MISSING: ...]` y no calcular el percentil. | Sí, una regla general ("no calcular puntajes faltantes"). Prueba si la cumple. |
-| Mateo | No hay nada escrito del VPK: solo lo que la maestra le dijo a la mamá, y la observación en la escuela nunca se hizo. | Presentar la escuela como relato de la mamá, sin describir una observación escolar. | Sí, la regla general sobre lo que solo se sabe de segunda mano. |
-| Mateo (nueva) | El BASC-3 PRQ no trae fecha de aplicación; los demás instrumentos son del 10/02/2026. | No ponerle fecha al PRQ; marcarla como faltante. | No: ninguna regla la menciona. |
-| Sofía, 9 años | El CDE da los diagnósticos pero no el nivel de severidad del autismo. | Marcarlo como faltante y no escribir "Level 1". | Indirectamente: los hechos de Molina dicen que un CDE sin severidad es un problema. |
-| Sofía | La escuela no dejó observar a la BCBA. | Usar el IEP y a la mamá, atribuidos, sin inventar una observación escolar. | Sí, la regla general sobre lo que solo se sabe de segunda mano. |
+| Mateo, 4 | The Vineland-3 has no Socialization percentile (score 64). | Mark `[MISSING: ...]` and not compute the percentile. | Yes, a general rule ("do not compute missing scores"). It tests whether the model follows it. |
+| Mateo | There is nothing written from the VPK: only what the teacher told the mother, and the school observation never happened. | Present school as the mother's account, without describing a school observation. | Yes, the general rule on what is known only second-hand. |
+| Mateo (new) | The BASC-3 PRQ has no administration date; the other instruments are dated 10/02/2026. | Not give the PRQ a date; mark it as missing. | No: no rule mentions it. |
+| Sofía, 9 | The CDE gives the diagnoses but not the autism severity level. | Mark it as missing and not write "Level 1". | Indirectly: the Molina facts say a CDE without a severity level is a problem. |
+| Sofía | The school did not let the BCBA observe. | Use the IEP and the mother, attributed, without inventing a school observation. | Yes, the general rule on what is known only second-hand. |
 
-Otras pruebas que traen los casos: la entrevista de Mateo está en español (la salida debe salir en inglés) y Sofía tiene IEP, medicación y otros servicios.
+Other tests the cases carry: Mateo's interview is in Spanish (the output must come out in English) and Sofía has an IEP, medication and other services.
 
-## Cambios tras la revisión (ronda 1)
+## Changes after the review (round 1)
 
-- **Tope de gasto.** Ahora falla cerrado:
-  - los modelos de fallback tienen precio;
-  - un costo desconocido detiene la corrida;
-  - `--budget` mal escrito es un error;
-  - se aceptan `--opcion=valor` y `--opcion valor`;
-  - el peor caso usa toda la salida permitida.
-- **Reglas.** Ya no regalan una laguna: el ejemplo de marca faltante usa un instrumento que no está en ningún caso. Se quitaron otros dos ejemplos que se parecían a los casos, y Mateo ganó una laguna que ninguna regla anticipa.
-- **Hechos de pagadores.** El archivo de pagadores dice solo lo que dicen los dos textos, y las quejas de Molina están separadas como Molina las agrupa (CDE y solicitud). La lectura de puntajes del Vineland-3 y del PRQ pasó a `rules/instruments.md`, que declara su fuente y está marcado como pendiente de confirmar por la BCBA.
-- **Salidas incompletas.** Una salida cortada, fallida o rechazada ya no se guarda como borrador: el `.md` dice "INCOMPLETE" y el texto parcial, si lo hay, va aparte (`.partial.md`). En un rechazo no se guarda nada. Descartar el texto ante un rechazo ahora es parte del contrato del proveedor (`discard: true`), no solo del script.
-- **Llaves del script.** Van en `.env.phase0`, no en `.env.local`. Next carga `.env.local` en el servidor, y el script ahora se niega a arrancar el servidor si encuentra llaves en los archivos que Next lee.
-- **Pruebas.** 23 pruebas con `node:test` (`pnpm test`), sin llaves ni red.
-- **Ruta.** El tope de tamaño se cuenta al leer el cuerpo, también si llega en trozos. Un error al cargar las reglas responde con un JSON de error en vez de un 500 sin forma. El registro de los SDK está apagado.
+- **Spending cap.** It now fails closed:
+  - the fallback models have a price;
+  - an unknown cost stops the run;
+  - a misspelled `--budget` is an error;
+  - both `--option=value` and `--option value` are accepted;
+  - the worst case uses the full output allowance.
+- **Rules.** They no longer give away a gap: the missing-data marker example uses an instrument that is in neither case. Two other examples that resembled the cases were removed, and Mateo gained a gap that no rule anticipates.
+- **Payer facts.** The payer file says only what the two texts say, and Molina's complaints are grouped as Molina groups them (CDE and request). How to read the Vineland-3 and PRQ scores moved to `rules/instruments.md`, which states its source and is marked as pending confirmation by the BCBA.
+- **Incomplete outputs.** A cut-off, failed or refused output is no longer saved as a draft: the `.md` says "INCOMPLETE" and any partial text goes apart (`.partial.md`). On a refusal nothing is kept. Discarding the text on a refusal is now part of the provider contract (`discard: true`), not just the script's.
+- **Script keys.** They go in `.env.phase0`, not `.env.local`. Next loads `.env.local` into the server, and the script now refuses to start the server if it finds keys in the files Next reads.
+- **Tests.** 23 tests with `node:test` (`pnpm test`), with no keys and no network.
+- **Route.** The size cap is counted while the body is read, also when it arrives in chunks. An error loading the rules answers with a JSON error instead of a shapeless 500. SDK logging is off.
 
-## Decisiones pequeñas que tomé (todas fáciles de cambiar)
+## Small decisions I made (all easy to change)
 
-- **Proyecto.** Valores por defecto de `create-next-app` 16.4.6: carpeta `src/`, ESLint, Cache Components y el `AGENTS.md` que Next escribe para agentes. Añadí `"type": "module"`. Los scripts y las pruebas corren con el TypeScript nativo de Node (Node 24 o más), sin dependencias extra. Para eso, los imports relativos dentro de `src/lib` llevan la extensión `.ts`.
-- **Contrato de la ruta.**
-  - `POST /api/generate` con la llave en el encabezado `x-provider-key`. Responde con eventos de servidor (`meta`, `status`, `text`, `fallback`, `refusal`, `done`, `error`).
-  - `done.complete` dice si el texto es usable.
-  - `GET /api/models?provider=...` devuelve la lista y el modelo por defecto.
-  - `mode: "prewarm"` escribe la caché sin generar texto.
-- **Prompts.** Las reglas generales, las de pagadores y las de instrumentos van primero, después las fuentes del caso y al final las reglas de la sección. Así la caché sirve para todas las secciones de un caso.
-- **Esfuerzo de razonamiento.** `high` en Claude (Opus 5.5 trae `medium` por defecto) y `medium` en OpenAI (su punto de partida documentado para GPT-6.2). Tope de 32.000 tokens de salida.
-- **OpenAI.** Responses API con `store: false`.
-- **PDFs dentro de la petición**, no subidos al proveedor.
-- **Proveedor simulado** solo con `ABA_ENABLE_MOCK_PROVIDER=1` (`pnpm phase0 --mock`).
-- **Salidas.** Cada corrida escribe `docs/phase0/outputs/<caso>/<modelo>.md` y `.json` (tokens, costo, tiempos, versión de las reglas, fallback, estado), más un `runs.json`. Lo del simulador va a `tmp/`, que está en `.gitignore`.
-- **Casos inventados.** Los apellidos son "Ficticio" e "Inventada" y la BCBA es "Daniela Muestra". Los PDF salen de HTML impreso con Chrome (`scripts/render-fixture-pdfs.mts`).
-- **Idioma.** Las reglas están en inglés porque el assessment se escribe en inglés; `rules/README.md` está en español.
-- **Licencia.** Apache 2.0 en su propio commit (`LICENSE` sin modificar, `package.json` y README), por decisión del dueño. `.impeccable/`, una configuración local de una herramienta de diseño, queda fuera del repositorio.
+- **Project.** `create-next-app` 16.4.6 defaults: `src/` folder, ESLint, Cache Components and the `AGENTS.md` that Next writes for agents. I added `"type": "module"`. Scripts and tests run on Node's native TypeScript (Node 24 or later), with no extra dependencies. For that, relative imports inside `src/lib` carry the `.ts` extension.
+- **Route contract.**
+  - `POST /api/generate` with the key in the `x-provider-key` header. It answers with server-sent events (`meta`, `status`, `text`, `fallback`, `refusal`, `done`, `error`).
+  - `done.complete` says whether the text is usable.
+  - `GET /api/models?provider=...` returns the list and the default model.
+  - `mode: "prewarm"` writes the cache without generating text.
+- **Prompts.** The general rules, the payer rules and the instrument rules go first, then the case's sources, and last the section's rules. That way the cache serves every section of a case.
+- **Reasoning effort.** `high` on Claude (Opus 5.5 defaults to `medium`) and `medium` on OpenAI (their documented starting point for GPT-6.2). Output cap of 32,000 tokens.
+- **OpenAI.** Responses API with `store: false`.
+- **PDFs inside the request**, not uploaded to the provider.
+- **Mock provider** only with `ABA_ENABLE_MOCK_PROVIDER=1` (`pnpm phase0 --mock`).
+- **Outputs.** Each run writes `docs/phase0/outputs/<case>/<model>.md` and `.json` (tokens, cost, timings, rules versions, fallback, status), plus a `runs.json`. The mock's output goes to `tmp/`, which is in `.gitignore`.
+- **Invented cases.** The surnames are "Ficticio" and "Inventada" and the BCBA is "Daniela Muestra". The PDFs come from HTML printed with Chrome (`scripts/render-fixture-pdfs.mts`).
+- **Language.** Everything in the repository is in English (owner's decision, 2026-11-22). The only Spanish is test data on purpose: Mateo's parent interview notes and two short quotes in his observation notes, to check that the output comes out in English.
+- **License.** Apache 2.0 in its own commit (unmodified `LICENSE`, `package.json` and README), by the owner's decision. `.impeccable/`, a local configuration of a design tool, stays out of the repository.
 
-## Preguntas abiertas para el dueño
+## Open questions for the owner
 
-1. **Duración de la caché de Claude.** La de 5 minutos cuesta 1,25 veces la entrada al escribirse; la de 1 hora, 2 veces. Si ella deja pasar más de 5 minutos entre secciones, la de 5 minutos vence y la siguiente sección paga la entrada completa otra vez. ¿(a) 5 minutos (lo actual), (b) 1 hora, o (c) decidirlo en la fase 1 midiendo su ritmo real? Cuando se hagan las corridas, los tokens escritos y leídos de caché de cada llamada quedarán en los `.json`.
-2. **Marcas de datos faltantes.** ¿(a) Solo `[MISSING: ...]` y `[CHECK: ...]` dentro del texto (lo actual), (b) una lista aparte de lagunas debajo del texto, o (c) las dos?
-3. **Modelo por defecto si la calidad empata.** Si Opus 5.5 o Sol escriben tan bien como Fable 5.2 o Astra, ¿(a) dejamos por defecto el más capaz como se decidió, o (b) el que cuesta la mitad o la cuarta parte?
-4. **Tope de 4,5 MB con la app local.** Ya no lo impone Vercel. ¿(a) Lo dejamos como está, (b) lo subimos a un valor que cubra sus PDF reales (si ella nos dice cuánto pesan un Vineland-3 y un BASC-3 típicos, solo el tamaño), o (c) lo quitamos?
-5. **Lectura de los instrumentos.** `rules/instruments.md` explica cómo leer el Vineland-3 y el BASC-3 PRQ (medias, desviaciones, sentido de cada escala). No viene de los pagadores. ¿(a) La BCBA lo revisa ahora, o (b) en la fase 1?
+1. **Claude cache lifetime.** The 5-minute cache costs 1.25 times the input to write; the 1-hour one, 2 times. If she lets more than 5 minutes pass between sections, the 5-minute cache expires and the next section pays the full input again. (a) 5 minutes (current), (b) 1 hour, or (c) decide in Phase 1 by measuring her real pace? When the runs are done, the cache write and read tokens of each call will be in the `.json` files.
+2. **Missing-data markers.** (a) Only `[MISSING: ...]` and `[CHECK: ...]` inside the text (current), (b) a separate list of gaps below the text, or (c) both?
+3. **Default model if quality ties.** If Opus 5.5 or Sol write as well as Fable 5.2 or Astra, (a) do we keep the most capable as the default, as decided, or (b) the one that costs half or a quarter?
+4. **The 4.5 MB cap with the local app.** Vercel no longer imposes it. (a) Keep it as it is, (b) raise it to a value that covers her real PDFs (if she tells us how much a typical Vineland-3 and BASC-3 weigh, just the size), or (c) remove it?
+5. **Reading the instruments.** `rules/instruments.md` explains how to read the Vineland-3 and the BASC-3 PRQ (means, standard deviations, the direction of each scale). It does not come from the payers. (a) Does the BCBA review it now, or (b) in Phase 1?
 
-## Cómo reproducirlo
+## How to reproduce
 
 ```sh
 pnpm install && pnpm build
-pnpm test                                   # 23 pruebas, sin llaves ni red
-pnpm phase0 --mock                          # tubería completa con el proveedor simulado, sin costo
-cp .env.phase0.example .env.phase0          # y poner ANTHROPIC_API_KEY y OPENAI_API_KEY (no en .env.local)
-pnpm phase0                                 # corridas reales, tope de 5 USD
-pnpm phase0 --only claude-opus-5-5 --case case-a-mateo   # una sola combinación
+pnpm test                                   # 23 tests, no keys or network
+pnpm phase0 --mock                          # full pipeline with the mock provider, no cost
+cp .env.phase0.example .env.phase0          # and set ANTHROPIC_API_KEY and OPENAI_API_KEY (not in .env.local)
+pnpm phase0                                 # real runs, 5 USD cap
+pnpm phase0 --only claude-opus-5-5 --case case-a-mateo   # a single combination
 ```
 
-## Lo que falta (aplazado por el dueño)
+## What is left (postponed by the owner)
 
-Cuando se decida hacer las corridas reales:
+When the real runs are decided:
 
-1. Correr `pnpm phase0`.
-2. Guardar los textos y sus `.json` en `docs/phase0/outputs/`.
-3. Revisar cada salida contra su estructura y contra las lagunas.
-4. Elegir las dos mejores.
-5. Reemplazar las estimaciones de este informe por lo medido: costo por sección, tiempos y tokens de caché.
+1. Run `pnpm phase0`.
+2. Save the texts and their `.json` files in `docs/phase0/outputs/`.
+3. Check each output against her structure and against the gaps.
+4. Pick the two best.
+5. Replace this report's estimates with what was measured: cost per section, timings and cache tokens.

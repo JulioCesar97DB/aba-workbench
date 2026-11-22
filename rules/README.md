@@ -1,16 +1,14 @@
-# Reglas de redacción
+# Writing rules
 
-Estas son las instrucciones que recibe el modelo, separadas del código para poder leerlas, discutirlas y versionarlas.
+These are the instructions the model receives, kept apart from the code so they can be read, discussed and versioned.
 
-| Archivo | Qué contiene | Cuándo se envía |
+| File | What it holds | When it is sent |
 | --- | --- | --- |
-| `assessment.md` | Reglas para todo el assessment: para qué sirve, quién lo lee, cómo se escribe, "nada inventado", formato para pegar en ABA Matrix. | En cada llamada, como prefijo en caché. |
-| `payers/florida-medicaid-molina.md` | Hechos de la política de Florida Medicaid (dic. 2024) y la guía de Molina (jul. 2026) que pesan en la autorización. Solo lo que esos dos textos dicen. | En cada llamada, como prefijo en caché. |
-| `instruments.md` | Cómo leer el Vineland-3 y el BASC-3 PRQ (medias, desviaciones, sentido de cada escala). No viene de los pagadores; está marcado como pendiente de confirmar por la BCBA. | En cada llamada, como prefijo en caché. |
-| `sections/medical-necessity.md` | Para qué sirve la sección Medical Necessity, la estructura que exige la BCBA y cómo se ve una buena. | Solo al generar esa sección, después del prefijo en caché. |
+| `assessment.md` | Rules for the whole assessment: what it is for, who reads it, how it is written, "nothing invented", the format for pasting into ABA Matrix. | On every call, as part of the cached prefix. |
+| `payers/florida-medicaid-molina.md` | Facts from the Florida Medicaid policy (Dec. 2024) and the Molina guide (Jul. 2026) that bear on authorization. Only what those two texts say. | On every call, as part of the cached prefix. |
+| `instruments.md` | How to read the Vineland-3 and the BASC-3 PRQ (means, standard deviations, the direction of each scale). Not from the payers; marked as pending confirmation by the BCBA. | On every call, as part of the cached prefix. |
+| `sections/medical-necessity.md` | What the Medical Necessity section is for, the structure the BCBA requires and what a good one looks like. | Only when generating that section, after the cached prefix. |
 
-Cada archivo empieza con `id` y `version`. Al cambiar el contenido se sube la versión; cada salida guarda las versiones que la produjeron (`rulesVersions` en el JSON de cada corrida).
+Each file starts with an `id` and a `version`. When the content changes, the version goes up; every output stores the versions that produced it (`rulesVersions` in each run's JSON).
 
-Las reglas están en inglés porque el assessment se escribe en inglés.
-
-El orden importa para el costo: las tres primeras son iguales para todas las secciones y todos los casos, y las fuentes del caso son iguales para todas las secciones de un caso. Ese prefijo se escribe una vez en la caché del proveedor y las demás secciones lo leen a una fracción del precio. Las reglas de cada sección van al final para no romper ese prefijo.
+The order matters for cost: the first three files are the same for every section and every case, and a case's sources are the same for every section of that case. That prefix is written once to the provider's cache and the other sections read it at a fraction of the price. Each section's rules go last so they don't break that prefix.
