@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { CREDENTIALS_FILE_NAME, CredentialsStore, parseCredentials, serializeCredentials, unreadableFileName, type StoredCredentials } from "../src/main/credentials.ts";
-import { describeAccess, ownerOnlyIcaclsArgs, parseWhoamiSid } from "../src/main/owner-only.ts";
+import { writeFileDurably } from "../src/main/durable-write.ts";
+import { describeAccess, ownerOnlyIcaclsArgs, parseWhoamiSid, restrictToOwner } from "../src/main/owner-only.ts";
 
 const HOST_ID = "urn:uuid:5b6f0f8e-2d7a-4c1e-9b3a-7e2f4d6c8a10";
 const SIGNED_IN = {
@@ -172,6 +173,37 @@ test("Windows owner-only: whoami's SID and the icacls arguments", () => {
   assert.equal(parseWhoamiSid('"desktop-1\\ana","S-1-5-21-1004336348-1177238915-682003330-1001"\r\n'), "S-1-5-21-1004336348-1177238915-682003330-1001");
   assert.equal(parseWhoamiSid("nothing useful"), null);
   assert.deepEqual(ownerOnlyIcaclsArgs("C:\\x\\credentials.json.1.tmp", "S-1-5-21-1-2-3-1001"), ["C:\\x\\credentials.json.1.tmp", "/inheritance:r", "/grant:r", "*S-1-5-21-1-2-3-1001:(F)"]);
+});
+
+/** The access entries icacls lists for a file: one per "name:(rights)". */
+function accessEntries(icaclsOutput: string): string[] {
+  return icaclsOutput.split(/\r?\n/).filter((line) => /:\([A-Z,()]+\)\s*$/.test(line.trim()) || /:\(F\)/.test(line));
+}
+
+test("Windows owner-only: icacls leaves an empty file with one access entry, the current user's", { skip: process.platform !== "win32" }, async (t) => {
+  const dir = await folder(t);
+  const file = path.join(dir, "probe.json");
+  await writeFile(file, "");
+  await restrictToOwner(file);
+  const access = await describeAccess(file);
+  assert.equal(accessEntries(access).length, 1, access);
+  assert.doesNotMatch(access, /\(I\)/, "no inherited entry");
+});
+
+test("Windows owner-only: a durable save keeps the temporary file's access list", { skip: process.platform !== "win32" }, async (t) => {
+  const dir = await folder(t);
+  const file = path.join(dir, "probe.json");
+  let afterPrepare = "";
+  await writeFileDurably(file, "{}", {
+    mode: 0o600,
+    prepare: async (temporary) => {
+      await restrictToOwner(temporary);
+      afterPrepare = await describeAccess(temporary);
+    },
+  });
+  const access = await describeAccess(file);
+  assert.equal(accessEntries(afterPrepare).length, 1, `temporary file, after icacls:\n${afterPrepare}`);
+  assert.equal(accessEntries(access).length, 1, `saved file, after the rename:\n${access}`);
 });
 
 test("Windows owner-only: the saved file has one access entry, the current user's, nothing inherited", { skip: process.platform !== "win32" }, async (t) => {
