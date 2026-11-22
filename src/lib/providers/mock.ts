@@ -1,4 +1,4 @@
-import type { GenerateEvent, Provider, TokenUsage } from "./types";
+import type { GenerateEvent, Provider, TokenUsage } from "./types.ts";
 
 /**
  * A fake provider for checking the plumbing (route, streaming, PDF transport, saving)
@@ -40,7 +40,7 @@ export const mockProvider: Provider = {
       if (options.signal.aborted) return;
       yield { type: "text", delta: word };
     }
-    yield { type: "done", stopReason: "end_turn", servedModel: options.model, usage: fakeUsage(inputChars, text.length), attempts: null };
+    yield { type: "done", complete: true, stopReason: "end_turn", servedModel: options.model, usage: fakeUsage(inputChars, text.length), attempts: null };
   },
 
   async prewarm(options) {

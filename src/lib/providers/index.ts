@@ -1,9 +1,9 @@
-import { anthropicProvider, toProviderError as anthropicError } from "./anthropic";
-import { mockProvider } from "./mock";
-import { openaiProvider, toProviderError as openaiError } from "./openai";
-import { ProviderError, type Provider, type ProviderId } from "./types";
+import { anthropicProvider, toProviderError as anthropicError } from "./anthropic.ts";
+import { mockProvider } from "./mock.ts";
+import { openaiProvider, toProviderError as openaiError } from "./openai.ts";
+import { ProviderError, type Provider, type ProviderId } from "./types.ts";
 
-export * from "./types";
+export * from "./types.ts";
 
 export function mockEnabled(): boolean {
   return process.env.ABA_ENABLE_MOCK_PROVIDER === "1";

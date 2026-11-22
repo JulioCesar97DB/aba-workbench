@@ -1,4 +1,4 @@
-import { toSafeError } from "./providers";
+import { toSafeError } from "./providers/index.ts";
 
 /**
  * A text/event-stream response. Each event is "event: <name>" plus one JSON line.

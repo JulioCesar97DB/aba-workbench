@@ -7,9 +7,10 @@ import {
   type GenerateOptions,
   type ModelOption,
   type Provider,
+  type ProviderDeps,
   type TokenUsage,
   type UsageAttempt,
-} from "./types";
+} from "./types.ts";
 
 type Beta = Anthropic.Beta.Messages.BetaMessage;
 type BetaUsage = Anthropic.Beta.Messages.BetaUsage;
@@ -26,9 +27,10 @@ const SERVER_SIDE_FALLBACKS = {
   fallbacks: "default",
 } as const satisfies { betas: Anthropic.Beta.AnthropicBeta[]; fallbacks: "default" };
 
-function client(apiKey: string): Anthropic {
-  // The key arrives with the request and lives only in this client object.
-  return new Anthropic({ apiKey, maxRetries: 2 });
+function makeClient(apiKey: string, deps: ProviderDeps): Anthropic {
+  // The key arrives with the request and lives only in this client object. Logging is
+  // off so that ANTHROPIC_LOG=debug can never print a request body.
+  return new Anthropic({ apiKey, maxRetries: 2, logLevel: "off", ...(deps.fetch ? { fetch: deps.fetch } : {}) });
 }
 
 /**
@@ -86,7 +88,7 @@ function toTokenUsage(u: {
  * With fallbacks, the top-level usage covers only the attempt that produced the final
  * message; usage.iterations lists every attempt, each billed at its own model's price.
  */
-function readUsage(message: Beta, requestedModel: string): { usage: TokenUsage; attempts: UsageAttempt[] | null } {
+export function readUsage(message: Pick<Beta, "usage">, requestedModel: string): { usage: TokenUsage; attempts: UsageAttempt[] | null } {
   const top = message.usage;
   const iterations = (top.iterations ?? []).filter(
     (it): it is Extract<NonNullable<BetaUsage["iterations"]>[number], { type: "message" | "fallback_message" }> =>
@@ -137,51 +139,65 @@ export function toProviderError(error: unknown): ProviderError | null {
   return new ProviderError("provider_error", `Anthropic error ${status ?? ""}`.trim(), status);
 }
 
-export const anthropicProvider: Provider = {
-  id: "anthropic",
+export function createAnthropicProvider(deps: ProviderDeps = {}): Provider {
+  const client = (apiKey: string) => makeClient(apiKey, deps);
+  return {
+    id: "anthropic",
 
-  async listModels(apiKey, signal) {
-    const models: ModelOption[] = [];
-    for await (const model of client(apiKey).models.list({ limit: 100 }, { signal })) {
-      if (model.lifecycle === "retired") continue;
-      models.push({ id: model.id, label: model.display_name, createdAt: model.created_at });
-    }
-    return models;
-  },
-
-  async *generate(options): AsyncIterable<GenerateEvent> {
-    const stream = client(options.apiKey).beta.messages.stream(buildParams(options), { signal: options.signal });
-    for await (const event of stream) {
-      if (event.type === "content_block_start") {
-        const block = event.content_block;
-        if (block.type === "thinking") yield { type: "status", phase: "thinking" };
-        else if (block.type === "text") yield { type: "status", phase: "writing" };
-        // A fallback keeps the text already streamed and the next model continues it.
-        else if (block.type === "fallback") yield { type: "fallback", from: block.from.model, to: block.to.model };
-      } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        yield { type: "text", delta: event.delta.text };
+    async listModels(apiKey, signal) {
+      const models: ModelOption[] = [];
+      for await (const model of client(apiKey).models.list({ limit: 100 }, { signal })) {
+        if (model.lifecycle === "retired") continue;
+        models.push({ id: model.id, label: model.display_name, createdAt: model.created_at });
       }
-    }
-    const message = await stream.finalMessage();
-    // A refusal that no fallback rescued: whatever text arrived must be discarded.
-    if (message.stop_reason === "refusal") {
-      yield {
-        type: "refusal",
-        category: message.stop_details?.category ?? null,
-        explanation: message.stop_details?.explanation ?? null,
-      };
-    }
-    const { usage, attempts } = readUsage(message, options.model);
-    yield { type: "done", stopReason: message.stop_reason ?? "unknown", servedModel: message.model, usage, attempts };
-  },
+      return models;
+    },
 
-  async prewarm(options) {
-    // max_tokens 0 runs prefill only: it writes the cache up to the last breakpoint
-    // (the end of the sources) and returns no content. Same settings as the real call.
-    const message = await client(options.apiKey).beta.messages.create(
-      { ...buildParams(options, false), max_tokens: 0 },
-      { signal: options.signal },
-    );
-    return readUsage(message, options.model).usage;
-  },
-};
+    async *generate(options): AsyncIterable<GenerateEvent> {
+      const stream = client(options.apiKey).beta.messages.stream(buildParams(options), { signal: options.signal });
+      for await (const event of stream) {
+        if (event.type === "content_block_start") {
+          const block = event.content_block;
+          if (block.type === "thinking") yield { type: "status", phase: "thinking" };
+          else if (block.type === "text") yield { type: "status", phase: "writing" };
+          // A fallback keeps the text already streamed and the next model continues it.
+          else if (block.type === "fallback") yield { type: "fallback", from: block.from.model, to: block.to.model };
+        } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          yield { type: "text", delta: event.delta.text };
+        }
+      }
+      const message = await stream.finalMessage();
+      // A refusal that no fallback rescued: whatever text arrived must be discarded.
+      const refused = message.stop_reason === "refusal";
+      if (refused) {
+        yield {
+          type: "refusal",
+          discard: true,
+          category: message.stop_details?.category ?? null,
+          explanation: message.stop_details?.explanation ?? null,
+        };
+      }
+      const { usage, attempts } = readUsage(message, options.model);
+      yield {
+        type: "done",
+        complete: message.stop_reason === "end_turn" && !refused,
+        stopReason: message.stop_reason ?? "unknown",
+        servedModel: message.model,
+        usage,
+        attempts,
+      };
+    },
+
+    async prewarm(options) {
+      // max_tokens 0 runs prefill only: it writes the cache up to the last breakpoint
+      // (the end of the sources) and returns no content. Same settings as the real call.
+      const message = await client(options.apiKey).beta.messages.create(
+        { ...buildParams(options, false), max_tokens: 0 },
+        { signal: options.signal },
+      );
+      return readUsage(message, options.model).usage;
+    },
+  };
+}
+
+export const anthropicProvider = createAnthropicProvider();

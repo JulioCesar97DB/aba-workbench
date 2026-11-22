@@ -7,12 +7,14 @@ import {
   type GenerateOptions,
   type ModelOption,
   type Provider,
+  type ProviderDeps,
   type TokenUsage,
-} from "./types";
+} from "./types.ts";
 
-function client(apiKey: string): OpenAI {
-  // The key arrives with the request and lives only in this client object.
-  return new OpenAI({ apiKey, maxRetries: 2 });
+function makeClient(apiKey: string, deps: ProviderDeps): OpenAI {
+  // The key arrives with the request and lives only in this client object. Logging is
+  // off so that OPENAI_LOG=debug can never print a request body.
+  return new OpenAI({ apiKey, maxRetries: 2, logLevel: "off", ...(deps.fetch ? { fetch: deps.fetch } : {}) });
 }
 
 const breakpoint = { mode: "explicit" as const };
@@ -49,7 +51,8 @@ function buildInput(options: GenerateOptions, includeTask: boolean): OpenAI.Resp
   return input;
 }
 
-function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined): TokenUsage {
+/** OpenAI's input_tokens includes both cached reads and cache writes (see the prompt caching guide's usage example). */
+export function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined): TokenUsage {
   if (!usage) {
     return { uncachedInputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, reasoningTokens: null };
   }
@@ -89,79 +92,91 @@ export function toProviderError(error: unknown): ProviderError | null {
 /** Only text-generation models are offered; image, audio and realtime models are not. */
 const NOT_TEXT_GENERATION = /(image|audio|realtime|transcribe|tts|live|whisper|translate|search|embedding|moderation|cyber)/;
 
-export const openaiProvider: Provider = {
-  id: "openai",
+export function createOpenAIProvider(deps: ProviderDeps = {}): Provider {
+  const client = (apiKey: string) => makeClient(apiKey, deps);
+  return {
+    id: "openai",
 
-  async listModels(apiKey, signal) {
-    const models: ModelOption[] = [];
-    for await (const model of client(apiKey).models.list({ signal })) {
-      if (!/^gpt-\d/.test(model.id) || NOT_TEXT_GENERATION.test(model.id)) continue;
-      models.push({ id: model.id, label: model.id, createdAt: new Date(model.created * 1000).toISOString() });
-    }
-    return models;
-  },
-
-  async *generate(options): AsyncIterable<GenerateEvent> {
-    const stream = await client(options.apiKey).responses.create(
-      {
-        model: options.model,
-        input: buildInput(options, true),
-        stream: true,
-        store: false, // nothing about the case is kept on OpenAI's side for later retrieval
-        reasoning: { effort: options.effort },
-        max_output_tokens: options.maxOutputTokens,
-        prompt_cache_options: { mode: "explicit", ttl: "30m" },
-      },
-      { signal: options.signal },
-    );
-
-    let final: OpenAI.Responses.Response | null = null;
-    let refusal = "";
-    let writing = false;
-    for await (const event of stream) {
-      switch (event.type) {
-        case "response.output_item.added":
-          if (event.item.type === "reasoning") yield { type: "status", phase: "thinking" };
-          break;
-        case "response.output_text.delta":
-          if (!writing) {
-            writing = true;
-            yield { type: "status", phase: "writing" };
-          }
-          yield { type: "text", delta: event.delta };
-          break;
-        case "response.refusal.delta":
-          refusal += event.delta;
-          break;
-        case "response.completed":
-        case "response.incomplete":
-          final = event.response;
-          break;
-        case "response.failed":
-          throw new ProviderError("provider_error", `OpenAI could not finish: ${event.response.error?.message ?? "unknown error"}`);
-        case "error":
-          throw new ProviderError("provider_error", `OpenAI stream error: ${event.message}`);
+    async listModels(apiKey, signal) {
+      const models: ModelOption[] = [];
+      for await (const model of client(apiKey).models.list({ signal })) {
+        if (!/^gpt-\d/.test(model.id) || NOT_TEXT_GENERATION.test(model.id)) continue;
+        models.push({ id: model.id, label: model.id, createdAt: new Date(model.created * 1000).toISOString() });
       }
-    }
-    if (!final) throw new ProviderError("provider_error", "OpenAI stream ended without a final response.");
+      return models;
+    },
 
-    if (refusal) yield { type: "refusal", category: null, explanation: refusal };
-    const stopReason =
-      final.status === "incomplete" ? (final.incomplete_details?.reason ?? "incomplete") : refusal ? "refusal" : (final.status ?? "unknown");
-    yield { type: "done", stopReason, servedModel: final.model, usage: normalizeUsage(final.usage), attempts: null };
-  },
+    async *generate(options): AsyncIterable<GenerateEvent> {
+      const stream = await client(options.apiKey).responses.create(
+        {
+          model: options.model,
+          input: buildInput(options, true),
+          stream: true,
+          store: false, // nothing about the case is kept on OpenAI's side for later retrieval
+          reasoning: { effort: options.effort },
+          max_output_tokens: options.maxOutputTokens,
+          prompt_cache_options: { mode: "explicit", ttl: "30m" },
+        },
+        { signal: options.signal },
+      );
 
-  async prewarm(options) {
-    const response = await client(options.apiKey).responses.create(
-      {
-        model: options.model,
-        input: buildInput(options, false),
-        store: false,
-        reasoning: { effort: options.effort },
-        prompt_cache_options: { mode: "explicit", ttl: "30m", prewarm: true },
-      },
-      { signal: options.signal },
-    );
-    return normalizeUsage(response.usage);
-  },
-};
+      let final: OpenAI.Responses.Response | null = null;
+      let refusal = "";
+      let writing = false;
+      for await (const event of stream) {
+        switch (event.type) {
+          case "response.output_item.added":
+            if (event.item.type === "reasoning") yield { type: "status", phase: "thinking" };
+            break;
+          case "response.output_text.delta":
+            if (!writing) {
+              writing = true;
+              yield { type: "status", phase: "writing" };
+            }
+            yield { type: "text", delta: event.delta };
+            break;
+          case "response.refusal.delta":
+            refusal += event.delta;
+            break;
+          case "response.completed":
+          case "response.incomplete":
+            final = event.response;
+            break;
+          case "response.failed":
+            throw new ProviderError("provider_error", `OpenAI could not finish: ${event.response.error?.message ?? "unknown error"}`);
+          case "error":
+            throw new ProviderError("provider_error", `OpenAI stream error: ${event.message}`);
+        }
+      }
+      if (!final) throw new ProviderError("provider_error", "OpenAI stream ended without a final response.");
+
+      if (refusal) yield { type: "refusal", discard: true, category: null, explanation: refusal };
+      const stopReason =
+        final.status === "incomplete" ? (final.incomplete_details?.reason ?? "incomplete") : refusal ? "refusal" : (final.status ?? "unknown");
+      yield {
+        type: "done",
+        complete: final.status === "completed" && !refusal,
+        stopReason,
+        servedModel: final.model,
+        usage: normalizeUsage(final.usage),
+        attempts: null,
+      };
+    },
+
+    async prewarm(options) {
+      const response = await client(options.apiKey).responses.create(
+        {
+          model: options.model,
+          input: buildInput(options, false),
+          store: false,
+          reasoning: { effort: options.effort },
+          prompt_cache_options: { mode: "explicit", ttl: "30m", prewarm: true },
+        },
+        { signal: options.signal },
+      );
+      return normalizeUsage(response.usage);
+    },
+  };
+}
+
+export const openaiProvider = createOpenAIProvider();

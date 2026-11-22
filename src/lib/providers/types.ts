@@ -57,9 +57,19 @@ export type GenerateEvent =
   | { type: "text"; delta: string }
   /** The requested model declined and another model continues the same answer. */
   | { type: "fallback"; from: string; to: string }
-  | { type: "refusal"; category: string | null; explanation: string | null }
+  /**
+   * The provider refused and no fallback rescued the answer. This invalidates ALL text
+   * received for this generation: the client must discard it, never show it as a draft.
+   */
+  | { type: "refusal"; discard: true; category: string | null; explanation: string | null }
   | {
       type: "done";
+      /**
+       * True only when the model finished on its own (Claude "end_turn", OpenAI
+       * "completed") without a refusal. Anything else (output limit reached, content
+       * filter, refusal) means the text is partial and must not be used as a draft.
+       */
+      complete: boolean;
       stopReason: string;
       /** The model that wrote the final text, which differs from the requested one after a fallback. */
       servedModel: string;
@@ -73,6 +83,11 @@ export interface ModelOption {
   id: string;
   label: string;
   createdAt: string | null;
+}
+
+/** What a provider needs from outside; tests pass a stub fetch so no network call is made. */
+export interface ProviderDeps {
+  fetch?: typeof fetch;
 }
 
 export interface Provider {

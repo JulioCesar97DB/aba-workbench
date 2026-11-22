@@ -1,5 +1,5 @@
-import type { Effort, SourceDocument } from "./providers/types";
-import { isSectionId, type SectionId } from "./rules";
+import type { Effort, SourceDocument } from "./providers/types.ts";
+import { isSectionId, type SectionId } from "./rules.ts";
 
 /** The header that carries the user's own provider key. It is never stored or logged. */
 export const KEY_HEADER = "x-provider-key";
