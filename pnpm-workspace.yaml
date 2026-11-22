@@ -1,3 +1,5 @@
+# pnpm runs no dependency build scripts unless they are listed here.
+# Electron needs none: it downloads its binary the first time it is started.
 allowBuilds:
-  sharp: false
-  unrs-resolver: false
+  # Squirrel.Windows installer tooling pulled in by electron-builder; unused (no installers yet).
+  electron-winstaller: false

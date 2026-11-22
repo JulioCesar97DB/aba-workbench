@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { providerTooLargeMessage } from "../limits.ts";
+import { OPENAI_BASE_URL, pinnedFetch, removeEnvHeaders } from "./endpoints.ts";
 import {
   ProviderError,
   sourceHeader,
@@ -12,9 +14,22 @@ import {
 } from "./types.ts";
 
 function makeClient(apiKey: string, deps: ProviderDeps): OpenAI {
-  // The key arrives with the request and lives only in this client object. Logging is
-  // off so that OPENAI_LOG=debug can never print a request body.
-  return new OpenAI({ apiKey, maxRetries: 2, logLevel: "off", ...(deps.fetch ? { fetch: deps.fetch } : {}) });
+  // The key arrives with the request and lives only in this client object. Every
+  // setting the SDK would otherwise take from the environment is given here
+  // (endpoints.ts lists them): the official address, no extra headers, no organization,
+  // project or admin key, and no logging, so OPENAI_LOG=debug can never print a body.
+  return new OpenAI({
+    apiKey,
+    baseURL: OPENAI_BASE_URL,
+    defaultHeaders: removeEnvHeaders("OPENAI_CUSTOM_HEADERS"),
+    adminAPIKey: null,
+    organization: null,
+    project: null,
+    webhookSecret: null,
+    maxRetries: 2,
+    logLevel: "off",
+    fetch: pinnedFetch(OPENAI_BASE_URL, deps.fetch),
+  });
 }
 
 const breakpoint = { mode: "explicit" as const };
@@ -82,6 +97,10 @@ export function toProviderError(error: unknown): ProviderError | null {
   }
   if (error instanceof OpenAI.RateLimitError) {
     return new ProviderError("rate_limited", "OpenAI rate limit or quota reached; check the account's billing.", status);
+  }
+  // A body over the limit: the size check before sending should prevent it (limits.ts).
+  if (status === 413) {
+    return new ProviderError("request_too_large", providerTooLargeMessage("openai"), status);
   }
   if (error instanceof OpenAI.BadRequestError) {
     return new ProviderError("bad_request", `OpenAI refused the request: ${error.message.slice(0, 300)}`, status);

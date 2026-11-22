@@ -1,6 +1,8 @@
-# Runs the same checks every pull request has passed by hand: install, lint,
-# typecheck, tests, build and the Phase 0 end-to-end run on the mock provider.
-# It uses no secrets and no API keys, and nothing in it calls a real provider.
+# Runs the same checks every pull request has passed by hand, on Linux, Windows
+# and macOS: install, lint, typecheck, unit tests, the Electron app's build, the
+# Phase 0 run on the mock provider, the window tests (Playwright driving the
+# Electron app), packaging the unpacked app, and the window tests again on it. It uses no secrets and no API keys, and nothing in it calls a
+# real provider: the only provider the window can reach is the mock.
 name: CI
 
 on:
@@ -24,11 +26,19 @@ concurrency:
 
 jobs:
   checks:
-    name: Lint, typecheck, test, build, phase0 --mock
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    env:
-      NEXT_TELEMETRY_DISABLED: "1"
+    name: Checks (${{ matrix.os }})
+    strategy:
+      # One system's failure must not cancel or hide the others'.
+      fail-fast: false
+      matrix:
+        # Pinned images, not -latest, so a runner upgrade is a deliberate change.
+        os: [ubuntu-24.04, windows-2025, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        # The same shell everywhere (Git Bash on Windows), so every step reads the same.
+        shell: bash
     steps:
       # Actions are pinned to a full commit SHA; the comment names the release.
       - name: Check out the repository
@@ -64,9 +74,44 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build
+      # electron-vite builds the main process, the preload and the interface into out/.
+      - name: Build the Electron app
         run: pnpm build
 
-      # The full pipeline against the mock provider: no keys, no spend.
+      # The provider layer called directly, against the mock provider: no keys, no spend.
       - name: Phase 0 end-to-end run (mock provider)
         run: pnpm phase0 --mock
+
+      # Linux only: Ubuntu 24.04 stops unprivileged user namespaces through AppArmor,
+      # which Chromium's sandbox needs; without this Electron refuses to start. The
+      # app keeps its sandbox on; this changes the runner, not the app.
+      - name: Let Chromium's sandbox run (Linux)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # Downloads Electron's binary, builds the app and drives its window with
+      # Playwright. Linux runners have no display: xvfb-run (preinstalled on the
+      # image) gives the window a virtual one.
+      - name: Window tests (Playwright, Electron)
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run --auto-servernum pnpm test:e2e
+          else
+            pnpm test:e2e
+          fi
+
+      # Assembles the unpacked app for this system with electron-builder (dist/): no
+      # installer, no signing (mac identity is null in electron-builder.yml; no signing
+      # certificate is configured for Windows), no secrets.
+      - name: Package the app (unpacked, unsigned)
+        run: pnpm package
+
+      # The same window tests, against the packaged app: it starts from dist/ and finds
+      # its rules in its own resources folder.
+      - name: Window tests on the packaged app
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run --auto-servernum pnpm test:e2e:packaged
+          else
+            pnpm test:e2e:packaged
+          fi

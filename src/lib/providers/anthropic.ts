@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { isPdfPageLimitError, pdfPageLimitMessage, providerTooLargeMessage } from "../limits.ts";
+import { ANTHROPIC_BASE_URL, pinnedFetch, removeEnvHeaders } from "./endpoints.ts";
 import {
   ProviderError,
   sourceHeader,
@@ -28,9 +30,20 @@ const SERVER_SIDE_FALLBACKS = {
 } as const satisfies { betas: Anthropic.Beta.AnthropicBeta[]; fallbacks: "default" };
 
 function makeClient(apiKey: string, deps: ProviderDeps): Anthropic {
-  // The key arrives with the request and lives only in this client object. Logging is
-  // off so that ANTHROPIC_LOG=debug can never print a request body.
-  return new Anthropic({ apiKey, maxRetries: 2, logLevel: "off", ...(deps.fetch ? { fetch: deps.fetch } : {}) });
+  // The key arrives with the request and lives only in this client object. Every
+  // setting the SDK would otherwise take from the environment is given here
+  // (endpoints.ts lists them): the official address, no extra headers, no telemetry,
+  // and no logging, so ANTHROPIC_LOG=debug can never print a request body.
+  return new Anthropic({
+    apiKey,
+    baseURL: ANTHROPIC_BASE_URL,
+    defaultHeaders: removeEnvHeaders("ANTHROPIC_CUSTOM_HEADERS"),
+    webhookKey: null,
+    openTelemetry: false,
+    maxRetries: 2,
+    logLevel: "off",
+    fetch: pinnedFetch(ANTHROPIC_BASE_URL, deps.fetch),
+  });
 }
 
 /**
@@ -133,7 +146,16 @@ export function toProviderError(error: unknown): ProviderError | null {
   if (error instanceof Anthropic.RateLimitError) {
     return new ProviderError("rate_limited", "Anthropic rate limit reached; try again in a minute.", status);
   }
+  // 413 request_too_large: the size check before sending should prevent it (limits.ts).
+  if (status === 413) {
+    return new ProviderError("request_too_large", providerTooLargeMessage("anthropic"), status);
+  }
   if (error instanceof Anthropic.BadRequestError) {
+    // The documentation does not give the wording of the PDF page-limit error; a refusal
+    // shaped like one is explained, with Claude's own words kept (limits.ts).
+    if (isPdfPageLimitError(error.message)) {
+      return new ProviderError("too_many_pdf_pages", pdfPageLimitMessage(error.message), status);
+    }
     return new ProviderError("bad_request", `Anthropic refused the request: ${error.message.slice(0, 300)}`, status);
   }
   return new ProviderError("provider_error", `Anthropic error ${status ?? ""}`.trim(), status);

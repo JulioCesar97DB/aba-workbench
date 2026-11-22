@@ -1,24 +1,25 @@
 import { anthropicProvider, toProviderError as anthropicError } from "./anthropic.ts";
-import { mockProvider } from "./mock.ts";
 import { openaiProvider, toProviderError as openaiError } from "./openai.ts";
 import { ProviderError, type Provider, type ProviderId } from "./types.ts";
 
 export * from "./types.ts";
 
-export function mockEnabled(): boolean {
-  return process.env.ABA_ENABLE_MOCK_PROVIDER === "1";
-}
-
+/**
+ * The real providers by id. The mock is not here: the code that wants it (the
+ * development check, `pnpm phase0 --mock`) imports it directly, so a provider id that
+ * arrives from outside can never select it.
+ */
 export function getProvider(id: string): Provider | null {
   if (id === "anthropic") return anthropicProvider;
   if (id === "openai") return openaiProvider;
-  if (id === "mock" && mockEnabled()) return mockProvider;
   return null;
 }
 
-/** Turns any failure into a message that is safe to send to the browser. */
+/** Turns any failure into a message that is safe to show the user: no key, path or request body. */
 export function toSafeError(error: unknown): ProviderError {
   if (error instanceof ProviderError) return error;
+  // The SDKs wrap a refusal from the pinned fetch (endpoints.ts) in a connection error.
+  if (error instanceof Error && error.cause instanceof ProviderError) return error.cause;
   const known = anthropicError(error) ?? openaiError(error);
   if (known) return known;
   return new ProviderError("internal_error", "The request failed before the provider answered.");
