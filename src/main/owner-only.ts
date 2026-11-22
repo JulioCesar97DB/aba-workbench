@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -9,6 +11,11 @@ import { promisify } from "node:util";
  * current user's security identifier (SID), and nothing inherited from the folder, set
  * with Windows' own icacls on the empty temporary file before any secret is written to it;
  * the rename that replaces the file keeps it. Nothing here imports Electron.
+ *
+ * The whole access list is set at once (icacls /restore with an SDDL string), not edited:
+ * a new file can start with explicit entries of its own (SYSTEM and Administrators, from
+ * the process's default access list, when its folder passes nothing down), which
+ * "/inheritance:r /grant:r" would leave in place, as CI on Windows showed.
  */
 
 const run = promisify(execFile);
@@ -37,9 +44,20 @@ export function parseWhoamiSid(stdout: string): string | null {
   return match ? match[1] : null;
 }
 
-/** The icacls arguments that leave `file` with one entry: full control for `sid`, nothing inherited. */
-export function ownerOnlyIcaclsArgs(file: string, sid: string): string[] {
-  return [file, "/inheritance:r", "/grant:r", `*${sid}:(F)`];
+/**
+ * The access list that leaves a file with one entry, full control (FA) for `sid`, and
+ * protected (P) from anything its folder would pass down, in SDDL.
+ */
+export function ownerOnlySddl(sid: string): string {
+  return `D:P(A;;FA;;;${sid})`;
+}
+
+/**
+ * What icacls /restore reads: for each file, its name inside the folder given to icacls,
+ * then its SDDL, in UTF-16LE as icacls /save writes it.
+ */
+export function ownerOnlyAclFile(fileName: string, sid: string): Buffer {
+  return Buffer.from(`${fileName}\r\n${ownerOnlySddl(sid)}\r\n`, "utf16le");
 }
 
 /**
@@ -50,7 +68,16 @@ export function ownerOnlyIcaclsArgs(file: string, sid: string): string[] {
 export async function restrictToOwner(file: string, platform: NodeJS.Platform = process.platform): Promise<void> {
   if (platform !== "win32") return;
   const sid = await currentUserSid();
-  await run(system32("icacls.exe"), ownerOnlyIcaclsArgs(file, sid), { windowsHide: true });
+  // The ACL file names only the file and the SID: nothing secret. It lives in its own
+  // temporary folder, removed at once.
+  const folder = await mkdtemp(path.join(tmpdir(), "aba-acl-"));
+  try {
+    const aclFile = path.join(folder, "acl.txt");
+    await writeFile(aclFile, ownerOnlyAclFile(path.basename(file), sid));
+    await run(system32("icacls.exe"), [path.dirname(file), "/restore", aclFile], { windowsHide: true });
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
 }
 
 /** Windows only: the access list's entries as icacls shows them, for tests and diagnostics. */

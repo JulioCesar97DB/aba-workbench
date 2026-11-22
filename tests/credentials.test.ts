@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { CREDENTIALS_FILE_NAME, CredentialsStore, parseCredentials, serializeCredentials, unreadableFileName, type StoredCredentials } from "../src/main/credentials.ts";
 import { writeFileDurably } from "../src/main/durable-write.ts";
-import { describeAccess, ownerOnlyIcaclsArgs, parseWhoamiSid, restrictToOwner } from "../src/main/owner-only.ts";
+import { describeAccess, ownerOnlyAclFile, ownerOnlySddl, parseWhoamiSid, restrictToOwner } from "../src/main/owner-only.ts";
 
 const HOST_ID = "urn:uuid:5b6f0f8e-2d7a-4c1e-9b3a-7e2f4d6c8a10";
 const SIGNED_IN = {
@@ -169,10 +169,12 @@ test("credentials store: leftover temporary files of a crashed save are removed 
   assert.deepEqual(await readdir(dir), []);
 });
 
-test("Windows owner-only: whoami's SID and the icacls arguments", () => {
+test("Windows owner-only: whoami's SID and the access list icacls sets", () => {
   assert.equal(parseWhoamiSid('"desktop-1\\ana","S-1-5-21-1004336348-1177238915-682003330-1001"\r\n'), "S-1-5-21-1004336348-1177238915-682003330-1001");
   assert.equal(parseWhoamiSid("nothing useful"), null);
-  assert.deepEqual(ownerOnlyIcaclsArgs("C:\\x\\credentials.json.1.tmp", "S-1-5-21-1-2-3-1001"), ["C:\\x\\credentials.json.1.tmp", "/inheritance:r", "/grant:r", "*S-1-5-21-1-2-3-1001:(F)"]);
+  // One entry, full control for the user, protected from anything the folder passes down.
+  assert.equal(ownerOnlySddl("S-1-5-21-1-2-3-1001"), "D:P(A;;FA;;;S-1-5-21-1-2-3-1001)");
+  assert.equal(ownerOnlyAclFile("credentials.json.1.tmp", "S-1-5-21-1-2-3-1001").toString("utf16le"), "credentials.json.1.tmp\r\nD:P(A;;FA;;;S-1-5-21-1-2-3-1001)\r\n");
 });
 
 /** The access entries icacls lists for a file: one per "name:(rights)". */
