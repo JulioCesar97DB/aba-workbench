@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
+import { temporaryFileFor } from "../src/main/durable-write.ts";
 import { defaultLanguage, MAX_FOLDER_PATH_LENGTH, readStoredSettings, serializeSettings, SETTINGS_FILE_NAME, SettingsStore, type StoredSettings } from "../src/main/settings.ts";
 
 const DEFAULTS: StoredSettings = { language: "es", casesFolder: null };
@@ -162,4 +163,15 @@ test("S3: a settings save cut short in an earlier run leaves no temporary copy a
   const store = new SettingsStore(file, () => DEFAULTS, () => undefined);
   assert.deepEqual(await store.get(), EN);
   assert.deepEqual(readdirSync(folder).sort(), [SETTINGS_FILE_NAME, `${SETTINGS_FILE_NAME}.backup`].sort());
+});
+
+test("R4-1: a settings save never touches a temporary file it did not create", async () => {
+  const file = tempFile(serializeSettings(EN));
+  const store = new SettingsStore(file, () => DEFAULTS, () => undefined);
+  await store.get();
+  // Appears after start (the leftover cleanup has run): a save must use another name and leave it.
+  writeFileSync(temporaryFileFor(file), "not this save's");
+  assert.deepEqual(await store.setLanguage("es"), { language: "es", casesFolder: null });
+  assert.equal(readFileSync(temporaryFileFor(file), "utf8"), "not this save's");
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { version: 1, language: "es" });
 });

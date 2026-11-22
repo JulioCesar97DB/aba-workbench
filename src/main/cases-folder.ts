@@ -94,17 +94,20 @@ async function canWrite(folder: string, platform: NodeJS.Platform, probe: boolea
     }
   }
   if (!probe) return true;
-  const probeFile = path.join(folder, `${WRITE_CHECK_PREFIX}${process.pid}${TEMPORARY_SUFFIX}`);
-  try {
-    const handle = await open(probeFile, "wx");
-    await handle.close();
-    await rm(probeFile, { force: true });
-    return true;
-  } catch (error) {
-    if (errorCode(error) === "EEXIST") {
-      await rm(probeFile, { force: true }).catch(() => undefined);
-      return true;
+  // Like a save (src/main/durable-write.ts): an exclusive create under a free name, and the
+  // removal of only the file this check created; a taken name is left alone.
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const probeFile = path.join(folder, `${WRITE_CHECK_PREFIX}${process.pid}${attempt === 0 ? "" : `-${attempt}`}${TEMPORARY_SUFFIX}`);
+    let handle;
+    try {
+      handle = await open(probeFile, "wx");
+    } catch (error) {
+      if (errorCode(error) === "EEXIST") continue;
+      return false;
     }
-    return false;
+    await handle.close().catch(() => undefined);
+    await rm(probeFile, { force: true }).catch(() => undefined);
+    return true;
   }
+  return false;
 }

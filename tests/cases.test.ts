@@ -252,31 +252,38 @@ test("durable write: writes the whole file, leaves no temporary file, replaces a
   assert.deepEqual(readdirSync(folder), [CASE_FILE_NAME]);
 });
 
-test("durable write: a stale temporary file from a crash does not get in the way", async () => {
+test("R4-1: a temporary file a crashed run left under this process's id is never touched; the save uses another name", async () => {
   const folder = tempFolder();
   const file = path.join(folder, CASE_FILE_NAME);
-  writeFileSync(temporaryFileFor(file), "half a file");
+  // A crashed earlier run had the same process id (ids are reused after a reboot), and the next name too.
+  writeFileSync(temporaryFileFor(file), "the user's latest change");
+  writeFileSync(temporaryFileFor(file, 1), "another leftover");
   await writeFileDurably(file, "whole");
   assert.equal(readFileSync(file, "utf8"), "whole");
-  assert.deepEqual(readdirSync(folder), [CASE_FILE_NAME]);
+  assert.equal(readFileSync(temporaryFileFor(file), "utf8"), "the user's latest change");
+  assert.equal(readFileSync(temporaryFileFor(file, 1), "utf8"), "another leftover");
+  assert.deepEqual(readdirSync(folder).sort(), [CASE_FILE_NAME, path.basename(temporaryFileFor(file)), path.basename(temporaryFileFor(file, 1))].sort());
+  // Every name a save uses is one the listing recognizes as a temporary data file.
+  assert.match(path.basename(temporaryFileFor(file, 7)), /^aba-case\.json\.[0-9]+\.tmp$/);
 });
-
-test("durable write: a failed write leaves the old file as it was and no temporary file", async () => {
+test("R4-1: a failed save removes the temporary file it created, and never one it did not", async () => {
   const folder = tempFolder();
   const file = path.join(folder, CASE_FILE_NAME);
-  writeFileSync(file, "old");
-  // A folder where the temporary file would go: the write fails on every system.
-  mkdirSync(temporaryFileFor(file));
-  writeFileSync(path.join(temporaryFileFor(file), "keep"), "");
+  // A folder where the file should be: the rename fails on every system, after the
+  // temporary file was created and written.
+  mkdirSync(file);
+  writeFileSync(path.join(file, "keep"), "");
+  // Left by others: one with this process's id, one with another's.
+  writeFileSync(temporaryFileFor(file), "left by a crashed run with this id");
+  writeFileSync(path.join(folder, `${CASE_FILE_NAME}.99999.tmp`), "left by another run");
   await assert.rejects(writeFileDurably(file, "new"));
-  assert.equal(readFileSync(file, "utf8"), "old");
-  // It never creates a folder either.
+  assert.deepEqual(readdirSync(folder).sort(), [CASE_FILE_NAME, path.basename(temporaryFileFor(file)), `${CASE_FILE_NAME}.99999.tmp`].sort());
+  assert.equal(readFileSync(temporaryFileFor(file), "utf8"), "left by a crashed run with this id");
+  assert.equal(readFileSync(path.join(folder, `${CASE_FILE_NAME}.99999.tmp`), "utf8"), "left by another run");
+  // A save that fails before it creates anything (no such folder) removes nothing.
   await assert.rejects(writeFileDurably(path.join(folder, "no-such-folder", "x.json"), "x"));
-  assert.deepEqual(readdirSync(folder).sort(), [CASE_FILE_NAME, path.basename(temporaryFileFor(file))].sort());
+  assert.equal(readdirSync(folder).length, 3);
 });
-
-/* The cases folder */
-
 test("cases folder: the default is ABA Workbench in the home folder, outside Documents", () => {
   assert.equal(defaultCasesFolder("/Users/ana", path.posix), "/Users/ana/ABA Workbench");
   assert.equal(defaultCasesFolder("/home/ana", path.posix), "/home/ana/ABA Workbench");
@@ -877,22 +884,24 @@ test("R3-1: a crash after the flush (before or after the rename) leaves a comple
   assert.equal((await lib.open(ID)).outcome, "opened");
 });
 
-test("R3-1: a complete temporary file still being written (this process's own, or changed in the last minute) waits", async () => {
+test("R3-1: a complete temporary file changed in the last minute waits; once left behind it is finished, whatever its process id", async () => {
   const folder = tempFolder();
   interruptedCreate(folder, "Fresh", COMPLETE, { old: false });
-  interruptedCreate(folder, "Own", serializeCaseFile(sample({ id: "22222222-2222-4222-8222-222222222222", label: "Own" })), { pid: process.pid });
+  // Named after this process (a crashed earlier run with the same id), but not being written now.
+  interruptedCreate(folder, "Same id", serializeCaseFile(sample({ id: "22222222-2222-4222-8222-222222222222", label: "Same process id" })), { pid: process.pid, old: false });
   const before = everything(folder);
   const { lib } = library(folder);
   assert.deepEqual((await lib.list()).unreadable, [
     { folderName: "Fresh", reason: "unfinished" },
-    { folderName: "Own", reason: "unfinished" },
+    { folderName: "Same id", reason: "unfinished" },
   ]);
   assert.deepEqual(everything(folder), before);
-  // A minute later, the one another process left is finished.
+  // A minute later, both are finished.
   makeOld(path.join(folder, "Fresh", `${CASE_FILE_NAME}.4242.tmp`));
+  makeOld(path.join(folder, "Same id", `${CASE_FILE_NAME}.${process.pid}.tmp`));
   assert.deepEqual(
-    (await lib.list()).cases.map((c) => c.label),
-    ["Interrupted"],
+    (await lib.list()).cases.map((c) => c.label).sort(),
+    ["Interrupted", "Same process id"],
   );
 });
 
@@ -966,4 +975,50 @@ test("R3-1: a creation that crashed for real (the save never renamed its file) i
     ["Ana"],
   );
   assert.deepEqual(readdirSync(path.join(folder, "Ana")), [CASE_FILE_NAME]);
+});
+
+/* Review round 4 */
+
+test("R4-1: opening and saving a case never touches a leftover named after this process's id", async () => {
+  const folder = tempFolder();
+  const { lib } = library(folder);
+  const created = await lib.create({ label: "Ana" });
+  assert.ok(created.outcome === "created");
+  const caseFolder = path.join(folder, "Ana");
+  const leftover = path.join(caseFolder, `${CASE_FILE_NAME}.${process.pid}.tmp`);
+  const newer = serializeCaseFile(sample({ id: created.case.id, label: "Ana, newer" }));
+  writeFileSync(leftover, newer);
+  makeOld(leftover);
+  writeFileSync(path.join(caseFolder, "a.pdf"), "%PDF");
+  const opened = await lib.open(created.case.id);
+  assert.ok(opened.outcome === "opened");
+  // The PDF list was saved (under another temporary name), and the leftover is as it was.
+  assert.deepEqual(opened.case.files.map((f) => f.name), ["a.pdf"]);
+  assert.equal(JSON.parse(readFileSync(path.join(caseFolder, CASE_FILE_NAME), "utf8")).files.length, 1);
+  assert.ok(await lib.update(created.case.id, (data) => ({ ...data, label: "Ana R." })));
+  assert.equal(readFileSync(leftover, "utf8"), newer);
+  assert.deepEqual(readdirSync(caseFolder).sort(), ["a.pdf", CASE_FILE_NAME, path.basename(leftover)].sort());
+});
+
+test("R4-2: a complete temporary file next to a partial one is not chosen: shown as unfinished, untouched", async () => {
+  const folder = tempFolder();
+  interruptedCreate(folder, "Two saves", COMPLETE);
+  writeFileSync(path.join(folder, "Two saves", `${CASE_FILE_NAME}.4243.tmp`), COMPLETE.slice(0, 50));
+  makeOld(path.join(folder, "Two saves", `${CASE_FILE_NAME}.4243.tmp`));
+  const before = everything(folder);
+  const { lib } = library(folder);
+  const list = await lib.list();
+  assert.deepEqual(list.cases, []);
+  assert.deepEqual(list.unreadable, [{ folderName: "Two saves", reason: "unfinished" }]);
+  assert.deepEqual(everything(folder), before);
+});
+
+test("R4-1: Windows' write check never removes a file it did not create", async () => {
+  const folder = tempFolder();
+  // A check that a crashed run with this process id left behind.
+  const leftover = path.join(folder, `.aba-workbench-write-check-${process.pid}.tmp`);
+  writeFileSync(leftover, "not this check's");
+  assert.equal(await inspectCasesFolder(folder, false, "win32"), "ready");
+  assert.deepEqual(readdirSync(folder), [path.basename(leftover)]);
+  assert.equal(readFileSync(leftover, "utf8"), "not this check's");
 });

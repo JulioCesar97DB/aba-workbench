@@ -124,11 +124,11 @@ type Unfinished = { kind: "none" } | { kind: "unfinished"; recoverable: { tempor
 /**
  * What a case folder with no data file holds of one being created. "none": no temporary
  * data file at all (an ordinary "not-a-case" folder). "unfinished": at least one plain file
- * named "aba-case.json.<digits>.tmp"; it is recoverable only when the folder holds nothing
- * else (every entry a plain temporary data file, checked with lstat so a link is never
- * followed), none of them is still being written (isLeftBehind: not this process's own,
- * untouched for a minute), and exactly one reads as a complete case under the same strict
- * reading as aba-case.json. Reads only; never writes.
+ * named "aba-case.json.<digits>.tmp"; it is recoverable only when the folder holds that one
+ * file and nothing else (a plain file, checked with lstat so a link is never followed), it
+ * is not still being written (isLeftBehind: not one this process is writing, untouched for
+ * a minute), and it reads as a complete case under the same strict reading as
+ * aba-case.json. Reads only; never writes.
  */
 export async function inspectUnfinishedCase(folder: string): Promise<Unfinished> {
   let names: string[];
@@ -145,7 +145,10 @@ export async function inspectUnfinishedCase(folder: string): Promise<Unfinished>
   const temporaries: string[] = [];
   for (const name of names) if (isTemporaryFileOf(CASE_FILE_NAME, name) && (await plainFile(name))) temporaries.push(name);
   if (temporaries.length === 0) return { kind: "none" };
-  if (temporaries.length !== names.length) return { kind: "unfinished", recoverable: null };
+  // Exactly one file, and it is the temporary data file: two would mean two saves were
+  // attempted, and which one the user wants (a partial one may be the newer change)
+  // cannot be told, so the app does not choose.
+  if (names.length !== 1 || temporaries.length !== 1) return { kind: "unfinished", recoverable: null };
   const complete: Array<{ temporary: string; data: CaseData }> = [];
   for (const name of temporaries) {
     if (!(await isLeftBehind(folder, name))) return { kind: "unfinished", recoverable: null };
