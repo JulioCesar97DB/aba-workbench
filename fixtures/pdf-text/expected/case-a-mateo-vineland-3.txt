@@ -1,0 +1,60 @@
+--- Page 1 of 2 ---
+Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)
+Comprehensive Parent/Caregiver Interview Form: Score Report
+
+Examinee | Mateo Ficticio
+Sex | Male
+Date of birth | 08/03/2022
+Age at testing | 4:2
+Interview date | 10/02/2026
+Respondent | Lucía Ficticio (mother)
+Interviewer | Daniela Muestra, M.S., BCBA
+Language of administration | Spanish
+
+Domain scores
+
+Domain | Sum of v-scale scores | Standard score | 90% confidence interval | Percentile rank | Adaptive level
+Communication | 23 | 62 | 57–67 | 1 | Low
+Daily Living Skills | 25 | 70 | 65–75 | 2 | Low
+Socialization | 21 | 64 | 59–69 | — | Low
+Motor Skills | 24 | 82 | 76–88 | 12 | Moderately Low
+Adaptive Behavior Composite | 93 | 66 | 62–70 | 1 | Low
+
+Standard scores: mean 100, SD 15. Percentile rank not printed for Socialization.
+
+Subdomain scores
+
+Domain | Subdomain | Raw score | v-scale score | Age equivalent | Adaptive level
+Communication | Receptive | 31 | 8 | 1:6 | Low
+Communication | Expressive | 22 | 6 | 1:3 | Low
+Communication | Written | 4 | 9 | 2:9 | Low
+Daily Living Skills | Personal | 18 | 7 | 1:9 | Low
+Daily Living Skills | Domestic | 6 | 10 | 2:6 | Moderately Low
+Daily Living Skills | Community | 5 | 8 | 2:0 | Low
+Socialization | Interpersonal Relationships | 21 | 7 | 1:5 | Low
+Socialization | Play and Leisure | 14 | 8 | 1:8 | Low
+Socialization | Coping | 6 | 6 | 1:7 | Low
+Motor Skills | Fine Motor | 38 | 11 | 3:1 | Moderately Low
+Motor Skills | Gross Motor | 62 | 13 | 3:9 | Adequate
+
+v-scale scores: mean 15, SD 3. Age equivalents in years:months.
+
+--- Page 2 of 2 ---
+Maladaptive Behavior domain
+
+Index / subscale | Raw score | v-scale score | Level
+Internalizing | 9 | 17 | Average
+Externalizing | 17 | 21 | Clinically Significant
+Maladaptive Behavior Index | 29 | 20 | Elevated
+
+Maladaptive v-scale levels: Average 1 to 17; Elevated 18 to 20; Clinically Significant 21 to 24. Higher scores indicate more problem behavior.
+
+Critical items endorsed (rated 2 = often)
+
+Item | Rating
+Bangs head or other body parts against objects, or hits self | 2
+Runs away or wanders off from caregivers | 2
+Bites others | 2
+Eats or drinks things that are not food | 1
+
+Invented case created to test aba-workbench. Not a real person and not a publisher-issued report; the layout imitates a typical scoring summary.

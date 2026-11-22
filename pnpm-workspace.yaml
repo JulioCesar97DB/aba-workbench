@@ -3,3 +3,7 @@
 allowBuilds:
   # Squirrel.Windows installer tooling pulled in by electron-builder; unused (no installers yet).
   electron-winstaller: false
+# PDF.js (pdfjs-dist) can use this native canvas package to draw pages; the app only reads
+# their text, and the main-process bundle could not load a native module anyway.
+ignoredOptionalDependencies:
+  - "@napi-rs/canvas"

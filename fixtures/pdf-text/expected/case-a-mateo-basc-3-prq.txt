@@ -1,0 +1,31 @@
+--- Page 1 of 1 ---
+BASC-3 Parenting Relationship Questionnaire (PRQ)
+Preschool form (ages 2 to 5): Score Report
+
+Child | Mateo Ficticio
+Child age | 4:2
+Rater | Lucía Ficticio (mother)
+Administration date | —
+Administered by | Daniela Muestra, M.S., BCBA
+Norm group | General, combined sex
+
+Validity indexes
+
+Index | Result
+F index | Acceptable
+Consistency index | Acceptable
+Omitted items | 0
+
+Scale scores
+
+Scale | Raw score | T-score | 90% confidence interval | Percentile | Classification
+Attachment | 31 | 44 | 39–49 | 27 | Average
+Communication | 14 | 38 | 33–43 | 12 | At-Risk
+Discipline Practices | 12 | 33 | 28–38 | 5 | At-Risk
+Involvement | 22 | 46 | 41–51 | 34 | Average
+Parenting Confidence | 11 | 29 | 24–34 | 2 | Clinically Significant
+Relational Frustration | 27 | 71 | 66–76 | 97 | Clinically Significant
+
+T-scores: mean 50, SD 10. Attachment, Communication, Discipline Practices, Involvement, Parenting Confidence: Very High 70+, High 60 to 69, Average 41 to 59, At-Risk 31 to 40, Clinically Significant 30 and below. Relational Frustration: Clinically Significant 70+, At-Risk 60 to 69, Average 41 to 59, Low 40 and below.
+
+Invented case created to test aba-workbench. Not a real person and not a publisher-issued report; the layout imitates a typical scoring summary.

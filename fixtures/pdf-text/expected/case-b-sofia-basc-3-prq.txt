@@ -1,0 +1,32 @@
+--- Page 1 of 1 ---
+BASC-3 Parenting Relationship Questionnaire (PRQ)
+Child/Adolescent form (ages 6 to 18): Score Report
+
+Child | Sofía Inventada
+Child age | 9:4
+Rater | Carmen Inventada (mother)
+Administration date | 10/05/2026
+Administered by | Daniela Muestra, M.S., BCBA
+Norm group | General, combined sex
+
+Validity indexes
+
+Index | Result
+F index | Acceptable
+Consistency index | Acceptable
+Omitted items | 1
+
+Scale scores
+
+Scale | Raw score | T-score | 90% confidence interval | Percentile | Classification
+Attachment | 33 | 47 | 42–52 | 38 | Average
+Communication | 24 | 41 | 36–46 | 19 | Average
+Discipline Practices | 14 | 36 | 31–41 | 8 | At-Risk
+Involvement | 25 | 43 | 38–48 | 24 | Average
+Parenting Confidence | 15 | 34 | 29–39 | 6 | At-Risk
+Satisfaction with School | 9 | 31 | 26–36 | 3 | At-Risk
+Relational Frustration | 24 | 68 | 63–73 | 95 | At-Risk
+
+T-scores: mean 50, SD 10. Attachment, Communication, Discipline Practices, Involvement, Parenting Confidence and Satisfaction with School: Very High 70+, High 60 to 69, Average 41 to 59, At-Risk 31 to 40, Clinically Significant 30 and below. Relational Frustration: Clinically Significant 70+, At-Risk 60 to 69, Average 41 to 59, Low 40 and below.
+
+Invented case created to test aba-workbench. Not a real person and not a publisher-issued report; the layout imitates a typical scoring summary.

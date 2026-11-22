@@ -1,0 +1,24 @@
+--- Page 1 of 2 ---
+Invented Adaptive Skills Summary (layout check)
+Invented report made to test aba-workbench's PDF text extraction. Every name, date and score is made up.
+
+Student | Bruno Desconocido Prueba
+Date of birth | 11/30/2019
+Parent/Guardian | Inés Prueba-Salcedo (mother)
+
+Scores with long names
+Area of adaptive functioning assessed | Standard score | Percentile | Descriptor
+Communication | 71 | 3 | Low
+Daily living skills at home and in the community | 68 | 2 | Low
+Socialization | 74 | 4 | Moderately low
+Composite | 69 | 2 | Low, with significant scatter across domains
+
+In a narrow column, the student's full name Bruno Desconocido Prueba is likely to wrap across two lines, which the de-identification must still catch, as must Inés Prueba-Salcedo.
+
+--- Page 2 of 2 ---
+Second page
+Behavior | Rate per hour | Function (hypothesized)
+Elopement | 0.8 | Escape; access to tangibles
+Hitting peers | 1.5 | Attention
+
+Invented case created to test aba-workbench. Not a real person and not a publisher-issued report.
