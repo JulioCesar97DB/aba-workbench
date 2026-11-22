@@ -1,5 +1,7 @@
 # Phase 0: report
 
+> **Note (2026-11-22):** this is the historical record of Phase 0, when aba-workbench was a Next.js site meant for Vercel. The project has since moved to an Electron desktop app: the route handlers described below are gone, and `pnpm phase0` now calls the provider layer directly, with no server. See [../desktop.md](../desktop.md) and the README for the project as it is now.
+
 Date: November 22, 2026. Branch `JulioCesar97DB/phase-0`, not pushed and with no pull request (that comes after the review).
 
 ## Summary
