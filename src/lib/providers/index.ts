@@ -19,6 +19,8 @@ export function getProvider(id: string): Provider | null {
 /** Turns any failure into a message that is safe to send to the browser. */
 export function toSafeError(error: unknown): ProviderError {
   if (error instanceof ProviderError) return error;
+  // The SDKs wrap a refusal from the pinned fetch (endpoints.ts) in a connection error.
+  if (error instanceof Error && error.cause instanceof ProviderError) return error.cause;
   const known = anthropicError(error) ?? openaiError(error);
   if (known) return known;
   return new ProviderError("internal_error", "The request failed before the provider answered.");
