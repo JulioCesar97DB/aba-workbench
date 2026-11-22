@@ -6,8 +6,12 @@ import type { PromptParts, SourceDocument } from "./providers/types.ts";
  * The writing rules live as versioned Markdown files in /rules, not in code.
  * Every generation reports the versions it used, so an output can be traced back
  * to the exact rules that produced it.
+ *
+ * Scripts and tests run from the repository root and use this default. The desktop app
+ * passes its own folder (see src/main/paths.ts), because a packaged app's working
+ * directory is not the repository.
  */
-const RULES_DIR = path.join(process.cwd(), "rules");
+export const DEFAULT_RULES_DIR = path.join(process.cwd(), "rules");
 
 /** Same for every section and every case: this is the cached system prefix. */
 const SYSTEM_FILES = ["assessment.md", "payers/florida-medicaid-molina.md", "instruments.md"];
@@ -33,7 +37,8 @@ interface RulesFile {
 }
 
 function parseRulesFile(raw: string, fileName: string): RulesFile {
-  const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(raw);
+  // A Windows checkout or editor may turn line endings into CRLF; the format is the same.
+  const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(raw.replace(/\r\n/g, "\n"));
   if (!match) throw new Error(`Rules file ${fileName} has no front matter.`);
   const fields = Object.fromEntries(
     match[1].split("\n").map((line) => {
@@ -47,12 +52,13 @@ function parseRulesFile(raw: string, fileName: string): RulesFile {
 
 const cache = new Map<string, Promise<RulesFile>>();
 
-function loadRulesFile(relativePath: string): Promise<RulesFile> {
-  let pending = cache.get(relativePath);
+function loadRulesFile(rulesDir: string, relativePath: string): Promise<RulesFile> {
+  const fullPath = path.join(rulesDir, relativePath);
+  let pending = cache.get(fullPath);
   if (!pending) {
-    pending = readFile(path.join(RULES_DIR, relativePath), "utf8").then((raw) => parseRulesFile(raw, relativePath));
+    pending = readFile(fullPath, "utf8").then((raw) => parseRulesFile(raw, relativePath));
     // In development the files are re-read on every request so edits show up at once.
-    if (process.env.NODE_ENV === "production") cache.set(relativePath, pending);
+    if (process.env.NODE_ENV === "production") cache.set(fullPath, pending);
   }
   return pending;
 }
@@ -60,11 +66,12 @@ function loadRulesFile(relativePath: string): Promise<RulesFile> {
 export async function buildPrompt(
   sectionId: SectionId,
   sources: SourceDocument[],
+  rulesDir: string = DEFAULT_RULES_DIR,
 ): Promise<{ prompt: PromptParts; rulesVersions: Record<string, string> }> {
   const section = SECTIONS[sectionId];
   const [systemFiles, sectionFile] = await Promise.all([
-    Promise.all(SYSTEM_FILES.map(loadRulesFile)),
-    loadRulesFile(section.file),
+    Promise.all(SYSTEM_FILES.map((file) => loadRulesFile(rulesDir, file))),
+    loadRulesFile(rulesDir, section.file),
   ]);
 
   const rulesVersions = Object.fromEntries([...systemFiles, sectionFile].map((f) => [f.id, f.version]));
