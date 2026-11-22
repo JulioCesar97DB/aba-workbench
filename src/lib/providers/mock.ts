@@ -1,8 +1,9 @@
 import type { GenerateEvent, Provider, TokenUsage } from "./types.ts";
 
 /**
- * A fake provider for checking the plumbing (route, streaming, PDF transport, saving)
- * without an API key or any spend. Only available when ABA_ENABLE_MOCK_PROVIDER=1.
+ * A fake provider for checking the plumbing (prompt building, streaming, PDF transport,
+ * saving) without an API key or any spend. Not reachable through getProvider(): the
+ * development check and `pnpm phase0 --mock` import it directly.
  */
 function fakeUsage(chars: number, outputChars: number): TokenUsage {
   return {
@@ -33,7 +34,7 @@ export const mockProvider: Provider = {
     yield { type: "status", phase: "writing" };
     const text = [
       `MOCK OUTPUT for model ${options.model} at effort ${options.effort}. No AI call was made.`,
-      `The route received ${prompt.sources.length} sources (${pdfs.length} PDF, ${pdfBytes} PDF bytes): ${prompt.sources.map((s) => s.id).join(", ")}.`,
+      `The provider received ${prompt.sources.length} sources (${pdfs.length} PDF, ${pdfBytes} PDF bytes): ${prompt.sources.map((s) => s.id).join(", ")}.`,
       `Rules sent as the cached prefix: ${prompt.system.length} characters. Section request: ${prompt.task.length} characters.`,
     ].join("\n\n");
     for (const word of text.split(/(?<= )/)) {
