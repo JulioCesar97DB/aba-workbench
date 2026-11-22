@@ -1,6 +1,7 @@
 # Runs the same checks every pull request has passed by hand: install, lint,
-# typecheck, tests, build and the Phase 0 end-to-end run on the mock provider.
-# It uses no secrets and no API keys, and nothing in it calls a real provider.
+# typecheck, tests, the Electron app's build and the Phase 0 run on the mock
+# provider. It uses no secrets and no API keys, and nothing in it calls a real
+# provider. No step starts Electron, so its binary is never downloaded here.
 name: CI
 
 on:
@@ -27,8 +28,6 @@ jobs:
     name: Lint, typecheck, test, build, phase0 --mock
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       # Actions are pinned to a full commit SHA; the comment names the release.
       - name: Check out the repository
@@ -64,9 +63,10 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build
+      # electron-vite builds the main process, the preload and the interface into out/.
+      - name: Build the Electron app
         run: pnpm build
 
-      # The full pipeline against the mock provider: no keys, no spend.
+      # The provider layer called directly, against the mock provider: no keys, no spend.
       - name: Phase 0 end-to-end run (mock provider)
         run: pnpm phase0 --mock

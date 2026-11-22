@@ -3,20 +3,15 @@ node_modules/
 .pnp
 .pnp.*
 
-# next.js
-.next/
+# build output: electron-vite (out/) and electron-builder (dist/)
 out/
-build/
-next-env.d.ts
+dist/
 *.tsbuildinfo
 
-# env files: keys live only in .env.local, never committed
+# env files: keys live only in .env.phase0, never committed
 .env
 .env.*
 !.env.phase0.example
-
-# vercel
-.vercel
 
 # misc
 .DS_Store
