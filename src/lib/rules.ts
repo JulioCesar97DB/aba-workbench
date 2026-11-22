@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { PromptParts, SourceDocument } from "./providers/types";
+import type { PromptParts, SourceDocument } from "./providers/types.ts";
 
 /**
  * The writing rules live as versioned Markdown files in /rules, not in code.
@@ -10,7 +10,7 @@ import type { PromptParts, SourceDocument } from "./providers/types";
 const RULES_DIR = path.join(process.cwd(), "rules");
 
 /** Same for every section and every case: this is the cached system prefix. */
-const SYSTEM_FILES = ["assessment.md", "payers/florida-medicaid-molina.md"];
+const SYSTEM_FILES = ["assessment.md", "payers/florida-medicaid-molina.md", "instruments.md"];
 
 export const SECTIONS = {
   "medical-necessity": {

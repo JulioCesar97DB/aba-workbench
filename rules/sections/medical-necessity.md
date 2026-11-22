@@ -1,7 +1,7 @@
 ---
 id: section-medical-necessity
-version: 1
-updated: 2026-11-21
+version: 2
+updated: 2026-11-22
 ---
 
 # Section 4: Medical Necessity Criteria
@@ -20,15 +20,11 @@ This structure is the BCBA's own and it is not optional. Follow it in this order
 
 2. Vineland-3 paragraph. Give the deficits with the specific scores: the Adaptive Behavior Composite and each domain's standard score with its percentile and adaptive level; the lowest subdomain v-scale scores and what they cover; and, when reported, the Maladaptive Behavior Index with the Internalizing and Externalizing v-scale scores and their levels. Say what the numbers mean, in plain terms, compared with same-age peers. Use exactly the numbers on the score report.
 
-3. One paragraph per deficit area named in the opening paragraph, in the same order. Argue each deficit with what the CDE, the parents' report and the BCBA's direct observation say about it, plus the IEP or teacher reports when available. Build each paragraph from: the score or finding; a concrete incident or observation from this child's life, with its numbers (frequency, duration, setting, who was present); why it limits the child's independence, safety or participation at home, at school or in the community; and what ABA will target for it, naming the skill or the procedure (for example, functional communication training to replace screaming when a preferred item is removed). The maladaptive behaviors, with their baselines and hypothesized functions as the sources give them, belong in the safety or behavior paragraph. Bring in the BASC-3 PRQ where it bears on an area, usually how behavior affects the caregivers.
+3. One paragraph per deficit area named in the opening paragraph, in the same order. Argue each deficit with what the CDE, the parents' report and the BCBA's direct observation say about it, plus the IEP or teacher reports when available. Build each paragraph from: the score or finding; a concrete incident or observation from this child's life, with its numbers (frequency, duration, setting, who was present); why it limits the child's independence, safety or participation at home, at school or in the community; and what ABA will target for it, naming the skill or the procedure (for example, differential reinforcement of an alternative behavior to replace grabbing a peer's materials). The maladaptive behaviors, with their baselines and hypothesized functions as the sources give them, belong in the safety or behavior paragraph. Bring in the BASC-3 PRQ where it bears on an area, usually how behavior affects the caregivers.
 
 4. Closing paragraph. State that these findings together support the medical necessity of ABA services. Explain how ABA strategies will improve these specific deficits (name the main strategies and the skills they build), in which settings and why there (where the impairment shows up), the role of caregiver training (tied to the BASC-3 PRQ results and what the parents reported), and how progress will be measured (direct data on target behaviors and skills, and the Vineland-3 and BASC-3 PRQ at reassessment). Do not state hours or units; they belong to the Summary and Recommendations section.
 
 Be very specific throughout. Each deficit paragraph should be impossible to reuse for another child.
-
-## Reading the scores
-
-Vineland-3 standard scores (Adaptive Behavior Composite and domains) have a mean of 100 and a standard deviation of 15; subdomain v-scale scores have a mean of 15 and a standard deviation of 3. Lower adaptive scores mean more impairment. On the Maladaptive Behavior domain the direction reverses: higher v-scale scores mean more problem behavior. BASC-3 PRQ T-scores have a mean of 50 and a standard deviation of 10. Use the adaptive and classification levels printed on each report (Low, Moderately Low, Elevated, At-Risk, Clinically Significant and so on); do not assign a level the report does not give.
 
 ## Length
 
@@ -38,4 +34,4 @@ Usually 6 to 9 paragraphs and 900 to 1,500 words, depending on how many deficit 
 
 - A missing score, percentile or level on the Vineland-3 or BASC-3 PRQ report stays visible as [MISSING: ...]. These instruments are required by the payer, so the BCBA needs to see the gap before submitting.
 - If a setting is described only second-hand (a parent's account of school), say whose account it is. If a setting the argument needs is not documented at all, mark it rather than filling it in.
-- If the CDE lacks something payers expect, such as the severity level, the date or the evaluator's credentials, do not supply it; mark it.
+- If the CDE lacks something the payers expect of it (see the payer facts), do not supply it; mark it.
