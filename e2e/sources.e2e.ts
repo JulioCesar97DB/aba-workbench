@@ -1,5 +1,5 @@
 import type { ElectronApplication, Page } from "@playwright/test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { defaultCasesFolder, expect, goTo, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
@@ -233,7 +233,7 @@ test("a PDF over the providers' limits is flagged as soon as it is added", async
     writeFileSync(large, inventedPdf("large", 40_000_000));
     await stubFileDialog(app, [large]);
     await page.getByRole("button", { name: "Add PDF…" }).click();
-    await expect(page.getByText("40 MB: more than ChatGPT accepts in one request (about 37.5 MB of PDF). Claude can read it; for ChatGPT, paste the report's text instead.")).toBeVisible();
+    await expect(page.getByText("40 MB: too large for ChatGPT to read (it takes PDFs up to about 37.5 MB). Claude can read it. To use ChatGPT, paste the report's text instead.")).toBeVisible();
   } finally {
     rmSync(originals, { recursive: true, force: true });
   }
@@ -286,9 +286,9 @@ test("details: rename, retype and date a source from the keyboard; PDFs put in t
   await expect(row).toContainText("IEP");
   await expect(page.getByRole("heading", { name: "Also in this case's folder" })).toBeHidden();
 
-  await row.getByRole("button", { name: "Details" }).focus();
+  await row.getByRole("button", { name: "Name, type and date" }).focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("dialog", { name: "Details of “iep 2026.pdf”" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Name, type and date: “iep 2026.pdf”" })).toBeVisible();
   // Its name follows the title as it is saved.
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("textbox", { name: "Title (optional)" }).fill("School IEP");
@@ -372,4 +372,151 @@ test("the sources functions refuse hostile input with messages that hold no path
   }
   // Nothing was written.
   expect(readFileSync(path.join(casesFolder, SAMPLE_CASE.label, "aba-case.json"), "utf8")).toBe(before);
+});
+
+/** Pastes a new text of a type and waits until it is saved; returns the text area. */
+async function newText(page: Page, type: string, text: string) {
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page.getByRole("menuitem", { name: type }).click();
+  const area = page.getByRole("textbox", { name: "Text" });
+  await area.fill(text);
+  await expect(page.getByText("All changes saved").first()).toBeVisible();
+  return area;
+}
+
+/** Replaces the system's message box: records what it would say and answers with `response`. */
+async function stubMessageBox(app: ElectronApplication, response: number) {
+  await app.evaluate(({ dialog }, answer) => {
+    const shown: string[] = [];
+    (globalThis as unknown as { messages: string[] }).messages = shown;
+    dialog.showMessageBox = (async (...args: unknown[]) => {
+      const options = args.at(-1) as { message: string };
+      shown.push(options.message);
+      return { response: answer, checkboxChecked: false };
+    }) as typeof dialog.showMessageBox;
+  }, response);
+  return () => app.evaluate(() => [...(globalThis as unknown as { messages: string[] }).messages]);
+}
+
+test("pasting first, then giving the title, type and date: nothing is lost and the focus stays (review B1)", async ({ launch, home }) => {
+  const { page, casesFolder } = await openSources(launch, home);
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page.getByRole("menuitem", { name: "Parent interview" }).click();
+  await page.getByRole("textbox", { name: "Text" }).fill("Invented interview notes.");
+  // Straight to the title, while the new text is being created.
+  const title = page.getByRole("textbox", { name: "Title (optional)" });
+  await title.click();
+  await title.pressSequentially("Mom interview");
+  await expect(title).toHaveValue("Mom interview");
+  await expect(title).toBeFocused();
+  await page.getByLabel("Date (optional)").fill("2026-10-05");
+  await page.getByRole("combobox", { name: "Type" }).click();
+  await page.getByRole("option", { name: "CDE" }).click();
+  await expect(heading(page)).toHaveText("Mom interview");
+  await expect.poll(() => caseData(casesFolder).sources).toEqual([
+    expect.objectContaining({ kind: "text", type: "cde", title: "Mom interview", date: "2026-10-05", text: "Invented interview notes." }),
+  ]);
+});
+
+test("quitting right after typing keeps what was typed, in a text and in a title (review B2)", async ({ launch, home }) => {
+  const first = await openSources(launch, home);
+  const { casesFolder } = first;
+  let { app, page } = first;
+  const area = await newText(page, "CDE", "First part.");
+  await area.press("ControlOrMeta+End");
+  await area.pressSequentially(" Second part.");
+  // Quit within the typing pause, as Cmd+Q or closing the last window on Windows would.
+  const closed = app.waitForEvent("close");
+  await app.evaluate(({ app: electronApp }) => electronApp.quit());
+  await closed;
+  expect(caseData(casesFolder).sources[0].text).toBe("First part. Second part.");
+
+  app = await launch();
+  page = await app.firstWindow();
+  await expect(heading(page)).toBeVisible();
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
+  await sourceRow(page, "CDE").getByRole("button", { name: "Name, type and date" }).click();
+  await page.getByRole("dialog").getByRole("textbox", { name: "Title (optional)" }).fill("Psychologist's CDE");
+  const closedAgain = app.waitForEvent("close");
+  await app.evaluate(({ app: electronApp }) => electronApp.quit());
+  await closedAgain;
+  expect(caseData(casesFolder).sources[0].title).toBe("Psychologist's CDE");
+});
+
+test("closing the window right after typing keeps what was typed (review B2)", async ({ launch, home }) => {
+  const { app, page, casesFolder } = await openSources(launch, home);
+  const area = await newText(page, "IEP", "Goals.");
+  await area.press("ControlOrMeta+End");
+  await area.pressSequentially(" More goals.");
+  const closed = page.waitForEvent("close");
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  await closed;
+  expect(caseData(casesFolder).sources[0].text).toBe("Goals. More goals.");
+});
+
+test("a change that cannot be saved is said before the window closes, and on Home after leaving the case (review B2, S2)", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const { app, page, caseFolder } = await openSources(launch, home);
+  const area = await newText(page, "CDE", "Saved part.");
+  chmodSync(caseFolder, 0o555);
+  try {
+    // Leaving the case at once: the failure is shown on Home.
+    await area.press("ControlOrMeta+End");
+    await area.pressSequentially(" Lost part.");
+    await page.getByRole("link", { name: "All cases" }).click();
+    await expect(heading(page)).toHaveText("Cases");
+    await expect(page.getByText("A change to “M.F. sample case” could not be saved.")).toBeVisible();
+    await page.getByRole("link", { name: "Open the case to try again" }).click();
+    await expect(page.getByText("Your last change could not be saved. Check that the cases folder is available, then try again.")).toBeVisible();
+
+    // Closing now asks; Go back keeps the window.
+    const messages = await stubMessageBox(app, 0);
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+    await expect.poll(messages).toEqual(["A change could not be saved"]);
+    await expect(heading(page)).toHaveText("Sources");
+
+    // The folder is writable again: Try again saves it, and the window closes without asking.
+    chmodSync(caseFolder, 0o755);
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByText("All changes saved").first()).toBeVisible();
+    expect(caseData(path.dirname(caseFolder)).sources[0].text).toBe("Saved part. Lost part.");
+    const closed = page.waitForEvent("close");
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+    await closed;
+    expect(await messages()).toEqual(["A change could not be saved"]);
+  } finally {
+    chmodSync(caseFolder, 0o755);
+  }
+});
+
+test("opening a source never hands the system a file that is not a PDF of the case (review S1)", async ({ launch, home }) => {
+  const casesFolder = defaultCasesFolder(home);
+  const caseFolder = seedCase(casesFolder, SAMPLE_CASE.label, {
+    ...SAMPLE_CASE,
+    schemaVersion: 2,
+    sources: [
+      { id: "aaaaaaaa-aaaa-4aaa-8aaa-000000000001", kind: "pdf", type: "other", addedAt: SAMPLE_CASE.createdAt, updatedAt: SAMPLE_CASE.createdAt, file: "report.command", bytes: 20 },
+      { id: "aaaaaaaa-aaaa-4aaa-8aaa-000000000002", kind: "pdf", type: "other", addedAt: SAMPLE_CASE.createdAt, updatedAt: SAMPLE_CASE.createdAt, file: "fake.pdf", bytes: 20 },
+    ],
+  });
+  writeFileSync(path.join(caseFolder, "report.command"), "#!/bin/sh\necho invented\n");
+  writeFileSync(path.join(caseFolder, "fake.pdf"), "#!/bin/sh\necho invented\n");
+  const app = await launch();
+  const page = await app.firstWindow();
+  await expect(heading(page)).toBeVisible();
+  await app.evaluate(({ shell }) => {
+    const seen: string[] = [];
+    (globalThis as unknown as { opened: string[] }).opened = seen;
+    shell.openPath = async (item: string) => {
+      seen.push(item);
+      return "";
+    };
+  });
+  const answers = await page.evaluate(async (caseId) => {
+    const aba = (globalThis as unknown as { aba: Record<string, (...args: unknown[]) => Promise<unknown>> }).aba;
+    await aba.openCase(caseId);
+    return [await aba.openSourcePdf(caseId, "aaaaaaaa-aaaa-4aaa-8aaa-000000000001"), await aba.openSourcePdf(caseId, "aaaaaaaa-aaaa-4aaa-8aaa-000000000002")];
+  }, SAMPLE_CASE.id);
+  expect(answers).toEqual([false, false]);
+  expect(await app.evaluate(() => (globalThis as unknown as { opened: string[] }).opened)).toEqual([]);
 });

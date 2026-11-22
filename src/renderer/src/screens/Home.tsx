@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, Tabl
 import { TextField } from "../components/TextField.tsx";
 import { formatAge, formatDate, formatDateTime } from "../format.ts";
 import { useLanguage } from "../language.tsx";
+import { useFailedSaves } from "../case-saves.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { WorkArea } from "../shell/WorkArea.tsx";
 
@@ -37,6 +38,7 @@ export function Home() {
   return (
     <WorkArea header={<PageHeader title={t("home.title")} actions={<NewCaseDialog onCreated={(created) => navigate(casePath(created.id))} />} />}>
       <div className="flex flex-col gap-6">
+        <UnsavedChanges />
         {state.status === "loading" ? (
           <p role="status" className="text-md text-fg-muted">
             {t("home.loading")}
@@ -60,6 +62,23 @@ export function Home() {
         {state.status === "loaded" ? <CasesView list={state.list} onFolderChosen={load} /> : null}
       </div>
     </WorkArea>
+  );
+}
+
+/** A change to a case that could not be saved after the clinician left it: never silently lost. */
+function UnsavedChanges() {
+  const { t } = useTranslation();
+  const failed = useFailedSaves();
+  if (failed.length === 0) return null;
+  return (
+    <div role="alert" className="flex max-w-4xl flex-col gap-2 rounded-md border border-danger px-3.5 py-2.5 text-md">
+      {failed.map((item) => (
+        <p key={item.caseId} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="font-medium text-danger">{t("home.unsavedChange", { label: item.label })}</span>
+          <TextLink to={casePath(item.caseId)}>{t("home.openToTryAgain")}</TextLink>
+        </p>
+      ))}
+    </div>
   );
 }
 

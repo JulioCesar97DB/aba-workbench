@@ -11,7 +11,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, Tabl
 import { TransWithTerms } from "../components/Trans.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
-import { CaseSavesProvider } from "../case-saves.tsx";
 import { useOpenCaseState, useOpenedCase } from "../open-case.tsx";
 import { sourceName, sourceNameLang } from "../source-labels.tsx";
 import { Placeholder } from "./Placeholder.tsx";
@@ -27,13 +26,8 @@ export function CaseRoute() {
   const { t } = useTranslation();
   const platform = useAppInfo()?.platform;
   const state = useOpenCaseState();
-  // The case's saves outlive its screens: leaving the text editor never drops one under way.
-  if (state?.outcome === "opened")
-    return (
-      <CaseSavesProvider key={state.case.id} caseId={state.case.id}>
-        <Outlet />
-      </CaseSavesProvider>
-    );
+  // The case's saves outlive its screens (case-saves.tsx): leaving it never drops one under way.
+  if (state?.outcome === "opened") return <Outlet />;
   if (state === null || state.outcome === "loading") {
     return (
       <WorkArea header={<PageHeader title={t("case.loading")} />}>

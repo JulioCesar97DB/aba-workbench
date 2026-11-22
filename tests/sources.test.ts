@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { LARGEST_PDF_FOR, pdfSizeWarning } from "../src/lib/limits.ts";
 import { CASE_FILE_NAME, MAX_CASE_FILE_BYTES, newCaseData, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
 import { pdfFileNames } from "../src/main/case-folder-name.ts";
-import { copyPdfIntoFolder, findSamePdf, looksLikePdf, writeNewFile } from "../src/main/case-pdfs.ts";
+import { copyPdfIntoFolder, findSamePdf, writeNewFile } from "../src/main/case-pdfs.ts";
 import { addTextSource, caseSources, changeSource, setRemoved, textPreview } from "../src/main/case-sources.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
 import { writeFileDurably } from "../src/main/durable-write.ts";
-import { checkSourceTitle, guessPdfType, isSourceDate, MAX_SOURCE_TEXT_LENGTH, normalizeSourceText } from "../src/shared/sources.ts";
+import { checkSourceTitle, guessPdfType, isSourceDate, looksLikePdf, MAX_SOURCE_TEXT_LENGTH, normalizeSourceText } from "../src/shared/sources.ts";
 
 // Invented cases and invented PDFs only.
 const NOW = new Date("2026-11-22T15:00:00.000Z");
@@ -75,6 +75,13 @@ test("sources: titles, dates, text and the type a PDF's name suggests", () => {
   assert.equal(guessPdfType("ABLLS-R grid.pdf"), "ablls-r");
   assert.equal(guessPdfType("IEP 2026.pdf"), "iep");
   assert.equal(guessPdfType("recipe.pdf"), "other");
+  // FAST and MAS are FBA tools only as capitalized acronyms (review L5).
+  assert.equal(guessPdfType("FAST caregiver.pdf"), "fba-questionnaire");
+  assert.equal(guessPdfType("MAS.pdf"), "fba-questionnaire");
+  assert.equal(guessPdfType("Fast track summary.pdf"), "other");
+  assert.equal(guessPdfType("christmas plans.pdf"), "other");
+  assert.equal(looksLikePdf(new TextEncoder().encode(`${" ".repeat(1000)}%PDF-1.7`)), true);
+  assert.equal(looksLikePdf(new TextEncoder().encode(`${" ".repeat(1020)}%PDF-1.7`)), false);
   assert.equal(textPreview("  one\n\ntwo   three "), "one two three");
   assert.equal(textPreview("x".repeat(200), 10), `${"x".repeat(10)}…`);
   // A character made of two UTF-16 units is never cut in half.
@@ -404,4 +411,71 @@ test("cases: a PDF that cannot be written into a read-only case folder is report
   } finally {
     chmodSync(caseFolder, 0o755);
   }
+});
+
+test("cases: opening a source only ever hands over a PDF inside the case's folder (review S1)", async () => {
+  const { lib, id, caseFolder } = await newCase(tempFolder());
+  const added = await lib.addDroppedPdf(id, { name: "report.pdf", data: PDF("report") });
+  assert.ok(added.outcome === "done");
+  const good = added.added[0];
+  assert.equal(await lib.sourcePdfPath(id, good), path.join(caseFolder, "report.pdf"));
+  // A data file from elsewhere naming other files: a program, a .pdf that is not one, a link.
+  writeFileSync(path.join(caseFolder, "report.command"), "#!/bin/sh\necho hi\n");
+  writeFileSync(path.join(caseFolder, "fake.pdf"), "#!/bin/sh\necho hi\n");
+  const outside = path.join(tempFolder(), "outside.pdf");
+  writeFileSync(outside, PDF("outside"));
+  let linked = false;
+  try {
+    symlinkSync(outside, path.join(caseFolder, "linked.pdf"));
+    linked = true;
+  } catch {
+    // Windows without the right to make links: that case is skipped.
+  }
+  const data = dataOf(caseFolder);
+  const entry = data.sources[0];
+  const made = ["report.command", "fake.pdf", ...(linked ? ["linked.pdf"] : [])].map((file, i) => ({ ...entry, id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12, "0")}`, file }));
+  writeFileSync(path.join(caseFolder, CASE_FILE_NAME), JSON.stringify({ ...data, sources: [...data.sources, ...made] }, null, 2));
+  for (const source of made) assert.equal(await lib.sourcePdfPath(id, source.id), null, source.file);
+  assert.equal(await lib.sourcePdfPath(id, good), path.join(caseFolder, "report.pdf"));
+});
+
+test("cases: a PDF copied in when the case then cannot be saved is said to be in the folder (review L2)", async () => {
+  let fail = false;
+  const { lib, id, caseFolder } = await newCase(tempFolder(), {
+    writeFile: async (file, text) => {
+      if (fail) throw new Error("disk full");
+      await writeFileDurably(file, text);
+    },
+  });
+  fail = true;
+  const result = await lib.addDroppedPdf(id, { name: "vineland.pdf", data: PDF("v") });
+  assert.equal(result.outcome, "copied-not-added");
+  assert.ok(result.outcome === "copied-not-added");
+  assert.deepEqual(result.files, ["vineland.pdf"]);
+  assert.deepEqual(result.sources.sources, []);
+  assert.deepEqual(result.sources.files.map((file) => file.name), ["vineland.pdf"]);
+  // Kept, never deleted.
+  assert.deepEqual(readFileSync(path.join(caseFolder, "vineland.pdf")), PDF("v"));
+});
+
+test("cases: quitting can wait until no case work is under way", async () => {
+  let release: () => void = () => undefined;
+  let hold = false;
+  const { lib, id } = await newCase(tempFolder(), {
+    writeFile: async (file, text) => {
+      if (hold) await new Promise<void>((resolve) => (release = resolve));
+      await writeFileDurably(file, text);
+    },
+  });
+  hold = true;
+  assert.equal(lib.busy, false);
+  assert.equal(await lib.idle(10), true);
+  const saving = lib.addTextSource(id, { type: "cde", text: "x" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(lib.busy, true);
+  assert.equal(await lib.idle(30), false);
+  release();
+  assert.equal(await lib.idle(1000), true);
+  assert.equal((await saving).outcome, "saved");
+  assert.equal(lib.busy, false);
 });

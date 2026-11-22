@@ -1,8 +1,10 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CaseLibrary } from "./cases.ts";
+import { createCloseGuard, FLUSH_TIMEOUT_MS, IDLE_TIMEOUT_MS, UNSAVED_DIALOG, withTimeout, type UnsavedProblem } from "./close-guard.ts";
 import { ChatGptSession } from "./chatgpt-session.ts";
 import { ConnectionService } from "./connections.ts";
 import { CREDENTIALS_FILE_NAME, CredentialsStore } from "./credentials.ts";
@@ -97,6 +99,44 @@ registerIpc({
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
 });
 
+/*
+ * Nothing typed is lost on close or quit (src/main/close-guard.ts): the window's close
+ * waits for the interface to save what is still waiting, and for the case work here.
+ */
+let quitting = false;
+const flushRequests = new Map<string, (result: { ok: boolean }) => void>();
+
+ipcMain.on(IPC_CHANNELS.savesFlushed, (event, requestId: unknown, result: unknown) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || !isTrustedFrame(event.senderFrame, trustedOrigin)) return;
+  if (typeof requestId !== "string") return;
+  const done = flushRequests.get(requestId);
+  flushRequests.delete(requestId);
+  done?.({ ok: typeof result === "object" && result !== null && (result as { ok?: unknown }).ok === true });
+});
+
+function flushInterface(window: BrowserWindow): Promise<{ ok: boolean } | "timeout" | "gone"> {
+  // A crashed page has nothing left to save, and cannot answer.
+  if (window.webContents.isCrashed()) return Promise.resolve("gone");
+  const requestId = randomUUID();
+  const answer = new Promise<{ ok: boolean }>((resolve) => flushRequests.set(requestId, resolve));
+  window.webContents.send(IPC_CHANNELS.flushSaves, requestId);
+  return withTimeout(answer, FLUSH_TIMEOUT_MS, "timeout" as const).finally(() => flushRequests.delete(requestId));
+}
+
+async function askAboutUnsaved(window: BrowserWindow, problem: UnsavedProblem): Promise<"stay" | "close"> {
+  const words = UNSAVED_DIALOG[(await settings.get()).language];
+  const { response } = await dialog.showMessageBox(window, {
+    type: "warning",
+    message: words[problem].message,
+    detail: words[problem].detail,
+    buttons: [words.stay, words.close],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  return response === 1 ? "close" : "stay";
+}
+
 function createWindow(): void {
   const window = new BrowserWindow({
     width: 1280,
@@ -117,6 +157,21 @@ function createWindow(): void {
   });
   mainWindow = window;
   window.once("ready-to-show", () => window.show());
+  window.on(
+    "close",
+    createCloseGuard({
+      flush: () => flushInterface(window),
+      idle: () => cases.idle(IDLE_TIMEOUT_MS),
+      ask: (problem) => askAboutUnsaved(window, problem),
+      close: () => window.close(),
+      quit: () => app.quit(),
+      isQuitting: () => quitting,
+      cancelQuit: () => {
+        quitting = false;
+      },
+      isDestroyed: () => window.isDestroyed(),
+    }),
+  );
   // Its generations stop when its page goes away (src/main/ipc.ts).
   window.on("closed", () => {
     mainWindow = null;
@@ -146,6 +201,17 @@ app.whenReady().then(() => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+// Quitting closes the window, whose guard saves first. With no window open (macOS), case
+// work still under way finishes first, for at most IDLE_TIMEOUT_MS.
+let waitedForCases = false;
+app.on("before-quit", (event) => {
+  quitting = true;
+  if (mainWindow || waitedForCases || !cases.busy) return;
+  waitedForCases = true;
+  event.preventDefault();
+  void cases.idle(IDLE_TIMEOUT_MS).finally(() => app.quit());
 });
 
 /*

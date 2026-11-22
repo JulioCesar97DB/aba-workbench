@@ -57,6 +57,7 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
       "getSettings",
       "listCases",
       "onConnectionsChange",
+      "onFlushSaves",
       "onGenerationUpdate",
       "openCase",
       "openChatGptUsage",

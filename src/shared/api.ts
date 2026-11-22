@@ -377,6 +377,13 @@ export interface AbaApi {
   addFolderPdf(caseId: string, fileName: string): Promise<AddPdfsResult>;
   /** Opens a PDF source's copy in the system's PDF viewer. False when it is not in the folder any more. */
   openSourcePdf(caseId: string, sourceId: string): Promise<boolean>;
+  /**
+   * Before the window closes or the app quits, the main process asks the interface to
+   * save everything still waiting; `listener` answers once nothing is under way, `ok`
+   * false when a change could not be saved (src/main/close-guard.ts). Returns the
+   * function that stops listening.
+   */
+  onFlushSaves(listener: () => Promise<{ ok: boolean }>): () => void;
 }
 
 export const IPC_CHANNELS = {
@@ -415,6 +422,8 @@ export const IPC_CHANNELS = {
   addDroppedPdf: "sources:add-dropped-pdf",
   addFolderPdf: "sources:add-folder-pdf",
   openSourcePdf: "sources:open-pdf",
+  flushSaves: "saves:flush",
+  savesFlushed: "saves:flushed",
 } as const;
 
 /** Generation ids are UUIDs (crypto.randomUUID()); anything else is refused. */

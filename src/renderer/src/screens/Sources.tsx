@@ -2,16 +2,14 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
+  looksLikePdf,
   MAX_PDF_BYTES,
-  SOURCE_TYPES,
   TEXT_SOURCE_TYPES,
-  checkSourceTitle,
   type AddPdfsResult,
   type CaseSources,
   type PdfProblem,
   type PdfSizeWarning,
   type SourceSummary,
-  type SourceType,
 } from "../../../shared/sources.ts";
 import { sourceAnswer, useCaseSaves, type SaveState } from "../case-saves.tsx";
 import { newTextPath, sourceTextPath, stepTitle } from "../case-steps.tsx";
@@ -20,15 +18,14 @@ import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
 import { Dialog, DialogClose, DialogDescription } from "../components/Dialog.tsx";
 import { ButtonLink } from "../components/Link.tsx";
 import { MenuButton } from "../components/Menu.tsx";
-import { Select } from "../components/Select.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
-import { TextField } from "../components/TextField.tsx";
 import { formatDate } from "../format.ts";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase, useSetCaseSources } from "../open-case.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { WorkArea } from "../shell/WorkArea.tsx";
 import { formatCount, formatFileSize, formatSourceDate, SourceTypeLabel, sourceName, sourceNameLang, sourceTypeLang, sourceTypeName } from "../source-labels.tsx";
+import { SourceDetailFields, useSourceDetails } from "../source-details.tsx";
 import { CaseRail, useStepMeta } from "./Case.tsx";
 
 /*
@@ -70,6 +67,9 @@ export function SourcesScreen() {
       if (result.outcome === "done") {
         setSources(caseId, result.sources);
         setNotice({ kind: "added", count: earlier.count + result.added.length, problems: [...earlier.problems, ...result.problems] });
+      } else if (result.outcome === "copied-not-added") {
+        setSources(caseId, result.sources);
+        setNotice({ kind: "error", message: t("sources.copiedNotAdded", { names: result.files.join(", ") }) });
       } else {
         setNotice({ kind: "error", message: t(`saveFailure.${result.outcome}`) });
       }
@@ -103,6 +103,11 @@ export function SourcesScreen() {
           }
           let data: Uint8Array;
           try {
+            // Only a PDF is read whole: a large video dropped by mistake is refused from its first bytes.
+            if (!looksLikePdf(new Uint8Array(await dropped.slice(0, 1024).arrayBuffer()))) {
+              earlier.problems.push({ name: dropped.name, problem: "not-a-pdf" });
+              continue;
+            }
             data = new Uint8Array(await dropped.arrayBuffer());
           } catch {
             // A folder, or a file the system would not let the window read.
@@ -205,11 +210,15 @@ export function SourcesScreen() {
   );
 }
 
-/** "Saving…" or "All changes saved", where the header's actions are. Shared with the text editor. */
+/**
+ * "Saving…" or "All changes saved", where the header's actions are. Shared with the text
+ * editor and the details dialog. Shown, not announced: a screen reader would hear it after
+ * every typing pause. Only a failure is announced (SaveFailure, role="alert").
+ */
 export function SaveStatus() {
   const { state } = useCaseSaves();
   return (
-    <p role="status" className="flex items-center self-center px-1 text-sm text-fg-muted">
+    <p className="flex items-center self-center px-1 text-sm text-fg-muted">
       <SaveStatusText state={state} />
     </p>
   );
@@ -388,7 +397,7 @@ function SourceDetailsDialog({ caseId, source, describedBy }: { caseId: string; 
     >
       <DialogDescription className="mt-2 text-md text-fg-muted">{t("sources.detailsBody")}</DialogDescription>
       <div className="mt-4 flex flex-col gap-4">
-        <SourceFields caseId={caseId} source={source} />
+        <ExistingSourceFields caseId={caseId} source={source} />
         <SaveStatus />
         <SaveFailure />
       </div>
@@ -399,106 +408,10 @@ function SourceDetailsDialog({ caseId, source, describedBy }: { caseId: string; 
   );
 }
 
-/** How long typing must pause before a title is saved. */
-export const TYPING_PAUSE_MS = 600;
-
-/**
- * The type, title and date fields of an existing source, saved as they change: the type
- * and the date at once, the title when typing pauses or the field is left.
- */
-export function SourceFields({ caseId, source }: { caseId: string; source: SourceSummary }) {
-  const { t } = useTranslation();
-  const { run } = useCaseSaves();
-  const [title, setTitle] = useState(source.title ?? "");
-  const [titleError, setTitleError] = useState<string | null>(null);
-  const [date, setDate] = useState(source.date ?? "");
-  const savedTitle = useRef(source.title ?? "");
-  const timer = useRef<number | undefined>(undefined);
-
-  const saveTitle = useCallback(
-    (value: string) => {
-      clearTimeout(timer.current);
-      const checked = checkSourceTitle(value);
-      if (!checked.ok) {
-        setTitleError(checked.problem === "too-long" ? t("sources.titleTooLong") : t("sources.titleControlCharacters"));
-        return;
-      }
-      setTitleError(null);
-      if ((checked.title ?? "") === savedTitle.current) return;
-      savedTitle.current = checked.title ?? "";
-      void run(`title:${source.id}`, async () => sourceAnswer(await window.aba.changeSource(caseId, source.id, { title: checked.title })));
-    },
-    [caseId, run, source.id, t],
-  );
-
-  // A title still being typed is saved when the fields go away (the dialog closes).
-  const latest = useRef(source.title ?? "");
-  useEffect(() => () => saveTitle(latest.current), [saveTitle]);
-
-  return (
-    <>
-      <SourceTypeSelect
-        value={source.type}
-        onChange={(type) => void run(`type:${source.id}`, async () => sourceAnswer(await window.aba.changeSource(caseId, source.id, { type })))}
-      />
-      <TextField
-        label={t("sources.titleLabel")}
-        description={t("sources.titleDescription")}
-        value={title}
-        error={titleError}
-        autoComplete="off"
-        maxLength={300}
-        onChange={(event) => {
-          const value = event.currentTarget.value;
-          latest.current = value;
-          setTitle(value);
-          clearTimeout(timer.current);
-          timer.current = window.setTimeout(() => saveTitle(value), TYPING_PAUSE_MS);
-        }}
-        onBlur={() => saveTitle(title)}
-      />
-      <SourceDateField
-        value={date}
-        onChange={(value) => {
-          setDate(value);
-          void run(`date:${source.id}`, async () => sourceAnswer(await window.aba.changeSource(caseId, source.id, { date: value === "" ? null : value })));
-        }}
-      />
-    </>
-  );
-}
-
-export function SourceTypeSelect({ value, onChange }: { value: SourceType; onChange: (type: SourceType) => void }) {
-  const { t } = useTranslation();
-  return (
-    <Select
-      label={t("sources.typeLabel")}
-      value={value}
-      options={SOURCE_TYPES.map((type) => ({ value: type, label: sourceTypeName(t, type), lang: sourceTypeLang(type) }))}
-      onValueChange={onChange}
-    />
-  );
-}
-
-/** A date field (the system's own, keyboard-friendly); "" when cleared. Only a whole, valid date is passed on. */
-export function SourceDateField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const { t } = useTranslation();
-  return (
-    <TextField
-      className="max-w-56"
-      type="date"
-      min="1900-01-01"
-      max="2100-12-31"
-      label={t("sources.dateLabel")}
-      description={t("sources.dateDescription")}
-      value={value}
-      onChange={(event) => {
-        const next = event.currentTarget.value;
-        // A half-typed date reads as "" while invalid; only a full one or a cleared field is saved.
-        if (next === "" || /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(next)) onChange(next);
-      }}
-    />
-  );
+/** The fields of a source that exists (the Details dialog). */
+function ExistingSourceFields({ caseId, source }: { caseId: string; source: SourceSummary }) {
+  const details = useSourceDetails({ caseId, sourceId: source.id, initial: { type: source.type, title: source.title ?? "", date: source.date ?? "" } });
+  return <SourceDetailFields details={details} />;
 }
 
 function FolderPdfs({ files, onAdd }: { files: CaseSources["files"]; onAdd: (name: string) => void }) {

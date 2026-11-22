@@ -1,26 +1,31 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router";
-import { checkSourceTitle, isSourceType, MAX_SOURCE_TEXT_LENGTH, type SourceType } from "../../../shared/sources.ts";
-import { sourceAnswer, useCaseSaves } from "../case-saves.tsx";
+import { isSourceType, MAX_SOURCE_TEXT_LENGTH, type SourceType } from "../../../shared/sources.ts";
+import { registerFlusher, sourceAnswer, useCaseSaves } from "../case-saves.tsx";
 import { casePath } from "../case-steps.tsx";
 import { ButtonLink } from "../components/Link.tsx";
-import { TextField } from "../components/TextField.tsx";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase } from "../open-case.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { WorkArea } from "../shell/WorkArea.tsx";
+import { SourceDetailFields, TYPING_PAUSE_MS, useSourceDetails } from "../source-details.tsx";
 import { formatCount, sourceName, sourceNameLang } from "../source-labels.tsx";
 import { CaseRail, useStepMeta } from "./Case.tsx";
-import { SaveFailure, SaveStatus, SourceDateField, SourceFields, SourceTypeSelect, TYPING_PAUSE_MS } from "./Sources.tsx";
+import { SaveFailure, SaveStatus } from "./Sources.tsx";
 
 /*
  * A pasted text, to read and edit: #/cases/<id>/sources/text/<source id>, or a new one
  * of a type, #/cases/<id>/sources/new/<type>. The text is saved as the clinician types
- * (when typing pauses, when she leaves the field, and when she leaves the screen); a new
- * text becomes a source with its first characters. The text area is not controlled by
- * React, so a very long paste stays quick: only its length is kept in state.
+ * (when typing pauses, when she leaves the field, when she leaves the screen, and when
+ * the window is about to close); a new text becomes a source with its first characters.
+ * Its type, title and date are one set of fields before and after that (source-details.tsx).
+ * The text area is not controlled by React, so a very long paste stays quick: only its
+ * length is kept in state.
  */
+
+/** Over this many characters with no line break, typing in the text area gets slow (Chromium lays it out as one paragraph). */
+export const LONG_PARAGRAPH_NOTICE_AT = 100_000;
 
 type Loaded = { status: "loading" } | { status: "loaded"; text: string } | { status: "not-found" } | { status: "failed" };
 
@@ -43,18 +48,23 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
   const [createdId, setCreatedId] = useState<string | null>(null);
   const id = existingId ?? createdId;
   const source = id ? opened.sources.sources.find((entry) => entry.id === id && entry.kind === "text") : undefined;
+  const [initialSource] = useState(source);
+  const details = useSourceDetails({
+    caseId,
+    sourceId: existingId,
+    initial: initialSource ? { type: initialSource.type, title: initialSource.title ?? "", date: initialSource.date ?? "" } : { type: initialType, title: "", date: "" },
+  });
+  const { draft, created } = details;
   const [loaded, setLoaded] = useState<Loaded>(existingId ? { status: "loading" } : { status: "loaded", text: "" });
   const [length, setLength] = useState(0);
-  // A new text's details, until it is created with them.
-  const [draftType, setDraftType] = useState<SourceType>(initialType);
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftDate, setDraftDate] = useState("");
+  const [oneLongParagraph, setOneLongParagraph] = useState(false);
   const timer = useRef<number | undefined>(undefined);
   const saved = useRef<string | null>(null);
   // The text as typed, kept outside the field: the field is gone by the time leaving the
   // screen saves it. Null until an existing text has loaded, so nothing is saved over it before.
   const typed = useRef<string | null>(existingId ? null : "");
   const creating = useRef<Promise<string | null> | null>(null);
+  const idRef = useRef(existingId);
   const textId = useId();
   const counterId = useId();
 
@@ -80,15 +90,6 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
     };
   }, [caseId, existingId]);
 
-  const draft = useRef({ type: draftType, title: draftTitle, date: draftDate });
-  useEffect(() => {
-    draft.current = { type: draftType, title: draftTitle, date: draftDate };
-  }, [draftType, draftTitle, draftDate]);
-  const idRef = useRef(id);
-  useEffect(() => {
-    if (id) idRef.current = id;
-  }, [id]);
-
   /**
    * Saves the text as it is in the field now, if it changed: the first time, a new text
    * is created with its type, title and date; then only its text changes.
@@ -107,12 +108,9 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
       if (!target) {
         // Nothing is created for an empty text.
         if (text.trim() === "") return;
-        const { type, title, date } = draft.current;
-        const checkedTitle = checkSourceTitle(title);
+        const sent = draft();
         saved.current = text;
-        creating.current = run(`text:new-${caseId}`, async () =>
-          sourceAnswer(await window.aba.addTextSource(caseId, { type, title: checkedTitle.ok ? checkedTitle.title : null, date: date || null, text })),
-        ).then((answer) => {
+        creating.current = run(`text:new-${caseId}`, async () => sourceAnswer(await window.aba.addTextSource(caseId, { ...sent, text }))).then((answer) => {
           creating.current = null;
           if (!answer.ok) {
             saved.current = null;
@@ -120,6 +118,8 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
           }
           idRef.current = answer.value;
           setCreatedId(answer.value);
+          // A type, title or date changed while it was being created is saved now.
+          created(answer.value, sent);
           return answer.value;
         });
         if ((await creating.current) === null && !idRef.current) return;
@@ -130,15 +130,14 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
       if (!answer.ok && saved.current === text) saved.current = null;
       return;
     }
-  }, [caseId, run]);
+  }, [caseId, run, draft, created]);
 
-  // Leaving the screen (or the window going away) saves what was typed.
+  // Leaving the screen saves what was typed; so does the window being about to close.
   useEffect(() => {
-    const flush = () => void save();
-    window.addEventListener("pagehide", flush);
+    const unregister = registerFlusher(save);
     return () => {
-      window.removeEventListener("pagehide", flush);
-      flush();
+      unregister();
+      void save();
     };
   }, [save]);
 
@@ -175,11 +174,7 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
     <WorkArea header={header} rail={<CaseRail />}>
       <div className="flex max-w-4xl flex-col gap-4">
         <div className="flex flex-col gap-4 @split:flex-row @split:flex-wrap @split:items-start">
-          {source ? (
-            <SourceFields caseId={caseId} source={source} />
-          ) : (
-            <NewTextFields type={draftType} onType={setDraftType} title={draftTitle} onTitle={setDraftTitle} date={draftDate} onDate={setDraftDate} />
-          )}
+          <SourceDetailFields details={details} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor={textId} className="font-medium">
@@ -187,7 +182,7 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
           </label>
           <p id={`${textId}-description`} className="max-w-measure text-sm text-fg-muted">
             {t("sources.textDescription")}
-            {source ? null : <> {t("sources.textEmptyNote")}</>}
+            {id ? null : <> {t("sources.textEmptyNote")}</>}
           </p>
           <textarea
             id={textId}
@@ -197,15 +192,17 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
             spellCheck
             autoFocus={!existingId}
             onInput={(event) => {
-              typed.current = event.currentTarget.value;
-              setLength(event.currentTarget.value.length);
+              const value = event.currentTarget.value;
+              typed.current = value;
+              setLength(value.length);
+              setOneLongParagraph(value.length > LONG_PARAGRAPH_NOTICE_AT && !value.includes("\n"));
               clearTimeout(timer.current);
               timer.current = window.setTimeout(() => void save(), TYPING_PAUSE_MS);
             }}
             onBlur={() => void save()}
             className="min-h-[24rem] w-full resize-y rounded-md border border-border-control bg-surface px-3 py-2 text-md text-fg"
           />
-          <TextCounter id={counterId} length={length} full={full} />
+          <TextCounter id={counterId} length={length} full={full} oneLongParagraph={oneLongParagraph} />
         </div>
         <SaveFailure />
       </div>
@@ -213,7 +210,7 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
   );
 }
 
-function TextCounter({ id, length, full }: { id: string; length: number; full: boolean }) {
+function TextCounter({ id, length, full, oneLongParagraph }: { id: string; length: number; full: boolean; oneLongParagraph: boolean }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const max = formatCount(language, MAX_SOURCE_TEXT_LENGTH);
@@ -225,27 +222,7 @@ function TextCounter({ id, length, full }: { id: string; length: number; full: b
           {t("sources.textTooLong", { max })}
         </p>
       ) : null}
+      {oneLongParagraph ? <p className="max-w-measure text-sm text-fg-muted">{t("sources.oneLongParagraph")}</p> : null}
     </div>
-  );
-}
-
-/** A new text's type, title and date, kept here until the text is created with them. */
-function NewTextFields(props: { type: SourceType; onType: (type: SourceType) => void; title: string; onTitle: (title: string) => void; date: string; onDate: (date: string) => void }) {
-  const { t } = useTranslation();
-  const checked = checkSourceTitle(props.title);
-  return (
-    <>
-      <SourceTypeSelect value={props.type} onChange={props.onType} />
-      <TextField
-        label={t("sources.titleLabel")}
-        description={t("sources.titleDescription")}
-        value={props.title}
-        error={checked.ok ? null : checked.problem === "too-long" ? t("sources.titleTooLong") : t("sources.titleControlCharacters")}
-        autoComplete="off"
-        maxLength={300}
-        onChange={(event) => props.onTitle(event.currentTarget.value)}
-      />
-      <SourceDateField value={props.date} onChange={props.onDate} />
-    </>
   );
 }

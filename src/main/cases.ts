@@ -17,7 +17,7 @@ import {
 } from "../shared/api.ts";
 import { guessPdfType, MAX_SOURCES, type AddPdfsResult, type CaseSources, type PdfProblem, type ReadSourceTextResult, type SourceSaveResult } from "../shared/sources.ts";
 import { CASE_FILE_NAME, ClientAgeSchema, MAX_CASE_FILE_BYTES, MAX_LISTED_FILES, newCaseData, nextUpdatedAt, readCaseFile, serializeCaseFile, type CaseData } from "./case-file.ts";
-import { checkDroppedPdf, copyPdfIntoFolder, findSamePdf, readChosenPdf, type LoadedPdf } from "./case-pdfs.ts";
+import { checkDroppedPdf, copyPdfIntoFolder, findSamePdf, isPdfFile, readChosenPdf, type LoadedPdf } from "./case-pdfs.ts";
 import {
   addPdfSource,
   addTextSource,
@@ -209,13 +209,14 @@ function checkSourceId(sourceId: unknown): string {
 }
 
 /** Adding PDFs: what was added and what was not, with the case's sources as they are now. */
-function pdfsOutcome(result: CaseWork<null>, added: string[], problems: Array<{ name: string; problem: PdfProblem }>): AddPdfsResult {
+function pdfsOutcome(result: CaseWork<null>, added: string[], problems: Array<{ name: string; problem: PdfProblem }>, copied: string[] = []): AddPdfsResult {
   switch (result.kind) {
     case "saved":
     case "unchanged":
       return { outcome: "done", sources: result.sources, added: result.kind === "saved" ? added : [], problems };
     case "failed":
-      return { outcome: result.outcome };
+      // A copy stays in the folder (nothing is deleted): say where it is.
+      return copied.length > 0 ? { outcome: "copied-not-added", files: copied, sources: result.sources } : { outcome: result.outcome };
     default:
       return { outcome: "case-unavailable" };
   }
@@ -231,6 +232,24 @@ export class CaseLibrary {
   private queues = new Map<string, Promise<unknown>>();
   /** Changes to one case's sources, by case id, in the order they were asked for (withCase). */
   private caseCalls = new Map<string, Promise<unknown>>();
+  /** Case work under way or waiting: saves, changes to sources, PDFs being copied. */
+  private active = 0;
+
+  /** Whether case work is under way: quitting waits for it (src/main/index.ts). */
+  get busy(): boolean {
+    return this.active > 0;
+  }
+
+  /** Resolves true once no case work is under way, or false after `timeoutMs`. */
+  async idle(timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (this.active > 0) {
+      const left = deadline - Date.now();
+      if (left <= 0) return false;
+      await Promise.race([Promise.allSettled([...this.caseCalls.values(), ...this.queues.values()]), new Promise((resolve) => setTimeout(resolve, Math.min(left, 50)))]);
+    }
+    return true;
+  }
   private readonly options: Required<CaseLibraryOptions>;
 
   constructor(options: CaseLibraryOptions) {
@@ -522,6 +541,7 @@ export class CaseLibrary {
   async addPdfs(caseId: unknown, pdfs: ReadonlyArray<{ name: string; load: () => Promise<LoadedPdf> }>): Promise<AddPdfsResult> {
     const id = checkCaseId(caseId);
     const added: string[] = [];
+    const copied: string[] = [];
     const problems: Array<{ name: string; problem: PdfProblem }> = [];
     const result = await this.withCase(id, async (data, folder, files) => {
       let next = data;
@@ -547,6 +567,7 @@ export class CaseLibrary {
         if (fileName === null) {
           try {
             fileName = await copyPdfIntoFolder(folder, pdf.name, loaded.bytes);
+            copied.push(fileName);
           } catch (error) {
             this.options.log(`A PDF could not be copied into a case (${(error as Error).message}).`);
             problems.push({ name: pdf.name, problem: "not-copied" });
@@ -560,7 +581,7 @@ export class CaseLibrary {
       }
       return { save: added.length > 0 ? next : null, value: null };
     });
-    return pdfsOutcome(result, added, problems);
+    return pdfsOutcome(result, added, problems, copied);
   }
 
   /** PDFs the user chose in the system's dialog: read, never changed. */
@@ -607,17 +628,21 @@ export class CaseLibrary {
     return pdfsOutcome(result, added, problems);
   }
 
-  /** The path of a PDF source's copy, to open it: a plain file at the top of the case's folder, or null. */
+  /**
+   * The path of a PDF source's copy, to open it in the system's viewer: only a plain
+   * file at the top of the case's folder, named ".pdf", whose first bytes are a PDF's.
+   * A data file copied or received from elsewhere could name any file ("report.command"),
+   * which the system would run rather than show; such a file is never handed over.
+   */
   async sourcePdfPath(caseId: unknown, sourceId: unknown): Promise<string | null> {
     const id = checkCaseId(caseId);
     const source = checkSourceId(sourceId);
     const result = await this.withCase(id, async (data, folder) => {
       const entry = data.sources.find((item) => item.id === source);
-      if (entry?.kind !== "pdf") return { save: null, value: null };
+      if (entry?.kind !== "pdf" || !/\.pdf$/i.test(entry.file)) return { save: null, value: null };
       const file = path.join(folder, entry.file);
       if (path.dirname(file) !== folder) return { save: null, value: null };
-      const info = await lstat(file).catch(() => null);
-      return { save: null, value: info?.isFile() ? file : null };
+      return { save: null, value: (await isPdfFile(file)) ? file : null };
     });
     return result.kind === "unchanged" ? result.value : null;
   }
@@ -656,7 +681,8 @@ export class CaseLibrary {
   private withCase<T>(caseId: string, work: (data: CaseData, folder: string, files: CaseFile[]) => Promise<{ save: CaseData | null; value: T }>): Promise<CaseWork<T>> {
     // In line before anything is awaited, so changes run in the order they were asked for:
     // two quick saves of a text never land older-last.
-    const run = (this.caseCalls.get(caseId) ?? Promise.resolve()).then(() => this.withCaseNow(caseId, work));
+    this.active++;
+    const run = (this.caseCalls.get(caseId) ?? Promise.resolve()).then(() => this.withCaseNow(caseId, work)).finally(() => this.active--);
     this.caseCalls.set(
       caseId,
       run.catch(() => undefined),
@@ -744,7 +770,8 @@ export class CaseLibrary {
   }
 
   private queued<T>(folder: string, work: () => Promise<T>): Promise<T> {
-    const run = (this.queues.get(folder) ?? Promise.resolve()).then(work);
+    this.active++;
+    const run = (this.queues.get(folder) ?? Promise.resolve()).then(work).finally(() => this.active--);
     this.queues.set(
       folder,
       run.catch(() => undefined),

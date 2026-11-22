@@ -46,7 +46,9 @@ export function guessPdfType(fileName: string): SourceType {
   if (/ablls/.test(name)) return "ablls-r";
   if (/(^|[^a-z])iep([^a-z]|$)/.test(name)) return "iep";
   if (/(^|[^a-z])cde([^a-z]|$)|diagnostic/.test(name)) return "cde";
-  if (/(^|[^a-z])(fba|fast|mas|qabf)([^a-z]|$)/.test(name)) return "fba-questionnaire";
+  if (/(^|[^a-z])(fba|qabf)([^a-z]|$)/.test(name)) return "fba-questionnaire";
+  // FAST and MAS only as acronyms in capitals: "Fast track summary" is not a questionnaire.
+  if (/(^|[^A-Za-z])(FAST|MAS)([^A-Za-z]|$)/.test(fileName)) return "fba-questionnaire";
   return "other";
 }
 
@@ -80,6 +82,14 @@ export function isSourceDate(value: unknown): value is string {
   if (year < 1900 || year > 2100) return false;
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+/** Whether bytes look like a PDF: "%PDF-" within the first 1024 bytes, as PDF readers accept. */
+export function looksLikePdf(bytes: Uint8Array): boolean {
+  const marker = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
+  const end = Math.min(bytes.byteLength, 1024) - marker.length;
+  for (let i = 0; i <= end; i++) if (marker.every((byte, j) => bytes[i + j] === byte)) return true;
+  return false;
 }
 
 /** A pasted text as it is saved: line endings made "\n" (Windows pastes "\r\n"); nothing else changes. */
@@ -191,6 +201,11 @@ export type AddPdfsResult =
       problems: Array<{ name: string; problem: PdfProblem }>;
     }
   | { outcome: "cancelled" }
+  /**
+   * PDFs were copied into the case's folder but the data file could not be saved: they are
+   * not sources, and stay in the folder (nothing is deleted), under "Also in this case's folder".
+   */
+  | { outcome: "copied-not-added"; files: string[]; sources: CaseSources }
   | SourceSaveFailure;
 
 /** A PDF dropped onto the window: its name and bytes, read by the interface. Never a path. */

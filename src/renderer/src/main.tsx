@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Settings } from "../../shared/api.ts";
 import { App } from "./App.tsx";
+import { flushAllSaves } from "./case-saves.tsx";
 import { initI18n } from "./i18n/index.ts";
 import { LanguageProvider } from "./language.tsx";
 import "./styles/fonts.ts";
@@ -16,6 +17,9 @@ for (const type of ["dragover", "drop"] as const) {
     if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
   });
 }
+
+// Before the window closes or the app quits, every save still waiting is made (case-saves.tsx).
+window.aba.onFlushSaves(flushAllSaves);
 
 async function start() {
   // The saved language first, so the first screen is already in it.

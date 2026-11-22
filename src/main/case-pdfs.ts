@@ -1,6 +1,6 @@
-import { open, readdir, readFile, rm, stat } from "node:fs/promises";
+import { lstat, open, readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { MAX_PDF_BYTES } from "../shared/sources.ts";
+import { looksLikePdf, MAX_PDF_BYTES } from "../shared/sources.ts";
 import { pdfFileNames } from "./case-folder-name.ts";
 import { flushFolder } from "./durable-write.ts";
 
@@ -19,10 +19,23 @@ import { flushFolder } from "./durable-write.ts";
  * Sources step lists it with the folder's other PDFs, never as a source.
  */
 
-/** Whether bytes look like a PDF: "%PDF-" within the first 1024 bytes, as PDF readers accept. */
-export function looksLikePdf(bytes: Uint8Array): boolean {
-  const head = Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.byteLength, 1024));
-  return head.includes("%PDF-");
+export { looksLikePdf };
+
+/** Whether `file` is a plain file (never a link) whose first 1024 bytes look like a PDF. Reads only those bytes. */
+export async function isPdfFile(file: string): Promise<boolean> {
+  try {
+    if (!(await lstat(file)).isFile()) return false;
+    const handle = await open(file, "r");
+    try {
+      const head = new Uint8Array(1024);
+      const { bytesRead } = await handle.read(head, 0, head.byteLength, 0);
+      return looksLikePdf(head.subarray(0, bytesRead));
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return false;
+  }
 }
 
 export type LoadedPdf = { ok: true; bytes: Uint8Array } | { ok: false; problem: "too-large" | "cannot-read" | "not-a-pdf" };
