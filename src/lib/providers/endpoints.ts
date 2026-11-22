@@ -43,14 +43,25 @@ export function removeEnvHeaders(variable: "ANTHROPIC_CUSTOM_HEADERS" | "OPENAI_
   return removals;
 }
 
-/** A fetch that sends requests only under `baseURL`, and refuses everything else. */
+/**
+ * A fetch that sends requests only under `baseURL` and never follows a redirect: a
+ * redirect would re-send the request (the case's documents, and on some hops the key) to
+ * wherever it points, and the providers' APIs never legitimately redirect. Anything else
+ * is refused before it is sent, and a redirect answer is refused when it arrives.
+ */
 export function pinnedFetch(baseURL: string, inner: typeof fetch = fetch): typeof fetch {
   const prefix = baseURL.endsWith("/") ? baseURL : `${baseURL}/`;
-  return ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+  return (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.startsWith(prefix)) {
-      return Promise.reject(new ProviderError("blocked_endpoint", "The request was stopped: it was not going to the provider's official address."));
+      throw new ProviderError("blocked_endpoint", "The request was stopped: it was not going to the provider's official address.");
     }
-    return inner(input, init);
+    const response = await inner(input, { ...init, redirect: "manual" });
+    // Node's fetch returns the 3xx itself; a browser-style fetch reports "opaqueredirect".
+    if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+      await response.body?.cancel();
+      throw new ProviderError("blocked_redirect", "The request was stopped: the provider answered with a redirect, which the app never follows.");
+    }
+    return response;
   }) as typeof fetch;
 }

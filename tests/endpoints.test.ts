@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 import { createAnthropicProvider } from "../src/lib/providers/anthropic.ts";
 import { ANTHROPIC_BASE_URL, OPENAI_BASE_URL, pinnedFetch, removeEnvHeaders } from "../src/lib/providers/endpoints.ts";
@@ -96,4 +98,61 @@ test("the pinned fetch sends only under the official address", async () => {
 test("custom-header variables are parsed into removals, as the SDKs parse them", () => {
   assert.deepEqual(removeEnvHeaders("OPENAI_CUSTOM_HEADERS", { OPENAI_CUSTOM_HEADERS: "a: 1\nB-Two : x:y\nnot a header" }), { a: null, "B-Two": null });
   assert.deepEqual(removeEnvHeaders("ANTHROPIC_CUSTOM_HEADERS", {}), {});
+});
+
+/** A local HTTP server that records every request it gets. */
+async function recordingServer(answer: (path: string) => { status: number; headers?: Record<string, string> }) {
+  const received: { method: string; path: string; headers: Record<string, unknown>; body: string }[] = [];
+  const server: Server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => (body += chunk));
+    request.on("end", () => {
+      received.push({ method: request.method ?? "", path: request.url ?? "", headers: request.headers, body });
+      const { status, headers } = answer(request.url ?? "");
+      response.writeHead(status, headers).end("{}");
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const close = () =>
+    new Promise<void>((resolve) => {
+      server.close(() => resolve());
+      // Keep-alive connections would otherwise hold the server open.
+      server.closeAllConnections();
+    });
+  return { origin, received, close };
+}
+
+test("the pinned fetch never follows a redirect: the other host receives nothing", { timeout: 10_000 }, async () => {
+  const elsewhere = await recordingServer(() => ({ status: 200 }));
+  try {
+    for (const status of [301, 302, 303, 307, 308]) {
+      const pinnedHost = await recordingServer(() => ({ status, headers: { location: `${elsewhere.origin}/stolen` } }));
+      try {
+        const pinned = pinnedFetch(`${pinnedHost.origin}/v1`);
+        await assert.rejects(
+          pinned(`${pinnedHost.origin}/v1/messages`, { method: "POST", headers: { "x-api-key": "test-key-not-real" }, body: '{"pdf":"BASE64-PDF-DATA"}' }),
+          /redirect, which the app never follows/,
+          String(status),
+        );
+        assert.equal(pinnedHost.received.length, 1, String(status));
+      } finally {
+        await pinnedHost.close();
+      }
+    }
+    assert.deepEqual(elsewhere.received, [], "neither the body nor the key reached the other host");
+  } finally {
+    await elsewhere.close();
+  }
+});
+
+test("the pinned fetch passes ordinary answers through, errors included", async () => {
+  const pinnedHost = await recordingServer((path) => ({ status: path.endsWith("/missing") ? 404 : 200 }));
+  try {
+    const pinned = pinnedFetch(`${pinnedHost.origin}/v1`);
+    assert.equal((await pinned(`${pinnedHost.origin}/v1/models`)).status, 200);
+    assert.equal((await pinned(`${pinnedHost.origin}/v1/missing`)).status, 404);
+  } finally {
+    await pinnedHost.close();
+  }
 });
