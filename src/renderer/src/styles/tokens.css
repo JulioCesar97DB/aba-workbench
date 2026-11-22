@@ -41,10 +41,14 @@
   --color-focus: #9a4a05;
   --color-focus-on-nav: #ffc46b;
 
-  /* Status. Only what the screens use today: success, warning and the ready/draft
-     section dots of the reference come with the screens that show them. */
+  /* Status. Only what the screens use today: the ready/draft section dots of the
+     reference come with the screens that show them. */
   --color-neutral: #46535f;
   --color-neutral-subtle: #eef1f4;
+  --color-success: #1f5f35; /* a connection that works */
+  --color-success-subtle: #dff2e5;
+  --color-warning: #6b3f00; /* something that needs the user (a connection to sign in again) */
+  --color-warning-subtle: #fdecc8;
   --color-danger: #a1231b; /* an error message on a light surface */
   --color-fg-on-nav-warning: #ffc46b; /* an error message on the sidebar */
   --color-dot-empty: #c7d0d9; /* a section not started, on the sidebar */

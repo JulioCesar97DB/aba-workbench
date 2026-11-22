@@ -63,7 +63,7 @@ test("Claude: no environment variable moves the request, adds a header or replac
   );
   await withEnv(HOSTILE_ENV, async () => {
     const provider = createAnthropicProvider({ fetch: fetchStub });
-    await provider.listModels("test-key-not-real", new AbortController().signal);
+    await provider.listModels({ kind: "api-key", apiKey: "test-key-not-real" }, new AbortController().signal);
     await provider.prewarm(options("claude-opus-5-5"));
   });
   assert.equal(calls.length, 2);
@@ -74,7 +74,7 @@ test("OpenAI: no environment variable moves the request, adds a header or replac
   const { fetchStub, calls } = stubFetch(({ url }) => (url.includes("/models") ? Response.json({ object: "list", data: [] }) : Response.json(openaiResponse)));
   await withEnv(HOSTILE_ENV, async () => {
     const provider = createOpenAIProvider({ fetch: fetchStub });
-    await provider.listModels("test-key-not-real", new AbortController().signal);
+    await provider.listModels({ kind: "api-key", apiKey: "test-key-not-real" }, new AbortController().signal);
     await provider.prewarm(options("gpt-6.2-sol"));
   });
   assert.equal(calls.length, 2);

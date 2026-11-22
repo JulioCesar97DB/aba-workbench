@@ -27,7 +27,7 @@ export async function* runDevCheckGeneration(options: {
   const pause = options.msPerTextDelta ?? 40;
   const events = runGeneration({
     provider: mockProvider,
-    apiKey: "", // the mock needs none
+    credential: { kind: "api-key", apiKey: "" }, // the mock needs none
     model: "mock-echo",
     section: "medical-necessity",
     effort: "high",

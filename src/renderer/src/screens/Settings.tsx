@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LANGUAGES, type CasesFolderInfo, type Language } from "../../../shared/api.ts";
 import { useAppInfo } from "../app-info.tsx";
@@ -11,8 +11,10 @@ import { TransWithTerms } from "../components/Trans.tsx";
 import { useLanguage } from "../language.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { WorkArea } from "../shell/WorkArea.tsx";
+import { ConnectionsSection } from "./Connections.tsx";
+import { SettingsSection } from "./SettingsSection.tsx";
 
-/** Settings: the screen language and the cases folder; the AI connection arrives later. */
+/** Settings: the screen language, the cases folder and the AI connections. */
 export function SettingsScreen() {
   const { t } = useTranslation();
   const info = useAppInfo();
@@ -48,9 +50,7 @@ export function SettingsScreen() {
 
       <CasesFolderSection />
 
-      <SettingsSection heading={t("settings.aiHeading")} badge={t("status.notAvailableYet")}>
-        <p className="max-w-measure text-fg-muted">{t("settings.aiBody")}</p>
-      </SettingsSection>
+      <ConnectionsSection />
 
       <SettingsSection heading={t("settings.aboutHeading")}>
         {info ? (
@@ -147,20 +147,5 @@ function CasesFolderSection() {
       </p>
       <p className="max-w-measure text-sm text-fg-muted">{t("settings.casesFolderChangeNote")}</p>
     </SettingsSection>
-  );
-}
-
-function SettingsSection({ heading, badge, children }: { heading: string; badge?: string; children: ReactNode }) {
-  const headingId = useId();
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2.5 border-b border-border py-5 first:pt-0 last:border-b-0">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h2 id={headingId} className="text-base font-semibold">
-          {heading}
-        </h2>
-        {badge ? <StatusBadge>{badge}</StatusBadge> : null}
-      </div>
-      {children}
-    </section>
   );
 }

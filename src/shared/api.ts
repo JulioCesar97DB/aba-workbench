@@ -173,6 +173,125 @@ export interface GenerationUpdate {
   event: GenerationUpdateEvent;
 }
 
+
+/* The AI connections (src/main/connections.ts). The interface only ever learns states, the
+ * account's display name when the provider gives one, and safe messages: never a key, a
+ * token or anything else from the credentials file. */
+
+/** Why the credentials file could not be used. Both connections then show as not connected. */
+export type CredentialsProblem = "damaged" | "newer-version" | "cannot-read";
+
+export type ClaudeConnection =
+  | { state: "not-connected" }
+  | { state: "connected" }
+  /** A key is saved, but Anthropic no longer accepts it (revoked or deleted in the Console). */
+  | { state: "needs-attention"; reason: "key-rejected" };
+
+export type ChatGptConnection =
+  /**
+   * `savedAccount`: a ChatGPT account signed in before and signed out; the next sign-in
+   * goes back to it, and "Use a different ChatGPT account" forgets it.
+   */
+  | { state: "not-connected"; savedAccount: boolean }
+  /**
+   * The browser is open at OpenAI's sign-in page; the app waits for it to come back.
+   * `otherPort`: another app held the usual port (1455), so the app listens on another one,
+   * which OpenAI may refuse for a first sign-in.
+   */
+  | { state: "signing-in"; otherPort: boolean }
+  /**
+   * `showWelcome`: plan use was allowed for the first time on this computer and the user has
+   * not dismissed "You're using your ChatGPT plan" yet (OpenAI's UI guidelines).
+   */
+  | { state: "connected"; displayName: string | null; showWelcome: boolean }
+  /**
+   * Signed in, but it cannot be used as it is:
+   * - "plan-not-allowed": OpenAI gave no permission to use the ChatGPT plan (it was not
+   *   allowed in the browser, or the account cannot use its plan in apps; OpenAI does not
+   *   say which);
+   * - "plan-not-eligible": OpenAI said the account's plan, workspace or a policy does not let
+   *   it be used in apps (kept across restarts until the next sign-in or sign-out);
+   * - "session-ended": revoked, disconnected in ChatGPT's settings, or unused for 30 days;
+   *   it needs a new sign-in;
+   * - "not-saved": it works, but its renewed sign-in could not be written to the disk, so
+   *   it would be lost when the app quits.
+   */
+  | { state: "needs-attention"; reason: "plan-not-allowed" | "plan-not-eligible" | "session-ended" | "not-saved"; displayName: string | null };
+
+export interface Connections {
+  chatgpt: ChatGptConnection;
+  claude: ClaudeConnection;
+  /** Set when the credentials file could not be read: nothing in it is used, and nothing overwrites it. */
+  problem: CredentialsProblem | null;
+}
+
+/** The longest text saveClaudeKey looks at; a real key is about a hundred characters. */
+export const MAX_API_KEY_INPUT_LENGTH = 1000;
+
+/** The outcome of pasting a Claude key: it is saved only when Anthropic accepted it. */
+export type SaveClaudeKeyResult =
+  | { outcome: "saved" }
+  /** Empty, or not shaped like a Claude key (they start with sk-ant-); nothing was sent. */
+  | { outcome: "not-a-key"; problem: "empty" | "not-a-claude-key" }
+  /** Anthropic said this key is not valid. */
+  | { outcome: "rejected" }
+  /** Anthropic could not be reached (no internet, say); nothing was saved. */
+  | { outcome: "unreachable" }
+  /** Anthropic answered with another error; nothing was saved. */
+  | { outcome: "provider-error" }
+  /** Accepted, but the credentials file could not be written; nothing was saved. */
+  | { outcome: "not-saved" }
+  /** The credentials file could not be read; it is left as it is. */
+  | { outcome: "credentials-problem"; problem: CredentialsProblem };
+
+/** The outcome of checking a saved connection with a free call (the provider's model list). */
+export type CheckConnectionResult =
+  | { outcome: "working" }
+  | { outcome: "not-connected" }
+  /** The provider no longer accepts the key or the sign-in: the connection needs attention. */
+  | { outcome: "rejected" }
+  /** ChatGPT only: OpenAI said this account cannot use its plan in apps; the connection needs attention. */
+  | { outcome: "not-eligible" }
+  | { outcome: "unreachable" }
+  | { outcome: "provider-error" };
+
+export type RemoveConnectionResult = { outcome: "removed" } | { outcome: "not-saved" } | { outcome: "credentials-problem"; problem: CredentialsProblem };
+
+/** How a ChatGPT sign-in ended. */
+export type ChatGptSignInResult =
+  /** Signed in with plan use allowed. */
+  | { outcome: "signed-in" }
+  /** Signed in, but OpenAI gave no permission to use the ChatGPT plan. */
+  | { outcome: "plan-not-allowed" }
+  /**
+   * OpenAI ended the attempt with access_denied: it was not allowed in the browser, or the
+   * account cannot use its plan in apps (OpenAI's answer does not say which); nothing was saved.
+   */
+  | { outcome: "access-denied" }
+  /** Cancelled in the app. */
+  | { outcome: "cancelled" }
+  /** Nothing came back from the browser in time (closed, say). */
+  | { outcome: "timed-out" }
+  /** The app could not listen for the browser's answer: another app holds the port. */
+  | { outcome: "port-in-use" }
+  /** The browser signed in to another ChatGPT account than the one saved; nothing changed. */
+  | { outcome: "different-account" }
+  | { outcome: "unreachable" }
+  /** OpenAI refused, or answered with something the app cannot verify; nothing was saved. */
+  | { outcome: "failed" }
+  | { outcome: "already-signing-in" }
+  | { outcome: "not-saved" }
+  | { outcome: "credentials-problem"; problem: CredentialsProblem };
+
+/** The outcome of "Start over" when the credentials file could not be used. */
+export type StartOverResult = { outcome: "started-over" } | { outcome: "not-needed" } | { outcome: "not-saved" };
+
+export type ChatGptSignOutResult =
+  /** Signed out here. `revocationConfirmed` false: OpenAI did not confirm it ended the session (offline, say). */
+  | { outcome: "signed-out"; revocationConfirmed: boolean }
+  | { outcome: "not-saved" }
+  | { outcome: "credentials-problem"; problem: CredentialsProblem };
+
 export interface AbaApi {
   getAppInfo(): Promise<AppInfo>;
   /**
@@ -203,6 +322,36 @@ export interface AbaApi {
   openCase(caseId: string): Promise<OpenCaseResult>;
   /** Shows a folder Home last listed as unreadable in Finder or Explorer, selected. False for any other name, or when it is gone. */
   showUnreadableFolder(folderName: string): Promise<boolean>;
+
+  /** The state of each AI connection. */
+  getConnections(): Promise<Connections>;
+  /** Called whenever a connection's state changes (a sign-in, a refresh that failed...); returns the function that unsubscribes. */
+  onConnectionsChange(listener: (connections: Connections) => void): () => void;
+  /** Checks the pasted Claude key with Anthropic (a free call: the model list) and saves it only if it is accepted. */
+  saveClaudeKey(key: string): Promise<SaveClaudeKeyResult>;
+  /** Checks the saved Claude key again. */
+  checkClaudeKey(): Promise<CheckConnectionResult>;
+  /** Removes the saved Claude key from this computer. */
+  removeClaudeKey(): Promise<RemoveConnectionResult>;
+  /** Opens OpenAI's sign-in page in the system browser and waits for it to come back. */
+  signInToChatGpt(): Promise<ChatGptSignInResult>;
+  /** Stops a sign-in that is waiting for the browser. */
+  cancelChatGptSignIn(): Promise<void>;
+  /** Checks the ChatGPT sign-in with a free call (the account's model list). */
+  checkChatGpt(): Promise<CheckConnectionResult>;
+  /** Ends the ChatGPT session with OpenAI and removes its tokens from this computer. */
+  signOutOfChatGpt(): Promise<ChatGptSignOutResult>;
+  /** Signed out: forgets the saved ChatGPT account, so the next sign-in can use another one. */
+  forgetChatGptAccount(): Promise<RemoveConnectionResult>;
+  /** Opens ChatGPT's usage settings (chatgpt.com/settings/usage) in the system browser. */
+  openChatGptUsage(): Promise<void>;
+  /** Remembers that "You're using your ChatGPT plan" was seen, so it is never shown again. */
+  dismissChatGptWelcome(): Promise<void>;
+  /**
+   * When the credentials file could not be used: renames it aside (never deleting it)
+   * and starts with no saved connections. The interface asks the user to confirm first.
+   */
+  startOverConnections(): Promise<StartOverResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -219,6 +368,19 @@ export const IPC_CHANNELS = {
   createCase: "cases:create",
   openCase: "cases:open",
   showUnreadableFolder: "cases:show-unreadable",
+  getConnections: "connections:get",
+  connectionsChanged: "connections:changed",
+  saveClaudeKey: "connections:claude-save",
+  checkClaudeKey: "connections:claude-check",
+  removeClaudeKey: "connections:claude-remove",
+  signInToChatGpt: "connections:chatgpt-sign-in",
+  cancelChatGptSignIn: "connections:chatgpt-cancel",
+  checkChatGpt: "connections:chatgpt-check",
+  signOutOfChatGpt: "connections:chatgpt-sign-out",
+  forgetChatGptAccount: "connections:chatgpt-forget",
+  openChatGptUsage: "connections:chatgpt-usage",
+  dismissChatGptWelcome: "connections:chatgpt-welcome-seen",
+  startOverConnections: "connections:start-over",
 } as const;
 
 /** Generation ids are UUIDs (crypto.randomUUID()); anything else is refused. */

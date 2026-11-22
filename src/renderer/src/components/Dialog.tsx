@@ -9,8 +9,8 @@ import { cn } from "./cn.ts";
  */
 
 export interface DialogProps {
-  /** The element that opens it, usually a <Button>. */
-  trigger: ReactElement;
+  /** The element that opens it, usually a <Button>; none for a dialog the screen opens itself (controlled with `open`). */
+  trigger?: ReactElement;
   title: ReactNode;
   children: ReactNode;
   variant?: "center" | "sheet";
@@ -32,7 +32,7 @@ const popupClasses = {
 export function Dialog({ trigger, title, children, variant = "center", open, onOpenChange, popupClassName, titleHidden }: DialogProps) {
   return (
     <BaseDialog.Root open={open} onOpenChange={onOpenChange ? (next) => onOpenChange(next) : undefined}>
-      <BaseDialog.Trigger render={trigger} />
+      {trigger ? <BaseDialog.Trigger render={trigger} /> : null}
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className="fixed inset-0 bg-backdrop transition-opacity data-ending-style:opacity-0 data-starting-style:opacity-0" />
         <BaseDialog.Popup className={cn(popupClasses[variant], popupClassName)}>

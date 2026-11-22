@@ -79,17 +79,20 @@ test("the interface loads under the content security policy as written, with its
   });
   expect(fonts).toEqual({ faces: [true, true, true], sans: true, mono: true });
 
-  // Popups (dialog, select, tooltip) render without inline styles the policy would block.
+  // Popups (dialog, tooltip, select) render without inline styles the policy would block.
   await page.getByRole("button", { name: "New case" }).click();
   await page.keyboard.press("Escape");
   await goTo(page, "/settings");
-  await page.getByRole("combobox", { name: "Language" }).click();
-  await expect(page.getByRole("option", { name: "Español" })).toBeVisible();
-  await page.keyboard.press("Escape");
-  // Base UI gives tooltips no role: the button's own name already says the same.
+  // The tooltip before the Select, never right after closing it: while a Select is mounted
+  // (open, or still closing), Base UI covers the page with an invisible backdrop, and a
+  // pointer that arrives while it is there gives the tooltip no mousemove, so it never
+  // opens. Base UI gives tooltips no role: the button's own name already says the same.
   await page.getByRole("button", { name: "Español" }).hover();
   await expect(page.locator('[data-slot="tooltip"]')).toHaveText("Español");
   await expect(page.locator('[data-slot="tooltip"]')).toBeVisible();
+  await page.getByRole("combobox", { name: "Language" }).click();
+  await expect(page.getByRole("option", { name: "Español" })).toBeVisible();
+  await page.keyboard.press("Escape");
   expect(violations).toEqual([]);
 
   // The fonts' license travels with them (SIL Open Font License 1.1, condition 2).

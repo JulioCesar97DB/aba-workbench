@@ -4,13 +4,21 @@ import {
   type AppInfo,
   type CaseList,
   type CasesFolderInfo,
+  type ChatGptSignInResult,
+  type ChatGptSignOutResult,
+  type CheckConnectionResult,
   type ChooseCasesFolderResult,
+  type Connections,
   type CreateCaseResult,
   type Language,
   type OpenCaseResult,
+  type RemoveConnectionResult,
+  type SaveClaudeKeyResult,
   type Settings,
+  type StartOverResult,
 } from "../shared/api.ts";
 import type { CaseLibrary } from "./cases.ts";
+import type { ConnectionService } from "./connections.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { runDevCheckGeneration } from "./dev-check.ts";
 import { GenerationRegistry, MAX_RUNNING_PER_WINDOW } from "./generations.ts";
@@ -24,6 +32,7 @@ export function registerIpc(options: {
   rulesDir: string;
   settings: SettingsStore;
   cases: CaseLibrary;
+  connections: ConnectionService;
   isTrustedSender: (event: IpcMainInvokeEvent) => boolean;
 }): void {
   const generations = new GenerationRegistry();
@@ -149,6 +158,93 @@ export function registerIpc(options: {
     return true;
   });
 
+  /*
+   * The AI connections (src/main/connections.ts checks every argument). They answer with
+   * states and outcomes only: no key or token ever crosses to the interface, and an
+   * unexpected error reaches it as a fixed sentence (the key is never in the log either).
+   */
+  ipcMain.handle(IPC_CHANNELS.getConnections, (event): Promise<Connections> => {
+    assertTrusted(event);
+    return options.connections.get().catch((error: unknown) => {
+      throw safeError(error, "The AI connections could not be checked.");
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.saveClaudeKey, (event, key: unknown): Promise<SaveClaudeKeyResult> => {
+    assertTrusted(event);
+    return options.connections.saveClaudeKey(key).catch((error: unknown) => {
+      throw safeError(error, "The Claude key could not be saved.");
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.checkClaudeKey, (event): Promise<CheckConnectionResult> => {
+    assertTrusted(event);
+    return options.connections.checkClaudeKey().catch((error: unknown) => {
+      throw safeError(error, "The Claude key could not be checked.");
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.removeClaudeKey, (event): Promise<RemoveConnectionResult> => {
+    assertTrusted(event);
+    return options.connections.removeClaudeKey().catch((error: unknown) => {
+      throw safeError(error, "The Claude key could not be removed.");
+    });
+  });
+
+  // Opens the system browser at OpenAI's page and resolves when the attempt ends.
+  ipcMain.handle(IPC_CHANNELS.signInToChatGpt, (event): Promise<ChatGptSignInResult> => {
+    assertTrusted(event);
+    return options.connections.signInToChatGpt().catch((error: unknown) => {
+      throw safeError(error, "The ChatGPT sign-in could not be started.");
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.cancelChatGptSignIn, (event): void => {
+    assertTrusted(event);
+    options.connections.cancelChatGptSignIn();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.checkChatGpt, (event): Promise<CheckConnectionResult> => {
+    assertTrusted(event);
+    return options.connections.checkChatGpt().catch((error: unknown) => {
+      throw safeError(error, "The ChatGPT sign-in could not be checked.");
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.signOutOfChatGpt, (event): Promise<ChatGptSignOutResult> => {
+    assertTrusted(event);
+    return options.connections.signOutOfChatGpt().catch((error: unknown) => {
+      throw safeError(error, "The ChatGPT sign-out could not be finished.");
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.forgetChatGptAccount, (event): Promise<RemoveConnectionResult> => {
+    assertTrusted(event);
+    return options.connections.forgetChatGptAccount().catch((error: unknown) => {
+      throw safeError(error, "The ChatGPT account could not be forgotten.");
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.startOverConnections, (event): Promise<StartOverResult> => {
+    assertTrusted(event);
+    return options.connections.startOver().catch((error: unknown) => {
+      throw safeError(error, "The saved connections could not be set aside.");
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.dismissChatGptWelcome, (event): Promise<void> => {
+    assertTrusted(event);
+    return options.connections.dismissChatGptWelcome().catch((error: unknown) => {
+      throw safeError(error, "That could not be saved, so it may show again next time.");
+    });
+  });
+
+  // A fixed address: the interface cannot make the app open any other.
+  ipcMain.handle(IPC_CHANNELS.openChatGptUsage, async (event): Promise<void> => {
+    assertTrusted(event);
+    await shell.openExternal(CHATGPT_USAGE_URL);
+  });
+
   ipcMain.handle(IPC_CHANNELS.startMockGeneration, (event, generationId: unknown): void => {
     assertTrusted(event);
     const sender = event.sender;
@@ -170,6 +266,9 @@ export function registerIpc(options: {
     if (typeof generationId === "string") generations.cancel(event.sender.id, generationId);
   });
 }
+
+/** Where ChatGPT shows its usage and each app's access to the user's plan (OpenAI's UI guidelines). */
+export const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
 
 /** The folder dialog's words, in the screen language (the main process draws that dialog). */
 const FOLDER_DIALOG: Record<Language, { title: string; button: string }> = {

@@ -8,7 +8,7 @@ import type { Provider } from "../src/lib/providers/types.ts";
 function request(overrides: Partial<GenerationRequest> = {}): GenerationRequest {
   return {
     provider: mockProvider,
-    apiKey: "",
+    credential: { kind: "api-key", apiKey: "" },
     model: "mock-echo",
     section: "medical-necessity",
     effort: "high",

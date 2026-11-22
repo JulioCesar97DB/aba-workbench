@@ -2,7 +2,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { LANGUAGES, isLanguage, type Language } from "../shared/api.ts";
-import { removeLeftoverSettingsTemporaryFiles, writeFileDurably } from "./durable-write.ts";
+import { removeLeftoverAppDataTemporaryFiles, writeFileDurably } from "./durable-write.ts";
 
 /*
  * The user's settings, in one JSON file in the app's own data folder
@@ -27,6 +27,11 @@ export interface StoredSettings {
   language: Language;
   /** The cases folder the user chose in Settings, or null for the default (ABA Workbench in the home folder). */
   casesFolder: string | null;
+  /**
+   * True once "You're using your ChatGPT plan" was dismissed: OpenAI's guidelines show it
+   * only after the first sign-in with plan use. Written only when true.
+   */
+  chatgptWelcomeShown?: true;
 }
 
 /** Long enough for any real folder, short enough that a hostile file cannot make it a burden. */
@@ -43,6 +48,7 @@ const StoredSettingsSchema = z
   .object({
     language: z.enum(LANGUAGES).optional().catch(undefined),
     casesFolder: FolderPathSchema.optional().catch(undefined),
+    chatgptWelcomeShown: z.literal(true).optional().catch(undefined),
   })
   .catch({});
 
@@ -67,21 +73,27 @@ export function readStoredSettings(text: string | null, defaults: StoredSettings
     return { settings: defaults, problem: "unreadable" };
   }
   const stored = StoredSettingsSchema.parse(json);
-  const settings: StoredSettings = { language: stored.language ?? defaults.language, casesFolder: stored.casesFolder ?? defaults.casesFolder };
+  const settings: StoredSettings = {
+    language: stored.language ?? defaults.language,
+    casesFolder: stored.casesFolder ?? defaults.casesFolder,
+    ...(stored.chatgptWelcomeShown ? { chatgptWelcomeShown: true as const } : {}),
+  };
   const record = typeof json === "object" && json !== null && !Array.isArray(json) ? (json as Record<string, unknown>) : null;
   const usedWhole =
     record !== null &&
     record.version === SETTINGS_FILE_VERSION &&
     stored.language !== undefined &&
     // A cases folder in the file that could not be used (not an absolute path, say).
-    (record.casesFolder === undefined || stored.casesFolder !== undefined);
+    (record.casesFolder === undefined || stored.casesFolder !== undefined) &&
+    (record.chatgptWelcomeShown === undefined || stored.chatgptWelcomeShown !== undefined);
   return { settings, problem: usedWhole ? null : "invalid" };
 }
 
 /** The default cases folder is not written: only a folder the user chose is. */
 export function serializeSettings(settings: StoredSettings): string {
   const body = settings.casesFolder === null ? {} : { casesFolder: settings.casesFolder };
-  return `${JSON.stringify({ version: SETTINGS_FILE_VERSION, language: settings.language, ...body }, null, 2)}\n`;
+  const welcome = settings.chatgptWelcomeShown ? { chatgptWelcomeShown: true } : {};
+  return `${JSON.stringify({ version: SETTINGS_FILE_VERSION, language: settings.language, ...body, ...welcome }, null, 2)}\n`;
 }
 
 /**
@@ -115,7 +127,7 @@ export class SettingsStore {
   async get(): Promise<StoredSettings> {
     if (this.current) return this.current;
     // A save cut short by a crash in an earlier run left its temporary file behind.
-    await removeLeftoverSettingsTemporaryFiles(this.file);
+    await removeLeftoverAppDataTemporaryFiles(this.file);
     let text: string | null = null;
     try {
       text = await readFile(this.file, "utf8");
@@ -141,6 +153,22 @@ export class SettingsStore {
   async setCasesFolder(folder: string): Promise<StoredSettings> {
     if (!FolderPathSchema.safeParse(folder).success) throw new Error("Refused: not an absolute folder path.");
     return this.update({ casesFolder: folder });
+  }
+
+  /**
+   * Remembers that the ChatGPT plan welcome was seen. If the file cannot be written, it
+   * is still remembered for this run (the dialog never stays stuck open) and the error is
+   * thrown, so the interface can say it may show again next time.
+   */
+  async markChatGptWelcomeShown(): Promise<StoredSettings> {
+    const current = await this.get();
+    if (current.chatgptWelcomeShown) return current;
+    try {
+      return await this.update({ chatgptWelcomeShown: true });
+    } catch (error) {
+      this.current = { ...(this.current ?? current), chatgptWelcomeShown: true };
+      throw error;
+    }
   }
 
   private update(change: Partial<StoredSettings>): Promise<StoredSettings> {

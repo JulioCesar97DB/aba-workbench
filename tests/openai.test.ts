@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createAnthropicProvider } from "../src/lib/providers/anthropic.ts";
 import { createOpenAIProvider, normalizeUsage } from "../src/lib/providers/openai.ts";
 import { collect, options, PDF_BASE64, sseResponse, stubFetch } from "./helpers.ts";
 
@@ -107,4 +108,103 @@ test("OpenAI usage: input_tokens includes cached reads and writes", () => {
     reasoningTokens: 2_000,
   });
   assert.equal(normalizeUsage(undefined).outputTokens, 0);
+});
+
+const chatgpt = { kind: "chatgpt", accessToken: "chatgpt-access-token-not-real" } as const;
+
+test("ChatGPT sign-in: the token is the bearer; stream and store false; no fields the flow refuses", async () => {
+  const { fetchStub, calls } = stubFetch(() => stream([textDelta, ["response.completed", { response: finalResponse("completed") }]]));
+  const events = await collect(createOpenAIProvider({ fetch: fetchStub }), { ...options("gpt-6.2-sol"), credential: chatgpt });
+  assert.equal(calls.length, 1, "no retries");
+  const { url, headers, body } = calls[0];
+  assert.equal(url, "https://api.openai.com/v1/responses", "the public Responses endpoint, never ChatGPT's backend-api");
+  assert.equal(headers.get("authorization"), "Bearer chatgpt-access-token-not-real");
+  assert.ok(body);
+  assert.equal(body.stream, true);
+  assert.equal(body.store, false);
+  assert.ok(Array.isArray(body.input));
+  // developers.openai.com/siwc/token-sharing-open-source/preview-limitations
+  for (const field of ["background", "conversation", "max_output_tokens", "max_tool_calls", "metadata", "moderation", "multi_agent", "prompt", "prompt_cache_retention", "safety_identifier", "temperature", "top_logprobs", "top_p", "truncation", "user", "previous_response_id", "instructions"]) {
+    assert.equal(field in body, false, field);
+  }
+  assert.deepEqual(body.prompt_cache_options, { mode: "explicit" }, "no ttl: it replaces prompt_cache_retention");
+  const roles = (body.input as Array<{ role: string }>).map((m) => m.role);
+  assert.equal(roles.includes("system"), false, "system messages are rejected in this flow");
+  assert.equal(events.at(-1)?.type, "done");
+});
+
+test("ChatGPT sign-in: the model list is models[] with slug and display_name, visibility list only, in the server's order", async () => {
+  const { fetchStub, calls } = stubFetch(() =>
+    Response.json({
+      models: [
+        { slug: "gpt-6.2-sol", display_name: "GPT-6.2 Sol", visibility: "list" },
+        { slug: "internal-model", display_name: "Hidden", visibility: "hide" },
+        { slug: "gpt-6.1-sol", display_name: "GPT-6.1 Sol", visibility: "list", extra: true },
+      ],
+    }),
+  );
+  const models = await createOpenAIProvider({ fetch: fetchStub }).listModels(chatgpt, new AbortController().signal);
+  assert.deepEqual(models, [
+    { id: "gpt-6.2-sol", label: "GPT-6.2 Sol", createdAt: null },
+    { id: "gpt-6.1-sol", label: "GPT-6.1 Sol", createdAt: null },
+  ]);
+  assert.equal(calls[0].url, "https://api.openai.com/v1/models");
+  assert.equal(calls[0].headers.get("authorization"), "Bearer chatgpt-access-token-not-real");
+});
+
+test("ChatGPT sign-in: a model list in another shape is refused, not guessed at", async () => {
+  const { fetchStub } = stubFetch(() => Response.json({ object: "list", data: [{ id: "gpt-6.2-sol" }] }));
+  await assert.rejects(createOpenAIProvider({ fetch: fetchStub }).listModels(chatgpt, new AbortController().signal), /model list this app does not understand/);
+});
+
+test("API key: the model list still comes from data[] and the request keeps its output limit", async () => {
+  const { fetchStub } = stubFetch(() => Response.json({ object: "list", data: [{ id: "gpt-6.2-sol", object: "model", created: 1790000000, owned_by: "openai" }, { id: "gpt-image-2", object: "model", created: 1, owned_by: "openai" }] }));
+  const models = await createOpenAIProvider({ fetch: fetchStub }).listModels({ kind: "api-key", apiKey: "test-key-not-real" }, new AbortController().signal);
+  assert.deepEqual(models.map((m) => m.id), ["gpt-6.2-sol"]);
+});
+
+test("ChatGPT sign-in: OpenAI's plan errors become their own messages, the token never in them", async () => {
+  const cases: Array<[number, unknown, RegExp, string]> = [
+    [429, { error: { message: "limit", type: "usage", code: "subscription_sharing_usage_limit_exceeded", param: null } }, /usage limit was reached/, "chatgpt_usage_limit"],
+    [403, { error: { message: "no", type: "x", code: "subscription_sharing_user_not_eligible", param: null } }, /cannot use its plan/, "chatgpt_not_eligible"],
+    [400, { error: { message: "no", type: "x", code: "subscription_sharing_unsupported_capability", param: "tools[0]" } }, /does not support part of this request \(tools\[0\]\)/, "chatgpt_unsupported"],
+    [401, { detail: "Unauthorized" }, /Sign in again in Settings/, "chatgpt_signed_out"],
+    [403, { detail: "Region not allowed" }, /policy or permission check/, "chatgpt_not_allowed"],
+    [503, { detail: "Direct routing unavailable" }, /not available just now/, "chatgpt_unavailable"],
+  ];
+  for (const [status, body, message, code] of cases) {
+    const { fetchStub, calls } = stubFetch(() => Response.json(body, { status }));
+    const provider = createOpenAIProvider({ fetch: fetchStub });
+    const error = await collect(provider, { ...options("gpt-6.2-sol"), credential: chatgpt }).then(
+      () => null,
+      (e: unknown) => e as { code: string; message: string },
+    );
+    assert.ok(error, String(status));
+    assert.equal(error.code, code, String(status));
+    assert.match(error.message, message);
+    assert.doesNotMatch(error.message, /chatgpt-access-token-not-real/);
+    assert.equal(calls.length, 1, `${status}: not retried`);
+  }
+});
+
+test("ChatGPT sign-in: a usage limit after the stream began ends the generation with that message", async () => {
+  const { fetchStub } = stubFetch(() =>
+    stream([
+      textDelta,
+      ["response.failed", { response: finalResponse("failed", { error: { code: "subscription_sharing_usage_limit_exceeded", message: "limit" } }) }],
+    ]),
+  );
+  await assert.rejects(collect(createOpenAIProvider({ fetch: fetchStub }), { ...options("gpt-6.2-sol"), credential: chatgpt }), { code: "chatgpt_usage_limit" });
+});
+
+test("ChatGPT sign-in: pre-warming (a request that does not stream) is refused before anything is sent", async () => {
+  const { fetchStub, calls } = stubFetch(() => Response.json(finalResponse("completed")));
+  await assert.rejects(createOpenAIProvider({ fetch: fetchStub }).prewarm({ ...options("gpt-6.2-sol"), credential: chatgpt }), { code: "chatgpt_unsupported" });
+  assert.equal(calls.length, 0);
+});
+
+test("Claude refuses a ChatGPT sign-in before anything is sent", async () => {
+  const { fetchStub, calls } = stubFetch(() => Response.json({}));
+  await assert.rejects(createAnthropicProvider({ fetch: fetchStub }).listModels(chatgpt, new AbortController().signal), { code: "unsupported_credential" });
+  assert.equal(calls.length, 0);
 });

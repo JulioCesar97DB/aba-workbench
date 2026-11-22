@@ -1,8 +1,13 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CaseLibrary } from "./cases.ts";
+import { ChatGptSession } from "./chatgpt-session.ts";
+import { ConnectionService } from "./connections.ts";
+import { CREDENTIALS_FILE_NAME, CredentialsStore } from "./credentials.ts";
+import { anthropicProvider } from "../lib/providers/anthropic.ts";
+import { IPC_CHANNELS } from "../shared/api.ts";
 import { defaultCasesFolder } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
 import { resolveHomeFolder, resolveRulesDir } from "./paths.ts";
@@ -60,10 +65,35 @@ const cases = new CaseLibrary({
   },
 });
 
+// The AI connections: the Claude key and the ChatGPT sign-in, in credentials.json in the
+// app's own data folder, owner-only (src/main/credentials.ts). The interface is told each
+// change as a state, never a key or a token.
+const credentials = new CredentialsStore(path.join(app.getPath("userData"), CREDENTIALS_FILE_NAME));
+const chatgpt = new ChatGptSession({
+  store: credentials,
+  // The system browser, never a window of the app: the user signs in on OpenAI's own page.
+  openBrowser: (url) => shell.openExternal(url),
+  language: async () => (await settings.get()).language,
+  onChange: () => void connections.changed(),
+});
+const connections = new ConnectionService({
+  store: credentials,
+  chatgpt,
+  welcome: {
+    shown: async () => (await settings.get()).chatgptWelcomeShown === true,
+    markShown: async () => void (await settings.markChatGptWelcomeShown()),
+  },
+  claude: anthropicProvider,
+  onChange: (state) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC_CHANNELS.connectionsChanged, state);
+  },
+});
+
 registerIpc({
   rulesDir,
   settings,
   cases,
+  connections,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
 });
 
@@ -110,10 +140,25 @@ app.whenReady().then(() => {
     console.error(`The writing rules were not found in ${rulesDir}. Generations will fail.`);
   }
   createWindow();
+  // While the app runs, a ChatGPT sign-in is refreshed before its token expires.
+  chatgpt.schedule();
   // macOS only: clicking the Dock icon with no window open opens one again.
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+/*
+ * A renewed ChatGPT sign-in that could not be saved (a full or read-only disk) lives only
+ * in memory: one last try to write it before the app quits, for at most 3 seconds, so the
+ * rotated refresh token is not lost if the disk has recovered.
+ */
+let lastSaveTried = false;
+app.on("before-quit", (event) => {
+  if (lastSaveTried || !credentials.hasUnsavedChange) return;
+  lastSaveTried = true;
+  event.preventDefault();
+  void Promise.race([credentials.saveUnsaved(), new Promise((resolve) => setTimeout(resolve, 3000))]).finally(() => app.quit());
 });
 
 // Platform convention: on macOS an app stays running with no windows; elsewhere it quits.

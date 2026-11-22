@@ -1,6 +1,6 @@
 import { measureRequest, requestTooLargeMessage } from "./limits.ts";
 import { toSafeError } from "./providers/index.ts";
-import type { Effort, Provider, SourceDocument } from "./providers/types.ts";
+import type { Effort, Provider, ProviderCredential, SourceDocument } from "./providers/types.ts";
 import { buildPrompt, type SectionId } from "./rules.ts";
 import type { GenerationEvent } from "./generation-events.ts";
 
@@ -8,8 +8,8 @@ export type { GenerationEvent } from "./generation-events.ts";
 
 export interface GenerationRequest {
   provider: Provider;
-  /** The user's key for this provider. It is passed to the provider and nowhere else. */
-  apiKey: string;
+  /** The user's key or sign-in for this provider. It is passed to the provider and nowhere else. */
+  credential: ProviderCredential;
   model: string;
   section: SectionId;
   effort: Effort;
@@ -48,7 +48,7 @@ export async function* runGeneration(request: GenerationRequest): AsyncGenerator
     return;
   }
   const options = {
-    apiKey: request.apiKey,
+    credential: request.credential,
     model: request.model,
     effort: request.effort,
     maxOutputTokens: request.maxOutputTokens,

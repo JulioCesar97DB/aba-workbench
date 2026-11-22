@@ -100,6 +100,15 @@ export const test = base.extend<Fixtures>({
           ? await electron.launch({ executablePath: packagedExecutable(), args, env })
           : await electron.launch({ args: [root, ...args], cwd: root, env });
       started.push(app);
+      // The tests drive the window with Playwright's own input, sent straight to the page.
+      // The computer's real pointer must not reach it: a person moving the mouse over a test
+      // window (the windows open mid-screen) moves the hover the tests rely on, and closed a
+      // tooltip a test was waiting for. Each window lets the real mouse pass through.
+      await app.evaluate(({ app: electronApp, BrowserWindow }) => {
+        const ignore = (window: Electron.BrowserWindow) => window.setIgnoreMouseEvents(true);
+        BrowserWindow.getAllWindows().forEach(ignore);
+        electronApp.on("browser-window-created", (_event, window) => ignore(window));
+      });
       return app;
     });
     for (const app of started) await app.close().catch(() => undefined);
@@ -193,6 +202,76 @@ export async function goTo(page: Page, address: string): Promise<void> {
 /** Resizes the window's content area. */
 export async function resize(app: ElectronApplication, width: number, height: number): Promise<void> {
   await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [width, height]);
+}
+
+/** What the faked providers saw: the addresses the system browser was asked to open, and each request. */
+export interface ConnectionStubLog {
+  opened: string[];
+  requests: Array<{ url: string; method: string; authorization: string | null; body: string | null }>;
+}
+
+/**
+ * Replaces, inside the app's main process, every way out to the AI providers: the system
+ * browser (shell.openExternal only records the address) and fetch, which answers
+ * Anthropic's model list, OpenAI's sign-in endpoints and ChatGPT's model list from what the
+ * test gives, and refuses anything else, so no test can reach a real provider. The ID
+ * token the token endpoint returns is set by the test with setTokenAnswer, once it knows
+ * the nonce the app sent.
+ */
+export async function stubConnections(app: ElectronApplication, options: { claudeKey: string; jwks: unknown }): Promise<void> {
+  await app.evaluate(({ shell }, { claudeKey, jwks }) => {
+    const g = globalThis as unknown as {
+      connectionStub: { opened: string[]; requests: unknown[]; token: unknown; tokenStatus: number; claudeStatus: number | null; chatgptModelsStatus: number; revokeStatus: number };
+      fetch: typeof fetch;
+    };
+    g.connectionStub = { opened: [], requests: [], token: null, tokenStatus: 200, claudeStatus: null, chatgptModelsStatus: 200, revokeStatus: 200 };
+    const stub = g.connectionStub;
+    shell.openExternal = async (url: string) => {
+      stub.opened.push(url);
+    };
+    g.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const headers = new Headers(init?.headers);
+      const authorization = headers.get("authorization") ?? headers.get("x-api-key");
+      stub.requests.push({ url, method: init?.method ?? "GET", authorization, body: typeof init?.body === "string" ? init.body : null });
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+      if (url.startsWith("https://api.anthropic.com/v1/models")) {
+        const key = (authorization ?? "").replace(/^Bearer /, "");
+        if (stub.claudeStatus !== null) return json({ type: "error", error: { type: "api_error", message: "stubbed" } }, stub.claudeStatus);
+        return key === claudeKey
+          ? json({ data: [{ type: "model", id: "claude-opus-5-5", display_name: "Claude Opus 5.5", created_at: "2026-01-01T00:00:00Z" }], has_more: false, first_id: null, last_id: null })
+          : json({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }, 401);
+      }
+      if (url === "https://auth.openai.com/.well-known/jwks.json") return json(jwks);
+      if (url === "https://auth.openai.com/api/accounts/oauth/token") return json(stub.token ?? { error: "invalid_grant" }, stub.token ? stub.tokenStatus : 400);
+      if (url === "https://auth.openai.com/api/accounts/oauth/revoke") return new Response(null, { status: stub.revokeStatus });
+      if (url === "https://api.openai.com/v1/models") {
+        if (stub.chatgptModelsStatus === 200) return json({ models: [{ slug: "gpt-6.2-sol", display_name: "GPT-6.2 Sol", visibility: "list" }] });
+        // 403: what OpenAI answers for an account that cannot use its plan in apps.
+        if (stub.chatgptModelsStatus === 403) return json({ error: { message: "not eligible", type: "invalid_request_error", code: "subscription_sharing_user_not_eligible", param: null } }, 403);
+        return json({ detail: "Unauthorized" }, stub.chatgptModelsStatus);
+      }
+      throw new Error(`The test refused a request to ${new URL(url).host}: no test reaches a real provider.`);
+    }) as typeof fetch;
+  }, options);
+}
+
+/** What the faked providers have seen so far. */
+export function connectionStubLog(app: ElectronApplication): Promise<ConnectionStubLog> {
+  return app.evaluate(() => {
+    const stub = (globalThis as unknown as { connectionStub: ConnectionStubLog }).connectionStub;
+    return { opened: [...stub.opened], requests: [...stub.requests] };
+  });
+}
+
+/** Sets what the faked token endpoint answers, and with which status; and the other faked answers. */
+export async function setStubAnswers(
+  app: ElectronApplication,
+  answers: { token?: unknown; tokenStatus?: number; claudeStatus?: number | null; chatgptModelsStatus?: number; revokeStatus?: number },
+): Promise<void> {
+  await app.evaluate((_electron, next) => {
+    Object.assign((globalThis as unknown as { connectionStub: object }).connectionStub, next);
+  }, answers);
 }
 
 export { expect } from "@playwright/test";
