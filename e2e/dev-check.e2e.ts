@@ -1,20 +1,31 @@
 import type { AbaApi, GenerationUpdate } from "../src/shared/api.ts";
-import { expect, test } from "./app.ts";
+import type { Page } from "@playwright/test";
+import { expect, goTo, test } from "./app.ts";
 
 /** window.aba inside the page; typed by hand because the e2e code has no DOM types. */
 type InPage = { aba: AbaApi; crypto: { randomUUID(): string } };
 
-test("the app starts and shows the development check", async ({ app }) => {
+/**
+ * The development check is linked from the sidebar in development builds only; in a
+ * packaged app it is still there, at #/dev-check, which these tests open directly.
+ */
+async function openDevCheck(page: Page): Promise<void> {
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await goTo(page, "/dev-check");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Development check");
+}
+
+test("the development check is reachable, in English, at #/dev-check", async ({ app }) => {
   const page = await app.firstWindow();
-  await expect(page).toHaveTitle("ABA Workbench");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+  await openDevCheck(page);
+  await expect(page).toHaveTitle("Development check · ABA Workbench");
   await expect(page.getByText(/^Development check, version \d+\.\d+\.\d+\./)).toBeVisible();
   await expect(page.getByRole("button", { name: "Run mock generation" })).toBeEnabled();
 });
 
 test("the interface has window.aba and no Node.js", async ({ app }) => {
   const page = await app.firstWindow();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+  await openDevCheck(page);
   const seen = await page.evaluate(() => {
     // Runs in the interface. Typed by hand: the e2e code is compiled without DOM types.
     const inPage = globalThis as unknown as { aba: object; open(url: string): unknown; require?: unknown; process?: unknown };
@@ -26,7 +37,7 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
     };
   });
   expect(seen).toEqual({
-    api: ["cancelGeneration", "getAppInfo", "onGenerationUpdate", "startMockGeneration"],
+    api: ["cancelGeneration", "getAppInfo", "getSettings", "onGenerationUpdate", "setLanguage", "startMockGeneration"],
     require: "undefined",
     process: "undefined",
     popupBlocked: true,
@@ -35,6 +46,7 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
 
 test("a mock generation streams to completion, with the rules found", async ({ app }) => {
   const page = await app.firstWindow();
+  await openDevCheck(page);
   const status = page.getByText(/^Status:/);
   const output = page.locator("pre");
 
@@ -55,7 +67,7 @@ test("a mock generation streams to completion, with the rules found", async ({ a
 
 test("a navigation the app blocks leaves the running generation alone", async ({ app }) => {
   const page = await app.firstWindow();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+  await openDevCheck(page);
   // All in the page: Playwright would otherwise wait for a navigation that never finishes.
   const result = await page.evaluate(
     () =>
@@ -93,7 +105,7 @@ test("a navigation the app blocks leaves the running generation alone", async ({
 
 test("a reload stops the running generation: nothing more arrives for it", async ({ app }) => {
   const page = await app.firstWindow();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+  await openDevCheck(page);
   const oldId = await page.evaluate(async () => {
     const { aba, crypto } = globalThis as unknown as InPage;
     const id = crypto.randomUUID();
@@ -103,7 +115,8 @@ test("a reload stops the running generation: nothing more arrives for it", async
   // Mid-stream: the mock thinks for 0.3 s, then writes for about 2 s.
   await page.waitForTimeout(600);
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+  // The address is in the hash, so the reload comes back to the same screen.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Development check");
 
   // Listen for longer than the old generation would have taken to finish.
   const arrived = await page.evaluate(
@@ -126,7 +139,7 @@ test("a reload stops the running generation: nothing more arrives for it", async
 
 test("a window runs at most two generations at once", async ({ app }) => {
   const page = await app.firstWindow();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+  await openDevCheck(page);
   const results = await page.evaluate(async () => {
     const { aba, crypto } = globalThis as unknown as InPage;
     const ids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
