@@ -319,6 +319,7 @@ test("in Spanish and at a narrow window: the step fits, and the clinical terms s
   await page.getByRole("textbox", { name: "Texto" }).fill("Notas inventadas de una observación directa.");
   await expect(page.getByText("Todos los cambios guardados").first()).toBeVisible();
   await page.getByRole("link", { name: "Volver a las fuentes" }).click();
+  await expect(heading(page)).toHaveText("Fuentes");
   await dropFiles(page, [{ name: "basc-3.pdf", bytes: inventedPdf("BASC-3") }]);
   await expect(page.getByText("Se agregó 1 PDF.")).toBeVisible();
   await expect(sourceRow(page, "Direct observation")).toContainText("Texto pegado · 44 caracteres");
