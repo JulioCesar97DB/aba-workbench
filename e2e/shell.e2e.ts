@@ -95,12 +95,15 @@ test("the interface loads under the content security policy as written, with its
   await page.keyboard.press("Escape");
   expect(violations).toEqual([]);
 
-  // The fonts' license travels with them (SIL Open Font License 1.1, condition 2).
+  // The fonts' license travels with them (SIL Open Font License 1.1, condition 2), and PDF.js's (Apache License 2.0, section 4a).
   if (testInfo.project.name === "packaged") {
     const resources = await app.evaluate(() => process.resourcesPath);
     const license = readFileSync(path.join(resources, "licenses", "IBM-Plex-OFL.txt"), "utf8");
     expect(license).toMatch(/^Copyright © 2017 IBM Corp\. with Reserved Font Name "Plex"/);
     expect(license).toContain("SIL OPEN FONT LICENSE Version 1.1");
+    const pdfjs = readFileSync(path.join(resources, "licenses", "PDF.js-Apache-2.0.txt"), "utf8");
+    expect(pdfjs).toContain("Apache License");
+    expect(pdfjs).toContain("Version 2.0, January 2004");
   }
 
   // The development check is linked in a development build only.

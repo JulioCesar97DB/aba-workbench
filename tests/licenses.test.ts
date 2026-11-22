@@ -39,3 +39,15 @@ test("font license: electron-builder copies it into the packaged app", () => {
   const config = read("electron-builder.yml");
   assert.match(config, /- from: licenses\n\s+to: licenses\n/);
 });
+
+test("PDF.js license: the repository carries the Apache License 2.0 exactly as the pdfjs-dist package does", () => {
+  const shipped = read("licenses/PDF.js-Apache-2.0.txt");
+  assert.equal(shipped, read("node_modules/pdfjs-dist/LICENSE"));
+  assert.match(shipped, /Apache License\s+Version 2\.0, January 2004/);
+  assert.ok(shipped.includes("4. Redistribution."));
+});
+
+test("PDF.js license: electron-builder copies every .txt of licenses/ into the packaged app", () => {
+  const config = read("electron-builder.yml");
+  assert.match(config, /- from: licenses\n\s+to: licenses\n\s+filter:\n\s+- "\*\.txt"/);
+});
