@@ -520,3 +520,90 @@ test("opening a source never hands the system a file that is not a PDF of the ca
   expect(answers).toEqual([false, false]);
   expect(await app.evaluate(() => (globalThis as unknown as { opened: string[] }).opened)).toEqual([]);
 });
+
+/** Reloads the window as the View menu's Reload or Force Reload does. */
+async function reloadWindow(app: ElectronApplication, page: Page, force = false) {
+  await app.evaluate(({ BrowserWindow }, ignoringCache) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    if (ignoringCache) contents.reloadIgnoringCache();
+    else contents.reload();
+  }, force);
+  await page.waitForEvent("load");
+  await expect(heading(page)).toBeVisible();
+}
+
+test("a reload or a force reload right after typing keeps what was typed (review round 2, R1)", async ({ launch, home }) => {
+  const { app, page, casesFolder } = await openSources(launch, home);
+  const area = await newText(page, "CDE", "First part.");
+  await area.press("ControlOrMeta+End");
+  await area.pressSequentially(" Typed before reload.");
+  await reloadWindow(app, page);
+  await expect.poll(() => caseData(casesFolder).sources[0].text).toBe("First part. Typed before reload.");
+  // The reload comes back to the same text.
+  const again = page.getByRole("textbox", { name: "Text" });
+  await expect(again).toHaveValue("First part. Typed before reload.");
+  await again.focus();
+  // The caret at the end (Cmd+End does not move it in a macOS text area).
+  await again.evaluate((field) => {
+    const area = field as unknown as { value: string; setSelectionRange(start: number, end: number): void };
+    area.setSelectionRange(area.value.length, area.value.length);
+  });
+  await again.pressSequentially(" And before force reload.");
+  await reloadWindow(app, page, true);
+  await expect.poll(() => caseData(casesFolder).sources[0].text).toBe("First part. Typed before reload. And before force reload.");
+});
+
+test("a change that could not be saved is still reported after a reload, and Try again then saves it (review round 2, R1)", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const { app, page, caseFolder, casesFolder } = await openSources(launch, home);
+  const area = await newText(page, "CDE", "Saved part.");
+  chmodSync(caseFolder, 0o555);
+  try {
+    await area.press("ControlOrMeta+End");
+    await area.pressSequentially(" Kept after reload.");
+    await page.getByRole("link", { name: "All cases" }).click();
+    const notice = page.getByText("A change to “M.F. sample case” could not be saved.");
+    await expect(notice).toBeVisible();
+    await reloadWindow(app, page);
+    // The page starts again with nothing in memory: the main process still knows.
+    await expect(notice).toBeVisible();
+    await page.getByRole("link", { name: "Open the case to try again" }).click();
+    await expect(page.getByText("Your last change could not be saved. Check that the cases folder is available, then try again.")).toBeVisible();
+    chmodSync(caseFolder, 0o755);
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByText("All changes saved").first()).toBeVisible();
+    expect(caseData(casesFolder).sources[0].text).toBe("Saved part. Kept after reload.");
+    await page.getByRole("link", { name: "All cases" }).click();
+    await expect(notice).toBeHidden();
+  } finally {
+    chmodSync(caseFolder, 0o755);
+  }
+});
+
+test("the packaged app's menu has no Reload or developer tools, and keeps Edit (owner's decision)", async ({ app }, testInfo) => {
+  const page = await app.firstWindow();
+  await expect(heading(page)).toBeVisible();
+  const menu = await app.evaluate(({ Menu }) => {
+    const roles: string[] = [];
+    const accelerators: string[] = [];
+    const walk = (items: Electron.MenuItem[]) => {
+      for (const item of items) {
+        if (item.role) roles.push(String(item.role).toLowerCase());
+        if (item.accelerator) accelerators.push(String(item.accelerator));
+        if (item.submenu) walk(item.submenu.items);
+      }
+    };
+    walk(Menu.getApplicationMenu()?.items ?? []);
+    return { roles, accelerators };
+  });
+  for (const role of ["copy", "paste", "cut", "undo", "selectall"]) expect(menu.roles).toContain(role);
+  const developmentOnly = ["reload", "forcereload", "toggledevtools"];
+  if (testInfo.project.name === "packaged") {
+    for (const role of developmentOnly) expect(menu.roles).not.toContain(role);
+    expect(menu.accelerators.filter((key) => /\+R$/i.test(key))).toEqual([]);
+    if (process.platform === "darwin") expect(menu.roles).toContain("about");
+  } else {
+    // A development build keeps them.
+    for (const role of developmentOnly) expect(menu.roles).toContain(role);
+  }
+});

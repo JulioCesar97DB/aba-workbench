@@ -135,12 +135,12 @@ export function SourcesScreen() {
   const dragging = usePdfDrop(addDropped);
 
   async function remove(source: SourceSummary) {
-    const answer = await run(`removed:${source.id}`, async () => sourceAnswer(await window.aba.removeSource(caseId, source.id)));
+    const answer = await run(async () => sourceAnswer(await window.aba.removeSource(caseId, source.id)));
     if (answer.ok) setNotice({ kind: "removed", source });
   }
 
   async function restore(source: SourceSummary) {
-    const answer = await run(`removed:${source.id}`, async () => sourceAnswer(await window.aba.restoreSource(caseId, source.id)));
+    const answer = await run(async () => sourceAnswer(await window.aba.restoreSource(caseId, source.id)));
     if (answer.ok) setNotice({ kind: "restored", name: sourceName(t, source) });
   }
 

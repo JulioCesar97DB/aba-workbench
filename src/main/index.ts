@@ -1,10 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { appMenuTemplate } from "./app-menu.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CaseLibrary } from "./cases.ts";
-import { createCloseGuard, FLUSH_TIMEOUT_MS, IDLE_TIMEOUT_MS, UNSAVED_DIALOG, withTimeout, type UnsavedProblem } from "./close-guard.ts";
+import { FailedSaves, runOnCases } from "./failed-saves.ts";
+import { createCloseGuard, createQuitWait, SAVE_WAIT_MS, UNSAVED_DIALOG, withTimeout, type UnsavedProblem } from "./close-guard.ts";
 import { ChatGptSession } from "./chatgpt-session.ts";
 import { ConnectionService } from "./connections.ts";
 import { CREDENTIALS_FILE_NAME, CredentialsStore } from "./credentials.ts";
@@ -67,6 +69,9 @@ const cases = new CaseLibrary({
   },
 });
 
+// Changes to sources that could not be saved, kept while the app runs (a reload does not forget them).
+const failedSaves = new FailedSaves({ run: runOnCases(cases), labelOf: (caseId) => cases.labelOf(caseId) });
+
 // The AI connections: the Claude key and the ChatGPT sign-in, in credentials.json in the
 // app's own data folder, owner-only (src/main/credentials.ts). The interface is told each
 // change as a state, never a key or a token.
@@ -95,6 +100,7 @@ registerIpc({
   rulesDir,
   settings,
   cases,
+  failedSaves,
   connections,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
 });
@@ -114,13 +120,18 @@ ipcMain.on(IPC_CHANNELS.savesFlushed, (event, requestId: unknown, result: unknow
   done?.({ ok: typeof result === "object" && result !== null && (result as { ok?: unknown }).ok === true });
 });
 
-function flushInterface(window: BrowserWindow): Promise<{ ok: boolean } | "timeout" | "gone"> {
+/**
+ * Asks the interface to save everything still waiting, within `timeoutMs`. `ok` is false
+ * when a change could not be saved, as the interface says or as the main process keeps it.
+ */
+async function flushInterface(window: BrowserWindow, timeoutMs: number): Promise<{ ok: boolean } | "timeout" | "gone"> {
   // A crashed page has nothing left to save, and cannot answer.
-  if (window.webContents.isCrashed()) return Promise.resolve("gone");
+  if (window.webContents.isCrashed()) return "gone";
   const requestId = randomUUID();
   const answer = new Promise<{ ok: boolean }>((resolve) => flushRequests.set(requestId, resolve));
   window.webContents.send(IPC_CHANNELS.flushSaves, requestId);
-  return withTimeout(answer, FLUSH_TIMEOUT_MS, "timeout" as const).finally(() => flushRequests.delete(requestId));
+  const result = await withTimeout(answer, timeoutMs, "timeout" as const).finally(() => flushRequests.delete(requestId));
+  return result === "timeout" ? result : { ok: result.ok && failedSaves.size === 0 };
 }
 
 async function askAboutUnsaved(window: BrowserWindow, problem: UnsavedProblem): Promise<"stay" | "close"> {
@@ -157,13 +168,18 @@ function createWindow(): void {
   });
   mainWindow = window;
   window.once("ready-to-show", () => window.show());
+  // Set once the close guard lets the window close: an unload the page then holds is that close, not a reload.
+  let closing = false;
   window.on(
     "close",
     createCloseGuard({
-      flush: () => flushInterface(window),
-      idle: () => cases.idle(IDLE_TIMEOUT_MS),
+      flush: (ms) => flushInterface(window, ms),
+      idle: (ms) => cases.idle(ms),
       ask: (problem) => askAboutUnsaved(window, problem),
-      close: () => window.close(),
+      close: () => {
+        closing = true;
+        window.close();
+      },
       quit: () => app.quit(),
       isQuitting: () => quitting,
       cancelQuit: () => {
@@ -172,6 +188,30 @@ function createWindow(): void {
       isDestroyed: () => window.isDestroyed(),
     }),
   );
+  /*
+   * A reload (Cmd+R in a development build, Force Reload, the page reloading itself) while
+   * saves are under way: the page holds its unload (holdUnloadForSaves in
+   * src/renderer/src/case-saves.tsx) after sending what was still waiting. The saves finish
+   * here, within SAVE_WAIT_MS, then the page reloads. What could not be saved stays in
+   * failedSaves, so the reloaded page shows it again. Not calling preventDefault keeps the page.
+   */
+  let reloading = false;
+  window.webContents.on("will-prevent-unload", (event) => {
+    if (closing) {
+      // The window is closing (its guard already saved): the saves still running finish here, without the page.
+      event.preventDefault();
+      return;
+    }
+    if (reloading) return;
+    reloading = true;
+    const deadline = Date.now() + SAVE_WAIT_MS;
+    void flushInterface(window, SAVE_WAIT_MS)
+      .then(() => cases.idle(Math.max(0, deadline - Date.now())))
+      .finally(() => {
+        reloading = false;
+        if (!window.isDestroyed()) window.webContents.reload();
+      });
+  });
   // Its generations stop when its page goes away (src/main/ipc.ts).
   window.on("closed", () => {
     mainWindow = null;
@@ -190,6 +230,9 @@ app.whenReady().then(() => {
   if (!isFirstInstance) return;
   denyAllPermissions();
   serveRenderer(rendererDir);
+  // The packaged app's menu has no Reload and no developer tools (src/main/app-menu.ts).
+  const menu = appMenuTemplate({ packaged: app.isPackaged, platform: process.platform });
+  if (menu) Menu.setApplicationMenu(Menu.buildFromTemplate(menu));
   if (!existsSync(path.join(rulesDir, "assessment.md"))) {
     // Main-process log only; the interface never sees the path.
     console.error(`The writing rules were not found in ${rulesDir}. Generations will fail.`);
@@ -203,29 +246,28 @@ app.whenReady().then(() => {
   });
 });
 
-// Quitting closes the window, whose guard saves first. With no window open (macOS), case
-// work still under way finishes first, for at most IDLE_TIMEOUT_MS.
-let waitedForCases = false;
-app.on("before-quit", (event) => {
-  quitting = true;
-  if (mainWindow || waitedForCases || !cases.busy) return;
-  waitedForCases = true;
-  event.preventDefault();
-  void cases.idle(IDLE_TIMEOUT_MS).finally(() => app.quit());
-});
-
 /*
- * A renewed ChatGPT sign-in that could not be saved (a full or read-only disk) lives only
- * in memory: one last try to write it before the app quits, for at most 3 seconds, so the
- * rotated refresh token is not lost if the disk has recovered.
+ * Before the app quits, one wait for everything that must not be cut short (one listener,
+ * createQuitWait, so one wait can never let the quit through while the other runs):
+ * - with no window open (macOS), case work still under way, for at most SAVE_WAIT_MS (with a
+ *   window, its close guard saves first);
+ * - a renewed ChatGPT sign-in that could not be saved (a full or read-only disk) lives only
+ *   in memory: one last try to write it, for at most 3 seconds, so the rotated refresh
+ *   token is not lost if the disk has recovered.
  */
-let lastSaveTried = false;
-app.on("before-quit", (event) => {
-  if (lastSaveTried || !credentials.hasUnsavedChange) return;
-  lastSaveTried = true;
-  event.preventDefault();
-  void Promise.race([credentials.saveUnsaved(), new Promise((resolve) => setTimeout(resolve, 3000))]).finally(() => app.quit());
+app.on("before-quit", () => {
+  quitting = true;
 });
+app.on(
+  "before-quit",
+  createQuitWait(
+    () => [
+      ...(!mainWindow && cases.busy ? [cases.idle(SAVE_WAIT_MS)] : []),
+      ...(credentials.hasUnsavedChange ? [withTimeout(credentials.saveUnsaved(), 3000, undefined)] : []),
+    ],
+    () => app.quit(),
+  ),
+);
 
 // Platform convention: on macOS an app stays running with no windows; elsewhere it quits.
 app.on("window-all-closed", () => {

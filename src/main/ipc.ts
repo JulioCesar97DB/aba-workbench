@@ -18,8 +18,9 @@ import {
   type Settings,
   type StartOverResult,
 } from "../shared/api.ts";
-import type { AddPdfsResult, ReadSourceTextResult, SourceSaveResult } from "../shared/sources.ts";
+import type { AddPdfsResult, FailedSave, ReadSourceTextResult, SourceSaveResult } from "../shared/sources.ts";
 import type { CaseLibrary } from "./cases.ts";
+import type { FailedSaves } from "./failed-saves.ts";
 import type { ConnectionService } from "./connections.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { runDevCheckGeneration } from "./dev-check.ts";
@@ -34,6 +35,8 @@ export function registerIpc(options: {
   rulesDir: string;
   settings: SettingsStore;
   cases: CaseLibrary;
+  /** Changes to sources that could not be saved (src/main/failed-saves.ts); every change goes through it. */
+  failedSaves: FailedSaves;
   connections: ConnectionService;
   isTrustedSender: (event: IpcMainInvokeEvent) => boolean;
 }): void {
@@ -259,22 +262,32 @@ export function registerIpc(options: {
 
   ipcMain.handle(IPC_CHANNELS.addTextSource, (event, caseId: unknown, input: unknown): Promise<SourceSaveResult> => {
     assertTrusted(event);
-    return sourceCall(() => options.cases.addTextSource(caseId, input), "The text could not be added.");
+    return sourceCall(() => options.failedSaves.save(caseId, { kind: "add-text", input }), "The text could not be added.");
   });
 
   ipcMain.handle(IPC_CHANNELS.changeSource, (event, caseId: unknown, sourceId: unknown, change: unknown): Promise<SourceSaveResult> => {
     assertTrusted(event);
-    return sourceCall(() => options.cases.changeSource(caseId, sourceId, change), "The source could not be saved.");
+    return sourceCall(() => options.failedSaves.save(caseId, { kind: "change", sourceId: sourceId as string, change: change as Record<string, unknown> }), "The source could not be saved.");
   });
 
   ipcMain.handle(IPC_CHANNELS.removeSource, (event, caseId: unknown, sourceId: unknown): Promise<SourceSaveResult> => {
     assertTrusted(event);
-    return sourceCall(() => options.cases.setSourceRemoved(caseId, sourceId, true), "The source could not be removed.");
+    return sourceCall(() => options.failedSaves.save(caseId, { kind: "removed", sourceId: sourceId as string, removed: true }), "The source could not be removed.");
   });
 
   ipcMain.handle(IPC_CHANNELS.restoreSource, (event, caseId: unknown, sourceId: unknown): Promise<SourceSaveResult> => {
     assertTrusted(event);
-    return sourceCall(() => options.cases.setSourceRemoved(caseId, sourceId, false), "The source could not be restored.");
+    return sourceCall(() => options.failedSaves.save(caseId, { kind: "removed", sourceId: sourceId as string, removed: false }), "The source could not be restored.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.listFailedSaves, (event): FailedSave[] => {
+    assertTrusted(event);
+    return options.failedSaves.list();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.retryFailedSave, (event, id: unknown): Promise<SourceSaveResult> => {
+    assertTrusted(event);
+    return sourceCall(() => options.failedSaves.retry(id), "The change could not be saved.");
   });
 
   ipcMain.handle(IPC_CHANNELS.readSourceText, (event, caseId: unknown, sourceId: unknown): Promise<ReadSourceTextResult> => {

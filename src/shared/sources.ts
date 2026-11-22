@@ -214,4 +214,16 @@ export interface DroppedPdf {
   data: Uint8Array;
 }
 
+/**
+ * A change to a case's sources that could not be saved, as the main process keeps it
+ * (src/main/failed-saves.ts) until it is saved: a reload of the window does not forget it.
+ */
+export interface FailedSave {
+  id: string;
+  caseId: string;
+  /** The case's label, or null when the app has not seen the case (its folder is gone, say). */
+  label: string | null;
+  failure: Exclude<SourceSaveResult["outcome"], "saved"> | "error";
+}
+
 export type ReadSourceTextResult = { outcome: "read"; text: string } | { outcome: "source-not-found" } | { outcome: "case-unavailable" };

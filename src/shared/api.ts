@@ -1,5 +1,5 @@
 import type { GenerationEvent } from "../lib/generation-events.ts";
-import type { AddPdfsResult, CaseSources, DroppedPdf, NewTextSource, ReadSourceTextResult, SourceChange, SourceSaveResult } from "./sources.ts";
+import type { AddPdfsResult, CaseSources, DroppedPdf, FailedSave, NewTextSource, ReadSourceTextResult, SourceChange, SourceSaveResult } from "./sources.ts";
 
 /*
  * The contract between the interface (renderer) and the main process. The preload
@@ -384,6 +384,10 @@ export interface AbaApi {
    * function that stops listening.
    */
   onFlushSaves(listener: () => Promise<{ ok: boolean }>): () => void;
+  /** The changes to sources that could not be saved, kept by the main process while the app runs (a reload does not forget them). */
+  listFailedSaves(): Promise<FailedSave[]>;
+  /** Runs a change that could not be saved again. */
+  retryFailedSave(id: string): Promise<SourceSaveResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -424,6 +428,8 @@ export const IPC_CHANNELS = {
   openSourcePdf: "sources:open-pdf",
   flushSaves: "saves:flush",
   savesFlushed: "saves:flushed",
+  listFailedSaves: "saves:list-failed",
+  retryFailedSave: "saves:retry-failed",
 } as const;
 
 /** Generation ids are UUIDs (crypto.randomUUID()); anything else is refused. */

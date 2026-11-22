@@ -234,6 +234,13 @@ export class CaseLibrary {
   private caseCalls = new Map<string, Promise<unknown>>();
   /** Case work under way or waiting: saves, changes to sources, PDFs being copied. */
   private active = 0;
+  /** Each case's label, as last read: what a change that could not be saved is shown under. */
+  private labels = new Map<string, string>();
+
+  /** A case's label as last read, or null. */
+  labelOf(caseId: string): string | null {
+    return this.labels.get(caseId) ?? null;
+  }
 
   /** Whether case work is under way: quitting waits for it (src/main/index.ts). */
   get busy(): boolean {
@@ -326,6 +333,7 @@ export class CaseLibrary {
       else if (folders.has(read.data.id)) unreadable.push({ folderName: name, reason: "duplicate" });
       else {
         folders.set(read.data.id, path.join(folder, name));
+        this.labels.set(read.data.id, read.data.label);
         cases.push({ data: read.data, name });
       }
     }
@@ -409,6 +417,7 @@ export class CaseLibrary {
       this.listedFolder = folder;
     }
     this.folders.set(data.id, caseFolder);
+    this.labels.set(data.id, data.label);
     return { outcome: "created", case: caseSummary(data) };
   }
 
@@ -701,6 +710,7 @@ export class CaseLibrary {
         if (read.kind === "unreadable" && read.reason === "not-a-case") return "moved";
         if (read.kind === "unreadable") return { kind: "unavailable" };
         if (read.data.id !== caseId) return "moved";
+        this.labels.set(caseId, read.data.label);
         const scan = async (fallback: CaseFile[]) => scanCaseFiles(folder).catch(() => fallback);
         const before = await scan(read.data.files);
         let done: { save: CaseData | null; value: T };

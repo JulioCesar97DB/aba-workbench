@@ -10,18 +10,23 @@ import type { Language } from "../shared/api.ts";
  * is unit-tested; src/main/index.ts wires it to the window, the app and the dialog.
  */
 
-/** How long the interface has to finish its saves before she is asked. */
-export const FLUSH_TIMEOUT_MS = 5_000;
-/** How long the main process's case work then has to finish. */
-export const IDLE_TIMEOUT_MS = 5_000;
+/**
+ * How long the interface's saves and then the main process's case work have, together,
+ * before she is asked (one deadline for both, so the wait is never longer). A save takes
+ * milliseconds; this leaves room for a slow network or cloud folder.
+ */
+export const SAVE_WAIT_MS = 5_000;
 
 export type UnsavedProblem = "failed" | "timeout";
 
 export interface CloseGuardOptions {
-  /** Asks the interface to save everything; "timeout" when it did not answer in time, "gone" when its page has crashed. */
-  flush: () => Promise<{ ok: boolean } | "timeout" | "gone">;
-  /** Waits for the main process's case work; false if it did not finish in time. */
-  idle: () => Promise<boolean>;
+  /** Asks the interface to save everything, within `timeoutMs`; "timeout" when it did not answer in time, "gone" when its page has crashed. */
+  flush: (timeoutMs: number) => Promise<{ ok: boolean } | "timeout" | "gone">;
+  /** Waits for the main process's case work, within `timeoutMs`; false if it did not finish in time. */
+  idle: (timeoutMs: number) => Promise<boolean>;
+  /** The one deadline for both waits (SAVE_WAIT_MS). */
+  timeoutMs?: number;
+  now?: () => number;
   /** Asks her what to do about a change that could not be saved. */
   ask: (problem: UnsavedProblem) => Promise<"stay" | "close">;
   /** Closes the window for real (the guard lets that close through). */
@@ -45,9 +50,11 @@ export function createCloseGuard(options: CloseGuardOptions): (event: { preventD
     busy = true;
     void (async () => {
       let problem: UnsavedProblem | null = null;
+      const now = options.now ?? Date.now;
+      const deadline = now() + (options.timeoutMs ?? SAVE_WAIT_MS);
       try {
-        const answer = await options.flush();
-        const idle = await options.idle();
+        const answer = await options.flush(Math.max(0, deadline - now()));
+        const idle = await options.idle(Math.max(0, deadline - now()));
         if (answer === "timeout" || !idle) problem = "timeout";
         else if (answer !== "gone" && !answer.ok) problem = "failed";
       } catch {
@@ -63,6 +70,24 @@ export function createCloseGuard(options: CloseGuardOptions): (event: { preventD
       if (options.isQuitting()) options.quit();
       else options.close();
     })();
+  };
+}
+
+/**
+ * Quitting waits for work that must not be cut short (the case work, the last save of the
+ * credentials), all at once, then quits: one listener, so one wait can never let the quit
+ * through while another is still running. `waits` gives the work to wait for now; each is
+ * bounded by its own caller.
+ */
+export function createQuitWait(waits: () => Array<Promise<unknown>>, quit: () => void): (event: { preventDefault(): void }) => void {
+  let waited = false;
+  return (event) => {
+    if (waited) return;
+    const pending = waits();
+    if (pending.length === 0) return;
+    waited = true;
+    event.preventDefault();
+    void Promise.allSettled(pending).finally(quit);
   };
 }
 

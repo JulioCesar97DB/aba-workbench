@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createCloseGuard, withTimeout, type CloseGuardOptions } from "../src/main/close-guard.ts";
+import { createCloseGuard, createQuitWait, SAVE_WAIT_MS, withTimeout, type CloseGuardOptions } from "../src/main/close-guard.ts";
 
 /* The window's close waits for the interface's saves (src/main/close-guard.ts). */
 
@@ -118,4 +118,49 @@ test("close guard: a crashed page has nothing to save: the window closes without
 test("close guard: withTimeout gives the fallback when the work is too slow", async () => {
   assert.equal(await withTimeout(new Promise(() => undefined), 5, "late"), "late");
   assert.equal(await withTimeout(Promise.resolve("on time"), 1000, "late"), "on time");
+});
+
+test("close guard: one deadline for both waits, so she waits at most SAVE_WAIT_MS before being asked (review S5)", async () => {
+  assert.equal(SAVE_WAIT_MS, 5_000);
+  const given: number[] = [];
+  let clock = 0;
+  const { close } = harness({
+    timeoutMs: 100,
+    now: () => clock,
+    flush: async (ms) => {
+      given.push(ms);
+      clock += 70; // the interface's saves took 70 of the 100
+      return { ok: true };
+    },
+    idle: async (ms) => {
+      given.push(ms);
+      return true;
+    },
+  });
+  close();
+  await settle();
+  assert.deepEqual(given, [100, 30]);
+});
+
+test("quit wait: every wait finishes before the quit, however many there are (review S6)", async () => {
+  const done: string[] = [];
+  const quits: string[] = [];
+  const later = (name: string, ms: number) => new Promise<void>((resolve) => setTimeout(() => (done.push(name), resolve()), ms));
+  let pending: Array<Promise<unknown>> = [later("cases", 5), later("credentials", 30)];
+  const onQuit = createQuitWait(() => pending, () => quits.push(`quit after ${done.join(", ")}`));
+  let prevented = false;
+  onQuit({ preventDefault: () => (prevented = true) });
+  assert.equal(prevented, true);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.deepEqual(quits, ["quit after cases, credentials"]);
+  // The quit that follows goes through.
+  pending = [later("again", 1)];
+  let preventedAgain = false;
+  onQuit({ preventDefault: () => (preventedAgain = true) });
+  assert.equal(preventedAgain, false);
+  // Nothing to wait for: nothing is held.
+  const idle = createQuitWait(() => [], () => quits.push("never"));
+  let held = false;
+  idle({ preventDefault: () => (held = true) });
+  assert.equal(held, false);
 });

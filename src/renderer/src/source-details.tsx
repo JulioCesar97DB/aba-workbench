@@ -47,11 +47,11 @@ export function useSourceDetails({ caseId, sourceId, initial }: { caseId: string
   const timer = useRef<number | undefined>(undefined);
 
   const send = useCallback(
-    (key: "type" | "title" | "date", change: SourceChange) => {
+    (change: SourceChange) => {
       const target = id.current;
       if (!target) return Promise.resolve();
       saved.current = { ...saved.current, ...change };
-      return run(`${key}:${target}`, async () => sourceAnswer(await window.aba.changeSource(caseId, target, change))).then(() => undefined);
+      return run(async () => sourceAnswer(await window.aba.changeSource(caseId, target, change))).then(() => undefined);
     },
     [caseId, run],
   );
@@ -68,7 +68,7 @@ export function useSourceDetails({ caseId, sourceId, initial }: { caseId: string
     }
     setTitleError(null);
     if (checked.title === saved.current.title) return Promise.resolve();
-    return send("title", { title: checked.title });
+    return send({ title: checked.title });
   }, [send, t]);
 
   // Typing still waiting for its pause is saved when the window is about to close, and when the fields go away.
@@ -83,7 +83,7 @@ export function useSourceDetails({ caseId, sourceId, initial }: { caseId: string
   const changeType = (value: SourceType) => {
     latest.current = { ...latest.current, type: value };
     setType(value);
-    void send("type", { type: value });
+    void send({ type: value });
   };
   const changeTitle = (value: string) => {
     latest.current = { ...latest.current, title: value };
@@ -94,7 +94,7 @@ export function useSourceDetails({ caseId, sourceId, initial }: { caseId: string
   const changeDate = (value: string) => {
     latest.current = { ...latest.current, date: value };
     setDate(value);
-    void send("date", { date: value === "" ? null : value });
+    void send({ date: value === "" ? null : value });
   };
 
   /** A new source's details, to create it with (an invalid title is left out, and shown as an error). */
@@ -109,8 +109,8 @@ export function useSourceDetails({ caseId, sourceId, initial }: { caseId: string
       id.current = newId;
       saved.current = { ...sent };
       const now = latest.current;
-      if (now.type !== sent.type) void send("type", { type: now.type });
-      if ((now.date || null) !== sent.date) void send("date", { date: now.date || null });
+      if (now.type !== sent.type) void send({ type: now.type });
+      if ((now.date || null) !== sent.date) void send({ date: now.date || null });
       void saveTitle();
     },
     [saveTitle, send],

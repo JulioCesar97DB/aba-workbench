@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router";
 import { isSourceType, MAX_SOURCE_TEXT_LENGTH, type SourceType } from "../../../shared/sources.ts";
 import { registerFlusher, sourceAnswer, useCaseSaves } from "../case-saves.tsx";
-import { casePath } from "../case-steps.tsx";
+import { casePath, sourceTextPath } from "../case-steps.tsx";
 import { ButtonLink } from "../components/Link.tsx";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase } from "../open-case.tsx";
@@ -110,7 +110,7 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
         if (text.trim() === "") return;
         const sent = draft();
         saved.current = text;
-        creating.current = run(`text:new-${caseId}`, async () => sourceAnswer(await window.aba.addTextSource(caseId, { ...sent, text }))).then((answer) => {
+        creating.current = run(async () => sourceAnswer(await window.aba.addTextSource(caseId, { ...sent, text }))).then((answer) => {
           creating.current = null;
           if (!answer.ok) {
             saved.current = null;
@@ -118,6 +118,12 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
           }
           idRef.current = answer.value;
           setCreatedId(answer.value);
+          // The address now names the text, so a reload opens it, not a new empty one. Set on
+          // the window's history directly, not through the router: navigating would remount
+          // the editor, losing what is being typed and the focus.
+          const url = new URL(window.location.href);
+          url.hash = sourceTextPath(caseId, answer.value);
+          window.history.replaceState(window.history.state, "", url);
           // A type, title or date changed while it was being created is saved now.
           created(answer.value, sent);
           return answer.value;
@@ -126,7 +132,7 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
         continue;
       }
       saved.current = text;
-      const answer = await run(`text:${target}`, async () => sourceAnswer(await window.aba.changeSource(caseId, target, { text })));
+      const answer = await run(async () => sourceAnswer(await window.aba.changeSource(caseId, target, { text })));
       if (!answer.ok && saved.current === text) saved.current = null;
       return;
     }
