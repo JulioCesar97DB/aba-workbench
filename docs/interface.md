@@ -36,7 +36,7 @@ React Router keeps the address in the URL's hash (`#/settings`). The app's page 
 | `#/` | Home: the cases in the cases folder, newest first (label, client age, created, last saved, PDFs), "New case", and below them the folders that could not be opened. When there are none, what to do; when the cases folder cannot be used, why and a way to choose another. |
 | `#/cases/<id>/sources`, `/behaviors`, `/interventions`, `/report`, `/review` | The case workspace's five steps, for the case with that id. The sidebar shows its label and age; the rail lists the PDFs in its folder. Each step is still a placeholder that says what it will hold. An id that is not a case, or a case that cannot be opened, says so. |
 | `#/cases/<id>/report/<section-id>` | One section of the report (ids in `src/shared/report-sections.ts`). |
-| `#/settings` | The screen language and the cases folder (its path, "Choose another folder…", "Show in Finder"); room for the AI connection, which arrives later. |
+| `#/settings` | The screen language and the cases folder (its path, "Choose another folder…", "Show in Finder", and a message when the folder cannot be shown or checked); room for the AI connection, which arrives later. |
 | `#/dev-check` | The development check (mock generation). Linked from the sidebar only when the app runs from the repository (`getAppInfo().developmentBuild`); the packaged app has no link to it, and the window tests open it by address. It is a developer screen, in English only. |
 
 ## Design tokens
