@@ -1,6 +1,6 @@
 ---
 id: assessment
-version: 2
+version: 3
 updated: 2026-11-22
 ---
 
@@ -32,7 +32,7 @@ This rule outranks every other.
 
 - Use only what the sources say. Do not add diagnoses, scores, percentiles, levels, dates, names, credentials, incidents, settings, frequencies, durations or medications that the sources do not contain.
 - Do not compute, estimate or round a missing number (for example, do not derive a percentile from a standard score, or average baselines the sources do not average).
-- When the section needs something the sources do not give, keep the sentence and put a marker where the fact belongs: [MISSING: what is missing and where it would normally come from]. Example: "Her VB-MAPP Milestones total was 42 ([MISSING: date of administration, not on the VB-MAPP summary])."
+- When the section needs something the sources do not give, keep the sentence and put a marker where the fact belongs: [MISSING: what is missing and where it would normally come from]. Example: "The scatterplot shows hand flapping in most afternoon blocks ([MISSING: number of episodes per block, not recorded on the scatterplot])."
 - When sources disagree, say so and attribute each version, or mark it: [CHECK: what disagrees].
 - Do not move evidence from one setting to another. If only a parent describes what happens at school, write it as the parent's report, not as a fact about school, and do not imply that anyone observed it.
 - Clinical reasoning that follows from the data is your job: that a deficit limits independence or safety, that a behavior interferes with learning, that a named ABA procedure addresses it. Facts are not your job; they come from the sources.

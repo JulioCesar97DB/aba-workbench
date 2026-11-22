@@ -14,7 +14,7 @@ Date: November 22, 2026. Branch `JulioCesar97DB/phase-0`, not pushed and with no
   - the writing rules and the two invented cases;
   - the `pnpm phase0` script with its spending cap.
 
-  `pnpm install`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (23 tests) and `pnpm phase0 --mock` pass.
+  `pnpm install`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (24 tests) and `pnpm phase0 --mock` pass.
 - **The two outputs for the BCBA to judge quality:** they will be picked when the real runs are done.
 - **Real spend: 0.00 USD** (Anthropic 0, OpenAI 0). The full run is estimated at about 2.6 USD for the two cases and the four models. The script never starts a call that, in the worst case, could pass the cap (5 USD by default), and it stops if it cannot know what something cost.
 - **The product will be a local app, not a website on Vercel** (owner's decision, 2026-11-22). So Vercel's limits (300 s, plan, 4.5 MB) no longer constrain the product. The analysis stays below as reference and the size cap stays in the code.
@@ -132,7 +132,7 @@ I will also check "nothing invented" against the gaps planted on purpose in each
 
 Other tests the cases carry: Mateo's interview is in Spanish (the output must come out in English) and Sofía has an IEP, medication and other services.
 
-## Changes after the review (round 1)
+## Changes after the review (rounds 1 and 2)
 
 - **Spending cap.** It now fails closed:
   - the fallback models have a price;
@@ -140,11 +140,11 @@ Other tests the cases carry: Mateo's interview is in Spanish (the output must co
   - a misspelled `--budget` is an error;
   - both `--option=value` and `--option value` are accepted;
   - the worst case uses the full output allowance.
-- **Rules.** They no longer give away a gap: the missing-data marker example uses an instrument that is in neither case. Two other examples that resembled the cases were removed, and Mateo gained a gap that no rule anticipates.
+- **Rules.** They no longer give away a gap. The missing-data marker example is now a kind of gap that matches none of the planted ones: a missing frequency on a scatterplot, a tool neither case uses (round 2; the round-1 example, a missing administration date, matched Mateo's new gap). Two other examples that resembled the cases were removed, and Mateo gained a gap that no rule anticipates. Each planted gap in `case.json` now lists its keywords and the rules files that anticipate it, and a test fails if the keywords show up in any other rules file.
 - **Payer facts.** The payer file says only what the two texts say, and Molina's complaints are grouped as Molina groups them (CDE and request). How to read the Vineland-3 and PRQ scores moved to `rules/instruments.md`, which states its source and is marked as pending confirmation by the BCBA.
 - **Incomplete outputs.** A cut-off, failed or refused output is no longer saved as a draft: the `.md` says "INCOMPLETE" and any partial text goes apart (`.partial.md`). On a refusal nothing is kept. Discarding the text on a refusal is now part of the provider contract (`discard: true`), not just the script's.
 - **Script keys.** They go in `.env.phase0`, not `.env.local`. Next loads `.env.local` into the server, and the script now refuses to start the server if it finds keys in the files Next reads.
-- **Tests.** 23 tests with `node:test` (`pnpm test`), with no keys and no network.
+- **Tests.** 24 tests with `node:test` (`pnpm test`), with no keys and no network.
 - **Route.** The size cap is counted while the body is read, also when it arrives in chunks. An error loading the rules answers with a JSON error instead of a shapeless 500. SDK logging is off.
 
 ## Small decisions I made (all easy to change)
@@ -177,7 +177,7 @@ Other tests the cases carry: Mateo's interview is in Spanish (the output must co
 
 ```sh
 pnpm install && pnpm build
-pnpm test                                   # 23 tests, no keys or network
+pnpm test                                   # 24 tests, no keys or network
 pnpm phase0 --mock                          # full pipeline with the mock provider, no cost
 cp .env.phase0.example .env.phase0          # and set ANTHROPIC_API_KEY and OPENAI_API_KEY (not in .env.local)
 pnpm phase0                                 # real runs, 5 USD cap

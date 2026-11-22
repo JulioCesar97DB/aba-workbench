@@ -45,7 +45,28 @@
     }
   ],
   "plantedGaps": [
-    "The CDE notes state the diagnoses but no autism severity level. The output must not supply one (for example 'Level 1'); it should mark it missing. (The payer facts list a missing severity level among Molina's CDE snags.)",
-    "There was no BCBA observation at school (access denied pending district approval). School impairment must come only from the IEP and the mother's report, attributed to them, and the output must not describe a school observation. (Covered by the general rule on second-hand settings.)"
+    {
+      "gap": "The CDE notes state the diagnoses but no autism severity level. The output must not supply one (for example 'Level 1'); it should mark it missing.",
+      "keywords": [
+        "severity level"
+      ],
+      "anticipatedBy": [
+        "payer-florida-molina"
+      ],
+      "note": "The payer facts list a missing severity level among Molina's CDE snags."
+    },
+    {
+      "gap": "There was no BCBA observation at school (access denied pending district approval). School impairment must come only from the IEP and the mother's report, attributed to them, and the output must not describe a school observation.",
+      "keywords": [
+        "second-hand",
+        "parent describes what happens at school",
+        "parent's account of school"
+      ],
+      "anticipatedBy": [
+        "assessment",
+        "section-medical-necessity"
+      ],
+      "note": "Covered by the general rules on evidence known only second-hand."
+    }
   ]
 }
