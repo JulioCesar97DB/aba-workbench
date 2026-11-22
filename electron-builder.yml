@@ -1,0 +1,22 @@
+# Packaging, minimal for now: `pnpm package` builds an unpacked app for the current
+# platform in dist/ (dist/mac-arm64/ABA Workbench.app, dist/win-unpacked/ABA Workbench.exe).
+# No installers, no signing, no automatic updates yet: those are later decisions.
+appId: com.aba-workbench.app
+directories:
+  output: dist
+# Only the build output goes into the app archive (package.json is always added).
+# Every dependency is bundled into it, so no node_modules are shipped.
+files:
+  - out/**/*
+# The writing rules are read at run time, so they ship next to the archive, in the app's
+# resources folder; src/main/paths.ts finds them there.
+extraResources:
+  - from: rules
+    to: rules
+    filter:
+      - "**/*.md"
+# No native modules to rebuild.
+npmRebuild: false
+mac:
+  # No code signing yet, even if a signing identity is in the keychain.
+  identity: null
