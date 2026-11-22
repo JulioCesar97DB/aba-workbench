@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { pdfPageLimitMessage, providerTooLargeMessage } from "../limits.ts";
 import {
   ProviderError,
   sourceHeader,
@@ -133,7 +134,16 @@ export function toProviderError(error: unknown): ProviderError | null {
   if (error instanceof Anthropic.RateLimitError) {
     return new ProviderError("rate_limited", "Anthropic rate limit reached; try again in a minute.", status);
   }
+  // 413 request_too_large: the size check before sending should prevent it (limits.ts).
+  if (status === 413) {
+    return new ProviderError("request_too_large", providerTooLargeMessage("anthropic"), status);
+  }
   if (error instanceof Anthropic.BadRequestError) {
+    // The documentation does not give the wording of the PDF page-limit error, so any
+    // refusal that names PDFs and pages is explained as one, with Claude's own words kept.
+    if (/pdf/i.test(error.message) && /page/i.test(error.message)) {
+      return new ProviderError("too_many_pdf_pages", pdfPageLimitMessage(error.message), status);
+    }
     return new ProviderError("bad_request", `Anthropic refused the request: ${error.message.slice(0, 300)}`, status);
   }
   return new ProviderError("provider_error", `Anthropic error ${status ?? ""}`.trim(), status);

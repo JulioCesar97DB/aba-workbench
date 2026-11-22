@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { providerTooLargeMessage } from "../limits.ts";
 import {
   ProviderError,
   sourceHeader,
@@ -82,6 +83,10 @@ export function toProviderError(error: unknown): ProviderError | null {
   }
   if (error instanceof OpenAI.RateLimitError) {
     return new ProviderError("rate_limited", "OpenAI rate limit or quota reached; check the account's billing.", status);
+  }
+  // A body over the limit: the size check before sending should prevent it (limits.ts).
+  if (status === 413) {
+    return new ProviderError("request_too_large", providerTooLargeMessage("openai"), status);
   }
   if (error instanceof OpenAI.BadRequestError) {
     return new ProviderError("bad_request", `OpenAI refused the request: ${error.message.slice(0, 300)}`, status);

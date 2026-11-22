@@ -1,3 +1,4 @@
+import { measureRequest, requestTooLargeMessage } from "./limits.ts";
 import { toSafeError } from "./providers/index.ts";
 import type { Effort, Provider, SourceDocument } from "./providers/types.ts";
 import { buildPrompt, type SectionId } from "./rules.ts";
@@ -23,7 +24,8 @@ export interface GenerationRequest {
 
 /**
  * One generation from start to end: builds the prompt from the rules and the sources,
- * then streams the provider's events. Failures become an "error" event whose message is
+ * checks the provider's size limit, then streams the provider's events. Failures (a
+ * request over the limit included) become an "error" event whose message is
  * safe to show; after a cancel (signal aborted) nothing more is reported.
  * Nothing here logs the request: not the key, not the sources.
  */
@@ -39,6 +41,12 @@ export async function* runGeneration(request: GenerationRequest): AsyncGenerator
     return;
   }
   const { prompt, rulesVersions } = built;
+  // Checked before anything is sent: the provider would refuse it anyway, after the upload.
+  const tooLarge = requestTooLargeMessage(provider.id, measureRequest(prompt));
+  if (tooLarge) {
+    yield { type: "error", code: "request_too_large", message: tooLarge, status: null };
+    return;
+  }
   const options = {
     apiKey: request.apiKey,
     model: request.model,

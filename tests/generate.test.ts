@@ -61,6 +61,15 @@ test("generation: rules that cannot be read give a rules_error that does not nam
   assert.doesNotMatch(JSON.stringify(error), /no-such-rules-folder/);
 });
 
+test("generation: a request over the provider's limit is refused before anything is sent", async () => {
+  const pdf = { id: "big", title: "Big report", kind: "pdf" as const, filename: "big.pdf", base64: Buffer.alloc(51_000_000).toString("base64") };
+  const events = await collect(runGeneration(request({ provider: providerThatMustNotBeCalled("openai"), sources: [pdf] })));
+  assert.equal(events.length, 1);
+  const [error] = events;
+  assert.equal(error.type === "error" && error.code, "request_too_large");
+  assert.match(error.type === "error" ? error.message : "", /51\.0 MB/);
+});
+
 test("generation: an unexpected failure becomes a safe error event; nothing is reported after a cancel", async () => {
   const failing: Provider = {
     ...mockProvider,

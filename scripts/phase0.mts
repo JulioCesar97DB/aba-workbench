@@ -18,7 +18,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runGeneration } from "../src/lib/generate.ts";
-import { MAX_REQUEST_BODY_BYTES, requestTooLargeMessage } from "../src/lib/limits.ts";
+import { measureRequest, requestTooLargeMessage, type RequestSize } from "../src/lib/limits.ts";
 import { costUsd, generationCostUsd, PRICES_CHECKED_ON } from "../src/lib/pricing.ts";
 import { getProvider, rankModels, toSafeError } from "../src/lib/providers/index.ts";
 import { mockProvider } from "../src/lib/providers/mock.ts";
@@ -62,8 +62,8 @@ interface CaseFixture {
   id: string;
   label: string;
   sources: SourceDocument[];
-  /** The size the request would have as the Phase 0 HTTP body; the 4.5 MB cap applies to it. */
-  bodyBytes: number;
+  /** What one generation request for this case sends (limits.ts). */
+  size: RequestSize;
   pdfBytes: number;
   pdfPages: number;
   /** Characters of everything sent as text: rules, section request and text sources. */
@@ -93,9 +93,7 @@ async function loadCases(only: string[] | null): Promise<CaseFixture[]> {
     const { prompt } = await buildPrompt(SECTION, sources);
     const promptChars =
       prompt.system.length + prompt.task.length + sources.reduce((n, s) => n + (s.kind === "text" ? s.text.length + s.title.length + 60 : 200), 0);
-    const body = { provider: REAL_MODELS[0].provider, model: REAL_MODELS[0].model, section: SECTION, effort: REAL_MODELS[0].effort, maxOutputTokens: MAX_OUTPUT_TOKENS, mode: "generate", sources };
-    const bodyBytes = Buffer.byteLength(JSON.stringify(body));
-    cases.push({ id: meta.id, label: meta.label, sources, bodyBytes, pdfBytes, pdfPages, promptChars });
+    cases.push({ id: meta.id, label: meta.label, sources, size: measureRequest(prompt), pdfBytes, pdfPages, promptChars });
   }
   if (only) {
     const missing = only.filter((id) => !cases.some((c) => c.id === id));
@@ -188,9 +186,7 @@ async function main() {
 
   const cases = await loadCases(args.cases);
   for (const c of cases) {
-    console.log(`${c.id}: request body ${(c.bodyBytes / 1_000_000).toFixed(3)} MB (PDFs ${(c.pdfBytes / 1_000_000).toFixed(3)} MB raw, ${c.pdfPages} pages)`);
-    const tooLarge = requestTooLargeMessage(c.bodyBytes);
-    if (tooLarge) throw new Error(`${c.id}: ${tooLarge} (limit ${MAX_REQUEST_BODY_BYTES} bytes)`);
+    console.log(`${c.id}: request ${(c.size.requestBytes / 1_000_000).toFixed(3)} MB (PDFs ${(c.pdfBytes / 1_000_000).toFixed(3)} MB, ${c.pdfPages} pages)`);
   }
 
   const pool = args.mock ? MOCK_MODELS : REAL_MODELS;
@@ -205,6 +201,13 @@ async function main() {
   if (runnable.length === 0) {
     console.log("Nothing to run. Use --mock to check the plumbing without keys.");
     return;
+  }
+  // Each provider's size limit, checked for every case before anything is spent.
+  for (const c of cases) {
+    for (const provider of new Set(runnable.map((m) => m.provider))) {
+      const tooLarge = requestTooLargeMessage(provider, c.size);
+      if (tooLarge) throw new Error(`${c.id} (${provider}): ${tooLarge}`);
+    }
   }
 
   const tracker = new SpendTracker(args.budgetUsd);
@@ -265,7 +268,7 @@ async function main() {
         effort: m.effort,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         rulesVersions: run?.meta?.rulesVersions ?? null,
-        requestBodyBytes: c.bodyBytes,
+        requestBytes: c.size.requestBytes,
         worstCaseUsd: worst,
         prewarm: warm ? { usage: warm.done?.usage ?? null, costUsd: warmCost, msTotal: Math.round(warm.msTotal), error: warm.error } : null,
         stopReason: run?.done?.stopReason ?? null,
