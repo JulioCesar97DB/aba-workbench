@@ -4,12 +4,14 @@
     <meta charset="UTF-8" />
     <!--
       Content security policy (Electron security checklist, item 7): only the app's own
-      scripts, styles and images; no inline scripts, no eval, no outside connections,
-      no frames, no plugins, no forms.
+      scripts, styles, images and fonts (IBM Plex ships inside the app); no inline scripts
+      or styles, no eval, no outside connections, no frames, no plugins, no forms.
+      Under pnpm dev only, scripts/dev-style-nonce.ts adds a nonce to style-src for the
+      styles Vite injects; a built or packaged app uses this policy as written.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'"
     />
     <title>ABA Workbench</title>
   </head>

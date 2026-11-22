@@ -10,6 +10,8 @@ const api: AbaApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getAppInfo),
   startMockGeneration: (generationId) => ipcRenderer.invoke(IPC_CHANNELS.startMockGeneration, generationId),
   cancelGeneration: (generationId) => ipcRenderer.invoke(IPC_CHANNELS.cancelGeneration, generationId),
+  getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
+  setLanguage: (language) => ipcRenderer.invoke(IPC_CHANNELS.setLanguage, language),
   onGenerationUpdate: (listener) => {
     const handler = (_event: IpcRendererEvent, update: GenerationUpdate) => listener(update);
     ipcRenderer.on(IPC_CHANNELS.generationUpdate, handler);

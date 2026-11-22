@@ -1,13 +1,18 @@
 import { app, ipcMain, type IpcMainInvokeEvent, type WebContents } from "electron";
-import { IPC_CHANNELS, type AppInfo } from "../shared/api.ts";
+import { IPC_CHANNELS, type AppInfo, type Settings } from "../shared/api.ts";
 import { runDevCheckGeneration } from "./dev-check.ts";
 import { GenerationRegistry, MAX_RUNNING_PER_WINDOW } from "./generations.ts";
+import type { SettingsStore } from "./settings.ts";
 
 /**
  * The main-process side of window.aba (src/shared/api.ts). Every handler first checks
  * that the message comes from the app's own window; everything else is refused.
  */
-export function registerIpc(options: { rulesDir: string; isTrustedSender: (event: IpcMainInvokeEvent) => boolean }): void {
+export function registerIpc(options: {
+  rulesDir: string;
+  settings: SettingsStore;
+  isTrustedSender: (event: IpcMainInvokeEvent) => boolean;
+}): void {
   const generations = new GenerationRegistry();
   const assertTrusted = (event: IpcMainInvokeEvent) => {
     if (!options.isTrustedSender(event)) throw new Error("Refused: the message does not come from the app's window.");
@@ -31,7 +36,23 @@ export function registerIpc(options: { rulesDir: string; isTrustedSender: (event
 
   ipcMain.handle(IPC_CHANNELS.getAppInfo, (event): AppInfo => {
     assertTrusted(event);
-    return { name: app.getName(), version: app.getVersion() };
+    return { name: app.getName(), version: app.getVersion(), developmentBuild: !app.isPackaged };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getSettings, (event): Promise<Settings> => {
+    assertTrusted(event);
+    return options.settings.get();
+  });
+
+  // The language is checked in SettingsStore.setLanguage: anything but "en" or "es" is refused.
+  ipcMain.handle(IPC_CHANNELS.setLanguage, (event, language: unknown): Promise<Settings> => {
+    assertTrusted(event);
+    return options.settings.setLanguage(language).catch((error: unknown) => {
+      // A safe message for the interface; the details (a path, say) stay in the main process's log.
+      if (error instanceof Error && error.message.startsWith("Refused:")) throw error;
+      console.error("The settings could not be saved:", error);
+      throw new Error("The settings could not be saved.");
+    });
   });
 
   ipcMain.handle(IPC_CHANNELS.startMockGeneration, (event, generationId: unknown): void => {

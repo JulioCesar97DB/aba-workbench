@@ -1,0 +1,100 @@
+/*
+ * Design tokens for direction C, "compact panel": a dark sidebar, a light working area
+ * with a compact header, a light grey right rail; IBM Plex Sans and Plex Mono; an amber
+ * accent. Every color, type size, radius and fixed size the interface uses is here, and
+ * nowhere else. Tailwind turns each one into utilities (--color-fg -> text-fg, bg-fg...).
+ *
+ * The names say what a token is for, never what it looks like ("nav", "fg-muted", not
+ * "slate-900"), so a second theme only gives the same names other values, under a
+ * selector such as [data-theme="dark"] on <html>: no class in a component changes.
+ *
+ * Text contrast: every pair of text and background color used together is listed in
+ * tests/design-tokens.test.ts, which checks it reaches 4.5:1.
+ */
+@theme {
+  /* Only these colors exist: Tailwind's own palette is switched off. */
+  --color-*: initial;
+
+  /* Working area and right rail */
+  --color-surface: #ffffff;
+  --color-surface-muted: #f3f5f7;
+  --color-fg: #16202a;
+  --color-fg-muted: #46535f;
+  --color-border: #cfd6dd;
+  /* Borders that show where a control is (WCAG 1.4.11 asks for 3:1 against the surface). */
+  --color-border-control: #7a8794;
+
+  /* Sidebar */
+  --color-nav: #1b2530;
+  --color-nav-hover: #2c3946;
+  --color-nav-current: #f3f5f7;
+  --color-fg-on-nav: #f3f5f7;
+  --color-fg-on-nav-muted: #c7d0d9;
+  --color-fg-on-nav-current: #16202a;
+
+  /* Accent: the main action, links, focus */
+  --color-accent: #9a4a05;
+  --color-accent-hover: #6f3503;
+  --color-fg-on-accent: #ffffff;
+  --color-accent-subtle: #ffe3b3;
+  --color-fg-on-accent-subtle: #5c3200;
+  --color-focus: #9a4a05;
+  --color-focus-on-nav: #ffc46b;
+
+  /* Status. Only what the screens use today: success, warning and the ready/draft
+     section dots of the reference come with the screens that show them. */
+  --color-neutral: #46535f;
+  --color-neutral-subtle: #eef1f4;
+  --color-danger: #a1231b; /* an error message on a light surface */
+  --color-fg-on-nav-warning: #ffc46b; /* an error message on the sidebar */
+  --color-dot-empty: #c7d0d9; /* a section not started, on the sidebar */
+
+  --color-backdrop: rgb(22 32 42 / 0.55);
+
+  /* Type: IBM Plex, shipped inside the app (src/renderer/src/styles/fonts.ts). */
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --text-*: initial;
+  --text-2xs: 0.6875rem; /* 11px: eyebrow headings */
+  --text-2xs--line-height: 1.4;
+  --text-xs: 0.75rem; /* 12px: meta, counts, badges */
+  --text-xs--line-height: 1.4;
+  --text-sm: 0.8125rem; /* 13px: section list, rail tables */
+  --text-sm--line-height: 1.45;
+  --text-base: 0.875rem; /* 14px: the interface */
+  --text-base--line-height: 1.45;
+  --text-md: 0.9375rem; /* 15px: reading text in the working area */
+  --text-md--line-height: 1.6;
+  --text-lg: 1.125rem; /* 18px: page titles, the case name */
+  --text-lg--line-height: 1.35;
+
+  --tracking-eyebrow: 0.08em;
+
+  /* Radii */
+  --radius-*: initial;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-full: 9999px;
+
+  --shadow-*: initial;
+  --shadow-popup: 0 1px 2px rgb(22 32 42 / 0.12), 0 8px 24px rgb(22 32 42 / 0.18);
+
+  /* Layout. The sidebar shows from --breakpoint-sidebar up (the sidebar: variant); below
+     it a Menu panel takes its place. src/shared/theme.ts repeats this value for the
+     script that closes the panel, and tests/design-tokens.test.ts keeps the two equal. */
+  --breakpoint-sidebar: 48rem;
+  /* The working area (a container) puts the rail beside the content from --container-split
+     (the @split: variant), and widens it from --container-split-wide. */
+  --container-split: 50rem;
+  --container-split-wide: 72rem;
+
+  /* Fixed sizes. Spacing otherwise uses Tailwind's 4px scale (p-2 = 8px, p-4.5 = 18px...). */
+  --spacing-control: 2.75rem; /* 44px: buttons, fields and steps, a comfortable target */
+  --spacing-control-sm: 2rem; /* 32px: compact buttons inside tables and badges' rows */
+  --spacing-sidebar: 16rem; /* 256px */
+  --spacing-rail: 16.25rem; /* 260px: the right rail beside the content */
+  --spacing-rail-wide: 20rem; /* 320px: the rail on a wide working area */
+  --spacing-measure: 74ch; /* longest line of reading text */
+}

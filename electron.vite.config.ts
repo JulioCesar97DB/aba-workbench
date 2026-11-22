@@ -1,5 +1,7 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
+import { devStyleNonce } from "./scripts/dev-style-nonce.ts";
 
 /*
  * Default layout: src/main, src/preload, src/renderer, built into out/.
@@ -21,6 +23,8 @@ export default defineConfig(({ mode }) => ({
     },
   },
   renderer: {
-    plugins: [react()],
+    // Tailwind compiles src/renderer/src/styles/app.css; devStyleNonce lets the dev
+    // server's injected styles through the content security policy (pnpm dev only).
+    plugins: [react(), tailwindcss(), devStyleNonce()],
   },
 }));
