@@ -6,7 +6,7 @@ import { Select } from "../components/Select.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
 import { Table, TableBody, TableCell, TableRow, TableRowHeader } from "../components/Table.tsx";
 import { TransWithTerms } from "../components/Trans.tsx";
-import { useLanguage } from "../language.ts";
+import { LanguageNotSavedError, useLanguage } from "../language.ts";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { WorkArea } from "../shell/WorkArea.tsx";
 
@@ -15,59 +15,60 @@ export function SettingsScreen() {
   const { t } = useTranslation();
   const info = useAppInfo();
   const { language, changeLanguage } = useLanguage();
-  const [saveState, setSaveState] = useState<"idle" | "saved" | "failed">("idle");
+  // After a change: saved, or shown for now but not saved (with the language that comes back next time).
+  const [result, setResult] = useState<{ saved: true } | { saved: false; previous: Language } | null>(null);
 
   async function onLanguageChange(next: Language) {
     try {
       await changeLanguage(next);
-      setSaveState("saved");
-    } catch {
-      setSaveState("failed");
+      setResult({ saved: true });
+    } catch (error) {
+      setResult({ saved: false, previous: error instanceof LanguageNotSavedError ? error.previous : language });
     }
   }
+  const inSentence = (lng: Language) => t(`languageInSentence.${lng}`);
 
   return (
-    <>
-      <PageHeader title={t("settings.title")} />
-      <WorkArea mainClassName="max-w-3xl">
-        <SettingsSection heading={t("settings.languageHeading")}>
-          <Select
-            label={t("settings.languageLabel")}
-            description={<TransWithTerms i18nKey="settings.languageDescription" />}
-            value={language}
-            options={LANGUAGES.map((option) => ({ value: option, label: t(`languages.${option}`), lang: option }))}
-            onValueChange={(next) => void onLanguageChange(next)}
-          />
-          <p role="status" className={saveState === "failed" ? "text-sm font-medium text-danger" : "text-sm text-fg-muted"}>
-            {saveState === "saved" ? t("settings.languageSaved", { language: t(`languages.${language}`) }) : null}
-            {saveState === "failed" ? t("settings.languageSaveFailed") : null}
-          </p>
-        </SettingsSection>
+    <WorkArea header={<PageHeader title={t("settings.title")} />} contentClassName="max-w-3xl">
+      <SettingsSection heading={t("settings.languageHeading")}>
+        <Select
+          label={t("settings.languageLabel")}
+          description={<TransWithTerms i18nKey="settings.languageDescription" />}
+          value={language}
+          options={LANGUAGES.map((option) => ({ value: option, label: t(`languages.${option}`), lang: option }))}
+          onValueChange={(next) => void onLanguageChange(next)}
+        />
+        <p role="status" className={result?.saved === false ? "text-sm font-medium text-danger" : "text-sm text-fg-muted"}>
+          {result?.saved ? t("settings.languageSaved", { language: inSentence(language) }) : null}
+          {result?.saved === false ? t("settings.languageNotSaved", { language: inSentence(language), previous: inSentence(result.previous) }) : null}
+        </p>
+      </SettingsSection>
 
-        <SettingsSection heading={t("settings.casesFolderHeading")} badge={t("status.notAvailableYet")}>
-          <p className="max-w-measure text-fg-muted">{t("settings.casesFolderBody")}</p>
-        </SettingsSection>
+      <SettingsSection heading={t("settings.casesFolderHeading")} badge={t("status.notAvailableYet")}>
+        <p className="max-w-measure text-fg-muted">{t("settings.casesFolderBody")}</p>
+      </SettingsSection>
 
-        <SettingsSection heading={t("settings.aiHeading")} badge={t("status.notAvailableYet")}>
-          <p className="max-w-measure text-fg-muted">{t("settings.aiBody")}</p>
-        </SettingsSection>
+      <SettingsSection heading={t("settings.aiHeading")} badge={t("status.notAvailableYet")}>
+        <p className="max-w-measure text-fg-muted">{t("settings.aiBody")}</p>
+      </SettingsSection>
 
-        <SettingsSection heading={t("settings.aboutHeading")}>
+      <SettingsSection heading={t("settings.aboutHeading")}>
+        {info ? (
           <Table className="max-w-sm text-base">
             <TableBody>
               <TableRow>
                 <TableRowHeader>{t("settings.aboutApplication")}</TableRowHeader>
-                <TableCell>{info?.name ?? "ABA Workbench"}</TableCell>
+                <TableCell>{info.name}</TableCell>
               </TableRow>
               <TableRow>
                 <TableRowHeader>{t("settings.aboutVersion")}</TableRowHeader>
-                <TableCell className="font-mono text-sm">{info?.version ?? "…"}</TableCell>
+                <TableCell className="font-mono text-sm">{info.version}</TableCell>
               </TableRow>
             </TableBody>
           </Table>
-        </SettingsSection>
-      </WorkArea>
-    </>
+        ) : null}
+      </SettingsSection>
+    </WorkArea>
   );
 }
 

@@ -26,9 +26,15 @@ export const en = {
     sectionsHeading: "Sections",
     languageLabel: "Screen language",
   },
+  /** Each language's own name, as the language switch and the Select show it. */
   languages: {
     en: "English",
     es: "Español",
+  },
+  /** Each language's name inside a sentence of the screen language ("will open in Spanish"). */
+  languageInSentence: {
+    en: "English",
+    es: "Spanish",
   },
   ai: {
     notConnected: "AI not connected",
@@ -74,6 +80,7 @@ export const en = {
     reportBody: "The report is drafted one section at a time, in English, from the case's sources and the writing rules. Choose a section to see where its draft will go.",
     reportSectionColumn: "Section",
     reportStatusColumn: "Status",
+    reportNumberColumn: "Number",
     sectionPosition: "Section {{number}} of {{total}}",
     sectionBody: "The draft of this section will appear here, written in English from the case's sources, for you to read, edit and approve.",
     reviewBody: "Here you will read the whole assessment once more, resolve anything still marked as missing, and copy each section to paste into ABA Matrix.",
@@ -94,7 +101,7 @@ export const en = {
     languageDescription:
       "The language of menus, buttons and messages. The assessment is always written in English, and clinical terms such as <term>Behaviors</term>, <term>Interventions</term> and the section names stay in English.",
     languageSaved: "Saved. The app will open in {{language}} next time.",
-    languageSaveFailed: "The language could not be saved. Try again; if it keeps failing, restart the app.",
+    languageNotSaved: "Shown in {{language}} for now, but the choice could not be saved: the app will open in {{previous}} next time.",
     casesFolderHeading: "Cases folder",
     casesFolderBody: "The folder on this computer where your cases are kept. Choosing it arrives in the next version.",
     aiHeading: "AI connection",

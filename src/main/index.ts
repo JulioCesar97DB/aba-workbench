@@ -7,6 +7,7 @@ import { resolveRulesDir } from "./paths.ts";
 import { APP_ORIGIN, registerAppScheme, serveRenderer } from "./protocol.ts";
 import { denyAllPermissions, hardenWebContents } from "./security.ts";
 import { defaultLanguage, SETTINGS_FILE_NAME, SettingsStore } from "./settings.ts";
+import { WINDOW_BACKGROUND } from "../shared/theme.ts";
 import { isTrustedFrame } from "./trust.ts";
 
 // electron-vite sets ELECTRON_RENDERER_URL in development (its Vite dev server). A packaged
@@ -42,8 +43,8 @@ function createWindow(): void {
     // Below this the interface still works, but a window this small is more likely a mistake.
     minWidth: 480,
     minHeight: 480,
-    // The sidebar's color, so the window does not flash white before the interface paints.
-    backgroundColor: "#1b2530",
+    // The sidebar's color (--color-nav), so the window does not flash white before the interface paints.
+    backgroundColor: WINDOW_BACKGROUND,
     show: false,
     title: app.getName(),
     webPreferences: {

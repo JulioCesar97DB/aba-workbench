@@ -1,15 +1,13 @@
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useParams } from "react-router";
+import { Navigate, Outlet, useParams } from "react-router";
 import { findReportSection, REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { CASE_STEPS, casePath, PREVIEW_CASE_ID, stepTitle, stepTitleLang, type CaseStep } from "../case-steps.tsx";
 import { TextLink } from "../components/Link.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, TableRowHeader } from "../components/Table.tsx";
 import { TransWithTerms } from "../components/Trans.tsx";
-import { AppShell } from "../shell/AppShell.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
-import { AppSidebar, CaseSidebar } from "../shell/Sidebar.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 import { Placeholder } from "./Placeholder.tsx";
 
@@ -19,23 +17,21 @@ import { Placeholder } from "./Placeholder.tsx";
  * a placeholder on each screen that says what will be there.
  */
 
-export function CaseLayout() {
+/** The case's screens; the sidebar shows the case (AppShell). Any case but the preview is not found. */
+export function CaseRoute() {
   const { t } = useTranslation();
   const { caseId = "" } = useParams();
   if (caseId !== PREVIEW_CASE_ID) {
     return (
-      <AppShell sidebar={<AppSidebar />}>
-        <PageHeader title={t("case.notFoundTitle")} />
-        <WorkArea>
-          <div className="flex max-w-measure flex-col items-start gap-3">
-            <p className="text-md">{t("case.notFoundBody")}</p>
-            <TextLink to="/">{t("case.backToCases")}</TextLink>
-          </div>
-        </WorkArea>
-      </AppShell>
+      <WorkArea header={<PageHeader title={t("case.notFoundTitle")} />}>
+        <div className="flex max-w-measure flex-col items-start gap-3">
+          <p className="text-md">{t("case.notFoundBody")}</p>
+          <TextLink to="/">{t("case.backToCases")}</TextLink>
+        </div>
+      </WorkArea>
     );
   }
-  return <AppShell sidebar={<CaseSidebar caseId={caseId} caseName={t("case.previewName")} caseDetail={t("case.previewDetail")} />} />;
+  return <Outlet />;
 }
 
 export function CaseIndex() {
@@ -59,14 +55,11 @@ export function StepScreen({ step }: { step: keyof typeof STEP_BODIES }) {
   const { t } = useTranslation();
   const meta = useStepMeta(step);
   return (
-    <>
-      <PageHeader title={stepTitle(t, step)} titleLang={stepTitleLang(step)} meta={meta} />
-      <WorkArea rail={<CaseRail />}>
-        <Placeholder>
-          <TransWithTerms i18nKey={STEP_BODIES[step]} />
-        </Placeholder>
-      </WorkArea>
-    </>
+    <WorkArea header={<PageHeader title={stepTitle(t, step)} titleLang={stepTitleLang(step)} meta={meta} />} rail={<CaseRail />}>
+      <Placeholder>
+        <TransWithTerms i18nKey={STEP_BODIES[step]} />
+      </Placeholder>
+    </WorkArea>
   );
 }
 
@@ -76,38 +69,38 @@ export function ReportScreen() {
   const { caseId = PREVIEW_CASE_ID } = useParams();
   const meta = useStepMeta("report");
   return (
-    <>
-      <PageHeader title={stepTitle(t, "report")} meta={meta} />
-      <WorkArea rail={<CaseRail />}>
-        <div className="flex max-w-measure flex-col gap-5">
-          <Placeholder>{t("workspace.reportBody")}</Placeholder>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeaderCell className="w-10">#</TableHeaderCell>
-                <TableHeaderCell>{t("workspace.reportSectionColumn")}</TableHeaderCell>
-                <TableHeaderCell className="text-right">{t("workspace.reportStatusColumn")}</TableHeaderCell>
+    <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />}>
+      <div className="flex max-w-measure flex-col gap-5">
+        <Placeholder>{t("workspace.reportBody")}</Placeholder>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableHeaderCell className="w-10">
+                <span aria-hidden="true">#</span>
+                <span className="sr-only">{t("workspace.reportNumberColumn")}</span>
+              </TableHeaderCell>
+              <TableHeaderCell>{t("workspace.reportSectionColumn")}</TableHeaderCell>
+              <TableHeaderCell className="text-right">{t("workspace.reportStatusColumn")}</TableHeaderCell>
+            </TableRow>
+          </TableHead>
+          <TableBody className="text-base">
+            {REPORT_SECTIONS.map((section, index) => (
+              <TableRow key={section.id}>
+                <TableCell className="py-2 font-mono text-xs text-fg-muted tabular-nums">{index + 1}</TableCell>
+                <TableRowHeader className="py-2">
+                  <TextLink to={casePath(caseId, "report", section.id)} lang="en">
+                    {section.title}
+                  </TextLink>
+                </TableRowHeader>
+                <TableCell className="py-2 text-right">
+                  <StatusBadge>{t("status.notStarted")}</StatusBadge>
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody className="text-base">
-              {REPORT_SECTIONS.map((section, index) => (
-                <TableRow key={section.id}>
-                  <TableCell className="py-2 font-mono text-xs text-fg-muted tabular-nums">{index + 1}</TableCell>
-                  <TableRowHeader className="py-2">
-                    <TextLink to={casePath(caseId, "report", section.id)} lang="en">
-                      {section.title}
-                    </TextLink>
-                  </TableRowHeader>
-                  <TableCell className="py-2 text-right">
-                    <StatusBadge>{t("status.notStarted")}</StatusBadge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </WorkArea>
-    </>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </WorkArea>
   );
 }
 
@@ -119,16 +112,18 @@ export function ReportSectionScreen() {
   if (!section) return <Navigate to={casePath(caseId, "report")} replace />;
   const number = REPORT_SECTIONS.indexOf(section) + 1;
   return (
-    <>
-      <PageHeader
-        title={section.title}
-        titleLang="en"
-        meta={`${t("case.previewName")} · ${t("workspace.sectionPosition", { number, total: REPORT_SECTIONS.length })}`}
-      />
-      <WorkArea rail={<CaseRail />}>
-        <Placeholder>{t("workspace.sectionBody")}</Placeholder>
-      </WorkArea>
-    </>
+    <WorkArea
+      header={
+        <PageHeader
+          title={section.title}
+          titleLang="en"
+          meta={`${t("case.previewName")} · ${t("workspace.sectionPosition", { number, total: REPORT_SECTIONS.length })}`}
+        />
+      }
+      rail={<CaseRail />}
+    >
+      <Placeholder>{t("workspace.sectionBody")}</Placeholder>
+    </WorkArea>
   );
 }
 

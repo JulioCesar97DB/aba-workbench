@@ -1,5 +1,5 @@
 import type { ConsoleMessage, ElectronApplication, Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
 import { expect, goTo, resize, test } from "./app.ts";
@@ -11,6 +11,16 @@ import { expect, goTo, resize, test } from "./app.ts";
  */
 
 const heading = (page: Page) => page.getByRole("heading", { level: 1 });
+/** The polite live region AppShell fills after each navigation. */
+const announcement = (page: Page) => page.locator('p[aria-live="polite"]');
+
+/** Clicks the language the screen is not in (the first-run language follows the system's). */
+async function switchToOtherLanguage(page: Page): Promise<{ from: "en" | "es"; to: "en" | "es" }> {
+  const from = (await page.locator("html").getAttribute("lang")) === "es" ? "es" : "en";
+  const to = from === "es" ? "en" : "es";
+  await page.getByRole("button", { name: to === "es" ? "Español" : "English" }).click();
+  return { from, to };
+}
 
 /** Everything the page logs from now on that mentions the content security policy. */
 function watchPolicy(page: Page): string[] {
@@ -83,6 +93,14 @@ test("the interface loads under the content security policy as written, with its
   await expect(page.locator('[data-slot="tooltip"]')).toBeVisible();
   expect(violations).toEqual([]);
 
+  // The fonts' license travels with them (SIL Open Font License 1.1, condition 2).
+  if (testInfo.project.name === "packaged") {
+    const resources = await app.evaluate(() => process.resourcesPath);
+    const license = readFileSync(path.join(resources, "licenses", "IBM-Plex-OFL.txt"), "utf8");
+    expect(license).toMatch(/^Copyright © 2017 IBM Corp\. with Reserved Font Name "Plex"/);
+    expect(license).toContain("SIL OPEN FONT LICENSE Version 1.1");
+  }
+
   // The development check is linked in a development build only.
   const devLink = page.getByRole("link", { name: /Development check/ });
   if (testInfo.project.name === "packaged") await expect(devLink).toHaveCount(0);
@@ -150,7 +168,9 @@ test("switching the language changes the screen and survives a restart", async (
 
   await expect(heading(page)).toHaveText("Ajustes");
   await expect(page.locator("html")).toHaveAttribute("lang", "es");
-  await expect(page.getByRole("status")).toHaveText("Guardado. La aplicación se abrirá en Español la próxima vez.");
+  await expect(page.getByRole("main").getByRole("status")).toHaveText("Guardado. La aplicación se abrirá en español la próxima vez.");
+  // The switch reads ES EN, as in the reference.
+  await expect(page.getByRole("group", { name: "Idioma de la pantalla" }).getByRole("button")).toHaveText(["ES", "EN"]);
   await expect(page.getByRole("button", { name: "Español" })).toHaveAttribute("aria-pressed", "true");
   expect(JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8"))).toEqual({ version: 1, language: "es" });
 
@@ -164,7 +184,8 @@ test("switching the language changes the screen and survives a restart", async (
   await expect(steps.locator('[lang="en"]')).toHaveText(["Behaviors", "Interventions"]);
   const sections = page.getByRole("navigation", { name: "Secciones" });
   await expect(sections.locator('[lang="en"]')).toHaveText(REPORT_SECTIONS.map((section) => section.title));
-  await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText("Behaviors");
+  // The title and the sentence that names the step: both marked English.
+  await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText(["Behaviors", "Behaviors"]);
 
   await app.close();
   app = await launch();
@@ -181,12 +202,67 @@ test("switching the language changes the screen and survives a restart", async (
 test("a corrupt settings file does not stop the app, and the next change rewrites it", async ({ launch, profile }) => {
   const app = await launch({ settingsFile: "{ not json" });
   const page = await openApp(app);
-  // The first-run language follows the system's, so either is right here.
+  // The first-run language follows the system's, so either is right here, and the test
+  // switches to whichever is not shown.
   await expect(heading(page)).toHaveText(/^(Cases|Casos)$/);
   await goTo(page, "/settings");
-  await page.getByRole("button", { name: "Español" }).click();
-  await expect(heading(page)).toHaveText("Ajustes");
-  expect(JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8"))).toEqual({ version: 1, language: "es" });
+  const { to } = await switchToOtherLanguage(page);
+  await expect(heading(page)).toHaveText(to === "es" ? "Ajustes" : "Settings");
+  expect(JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8"))).toEqual({ version: 1, language: to });
+});
+
+test("a language that cannot be saved still changes the screen, and the sidebar says it will not last", async ({ launch, profile }) => {
+  // A folder where settings.json should be: the app reads the defaults and cannot save, on every system.
+  const settingsPath = path.join(profile, "settings.json");
+  mkdirSync(settingsPath);
+  writeFileSync(path.join(settingsPath, "keep"), "");
+  let app = await launch();
+  let page = await openApp(app);
+  const { from, to } = await switchToOtherLanguage(page);
+  await expect(page.locator("html")).toHaveAttribute("lang", to);
+  const message =
+    to === "es"
+      ? `Se muestra en español por ahora, pero no se pudo guardar: la próxima vez la aplicación se abrirá en ${from === "en" ? "inglés" : "español"}.`
+      : `Shown in English for now, but the choice could not be saved: the app will open in ${from === "es" ? "Spanish" : "English"} next time.`;
+  await expect(page.getByRole("status").filter({ hasText: message })).toBeVisible();
+  // No temporary file is left next to it.
+  expect(readdirSync(profile).filter((name) => name.startsWith("settings.json."))).toEqual([]);
+
+  // Next start: the language that was saved before (here, the system's first-run one).
+  await app.close();
+  app = await launch();
+  page = await openApp(app);
+  await expect(page.locator("html")).toHaveAttribute("lang", from);
+});
+
+test("moving into and out of a case announces the new screen and puts focus on its title", async ({ app }) => {
+  const page = await openApp(app);
+
+  // Home -> case: the link that was followed is gone, so focus goes to the new title.
+  await page.getByRole("link", { name: "Preview a case" }).click();
+  await expect(heading(page)).toHaveText("Sources");
+  await expect(announcement(page)).toHaveText("Sources · ABA Workbench");
+  await expect(heading(page)).toBeFocused();
+
+  // Inside the case the sidebar stays, and so does the focus, on the link followed.
+  const behaviors = page.getByRole("navigation", { name: "Steps of the case" }).getByRole("link", { name: "Behaviors" });
+  await behaviors.click();
+  await expect(announcement(page)).toHaveText("Behaviors · ABA Workbench");
+  await expect(behaviors).toBeFocused();
+
+  // Case -> Settings, from the case's sidebar.
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(heading(page)).toHaveText("Settings");
+  await expect(announcement(page)).toHaveText("Settings · ABA Workbench");
+  await expect(heading(page)).toBeFocused();
+
+  // Into the case again and out through "All cases".
+  await goTo(page, "/cases/preview/report");
+  await expect(announcement(page)).toHaveText("Report · ABA Workbench");
+  await page.getByRole("link", { name: "All cases" }).click();
+  await expect(heading(page)).toHaveText("Cases");
+  await expect(announcement(page)).toHaveText("Cases · ABA Workbench");
+  await expect(heading(page)).toBeFocused();
 });
 
 test("everything works from the keyboard, with the focus always visible", async ({ app }) => {
@@ -199,9 +275,16 @@ test("everything works from the keyboard, with the focus always visible", async 
       return { name: element?.getAttribute("aria-label") ?? element?.textContent?.trim() ?? "", outline: style.outlineStyle !== "none" && style.outlineWidth !== "0px" };
     });
 
-  // The first stop skips the sidebar.
+  // The first stop skips the sidebar and lands on the screen's title, inside <main>.
   await page.keyboard.press("Tab");
   expect(await focused()).toEqual({ name: "Skip to content", outline: true });
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toBeFocused();
+
+  // From the top again: every stop on the way shows the focus ring.
+  await page.reload();
+  await expect(heading(page)).toHaveText("Cases");
+  await page.keyboard.press("Tab");
 
   // Every stop on the way shows the focus ring.
   const stops: string[] = [];
@@ -247,6 +330,8 @@ test("a narrow window: the sidebar becomes a Menu panel and nothing spills sidew
   await page.getByRole("button", { name: "Menu" }).click();
   await page.getByRole("dialog", { name: "Navigation" }).getByRole("button", { name: "Español" }).click();
   await page.getByRole("dialog", { name: "Navegación" }).getByRole("button", { name: "Cerrar el menú" }).click();
+  // The panel slides out before it leaves the page.
+  await expect(page.getByRole("dialog")).toBeHidden();
   for (const address of ["/", "/cases/preview/sources", "/cases/preview/report", "/cases/preview/report/discharge-and-service-fading-plan", "/settings"]) {
     await goTo(page, address);
     await expect(heading(page)).toBeVisible();

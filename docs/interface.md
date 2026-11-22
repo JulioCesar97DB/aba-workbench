@@ -6,22 +6,23 @@ How the React interface in `src/renderer/` is organized: its look (direction C, 
 
 Direction C, chosen by the owner from three mockups: a dark sidebar with the case, its five steps and the report's sections; a light working area under a compact header; a light grey right rail for sources and checks. IBM Plex Sans for the interface, IBM Plex Mono for technical detail (versions, positions such as "Step 2 of 5"), an amber accent for the main action, links and focus. Dense, but every control is at least 44 px tall. One theme for now.
 
-The fonts come from the `@fontsource/ibm-plex-sans` and `@fontsource/ibm-plex-mono` packages: Vite copies the font files into the build and the app loads them from its own files. The interface makes no network request of its own.
+The fonts come from the `@fontsource/ibm-plex-sans` and `@fontsource/ibm-plex-mono` packages: Vite copies the font files into the build and the app loads them from its own files. The interface makes no network request of its own. They are under the SIL Open Font License 1.1, which asks every copy to carry IBM's notice and the license: `licenses/IBM-Plex-OFL.txt` (from IBM's own repository) ships in the packaged app's resources folder, `tests/licenses.test.ts` checks it against the license the font packages carry, and the packaged window tests check it is in the app. See [licenses/README.md](../licenses/README.md).
 
 ## Where things are
 
 | Path | What it holds |
 | --- | --- |
 | `src/renderer/src/main.tsx` | Start-up: reads the saved settings, starts i18next in that language, renders the app. |
-| `src/renderer/src/App.tsx` | The screens and their addresses (React Router), and the providers around them. |
+| `src/renderer/src/App.tsx` | The screens and their addresses (React Router), and the providers around them. One shell route holds every screen. |
 | `src/renderer/src/styles/tokens.css` | **The design tokens**: every color, type size, radius, shadow and fixed size. |
 | `src/renderer/src/styles/app.css` | Tailwind, the tokens, and the few rules that apply everywhere (body text, the focus ring). |
 | `src/renderer/src/styles/fonts.ts` | Which Plex weights ship. |
 | `src/renderer/src/components/` | **The project's own components**, on Base UI where it has the part: `Button`, `TextLink` and `ButtonLink`, `Select`, `Dialog` (a centered box or a side panel), `Tooltip`, `Table`, `StatusBadge`, `NavItem` and `SectionNavItem`, `Term`. |
-| `src/renderer/src/shell/` | The frame: `AppShell` (sidebar, working area, the Menu panel on a narrow window, the skip link), `Sidebar`, `PageHeader`, `WorkArea` (content and right rail). |
+| `src/renderer/src/shell/` | The frame: `AppShell` (rendered once: the sidebar for the app or for the case, the working area, the Menu panel on a narrow window, the skip link, the announcement and focus after a navigation), `Sidebar`, `PageHeader`, `WorkArea` (a screen's `<main>`: header, content and right rail). |
 | `src/renderer/src/screens/` | One file per screen: `Home`, `Case` (the workspace's steps and report), `Settings`, `NotFound`, `DevCheck`. |
 | `src/renderer/src/i18n/` | The strings: `en.ts`, `es.ts`, the English-only clinical terms (`terms.ts`) and i18next's set-up. |
 | `src/shared/report-sections.ts` | The report's sections and their English titles, shared with the main process. |
+| `src/shared/theme.ts` | The two design values code needs outside the stylesheet (the window's background, the sidebar breakpoint); a test keeps them equal to the tokens. |
 
 ## Screens and addresses
 
@@ -41,7 +42,9 @@ All of them are in `src/renderer/src/styles/tokens.css`, inside Tailwind's `@the
 
 - Names say what a token is for (`surface`, `nav`, `fg-on-nav-muted`, `accent`, `success-subtle`), never what it looks like. A second theme (a dark one, say) gives the same names other values under a selector such as `[data-theme="dark"]` on `<html>`; no component changes, because Tailwind's utilities read the variables.
 - Colors are hex values so `tests/design-tokens.test.ts` can check contrast: text 4.5:1 on each background it is used on, control borders, focus rings and status dots 3:1. When a component puts a text color on a new background, add the pair there.
-- Components never use raw values (`#9a4a05`, `13px`): add or reuse a token.
+- Layout values are tokens too: `--breakpoint-sidebar` (the `sidebar:` variant: the sidebar shows from 48rem), `--container-split` and `--container-split-wide` (the `@split:` and `@split-wide:` container variants: the rail beside the content), `--spacing-rail` and `--spacing-rail-wide`.
+- Components never use raw values (`#9a4a05`, `13px`): add or reuse a token. Code outside the stylesheet that needs one (the main process's window background, the script that closes the Menu panel) reads it from `src/shared/theme.ts`, which the token test compares with `tokens.css`.
+- Only what the screens use exists. The reference's success and warning colors and its "ready" and "draft" section dots arrive with the screens that show them.
 
 ## Components
 
@@ -53,8 +56,8 @@ Each component in `src/renderer/src/components/` wraps a Base UI part (`@base-ui
 - `Dialog`: modal; focus moves in and returns to the trigger; Escape and the backdrop close it. `variant="sheet"` is the navigation panel on a narrow window.
 - `Tooltip`: hover and keyboard focus. It repeats the control's own name; it is never the only place a piece of information lives.
 - `Table` and its parts: plain HTML tables with column or row headers.
-- `StatusBadge`: a status in words; the color only repeats them.
-- `NavItem`, `SectionNavItem`: the sidebar's links; the current one is `aria-current="page"`.
+- `StatusBadge`: a status in words; the color only repeats them. Two tones today: `neutral` and `accent`.
+- `NavItem`, `SectionNavItem`: the sidebar's links; the current one is `aria-current="page"`. A section shows one state today, "not started".
 - `Term`, `TransWithTerms`: English terms inside the interface (below).
 
 Not built yet, on purpose: a text field (no screen takes typed input until cases can be created), and anything else no screen uses.
@@ -63,14 +66,16 @@ Base UI's own inline `<style>` tags are turned off (`CSPProvider disableStyleEle
 
 ## Layout
 
-`AppShell`: the sidebar (16rem) and the working area side by side, each scrolling on its own. Below 48rem the sidebar leaves the screen: a dark bar with a Menu button takes its place and opens it as a side panel, which closes when a link is followed or the window widens again. Inside the working area, `WorkArea` puts the right rail beside the content when the working area is at least 50rem wide and below it otherwise; it is a container query, so it follows the working area's own width whether the sidebar shows or not. Titles, steps and section names wrap rather than cut off, which matters in Spanish, whose strings run longer.
+`AppShell`, rendered once for every screen: the sidebar (16rem) and the working area side by side, each scrolling on its own; inside the sidebar the case and the footer stay put and the lists scroll. Below `--breakpoint-sidebar` (48rem) the sidebar leaves the screen: a dark bar with a Menu button takes its place and opens it as a side panel, which closes when a link is followed or the window widens again. Each screen is a `WorkArea`: one `<main>` with the screen's header and content, and the right rail beside the content when the working area is at least `--container-split` (50rem) wide, below it otherwise; it is a container query, so it follows the working area's own width whether the sidebar shows or not. Titles, steps and section names wrap rather than cut off, which matters in Spanish, whose strings run longer.
 
 ## Languages
 
 The screens are in English or Spanish, chosen in Settings (or with ES/EN at the foot of the sidebar) and remembered across restarts. The assessment itself is always English.
 
 - The setting lives in the main process, in `settings.json` in the app's data folder (`src/main/settings.ts`, read back through Zod; a missing, corrupt or outdated file falls back to the defaults). The interface reaches it only through `window.aba.getSettings()` and `window.aba.setLanguage()`. On the first run the language follows the system's preferred languages: Spanish if Spanish comes before English, English otherwise.
-- A change is saved first and shown once saved, so the screen never shows a language the next start would not.
+- A change is saved first, then shown. If the main process cannot save it (a read-only file, say), the screen still changes for this session, so the user can work in the language they chose, and a message where they changed it (the sidebar's footer or Settings) says it could not be saved and which language the app will open in next time.
+- The sidebar's switch reads ES EN, as in the reference.
+- A language named inside a sentence uses `languageInSentence` ("will open in Spanish", "se abrirá en español"), not the language's own name (`languages`: "English", "Español"), which the switch and the Select show.
 - `<html lang>` follows the screen language. Clinical terms and section names stay English in the Spanish interface (Behaviors, Interventions, Medical Necessity Criteria...), because that is how the clinician and her forms name them, and they are marked `lang="en"` so a screen reader reads them in English. Spanish uses the informal "tú" and Latin American vocabulary ("computadora").
 
 ### Adding a string
@@ -82,11 +87,12 @@ The screens are in English or Spanish, chosen in Settings (or with ES/EN at the 
 
 ## Accessibility
 
-- Everything works from the keyboard. The first Tab stop is "Skip to content". Dialogs keep focus inside and give it back; the Select opens with Enter, Space or the arrows.
+- Everything works from the keyboard. The first Tab stop is "Skip to content", which puts focus on the screen's title (`<h1>` inside `<main>`). Dialogs keep focus inside and give it back; the Select opens with Enter, Space or the arrows.
+- After each navigation a polite live region announces the new screen's title. When the link that was followed is gone (moving into or out of a case changes the sidebar), focus moves to the new screen's title instead of being lost; otherwise it stays on the link.
 - Focus is always visible: one 2 px ring for every focusable element (`:focus-visible` in `app.css`), amber on light surfaces and light amber on the sidebar (`data-surface="nav"`).
 - Text contrast meets 4.5:1 (checked by `tests/design-tokens.test.ts`).
 - Every control has a name a screen reader announces; ES/EN are named "Español" and "English", each in its own language.
-- Each page has one `h1` (in the header), landmarks for the navigation, the content (`main`) and the rail (`aside`), and a polite announcement of the new screen's title after each navigation.
+- Each screen has one `h1` (in its header, inside `main`), and landmarks for the navigation, the content (`main`) and the rail (`aside`).
 - The language of each part is marked (`<html lang>`, `lang="en"` on English terms in Spanish screens, `lang="en"` on the development check).
 - Motion is minimal and switched off under "reduce motion".
 

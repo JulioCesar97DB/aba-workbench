@@ -23,16 +23,12 @@ export function NavItem({ to, end, number, children, detail }: { to: string; end
   );
 }
 
-export type SectionState = "empty" | "draft" | "done";
-
-const dots: Record<SectionState, string> = {
-  empty: "border border-dot-empty",
-  draft: "bg-dot-draft",
-  done: "bg-dot-done",
-};
-
-/** A report section: a status dot, its English title, and its status in words. */
-export function SectionNavItem({ to, title, state, statusLabel, statusVisible }: { to: string; title: string; state: SectionState; statusLabel: string; statusVisible?: boolean }) {
+/**
+ * A report section: a status dot, its English title, and its status in words (read by a
+ * screen reader; the dot shows it). Every section is "not started" until drafting exists;
+ * the reference's ready and draft states arrive with it.
+ */
+export function SectionNavItem({ to, title, statusLabel }: { to: string; title: string; statusLabel: string }) {
   return (
     <NavLink
       to={to}
@@ -43,11 +39,11 @@ export function SectionNavItem({ to, title, state, statusLabel, statusVisible }:
         )
       }
     >
-      <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", dots[state])} />
+      <span aria-hidden="true" className="size-2 shrink-0 rounded-full border border-dot-empty" />
       <span lang="en" className="min-w-0 flex-1">
         {title}
       </span>
-      <span className={statusVisible ? "text-xs font-normal text-fg-on-nav-muted" : "sr-only"}>{statusLabel}</span>
+      <span className="sr-only">{statusLabel}</span>
     </NavLink>
   );
 }

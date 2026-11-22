@@ -81,8 +81,7 @@ export function DevCheck() {
 
   return (
     <div lang="en" className="flex flex-1 flex-col">
-      <PageHeader title="Development check" meta={info ? `${info.name} ${info.version}` : undefined} />
-      <WorkArea>
+      <WorkArea header={<PageHeader title="Development check" meta={info ? `${info.name} ${info.version}` : undefined} />}>
         <div className="flex max-w-measure flex-col gap-4">
           <p>
             Development check{info ? `, version ${info.version}` : ""}. This screen only shows that the desktop app works end to

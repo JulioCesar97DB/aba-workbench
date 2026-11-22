@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
+import { SIDEBAR_BREAKPOINT, WINDOW_BACKGROUND } from "../src/shared/theme.ts";
 
 /*
  * Text contrast (WCAG 2.2, 1.4.3): every pair of text and background tokens the
@@ -28,11 +29,10 @@ const TEXT_PAIRS: Array<[text: string, background: string]> = [
   ["fg-on-nav-muted", "nav-hover"],
   ["fg-on-nav-current", "nav-current"],
   ["surface", "fg"], // tooltip
-  ["success", "success-subtle"],
-  ["warning", "warning-subtle"],
-  ["danger", "danger-subtle"],
-  ["neutral", "neutral-subtle"],
+  ["neutral", "neutral-subtle"], // status badge
   ["danger", "surface"], // error message
+  ["fg-on-nav-warning", "nav"], // error message on the sidebar
+  ["fg-on-nav-warning", "nav-hover"],
 ];
 
 const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
@@ -42,8 +42,6 @@ const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
   ["focus-on-nav", "nav"],
   ["focus-on-nav", "nav-hover"],
   ["dot-empty", "nav"],
-  ["dot-draft", "nav"],
-  ["dot-done", "nav"],
 ];
 
 function luminance(hex: string): number {
@@ -74,4 +72,9 @@ test("design tokens: control borders, focus rings and status dots reach 3:1", ()
     const ratio = contrast(color(element), color(background));
     assert.ok(ratio >= 3, `${element} on ${background}: ${ratio.toFixed(2)}:1`);
   }
+});
+
+test("design tokens: the values code repeats (src/shared/theme.ts) match the tokens", () => {
+  assert.equal(WINDOW_BACKGROUND, color("nav"));
+  assert.equal(/--breakpoint-sidebar:\s*([^;]+);/.exec(tokensCss)?.[1], SIDEBAR_BREAKPOINT);
 });
