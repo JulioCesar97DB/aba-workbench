@@ -1,7 +1,9 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { LANGUAGES, type Language } from "../../../shared/api.ts";
+import { LANGUAGES, type CasesFolderInfo, type Language } from "../../../shared/api.ts";
 import { useAppInfo } from "../app-info.tsx";
+import { casesFolderProblemText, useShowInFolderLabel } from "../cases-folder.tsx";
+import { Button } from "../components/Button.tsx";
 import { Select } from "../components/Select.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
 import { Table, TableBody, TableCell, TableRow, TableRowHeader } from "../components/Table.tsx";
@@ -10,7 +12,7 @@ import { useLanguage } from "../language.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { WorkArea } from "../shell/WorkArea.tsx";
 
-/** Settings: the screen language today; the cases folder and the AI connection arrive later. */
+/** Settings: the screen language and the cases folder; the AI connection arrives later. */
 export function SettingsScreen() {
   const { t } = useTranslation();
   const info = useAppInfo();
@@ -44,9 +46,7 @@ export function SettingsScreen() {
         </p>
       </SettingsSection>
 
-      <SettingsSection heading={t("settings.casesFolderHeading")} badge={t("status.notAvailableYet")}>
-        <p className="max-w-measure text-fg-muted">{t("settings.casesFolderBody")}</p>
-      </SettingsSection>
+      <CasesFolderSection />
 
       <SettingsSection heading={t("settings.aiHeading")} badge={t("status.notAvailableYet")}>
         <p className="max-w-measure text-fg-muted">{t("settings.aiBody")}</p>
@@ -69,6 +69,68 @@ export function SettingsScreen() {
         ) : null}
       </SettingsSection>
     </WorkArea>
+  );
+}
+
+/**
+ * Where the cases are kept. The main process sends the folder's path as text to show; a
+ * new folder can only come from the system's folder dialog, which the main process opens.
+ */
+function CasesFolderSection() {
+  const { t } = useTranslation();
+  const platform = useAppInfo()?.platform;
+  const showLabel = useShowInFolderLabel();
+  const [folder, setFolder] = useState<CasesFolderInfo | null>(null);
+  const [message, setMessage] = useState<{ text: string; problem: boolean } | null>(null);
+  useEffect(() => {
+    window.aba.getCasesFolder().then(setFolder, () => setFolder(null));
+  }, []);
+
+  async function choose() {
+    try {
+      const result = await window.aba.chooseCasesFolder();
+      if (result.outcome === "chosen") {
+        setFolder(result.folder);
+        setMessage({ text: t("casesFolder.chosen"), problem: false });
+      } else if (result.outcome === "unusable") {
+        setMessage({ text: `${t("casesFolder.unusable")} ${casesFolderProblemText(t, result.problem, platform)}`, problem: true });
+      } else if (result.outcome === "not-saved") {
+        setMessage({ text: t("casesFolder.notSaved"), problem: true });
+      }
+    } catch {
+      setMessage({ text: t("casesFolder.failed"), problem: true });
+    }
+  }
+
+  const problem = folder && folder.state !== "ready" && folder.state !== "not-created-yet" ? folder.state : null;
+  const canShow = folder?.state === "ready" || folder?.state === "not-writable";
+  return (
+    <SettingsSection heading={t("settings.casesFolderHeading")}>
+      <p className="max-w-measure text-fg-muted">{t("settings.casesFolderBody")}</p>
+      {folder ? (
+        <dl className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <dt className="font-medium">{t("settings.casesFolderLabel")}</dt>
+            {folder.isDefault ? <StatusBadge>{t("casesFolder.defaultBadge")}</StatusBadge> : null}
+          </div>
+          <dd className="max-w-measure font-mono text-sm break-all" data-testid="cases-folder-path">
+            {folder.displayPath}
+          </dd>
+          {problem ? <dd className="max-w-measure text-sm font-medium text-danger">{casesFolderProblemText(t, problem, platform)}</dd> : null}
+          {folder.state === "not-created-yet" ? <dd className="text-sm text-fg-muted">{t("casesFolder.notCreatedYet")}</dd> : null}
+        </dl>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => void choose()}>{t("casesFolder.choose")}</Button>
+        <Button disabled={!canShow} focusableWhenDisabled onClick={() => void window.aba.showCasesFolder()}>
+          {showLabel}
+        </Button>
+      </div>
+      <p role="status" className={message?.problem ? "max-w-measure text-sm font-medium text-danger" : "max-w-measure text-sm text-fg-muted"}>
+        {message?.text}
+      </p>
+      <p className="max-w-measure text-sm text-fg-muted">{t("settings.casesFolderChangeNote")}</p>
+    </SettingsSection>
   );
 }
 

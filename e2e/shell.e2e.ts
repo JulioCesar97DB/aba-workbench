@@ -1,8 +1,8 @@
 import type { ConsoleMessage, ElectronApplication, Page } from "@playwright/test";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
-import { expect, goTo, resize, test } from "./app.ts";
+import { defaultCasesFolder, expect, goTo, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
 
 /*
  * The interface as a user meets it: the screens, the navigation, the language and the
@@ -43,15 +43,14 @@ test("the app opens on Home, the empty list of cases, with what to do next", asy
   await expect(page).toHaveTitle("Cases · ABA Workbench");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "No cases yet" })).toBeVisible();
-  await expect(page.getByText(/Creating and opening cases arrives in the next version/)).toBeVisible();
-  await expect(page.getByRole("link", { name: "Preview a case" })).toBeVisible();
+  await expect(page.getByText(/Choose New case to make your first one/)).toBeVisible();
 
-  // "New case" explains, in a dialog, that cases arrive next; Escape closes it and focus returns.
+  // "New case" opens its form; Escape closes it and focus returns.
   const newCase = page.getByRole("button", { name: "New case" });
   await newCase.click();
   const dialog = page.getByRole("dialog", { name: "New case" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Creating cases arrives in the next version");
+  await expect(dialog.getByRole("textbox", { name: "Label" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(newCase).toBeFocused();
@@ -107,12 +106,13 @@ test("the interface loads under the content security policy as written, with its
   else await expect(devLink).toBeVisible();
 });
 
-test("the navigation reaches every screen", async ({ app }) => {
-  const page = await openApp(app);
+test("the navigation reaches every screen", async ({ launch, documents }) => {
+  seedCase(defaultCasesFolder(documents));
+  const page = await openApp(await launch());
 
-  await page.getByRole("link", { name: "Preview a case" }).click();
+  await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
   await expect(heading(page)).toHaveText("Sources");
-  await expect(page.getByText("Case preview · Step 1 of 5")).toBeVisible();
+  await expect(page.getByText(`${SAMPLE_CASE.label} · Step 1 of 5`)).toBeVisible();
   const rail = page.getByRole("complementary", { name: "Sources and checks" });
   await expect(rail).toContainText("No sources yet.");
 
@@ -149,7 +149,7 @@ test("the navigation reaches every screen", async ({ app }) => {
   await page.getByRole("link", { name: "Cases", exact: true }).click();
   await expect(heading(page)).toHaveText("Cases");
 
-  await goTo(page, "/cases/preview/report/no-such-section");
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/report/no-such-section`);
   await expect(heading(page)).toHaveText("Report");
   await goTo(page, "/cases/not-a-case/sources");
   await expect(heading(page)).toHaveText("This case was not found");
@@ -159,7 +159,8 @@ test("the navigation reaches every screen", async ({ app }) => {
   await expect(heading(page)).toHaveText("Cases");
 });
 
-test("switching the language changes the screen and survives a restart", async ({ launch, profile }) => {
+test("switching the language changes the screen and survives a restart", async ({ launch, profile, documents }) => {
+  seedCase(defaultCasesFolder(documents));
   let app = await launch();
   let page = await openApp(app);
   await page.getByRole("link", { name: "Settings", exact: true }).click();
@@ -168,17 +169,19 @@ test("switching the language changes the screen and survives a restart", async (
 
   await expect(heading(page)).toHaveText("Ajustes");
   await expect(page.locator("html")).toHaveAttribute("lang", "es");
-  await expect(page.getByRole("main").getByRole("status")).toHaveText("Guardado. La aplicación se abrirá en español la próxima vez.");
+  await expect(page.getByRole("region", { name: "Idioma de la pantalla" }).getByRole("status")).toHaveText("Guardado. La aplicación se abrirá en español la próxima vez.");
   // The switch reads ES EN, as in the reference.
   await expect(page.getByRole("group", { name: "Idioma de la pantalla" }).getByRole("button")).toHaveText(["ES", "EN"]);
   await expect(page.getByRole("button", { name: "Español" })).toHaveAttribute("aria-pressed", "true");
   expect(JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8"))).toEqual({ version: 1, language: "es" });
 
   // Clinical terms and section names stay in English, marked as English.
-  await goTo(page, "/cases/preview/behaviors");
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/behaviors`);
   await expect(heading(page)).toHaveText("Behaviors");
   await expect(heading(page)).toHaveAttribute("lang", "en");
-  await expect(page.getByText("Caso de muestra · Paso 2 de 5")).toBeVisible();
+  await expect(page.getByText(`${SAMPLE_CASE.label} · Paso 2 de 5`)).toBeVisible();
+  // The age in Spanish words, under the case's label in the sidebar.
+  await expect(page.getByText("4 años 2 meses")).toBeVisible();
   const steps = page.getByRole("navigation", { name: "Pasos del caso" });
   await expect(steps.getByRole("link", { name: "Fuentes" })).toBeVisible();
   await expect(steps.locator('[lang="en"]')).toHaveText(["Behaviors", "Interventions"]);
@@ -235,11 +238,43 @@ test("a language that cannot be saved still changes the screen, and the sidebar 
   await expect(page.locator("html")).toHaveAttribute("lang", from);
 });
 
-test("moving into and out of a case announces the new screen and puts focus on its title", async ({ app }) => {
+test("after two failed saves, the sidebar and Settings both name the language that was saved", async ({ launch, profile }) => {
+  // The saved language is English; then the file cannot be replaced (a folder takes its place).
+  const settingsPath = path.join(profile, "settings.json");
+  const app = await launch();
   const page = await openApp(app);
+  rmSync(settingsPath);
+  mkdirSync(settingsPath);
+  writeFileSync(path.join(settingsPath, "keep"), "");
+  await goTo(page, "/settings");
+  await expect(heading(page)).toHaveText("Settings");
+
+  // First failure: Spanish on screen, English next time.
+  await page.getByRole("button", { name: "Español" }).click();
+  await expect(heading(page)).toHaveText("Ajustes");
+  const notSaved = "Se muestra en español por ahora, pero no se pudo guardar: la próxima vez la aplicación se abrirá en inglés.";
+  await expect(page.getByRole("status").filter({ hasText: notSaved })).toHaveCount(2);
+
+  // Second failure, from Settings, back to English: English is what was saved, so nothing is pending.
+  await page.getByRole("combobox", { name: "Idioma" }).click();
+  await page.getByRole("option", { name: "English" }).click();
+  await expect(heading(page)).toHaveText("Settings");
+  await expect(page.getByRole("status").filter({ hasText: /could not be saved|no se pudo guardar/ })).toHaveCount(0);
+
+  // Third, to Spanish again from Settings: both places say English, the saved one, not the one on screen before.
+  await page.getByRole("combobox", { name: "Language" }).click();
+  await page.getByRole("option", { name: "Español" }).click();
+  await expect(heading(page)).toHaveText("Ajustes");
+  await expect(page.getByRole("status").filter({ hasText: notSaved })).toHaveCount(2);
+  await expect(page.getByRole("status").filter({ hasText: "Guardado" })).toHaveCount(0);
+});
+
+test("moving into and out of a case announces the new screen and puts focus on its title", async ({ launch, documents }) => {
+  seedCase(defaultCasesFolder(documents));
+  const page = await openApp(await launch());
 
   // Home -> case: the link that was followed is gone, so focus goes to the new title.
-  await page.getByRole("link", { name: "Preview a case" }).click();
+  await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
   await expect(heading(page)).toHaveText("Sources");
   await expect(announcement(page)).toHaveText("Sources · ABA Workbench");
   await expect(heading(page)).toBeFocused();
@@ -257,7 +292,7 @@ test("moving into and out of a case announces the new screen and puts focus on i
   await expect(heading(page)).toBeFocused();
 
   // Into the case again and out through "All cases".
-  await goTo(page, "/cases/preview/report");
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/report`);
   await expect(announcement(page)).toHaveText("Report · ABA Workbench");
   await page.getByRole("link", { name: "All cases" }).click();
   await expect(heading(page)).toHaveText("Cases");
@@ -294,7 +329,7 @@ test("everything works from the keyboard, with the focus always visible", async 
     expect(stop.outline, `focus ring on "${stop.name}"`).toBe(true);
     stops.push(stop.name);
   }
-  expect(stops).toEqual(expect.arrayContaining(["Cases", "Settings", "English", "Español", "New case", "Preview a case", "Open Settings"]));
+  expect(stops).toEqual(expect.arrayContaining(["Cases", "Settings", "English", "Español", "New case", "Open Settings"]));
 
   // A link opens with Enter; the Select opens and chooses with the arrow keys.
   await page.getByRole("link", { name: "Open Settings" }).focus();
@@ -308,7 +343,9 @@ test("everything works from the keyboard, with the focus always visible", async 
   await expect(heading(page)).toHaveText("Ajustes");
 });
 
-test("a narrow window: the sidebar becomes a Menu panel and nothing spills sideways", async ({ app }) => {
+test("a narrow window: the sidebar becomes a Menu panel and nothing spills sideways", async ({ launch, documents }) => {
+  seedCase(defaultCasesFolder(documents));
+  const app = await launch();
   const page = await openApp(app);
   const overflows = () =>
     page.evaluate(() => {
@@ -332,7 +369,8 @@ test("a narrow window: the sidebar becomes a Menu panel and nothing spills sidew
   await page.getByRole("dialog", { name: "Navegación" }).getByRole("button", { name: "Cerrar el menú" }).click();
   // The panel slides out before it leaves the page.
   await expect(page.getByRole("dialog")).toBeHidden();
-  for (const address of ["/", "/cases/preview/sources", "/cases/preview/report", "/cases/preview/report/discharge-and-service-fading-plan", "/settings"]) {
+  const inCase = `/cases/${SAMPLE_CASE.id}`;
+  for (const address of ["/", `${inCase}/sources`, `${inCase}/report`, `${inCase}/report/discharge-and-service-fading-plan`, "/settings"]) {
     await goTo(page, address);
     await expect(heading(page)).toBeVisible();
     expect(await overflows(), address).toBe(false);

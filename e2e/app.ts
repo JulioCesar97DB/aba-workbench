@@ -1,5 +1,5 @@
 import { test as base, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Language } from "../src/shared/api.ts";
@@ -31,11 +31,18 @@ export interface LaunchOptions {
   language?: Language | null;
   /** Raw contents for the settings file instead (a corrupt file, say). */
   settingsFile?: string;
+  /** A cases folder chosen in Settings, written into the settings file with the language. */
+  casesFolder?: string;
 }
 
 interface Fixtures {
   /** A temporary profile (--user-data-dir), shared by every launch in the test and removed after it. */
   profile: string;
+  /**
+   * A temporary folder the app takes for Documents (--documents-folder), so the default
+   * cases folder is <documents>/ABA Workbench and no test touches the real Documents.
+   */
+  documents: string;
   /** Starts the app on the test's profile; call it again after closing to restart. */
   launch: (options?: LaunchOptions) => Promise<ElectronApplication>;
   /** The app, started once with the default options. */
@@ -54,13 +61,22 @@ export const test = base.extend<Fixtures>({
       rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   },
-  launch: async ({ profile }, use, testInfo) => {
+  // eslint-disable-next-line no-empty-pattern
+  documents: async ({}, use) => {
+    const folder = mkdtempSync(path.join(tmpdir(), "aba-workbench-e2e-documents-"));
+    try {
+      await use(folder);
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  },
+  launch: async ({ profile, documents }, use, testInfo) => {
     const started: ElectronApplication[] = [];
-    await use(async ({ language = "en", settingsFile }: LaunchOptions = {}) => {
+    await use(async ({ language = "en", settingsFile, casesFolder }: LaunchOptions = {}) => {
       const settingsPath = path.join(profile, "settings.json");
       if (settingsFile !== undefined) writeFileSync(settingsPath, settingsFile);
-      else if (language !== null && !existsSync(settingsPath)) writeFileSync(settingsPath, JSON.stringify({ version: 1, language }));
-      const args = [`--user-data-dir=${profile}`];
+      else if (language !== null && !existsSync(settingsPath)) writeFileSync(settingsPath, JSON.stringify({ version: 1, language, ...(casesFolder ? { casesFolder } : {}) }));
+      const args = [`--user-data-dir=${profile}`, `--documents-folder=${documents}`];
       // Never point the window at a dev server.
       const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) => name !== "ELECTRON_RENDERER_URL" && value !== undefined)) as Record<string, string>;
       const app =
@@ -76,6 +92,54 @@ export const test = base.extend<Fixtures>({
     await use(await launch());
   },
 });
+
+/** The default cases folder for a test's Documents folder. */
+export function defaultCasesFolder(documents: string): string {
+  return path.join(documents, "ABA Workbench");
+}
+
+/** An invented case, as the app writes it. */
+export const SAMPLE_CASE = {
+  id: "5b6f0f8e-2d7a-4c1e-9b3a-7e2f4d6c8a10",
+  label: "M.F. sample case",
+  clientAge: { years: 4, months: 2 },
+  createdAt: "2026-11-20T10:00:00.000Z",
+  updatedAt: "2026-11-20T10:00:00.000Z",
+};
+
+/** Writes a case's folder and data file into `casesFolder` (made if needed), before the app starts. */
+export function seedCase(casesFolder: string, folderName = SAMPLE_CASE.label, data: Record<string, unknown> = SAMPLE_CASE): string {
+  const folder = path.join(casesFolder, folderName);
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(path.join(folder, "aba-case.json"), JSON.stringify({ schemaVersion: 1, files: [], ...data }, null, 2));
+  return folder;
+}
+
+/**
+ * Replaces the system's folder dialog: the next choices return `folder` (null: the user
+ * cancels). A test never sees a real dialog.
+ */
+export async function stubFolderDialog(app: ElectronApplication, folder: string | null): Promise<void> {
+  await app.evaluate(({ dialog }, chosen) => {
+    dialog.showOpenDialog = (async () => (chosen ? { canceled: false, filePaths: [chosen] } : { canceled: true, filePaths: [] })) as typeof dialog.showOpenDialog;
+  }, folder);
+}
+
+/** Replaces "Show in Finder / Explorer": records what would be shown instead of opening a window. */
+export async function stubFileManager(app: ElectronApplication): Promise<() => Promise<string[]>> {
+  await app.evaluate(({ shell }) => {
+    const shown: string[] = [];
+    (globalThis as unknown as { shownInFileManager: string[] }).shownInFileManager = shown;
+    shell.showItemInFolder = (item: string) => {
+      shown.push(item);
+    };
+    shell.openPath = async (item: string) => {
+      shown.push(item);
+      return "";
+    };
+  });
+  return () => app.evaluate(() => [...(globalThis as unknown as { shownInFileManager: string[] }).shownInFileManager]);
+}
 
 /** Shows a screen by its address (the part after #), as a link inside the app would. */
 export async function goTo(page: Page, address: string): Promise<void> {
