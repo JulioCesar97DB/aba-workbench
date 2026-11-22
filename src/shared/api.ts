@@ -173,6 +173,9 @@ export interface GenerationUpdate {
   event: GenerationUpdateEvent;
 }
 
+/** Why the credentials file could not be used. Both connections then show as not connected. */
+export type CredentialsProblem = "damaged" | "newer-version" | "cannot-read";
+
 export interface AbaApi {
   getAppInfo(): Promise<AppInfo>;
   /**

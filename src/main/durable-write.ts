@@ -40,7 +40,22 @@ const inFlight = new Set<string>();
  * tried and the existing file is left as it is. A failed save removes the temporary file
  * this same call created, and only that one (`created`), and throws; `file` is left as it was.
  */
-export async function writeFileDurably(file: string, text: string): Promise<void> {
+export interface DurableWriteOptions {
+  /**
+   * The temporary file's permissions when it is created (POSIX; the process's umask can
+   * only remove bits). The rename keeps them, so the file is never readable by others,
+   * not even for an instant. 0o600 for the credentials file.
+   */
+  mode?: number;
+  /**
+   * Runs on the empty temporary file, after it is created and before anything is
+   * written to it: on Windows the credentials file's owner-only access list is set here
+   * (src/main/owner-only.ts). A failure fails the save.
+   */
+  prepare?: (temporary: string) => Promise<void>;
+}
+
+export async function writeFileDurably(file: string, text: string, options: DurableWriteOptions = {}): Promise<void> {
   let temporary: string | null = null;
   let created = false;
   try {
@@ -49,7 +64,7 @@ export async function writeFileDurably(file: string, text: string): Promise<void
       if (attempt >= MAX_TEMPORARY_NAMES) throw new Error("No free name for a temporary file.");
       const candidate = temporaryFileFor(file, attempt);
       try {
-        handle = await open(candidate, "wx");
+        handle = await open(candidate, "wx", options.mode ?? 0o666);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
         throw error;
@@ -59,6 +74,7 @@ export async function writeFileDurably(file: string, text: string): Promise<void
       inFlight.add(temporary);
     }
     try {
+      if (options.prepare) await options.prepare(temporary!);
       await handle.writeFile(text, "utf8");
       await handle.datasync();
     } finally {
@@ -135,14 +151,16 @@ export async function finishInterruptedSave(temporary: string, file: string): Pr
 }
 
 /**
- * The settings file only (never a case folder: there the app deletes nothing, see
- * src/main/cases.ts): removes the temporary files a save cut short left next to `file`,
+ * The settings and credentials files only, in the app's own data folder (never a case
+ * folder: there the app deletes nothing, see src/main/cases.ts): removes the temporary
+ * files a save cut short left next to `file`,
  * exactly "<name>.<digits>.tmp" and plain files, but not one this process is writing. One copy of
  * the app runs per profile, so no other process writes this profile's settings, and no
- * age is needed. A settings file holds only the app's own preferences, rewritten whole by
- * the next save. Failures are ignored.
+ * age is needed. The settings file holds only the app's own preferences, and the
+ * credentials file only what the user can sign in again for; each is rewritten whole by
+ * the next save, and a leftover copy of credentials is better gone. Failures are ignored.
  */
-export async function removeLeftoverSettingsTemporaryFiles(file: string): Promise<void> {
+export async function removeLeftoverAppDataTemporaryFiles(file: string): Promise<void> {
   const folder = path.dirname(file);
   const base = path.basename(file);
   let names: string[];

@@ -2,7 +2,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { LANGUAGES, isLanguage, type Language } from "../shared/api.ts";
-import { removeLeftoverSettingsTemporaryFiles, writeFileDurably } from "./durable-write.ts";
+import { removeLeftoverAppDataTemporaryFiles, writeFileDurably } from "./durable-write.ts";
 
 /*
  * The user's settings, in one JSON file in the app's own data folder
@@ -115,7 +115,7 @@ export class SettingsStore {
   async get(): Promise<StoredSettings> {
     if (this.current) return this.current;
     // A save cut short by a crash in an earlier run left its temporary file behind.
-    await removeLeftoverSettingsTemporaryFiles(this.file);
+    await removeLeftoverAppDataTemporaryFiles(this.file);
     let text: string | null = null;
     try {
       text = await readFile(this.file, "utf8");
