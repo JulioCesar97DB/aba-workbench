@@ -1,4 +1,4 @@
-import { open, readdir, rename, rm } from "node:fs/promises";
+import { open, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 /*
@@ -43,12 +43,37 @@ export async function writeFileDurably(file: string, text: string): Promise<void
 }
 
 /**
- * Removes the temporary files an earlier run left next to `file` when it stopped
- * mid-save (a crash, a power cut): exactly "<name>.<process id>.tmp", never anything
- * else. They are full or partial copies of the file and would otherwise stay for good,
- * since each run's temporary name holds its own process id. Only one copy of the app
- * runs at a time (src/main/index.ts), and the caller runs this where no save of `file`
- * is in flight, so none of them is in use. Failures are ignored.
+ * How old another process's temporary file must be before it counts as left behind. A
+ * save takes milliseconds; this leaves room for a slow disk or network volume.
+ */
+export const STALE_TEMPORARY_AFTER_MS = 60_000;
+
+/** Whether `name` is a temporary file a save of `fileName` makes: exactly "<fileName>.<digits>.tmp". */
+export function isTemporaryFileOf(fileName: string, name: string): boolean {
+  return name.startsWith(`${fileName}.`) && /^\.[0-9]+\.tmp$/.test(name.slice(fileName.length));
+}
+
+/**
+ * Whether the temporary file `name` in `folder` was left behind by a save cut short (a
+ * crash, a power cut): not this process's own, and untouched for STALE_TEMPORARY_AFTER_MS.
+ * One copy of the app runs per profile (src/main/index.ts), but two profiles or two
+ * computers can share a cases folder (a network or synced folder); the age keeps one from
+ * removing a temporary file the other is still writing.
+ */
+export async function isLeftBehind(folder: string, name: string, now = Date.now()): Promise<boolean> {
+  if (name.endsWith(`.${process.pid}${TEMPORARY_SUFFIX}`)) return false;
+  try {
+    return now - (await stat(path.join(folder, name))).mtimeMs >= STALE_TEMPORARY_AFTER_MS;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Removes the temporary files a save cut short left next to `file` (isLeftBehind):
+ * exactly "<name>.<digits>.tmp", never anything else. They are full or partial copies of
+ * the file and would otherwise stay for good, since each run's temporary name holds its
+ * own process id. Failures are ignored.
  */
 export async function removeStaleTemporaryFiles(file: string): Promise<void> {
   const folder = path.dirname(file);
@@ -59,9 +84,8 @@ export async function removeStaleTemporaryFiles(file: string): Promise<void> {
   } catch {
     return;
   }
-  const own = path.basename(temporaryFileFor(file));
   for (const name of names) {
-    if (name === own || !name.startsWith(`${base}.`) || !/^\.[0-9]+\.tmp$/.test(name.slice(base.length))) continue;
+    if (!isTemporaryFileOf(base, name) || !(await isLeftBehind(folder, name))) continue;
     await rm(path.join(folder, name), { force: true }).catch(() => undefined);
   }
 }

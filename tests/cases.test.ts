@@ -24,6 +24,14 @@ function tempFolder(): string {
   return folder;
 }
 
+/** Sets a file's modified time two minutes back: what a crash in an earlier run leaves. */
+function makeOld(file: string): void {
+  const then = new Date(Date.now() - 2 * 60_000);
+  utimesSync(file, then, then);
+}
+
+const BACKSLASH = String.fromCharCode(92);
+
 function sample(overrides: Partial<CaseData> = {}): CaseData {
   return { ...newCaseData({ id: ID, label: "M.F. initial assessment", clientAge: { years: 4, months: 2 }, now: NOW }), ...overrides };
 }
@@ -659,9 +667,12 @@ test("S3: temporary copies a crash left behind are removed when the case is open
   const caseFolder = path.join(folder, "Ana");
   for (const name of ["aba-case.json.99999.tmp", "aba-case.json.1.tmp", "aba-case.json.12a.tmp", "aba-case.json.tmp", "notes.99999.tmp", "a.pdf"]) {
     writeFileSync(path.join(caseFolder, name), "{ half a fi");
+    makeOld(path.join(caseFolder, name));
   }
+  // Another copy of the app (another profile or computer sharing the folder) is saving right now: kept.
+  writeFileSync(path.join(caseFolder, "aba-case.json.77777.tmp"), "{ being written");
   assert.equal((await lib.open(created.case.id)).outcome, "opened");
-  assert.deepEqual(readdirSync(caseFolder).sort(), ["a.pdf", "aba-case.json", "aba-case.json.12a.tmp", "aba-case.json.tmp", "notes.99999.tmp"].sort());
+  assert.deepEqual(readdirSync(caseFolder).sort(), ["a.pdf", "aba-case.json", "aba-case.json.12a.tmp", "aba-case.json.77777.tmp", "aba-case.json.tmp", "notes.99999.tmp"].sort());
 
   // An unreadable case's folder is never cleaned: the app does not change it at all.
   mkdirSync(path.join(folder, "Broken"));
@@ -749,4 +760,78 @@ test("M6: listing never makes Windows' write check; creating a case does", { ski
   } finally {
     chmodSync(folder, 0o755);
   }
+});
+
+/* Review round 2 */
+
+test("R2-1: a __proto__ key, at the top or inside clientAge, makes the file damaged, and it is never rewritten", async () => {
+  const good = serializeCaseFile(sample());
+  const top = good.replace('"files": []', '"files": [],\n  "__proto__": { "q": 2 }');
+  const inAge = good.replace('"months": 2', '"months": 2,\n    "__proto__": { "p": 1 }');
+  // The same key with its first underscore escaped.
+  const escaped = good.replace('"files": []', `"files": [],\n  "${BACKSLASH}u005f_proto__": 1`);
+  for (const text of [top, inAge, escaped]) {
+    assert.notEqual(text, good);
+    assert.deepEqual(readCaseFile(text), { ok: false, problem: "damaged" });
+  }
+  // A key that merely contains it is an ordinary key.
+  assert.equal(readCaseFile(good.replace('"files": []', '"files": [],\n  "not__proto__": 1')).ok, true);
+
+  const folder = tempFolder();
+  mkdirSync(path.join(folder, "Proto"));
+  writeFileSync(path.join(folder, "Proto", CASE_FILE_NAME), top);
+  writeFileSync(path.join(folder, "Proto", "a.pdf"), "%PDF");
+  const { lib } = library(folder);
+  assert.deepEqual((await lib.list()).unreadable, [{ folderName: "Proto", reason: "damaged" }]);
+  assert.deepEqual(await lib.open(ID), { outcome: "not-found" });
+  assert.equal(await lib.update(ID, (data) => data), null);
+  assert.equal(readFileSync(path.join(folder, "Proto", CASE_FILE_NAME), "utf8"), top);
+});
+
+test("R2-2: a number that would not be written back as itself makes the file damaged; exact ones read", async () => {
+  const good = serializeCaseFile(sample());
+  const withNumber = (number: string) => good.replace('"files": []', `"files": [],\n  "later": ${number}`);
+  for (const number of ["0.30000000000000000001", "1e-400", "-1e-400", "-0", "-0.0", "123456789.123456789", "2e-324"]) {
+    assert.deepEqual(readCaseFile(withNumber(number)), { ok: false, problem: "damaged" }, number);
+  }
+  for (const number of ["0.1", "1.50", "1e2", "2.5e-3", "1E+21", "9007199254740992", "5e-324", "0", "-1.5"]) {
+    assert.equal(readCaseFile(withNumber(number)).ok, true, number);
+  }
+  // A known field written as 4.0 is still the same value.
+  assert.equal(readCaseFile(good.replace('"years": 4', '"years": 4.0')).ok, true);
+
+  const folder = tempFolder();
+  mkdirSync(path.join(folder, "Decimal"));
+  const text = withNumber("0.30000000000000000001");
+  writeFileSync(path.join(folder, "Decimal", CASE_FILE_NAME), text);
+  writeFileSync(path.join(folder, "Decimal", "a.pdf"), "%PDF");
+  const { lib } = library(folder);
+  assert.deepEqual(await lib.open(ID), { outcome: "not-found" });
+  assert.equal(readFileSync(path.join(folder, "Decimal", CASE_FILE_NAME), "utf8"), text);
+});
+
+test("R2-3: a case the app stopped while creating is cleared away when Home lists the cases; anything else stays", async () => {
+  const folder = tempFolder();
+  // Left by a crash between making the folder and saving the data file.
+  mkdirSync(path.join(folder, "Ana"));
+  writeFileSync(path.join(folder, "Ana", "aba-case.json.4242.tmp"), '{ "label": "Ana"');
+  makeOld(path.join(folder, "Ana", "aba-case.json.4242.tmp"));
+  // Being created right now by another copy of the app: kept.
+  mkdirSync(path.join(folder, "Beto"));
+  writeFileSync(path.join(folder, "Beto", "aba-case.json.4243.tmp"), "{");
+  // A temporary file next to something else, and an empty folder: not the app's, kept.
+  mkdirSync(path.join(folder, "Carla"));
+  writeFileSync(path.join(folder, "Carla", "aba-case.json.4244.tmp"), "{");
+  makeOld(path.join(folder, "Carla", "aba-case.json.4244.tmp"));
+  writeFileSync(path.join(folder, "Carla", "notes.txt"), "mine");
+  mkdirSync(path.join(folder, "Empty"));
+  const { lib, logged } = library(folder);
+  const list = await lib.list();
+  assert.deepEqual(
+    list.unreadable.map((entry) => entry.folderName),
+    ["Beto", "Carla", "Empty"],
+  );
+  assert.deepEqual(readdirSync(folder).sort(), ["Beto", "Carla", "Empty"]);
+  assert.deepEqual(readdirSync(path.join(folder, "Carla")).sort(), ["aba-case.json.4244.tmp", "notes.txt"]);
+  assert.equal(logged.length, 1);
 });

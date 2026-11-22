@@ -129,7 +129,8 @@ export interface CaseDetail extends CaseSummary {
  * - "newer-version": a newer version of the app wrote it; updating the app opens it.
  * - "duplicate": its data file has the same id as another case's (a copied folder).
  * - "cannot-read": the system did not let the app read it.
- * - "link": a link (alias, shortcut target) to a folder elsewhere, which the app never follows.
+ * - "link": a symbolic link to a folder elsewhere, which the app never follows. (A Finder
+ *   alias or a Windows shortcut is a file, not a folder: it is not listed at all.)
  * The app never changes such a folder.
  */
 export type UnreadableReason = "not-a-case" | "damaged" | "newer-version" | "duplicate" | "cannot-read" | "link";

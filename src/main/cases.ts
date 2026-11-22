@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rmdir, stat } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
@@ -18,7 +18,7 @@ import {
 import { CASE_FILE_NAME, ClientAgeSchema, MAX_CASE_FILE_BYTES, MAX_LISTED_FILES, newCaseData, nextUpdatedAt, readCaseFile, serializeCaseFile, type CaseData } from "./case-file.ts";
 import { caseFolderNames } from "./case-folder-name.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
-import { removeStaleTemporaryFiles, writeFileDurably } from "./durable-write.ts";
+import { isLeftBehind, isTemporaryFileOf, removeStaleTemporaryFiles, writeFileDurably } from "./durable-write.ts";
 
 /*
  * The cases in the cases folder: listing, creating, opening and saving them. Only the
@@ -112,6 +112,30 @@ export async function scanCaseFiles(folder: string): Promise<CaseFile[]> {
   return files.slice(0, MAX_LISTED_FILES);
 }
 
+/**
+ * A case folder the app itself was making when it stopped (a crash or a power cut between
+ * making the folder and saving its data file): it holds nothing but a temporary data file
+ * left behind (isLeftBehind). Removes that file and the folder, and says whether it did.
+ * rmdir never removes a folder that holds anything else, so nothing else can be lost.
+ */
+export async function removeHalfMadeCase(folder: string): Promise<boolean> {
+  let names: string[];
+  try {
+    names = await readdir(folder);
+  } catch {
+    return false;
+  }
+  if (names.length === 0 || !names.every((name) => isTemporaryFileOf(CASE_FILE_NAME, name))) return false;
+  for (const name of names) if (!(await isLeftBehind(folder, name))) return false;
+  try {
+    for (const name of names) await rm(path.join(folder, name));
+    await rmdir(folder);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function sameFiles(a: readonly CaseFile[], b: readonly CaseFile[]): boolean {
   return a.length === b.length && a.every((file, i) => file.name === b[i].name && file.bytes === b[i].bytes && file.modifiedAt === b[i].modifiedAt);
 }
@@ -192,6 +216,12 @@ export class CaseLibrary {
     const cases: Array<{ data: CaseData; name: string }> = [];
     const unreadable: UnreadableFolder[] = links.map((name) => ({ folderName: name, reason: "link" }));
     for (const { name, read } of reads) {
+      // A case the app was making when it stopped: its temporary data file is a copy of
+      // client data in a folder Home would call "not a case". Clear it away instead.
+      if (read.kind === "unreadable" && read.reason === "not-a-case" && (await removeHalfMadeCase(path.join(folder, name)))) {
+        this.options.log("A case left half-made by an earlier run was removed.");
+        continue;
+      }
       if (read.kind === "unreadable") unreadable.push({ folderName: name, reason: read.reason });
       else if (folders.has(read.data.id)) unreadable.push({ folderName: name, reason: "duplicate" });
       else {

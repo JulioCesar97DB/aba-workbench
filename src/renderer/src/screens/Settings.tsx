@@ -83,10 +83,17 @@ function CasesFolderSection() {
   const [folder, setFolder] = useState<CasesFolderInfo | null>(null);
   const [message, setMessage] = useState<{ text: string; problem: boolean } | null>(null);
   useEffect(() => {
-    window.aba.getCasesFolder().then(setFolder, () => {
-      setFolder(null);
-      setMessage({ text: t("casesFolder.readFailed"), problem: true });
-    });
+    window.aba.getCasesFolder().then(
+      (info) => {
+        setFolder(info);
+        // A failure to check it an earlier time no longer holds.
+        setMessage((current) => (current?.text === t("casesFolder.readFailed") ? null : current));
+      },
+      () => {
+        setFolder(null);
+        setMessage({ text: t("casesFolder.readFailed"), problem: true });
+      },
+    );
   }, [t]);
 
   async function show() {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -156,6 +156,8 @@ test("S3: a settings save cut short in an earlier run leaves no temporary copy a
   const file = tempFile(serializeSettings(EN));
   const folder = path.dirname(file);
   writeFileSync(`${file}.99999.tmp`, "{ half");
+  const then = new Date(Date.now() - 2 * 60_000);
+  utimesSync(`${file}.99999.tmp`, then, then);
   writeFileSync(`${file}.backup`, "kept");
   const store = new SettingsStore(file, () => DEFAULTS, () => undefined);
   assert.deepEqual(await store.get(), EN);

@@ -100,10 +100,40 @@ export function migrateCaseData(
 export type ReadCaseFileResult = { ok: true; data: CaseData; migratedFrom: number | null } | { ok: false; problem: CaseFileProblem };
 
 /**
+ * A number written in JSON as a canonical decimal: sign, significant digits and exponent
+ * ("-0.0150" and "-1.5e-2" both give "-15e-3"). Zero is "0" or "-0".
+ */
+function canonicalNumber(token: string): string {
+  const match = /^(-?)([0-9]+)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/.exec(token);
+  if (!match) return token;
+  const [, sign, whole, fraction = "", exponent = "0"] = match;
+  let digits = `${whole}${fraction}`.replace(/^0+/, "");
+  if (digits === "") return `${sign}0`;
+  let power = Number(exponent) - fraction.length;
+  const trimmed = digits.replace(/0+$/, "");
+  power += digits.length - trimmed.length;
+  digits = trimmed;
+  return `${sign}${digits}e${power}`;
+}
+
+/**
+ * Whether a JSON number token reads back as itself: a save writes the number JSON.parse
+ * made of it, which must be the same value. Not so for one too large for any number
+ * (1e400), one that loses digits (2^53 + 1, 0.30000000000000000001, 1e-400 read as 0), or
+ * -0 (written back as 0). Numbers the app writes always pass: they come from JSON.stringify.
+ */
+export function numberReadsExactly(token: string): boolean {
+  const value = Number(token);
+  if (!Number.isFinite(value)) return false;
+  return canonicalNumber(token) === canonicalNumber(JSON.stringify(value));
+}
+
+/**
  * Whether JSON.parse kept everything in `text`, so a save would write back all of it.
- * It does not when an object repeats a key (the last one wins) or a number cannot be held
- * exactly (beyond 2^53 for a whole number, or beyond the largest number at all). `text`
- * must already be valid JSON. A file that fails this is damaged and never written to.
+ * It does not when an object repeats a key (the last one wins), when a key is "__proto__"
+ * (rebuilding the object turns it into the object's prototype, and a save drops it), or
+ * when a number does not read back as itself (numberReadsExactly). `text` must already
+ * be valid JSON. A file that fails this is damaged and never written to.
  */
 export function parsesWithoutLoss(text: string): boolean {
   const stack: Array<{ keys: Set<string> | null; expectKey: boolean }> = [];
@@ -116,7 +146,7 @@ export function parsesWithoutLoss(text: string): boolean {
       const top = stack.at(-1);
       if (top?.keys && top.expectKey) {
         const key = JSON.parse(text.slice(i, end + 1)) as string;
-        if (top.keys.has(key)) return false;
+        if (key === "__proto__" || top.keys.has(key)) return false;
         top.keys.add(key);
         top.expectKey = false;
       }
@@ -134,9 +164,7 @@ export function parsesWithoutLoss(text: string): boolean {
     } else if (char === "-" || (char >= "0" && char <= "9")) {
       let end = i + 1;
       while (end < text.length && /[0-9.eE+-]/.test(text[end])) end++;
-      const token = text.slice(i, end);
-      const value = Number(token);
-      if (!Number.isFinite(value) || (/^-?[0-9]+$/.test(token) && !Number.isSafeInteger(value))) return false;
+      if (!numberReadsExactly(text.slice(i, end))) return false;
       i = end;
     } else {
       i++;
