@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 /*
- * macOS shows a usage description when the app first opens Documents (or the Desktop,
- * Downloads, an external or a network drive, a folder a cloud storage app manages). The English text is in electron-builder.yml
+ * macOS shows a usage description when the app first opens a folder the user chose in
+ * Documents, the Desktop, Downloads, an external or a network drive, or a folder a cloud
+ * storage app manages. The default cases folder is in the home folder, which needs none. The English text is in electron-builder.yml
  * (mac.extendInfo), and each language's in packaging/macos/<language>.lproj/InfoPlist.strings.
  */
 
@@ -52,7 +53,9 @@ test("macOS usage descriptions: English matches the plist, Spanish has the same 
   }
   // A Mac set to Latin American Spanish (es-419) looks in es_419.lproj first: the same words.
   assert.deepEqual(fromStrings("es_419"), spanish);
-  // The documents one speaks of Documents in each language.
-  assert.match(fromBuilderConfig().get("NSDocumentsFolderUsageDescription") ?? "", /Documents/);
-  assert.match(spanish.get("NSDocumentsFolderUsageDescription") ?? "", /Documentos/);
+  // The cases are in Documents only if the user chose a folder there: nothing says the app keeps them there by default.
+  for (const [key, value] of [...fromBuilderConfig(), ...spanish]) {
+    assert.doesNotMatch(value, /Documents|Documentos/, key);
+    assert.match(value, /the folder you chose in Settings|la carpeta que elegiste en Ajustes/, key);
+  }
 });

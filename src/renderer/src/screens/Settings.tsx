@@ -115,6 +115,7 @@ function CasesFolderSection() {
   return (
     <SettingsSection heading={t("settings.casesFolderHeading")}>
       <p className="max-w-measure text-fg-muted">{t("settings.casesFolderBody")}</p>
+      <p className="max-w-measure text-fg-muted">{t("settings.casesFolderSyncNote")}</p>
       {folder ? (
         <dl className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

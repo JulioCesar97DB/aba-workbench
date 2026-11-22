@@ -49,6 +49,18 @@ test("strings: US English spelling, and macOS's own name for its settings pane",
   assert.equal(es.casesFolder.showWindows, "Mostrar en el Explorador de archivos");
 });
 
+test("strings: say only what the app controls about where cases go", () => {
+  for (const [language, strings] of [["en", english], ["es", spanish]] as const) {
+    for (const [key, value] of strings) {
+      assert.doesNotMatch(value, /on this computer|en esta computadora/i, `${language}: ${key} promises where the cases stay`);
+    }
+  }
+  // Where the folder is chosen, one plain sentence says a synced folder sends the cases to that service.
+  assert.match(en.settings.casesFolderSyncNote, /OneDrive, iCloud, Dropbox or Google Drive/);
+  assert.match(es.settings.casesFolderSyncNote, /OneDrive, iCloud, Dropbox o Google Drive/);
+  assert.match(en.settings.casesFolderBody, /sends nothing anywhere/);
+});
+
 test("strings: the only tag is <term></term>, and it is balanced", () => {
   for (const [language, strings] of [["en", english], ["es", spanish]] as const) {
     for (const [key, value] of strings) {

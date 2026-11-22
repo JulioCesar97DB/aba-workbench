@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { CaseLibrary } from "./cases.ts";
 import { defaultCasesFolder } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
-import { resolveRulesDir } from "./paths.ts";
+import { resolveHomeFolder, resolveRulesDir } from "./paths.ts";
 import { APP_ORIGIN, registerAppScheme, serveRenderer } from "./protocol.ts";
 import { denyAllPermissions, hardenWebContents } from "./security.ts";
 import { defaultLanguage, SETTINGS_FILE_NAME, SettingsStore } from "./settings.ts";
@@ -43,19 +43,18 @@ const settings = new SettingsStore(path.join(app.getPath("userData"), SETTINGS_F
 }));
 
 /**
- * The folder the default cases folder goes in: Documents. The window tests start the app
- * with --documents-folder=<a temporary folder> so that no test ever reads or writes the
- * real Documents folder. It only moves the default; a folder chosen in Settings wins.
+ * The home folder, where the default cases folder goes (src/main/paths.ts). The window
+ * tests start the built app with --home-folder=<a temporary folder>; a packaged app
+ * ignores the option. It only moves the default; a folder chosen in Settings wins.
  */
-function documentsFolder(): string {
-  const override = app.commandLine.getSwitchValue("documents-folder");
-  return override && path.isAbsolute(override) ? override : app.getPath("documents");
+function homeFolder(): string {
+  return resolveHomeFolder({ isPackaged: app.isPackaged, override: app.commandLine.getSwitchValue("home-folder"), home: app.getPath("home") });
 }
 
-// The cases, in the folder chosen in Settings or in Documents/ABA Workbench.
+// The cases, in the folder chosen in Settings or in <home>/ABA Workbench.
 const cases = new CaseLibrary({
   location: async () => {
-    const fallback = defaultCasesFolder(documentsFolder());
+    const fallback = defaultCasesFolder(homeFolder());
     const chosen = (await settings.get()).casesFolder;
     return { folder: chosen ?? fallback, isDefault: chosen === null || chosen === fallback };
   },

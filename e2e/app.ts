@@ -33,18 +33,26 @@ export interface LaunchOptions {
   language?: Language | null;
   /** Raw contents for the settings file instead (a corrupt file, say). */
   settingsFile?: string;
-  /** A cases folder chosen in Settings, written into the settings file with the language. */
+  /**
+   * A cases folder chosen in Settings, written into the settings file with the language.
+   * The packaged app, which never takes --home-folder, gets <home>/ABA Workbench (made
+   * empty) when none is given, so it never falls back to the real home folder.
+   */
   casesFolder?: string;
+  /** More command-line options. */
+  extraArgs?: string[];
 }
 
 interface Fixtures {
   /** A temporary profile (--user-data-dir), shared by every launch in the test and removed after it. */
   profile: string;
   /**
-   * A temporary folder the app takes for Documents (--documents-folder), so the default
-   * cases folder is <documents>/ABA Workbench and no test touches the real Documents.
+   * A temporary folder that stands in for the home folder. The built app takes it as its
+   * home (--home-folder, development only), so its default cases folder is
+   * <home>/ABA Workbench; the packaged app ignores that option and is given
+   * <home>/ABA Workbench as its chosen cases folder instead. No test touches the real home folder.
    */
-  documents: string;
+  home: string;
   /** Starts the app on the test's profile; call it again after closing to restart. */
   launch: (options?: LaunchOptions) => Promise<ElectronApplication>;
   /** The app, started once with the default options. */
@@ -64,21 +72,27 @@ export const test = base.extend<Fixtures>({
     }
   },
   // eslint-disable-next-line no-empty-pattern
-  documents: async ({}, use) => {
-    const folder = mkdtempSync(path.join(tmpdir(), "aba-workbench-e2e-documents-"));
+  home: async ({}, use) => {
+    const folder = mkdtempSync(path.join(tmpdir(), "aba-workbench-e2e-home-"));
     try {
       await use(folder);
     } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   },
-  launch: async ({ profile, documents }, use, testInfo) => {
+  launch: async ({ profile, home }, use, testInfo) => {
     const started: ElectronApplication[] = [];
-    await use(async ({ language = "en", settingsFile, casesFolder }: LaunchOptions = {}) => {
+    const packaged = testInfo.project.name === "packaged";
+    await use(async ({ language = "en", settingsFile, casesFolder, extraArgs = [] }: LaunchOptions = {}) => {
       const settingsPath = path.join(profile, "settings.json");
+      let chosen = casesFolder;
+      if (packaged && chosen === undefined) {
+        chosen = defaultCasesFolder(home);
+        mkdirSync(chosen, { recursive: true });
+      }
       if (settingsFile !== undefined) writeFileSync(settingsPath, settingsFile);
-      else if (language !== null && !existsSync(settingsPath)) writeFileSync(settingsPath, JSON.stringify({ version: 1, language, ...(casesFolder ? { casesFolder } : {}) }));
-      const args = [`--user-data-dir=${profile}`, `--documents-folder=${documents}`];
+      else if (language !== null && !existsSync(settingsPath)) writeFileSync(settingsPath, JSON.stringify({ version: 1, language, ...(chosen ? { casesFolder: chosen } : {}) }));
+      const args = [`--user-data-dir=${profile}`, `--home-folder=${home}`, ...extraArgs];
       // Never point the window at a dev server.
       const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) => name !== "ELECTRON_RENDERER_URL" && value !== undefined)) as Record<string, string>;
       const app =
@@ -95,9 +109,9 @@ export const test = base.extend<Fixtures>({
   },
 });
 
-/** The default cases folder for a test's Documents folder. */
-export function defaultCasesFolder(documents: string): string {
-  return path.join(documents, "ABA Workbench");
+/** The default cases folder for a test's home folder (in the packaged app, the chosen one: see LaunchOptions). */
+export function defaultCasesFolder(home: string): string {
+  return path.join(home, "ABA Workbench");
 }
 
 /** An invented case, as the app writes it. */
@@ -150,8 +164,8 @@ export async function stubFileManager(app: ElectronApplication, { fail = false }
  * Starts another copy of the app on the same profile, outside Playwright, and waits for it
  * to end: its exit code, or "still running" (it is then stopped) after `timeoutMs`.
  */
-export async function startSecondCopy(project: string, profile: string, documents: string, timeoutMs = 20_000): Promise<number | null | "still running"> {
-  const args = [`--user-data-dir=${profile}`, `--documents-folder=${documents}`];
+export async function startSecondCopy(project: string, profile: string, home: string, timeoutMs = 20_000): Promise<number | null | "still running"> {
+  const args = [`--user-data-dir=${profile}`, `--home-folder=${home}`];
   const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) => name !== "ELECTRON_RENDERER_URL" && value !== undefined)) as Record<string, string>;
   const child =
     project === "packaged"

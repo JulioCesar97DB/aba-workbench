@@ -19,6 +19,17 @@ export function resolveRulesDir(location: AppLocation, p: path.PlatformPath = pa
 }
 
 /**
+ * The folder the default cases folder goes in: the user's home folder, outside Documents,
+ * which iCloud and OneDrive often sync (owner's decision, 2026-11-22). In development only,
+ * --home-folder=<absolute path> stands in for it, so the window tests never touch the real
+ * home folder; a packaged app ignores the option (owner's decision, 2026-11-22).
+ */
+export function resolveHomeFolder(options: { isPackaged: boolean; override: string; home: string }, p: path.PlatformPath = path): string {
+  if (!options.isPackaged && options.override !== "" && p.isAbsolute(options.override)) return options.override;
+  return options.home;
+}
+
+/**
  * Maps the path of an app:// URL to a file inside `root` (the built interface), or null
  * when the path is malformed or would leave `root`. "/" means index.html.
  */

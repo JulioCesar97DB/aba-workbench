@@ -58,7 +58,7 @@ export const en = {
     loadFailed: "Your cases could not be listed. Try again in a moment.",
     retry: "Try again",
     emptyTitle: "No cases yet",
-    emptyBody: "A case keeps one client's sources and the assessment drafted from them, on this computer.",
+    emptyBody: "A case keeps one client's sources and the assessment drafted from them, in a folder of its own.",
     emptyNext: "Choose New case to make your first one. Each case is a folder inside your cases folder, which you can change in Settings.",
     openSettings: "Open Settings",
     listHeading: "Your cases",
@@ -86,7 +86,7 @@ export const en = {
   },
   newCase: {
     title: "New case",
-    body: "The case gets its own folder inside your cases folder, on this computer.",
+    body: "The case gets its own folder inside your cases folder.",
     labelLabel: "Label",
     labelDescription: "A name you will recognize, such as the client's initials. It also names the case's folder.",
     ageLegend: "Client's age (optional)",
@@ -141,7 +141,7 @@ export const en = {
   workspace: {
     placeholderBadge: "Not built yet",
     sourcesBody:
-      "Here you will add the client's documents: evaluations and score reports as PDFs, interviews and observation notes as text. They stay on this computer, in the case's folder.",
+      "Here you will add the client's documents: evaluations and score reports as PDFs, interviews and observation notes as text. They go in the case's folder.",
     behaviorsBody: "Here you will list the client's target <term>Behaviors</term>, taken from the sources, and confirm each one before the report is drafted.",
     interventionsBody: "Here you will choose the <term>Interventions</term> for each target behavior and skill, which the report then describes.",
     reportBody: "The report is drafted one section at a time, in English, from the case's sources and the writing rules. Choose a section to see where its draft will go.",
@@ -172,7 +172,8 @@ export const en = {
     languageSaved: "Saved. The app will open in {{language}} next time.",
     languageNotSaved: "Shown in {{language}} for now, but the choice could not be saved: the app will open in {{previous}} next time.",
     casesFolderHeading: "Cases folder",
-    casesFolderBody: "Each case is a folder in here, with its data file and its PDFs. Your cases stay on this computer.",
+    casesFolderBody: "Each case is a folder in here, with its data file and its PDFs. ABA Workbench sends nothing anywhere.",
+    casesFolderSyncNote: "A folder that OneDrive, iCloud, Dropbox or Google Drive syncs sends your cases to that service.",
     casesFolderLabel: "Folder",
     casesFolderChangeNote: "Cases already in another folder stay there. Choose that folder again to see them.",
     aiHeading: "AI connection",

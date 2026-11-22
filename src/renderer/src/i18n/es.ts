@@ -54,7 +54,7 @@ export const es: Messages = {
     loadFailed: "No se pudo mostrar la lista de tus casos. Vuelve a intentarlo en un momento.",
     retry: "Volver a intentar",
     emptyTitle: "Todavía no hay casos",
-    emptyBody: "Un caso reúne las fuentes de un cliente y la evaluación redactada a partir de ellas, en esta computadora.",
+    emptyBody: "Un caso reúne las fuentes de un cliente y la evaluación redactada a partir de ellas, en una carpeta propia.",
     emptyNext: "Elige Nuevo caso para crear el primero. Cada caso es una carpeta dentro de tu carpeta de casos, que puedes cambiar en Ajustes.",
     openSettings: "Abrir Ajustes",
     listHeading: "Tus casos",
@@ -81,7 +81,7 @@ export const es: Messages = {
   },
   newCase: {
     title: "Nuevo caso",
-    body: "El caso tendrá su propia carpeta dentro de tu carpeta de casos, en esta computadora.",
+    body: "El caso tendrá su propia carpeta dentro de tu carpeta de casos.",
     labelLabel: "Nombre",
     labelDescription: "Un nombre que reconozcas, como las iniciales del cliente. También le da nombre a la carpeta del caso.",
     ageLegend: "Edad del cliente (opcional)",
@@ -134,7 +134,7 @@ export const es: Messages = {
   workspace: {
     placeholderBadge: "En preparación",
     sourcesBody:
-      "Aquí agregarás los documentos del cliente: evaluaciones e informes de puntajes en PDF, entrevistas y notas de observación como texto. Se quedan en esta computadora, en la carpeta del caso.",
+      "Aquí agregarás los documentos del cliente: evaluaciones e informes de puntajes en PDF, entrevistas y notas de observación como texto. Se guardan en la carpeta del caso.",
     behaviorsBody: "Aquí anotarás los <term>Behaviors</term> objetivo del cliente, sacados de las fuentes, y confirmarás cada uno antes de redactar el informe.",
     interventionsBody: "Aquí elegirás las <term>Interventions</term> para cada conducta y habilidad objetivo, que luego describe el informe.",
     reportBody: "El informe se redacta sección por sección, en inglés, a partir de las fuentes del caso y de las reglas de redacción. Elige una sección para ver dónde irá su borrador.",
@@ -165,7 +165,8 @@ export const es: Messages = {
     languageSaved: "Guardado. La aplicación se abrirá en {{language}} la próxima vez.",
     languageNotSaved: "Se muestra en {{language}} por ahora, pero no se pudo guardar: la próxima vez la aplicación se abrirá en {{previous}}.",
     casesFolderHeading: "Carpeta de casos",
-    casesFolderBody: "Cada caso es una carpeta aquí dentro, con su archivo de datos y sus PDF. Tus casos se quedan en esta computadora.",
+    casesFolderBody: "Cada caso es una carpeta aquí dentro, con su archivo de datos y sus PDF. ABA Workbench no envía nada a ninguna parte.",
+    casesFolderSyncNote: "Si una carpeta la sincroniza OneDrive, iCloud, Dropbox o Google Drive, tus casos se envían a ese servicio.",
     casesFolderLabel: "Carpeta",
     casesFolderChangeNote: "Los casos que ya están en otra carpeta se quedan allí. Vuelve a elegir esa carpeta para verlos.",
     aiHeading: "Conexión con la IA",

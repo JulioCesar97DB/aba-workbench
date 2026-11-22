@@ -1,5 +1,5 @@
 /* What macOS shows when ABA Workbench first asks to open a protected folder (Spanish). Addresses the user informally, as the interface does. */
-"NSDocumentsFolderUsageDescription" = "ABA Workbench guarda tus casos en una carpeta dentro de Documentos. Necesita tu permiso para abrirlos y guardarlos ahí.";
+"NSDocumentsFolderUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes. Necesita tu permiso para abrirlos y guardarlos ahí.";
 "NSDesktopFolderUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes. Necesita tu permiso para abrirlos y guardarlos ahí.";
 "NSDownloadsFolderUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes. Necesita tu permiso para abrirlos y guardarlos ahí.";
 "NSRemovableVolumesUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes. Necesita tu permiso para abrirlos y guardarlos ahí.";

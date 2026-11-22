@@ -6,8 +6,9 @@ import { defaultCasesFolder, expect, goTo, SAMPLE_CASE, seedCase, startSecondCop
 /*
  * Cases as a user meets them: creating one, finding it in the list, opening it after a
  * restart, folders that are not cases, and changing the cases folder. Every test works
- * in a temporary Documents folder (--documents-folder) or a temporary cases folder;
- * none touches the real Documents. Only invented cases.
+ * in a temporary home folder (--home-folder, built app) or a temporary cases folder
+ * chosen in the profile (packaged app); none touches the real home folder or Documents.
+ * Only invented cases.
  */
 
 const heading = (page: Page) => page.getByRole("heading", { level: 1 });
@@ -37,12 +38,12 @@ function snapshot(folder: string): string[] {
     .sort();
 }
 
-test("create a case, see it in the list, restart the app and open it again", async ({ launch, documents }) => {
-  const casesFolder = defaultCasesFolder(documents);
+test("create a case, see it in the list, restart the app and open it again", async ({ launch, home }, testInfo) => {
+  const casesFolder = defaultCasesFolder(home);
   let app = await launch();
   let page = await openApp(app);
-  // Nothing is made in Documents until the first case.
-  expect(readdirSync(documents)).toEqual([]);
+  // The default folder (built app): nothing is made in the home folder until the first case.
+  if (testInfo.project.name === "built") expect(readdirSync(home)).toEqual([]);
 
   await createCase(page, "R.T. initial assessment", { years: "5", months: "3" });
   // The new case opens on its first step, with its label and age in the sidebar.
@@ -81,8 +82,8 @@ test("create a case, see it in the list, restart the app and open it again", asy
   expect(page.url()).toContain(`#/cases/${data.id}/sources`);
 });
 
-test("the form checks the label and the age, in Spanish too, and two cases with one label get two folders", async ({ launch, documents }) => {
-  const casesFolder = defaultCasesFolder(documents);
+test("the form checks the label and the age, in Spanish too, and two cases with one label get two folders", async ({ launch, home }) => {
+  const casesFolder = defaultCasesFolder(home);
   const page = await openApp(await launch({ language: "es" }));
   const words = { newCase: "Nuevo caso", label: "Nombre", years: "Años", months: "Meses", create: "Crear caso" };
   await page.getByRole("button", { name: words.newCase }).click();
@@ -94,7 +95,7 @@ test("the form checks the label and the age, in Spanish too, and two cases with 
   // Focus goes to the first field to fix.
   await expect(dialog.getByRole("textbox", { name: words.label })).toBeFocused();
   await page.keyboard.press("Escape");
-  expect(existsSync(casesFolder)).toBe(false);
+  expect(existsSync(casesFolder) ? readdirSync(casesFolder) : []).toEqual([]);
 
   await createCase(page, "Ana", { months: "8" }, words);
   await expect(page.getByText("8 meses", { exact: true })).toBeVisible();
@@ -107,8 +108,8 @@ test("the form checks the label and the age, in Spanish too, and two cases with 
   await expect(page.getByRole("main").getByRole("table").first().getByRole("rowheader")).toHaveText(["ana", "Ana"]);
 });
 
-test("folders that are not cases show plainly as unreadable and are never changed", async ({ launch, documents }) => {
-  const casesFolder = defaultCasesFolder(documents);
+test("folders that are not cases show plainly as unreadable and are never changed", async ({ launch, home }) => {
+  const casesFolder = defaultCasesFolder(home);
   seedCase(casesFolder);
   mkdirSync(path.join(casesFolder, "Scans to sort"));
   writeFileSync(path.join(casesFolder, "Scans to sort", "notes.txt"), "the user's own file");
@@ -142,8 +143,8 @@ test("folders that are not cases show plainly as unreadable and are never change
   expect(snapshot(casesFolder)).toEqual(before);
 });
 
-test("a PDF put into the case's folder shows when the case is opened again, and the case is saved", async ({ launch, documents }) => {
-  const caseFolder = seedCase(defaultCasesFolder(documents));
+test("a PDF put into the case's folder shows when the case is opened again, and the case is saved", async ({ launch, home }) => {
+  const caseFolder = seedCase(defaultCasesFolder(home));
   const app = await launch();
   const page = await openApp(app);
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
@@ -163,9 +164,9 @@ test("a PDF put into the case's folder shows when the case is opened again, and 
   await expect(page.getByRole("row", { name: new RegExp(SAMPLE_CASE.label.replace(/\./g, "\\.")) }).getByRole("cell").last()).toHaveText("1");
 });
 
-test("change the cases folder in Settings; it is remembered, and the list follows it", async ({ launch, documents, profile }) => {
-  seedCase(defaultCasesFolder(documents));
-  const other = path.join(documents, "Elsewhere", "My cases");
+test("change the cases folder in Settings; it is remembered, and the list follows it", async ({ launch, home, profile }, testInfo) => {
+  seedCase(defaultCasesFolder(home));
+  const other = path.join(home, "Elsewhere", "My cases");
   mkdirSync(other, { recursive: true });
   let app = await launch();
   let page = await openApp(app);
@@ -173,19 +174,21 @@ test("change the cases folder in Settings; it is remembered, and the list follow
 
   await goTo(page, "/settings");
   const section = page.getByRole("region", { name: "Cases folder" });
-  await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(documents));
-  await expect(section.getByText("Default", { exact: true })).toBeVisible();
+  await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(home));
+  // The built app takes it as its default; the packaged app was given it as a chosen folder.
+  await expect(section.getByText("Default", { exact: true })).toHaveCount(testInfo.project.name === "built" ? 1 : 0);
+  await expect(section.getByText("A folder that OneDrive, iCloud, Dropbox or Google Drive syncs sends your cases to that service.")).toBeVisible();
 
   // Cancelling the dialog changes nothing.
   await stubFolderDialog(app, null);
   await section.getByRole("button", { name: "Choose another folder…" }).click();
-  await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(documents));
+  await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(home));
 
   // A folder that is gone is refused.
-  await stubFolderDialog(app, path.join(documents, "gone"));
+  await stubFolderDialog(app, path.join(home, "gone"));
   await section.getByRole("button", { name: "Choose another folder…" }).click();
   await expect(section.getByRole("status")).toContainText("That folder cannot be used, so the cases folder did not change.");
-  await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(documents));
+  await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(home));
 
   await stubFolderDialog(app, other);
   await section.getByRole("button", { name: "Choose another folder…" }).click();
@@ -206,14 +209,14 @@ test("change the cases folder in Settings; it is remembered, and the list follow
   await expect(page.getByRole("link", { name: SAMPLE_CASE.label })).toHaveCount(0);
 });
 
-test("a cases folder that is missing is reported, never made again, and another can be chosen", async ({ launch, documents }) => {
-  const unplugged = path.join(documents, "External drive", "Cases");
+test("a cases folder that is missing is reported, never made again, and another can be chosen", async ({ launch, home }) => {
+  const unplugged = path.join(home, "External drive", "Cases");
   const app = await launch({ casesFolder: unplugged });
   const page = await openApp(app);
   await expect(page.getByRole("heading", { name: "Your cases folder cannot be used" })).toBeVisible();
   await expect(page.getByText(/The cases folder was not found/)).toBeVisible();
   await expect(page.getByText(unplugged)).toBeVisible();
-  expect(readdirSync(documents)).toEqual([]);
+  expect(readdirSync(home)).toEqual([]);
 
   // Creating a case says why it cannot, and makes nothing.
   await page.getByRole("button", { name: "New case" }).click();
@@ -222,16 +225,16 @@ test("a cases folder that is missing is reported, never made again, and another 
   await dialog.getByRole("button", { name: "Create case" }).click();
   await expect(dialog.getByRole("alert")).toContainText("The cases folder was not found");
   await page.keyboard.press("Escape");
-  expect(readdirSync(documents)).toEqual([]);
+  expect(readdirSync(home)).toEqual([]);
 
-  const chosen = path.join(documents, "Found");
+  const chosen = path.join(home, "Found");
   mkdirSync(chosen);
   await stubFolderDialog(app, chosen);
   await page.getByRole("button", { name: "Choose another folder…" }).click();
   await expect(page.getByRole("heading", { name: "No cases yet" })).toBeVisible();
 });
 
-test("the interface's functions refuse hostile input and say nothing about the disk", async ({ app, documents }) => {
+test("the interface's functions refuse hostile input and say nothing about the disk", async ({ app, home }) => {
   const page = await openApp(app);
   const results = await page.evaluate(async () => {
     const aba = (globalThis as unknown as { aba: Record<string, (...args: unknown[]) => Promise<unknown>> }).aba;
@@ -251,32 +254,37 @@ test("the interface's functions refuse hostile input and say nothing about the d
     const result = results[key] as { ok: boolean; message: string };
     expect(result.ok, key).toBe(false);
     expect(result.message, key).toContain("Refused:");
-    expect(result.message, key).not.toContain(documents);
+    expect(result.message, key).not.toContain(home);
     expect(result.message.length, key).toBeLessThan(400);
   }
   expect(results.unknownCase).toEqual({ ok: true, value: { outcome: "not-found" } });
-  expect(readdirSync(documents)).toEqual([]);
+  const casesFolder = defaultCasesFolder(home);
+  expect(existsSync(casesFolder) ? readdirSync(casesFolder) : []).toEqual([]);
 });
 
-test("the packaged app on macOS says why it asks for Documents, in English and Spanish", async ({ app }, testInfo) => {
+test("the packaged app on macOS says why it may ask for a protected folder, in English and Spanish, and never claims Documents", async ({ app }, testInfo) => {
   test.skip(testInfo.project.name !== "packaged" || process.platform !== "darwin", "macOS packaged app only");
   const resources = await app.evaluate(() => process.resourcesPath);
   const plist = readFileSync(path.join(resources, "..", "Info.plist"), "utf8");
   expect(plist).toContain("<key>NSDocumentsFolderUsageDescription</key>");
-  expect(plist).toContain("ABA Workbench keeps your cases in a folder inside Documents.");
   expect(plist).toContain("<key>NSFileProviderDomainUsageDescription</key>");
-  expect(readFileSync(path.join(resources, "es.lproj", "InfoPlist.strings"), "utf8")).toContain("dentro de Documentos");
-  expect(readFileSync(path.join(resources, "es_419.lproj", "InfoPlist.strings"), "utf8")).toContain("dentro de Documentos");
-  expect(readFileSync(path.join(resources, "en.lproj", "InfoPlist.strings"), "utf8")).toContain("inside Documents");
+  expect(plist).toContain("ABA Workbench keeps your cases in the folder you chose in Settings.");
+  expect(plist).not.toContain("inside Documents");
+  for (const language of ["es", "es_419"]) {
+    const strings = readFileSync(path.join(resources, `${language}.lproj`, "InfoPlist.strings"), "utf8");
+    expect(strings).toContain("la carpeta que elegiste en Ajustes");
+    expect(strings).not.toContain("Documentos");
+  }
+  expect(readFileSync(path.join(resources, "en.lproj", "InfoPlist.strings"), "utf8")).toContain("the folder you chose in Settings");
 });
 
-test("a second start of the app on the same profile quits and leaves the first one as it was", async ({ launch, documents, profile }, testInfo) => {
-  seedCase(defaultCasesFolder(documents));
+test("a second start of the app on the same profile quits and leaves the first one as it was", async ({ launch, home, profile }, testInfo) => {
+  seedCase(defaultCasesFolder(home));
   const app = await launch();
   const page = await openApp(app);
   await expect(page.getByRole("link", { name: SAMPLE_CASE.label })).toBeVisible();
   // Two copies would each have their own save queue and could overwrite each other's saves.
-  expect(await startSecondCopy(testInfo.project.name, profile, documents)).toBe(0);
+  expect(await startSecondCopy(testInfo.project.name, profile, home)).toBe(0);
   expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
   await expect(heading(page)).toHaveText("Sources");
@@ -308,4 +316,19 @@ test("Settings says so when the cases folder cannot be shown or checked", async 
   await goTo(page, "/");
   await goTo(page, "/settings");
   await expect(section.getByRole("status")).toHaveText("Where your cases are kept could not be checked. Try again in a moment.");
+});
+
+test("--home-folder moves the default cases folder in development only; the packaged app ignores it", async ({ launch, home }, testInfo) => {
+  // The folder is also the chosen one, so neither app ever looks at the real home folder.
+  // Settings shows "Default" only when the chosen folder is the default: the built app
+  // takes <home> as its home, so it is; the packaged app ignores the option, so it is not.
+  const casesFolder = defaultCasesFolder(home);
+  mkdirSync(casesFolder, { recursive: true });
+  const app = await launch({ casesFolder, extraArgs: [`--home-folder=${home}`] });
+  const page = await openApp(app);
+  await goTo(page, "/settings");
+  const section = page.getByRole("region", { name: "Cases folder" });
+  await expect(section.getByTestId("cases-folder-path")).toHaveText(casesFolder);
+  await expect(section.getByText("Default", { exact: true })).toHaveCount(testInfo.project.name === "packaged" ? 0 : 1);
+  expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(testInfo.project.name === "packaged");
 });

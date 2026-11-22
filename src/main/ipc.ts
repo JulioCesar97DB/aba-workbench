@@ -92,8 +92,8 @@ export function registerIpc(options: {
       title: words.title,
       message: words.title,
       buttonLabel: words.button,
-      // Where the current folder is, or Documents: never somewhere the user did not expect.
-      defaultPath: current.state === "ready" || current.state === "not-writable" ? current.folder : app.getPath("documents"),
+      // Where the current folder is, or the home folder: never somewhere the user did not expect.
+      defaultPath: current.state === "ready" || current.state === "not-writable" ? current.folder : app.getPath("home"),
       properties: ["openDirectory", "createDirectory", "dontAddToRecent"],
     };
     const result = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions);

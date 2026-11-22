@@ -215,7 +215,7 @@ export class CaseLibrary {
 
     const { folder, state } = await this.folderInfo({ probeWrite: true });
     if (state === "not-created-yet") {
-      // The default folder, inside Documents, on the first case. One level: Documents must be there.
+      // The default folder, in the home folder, on the first case. One level: the home folder must be there.
       try {
         await mkdir(folder);
       } catch (error) {

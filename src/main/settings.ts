@@ -25,7 +25,7 @@ export const SETTINGS_FILE_VERSION = 1;
  */
 export interface StoredSettings {
   language: Language;
-  /** The cases folder the user chose in Settings, or null for the default (Documents/ABA Workbench). */
+  /** The cases folder the user chose in Settings, or null for the default (ABA Workbench in the home folder). */
   casesFolder: string | null;
 }
 

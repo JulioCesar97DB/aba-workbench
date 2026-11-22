@@ -106,8 +106,8 @@ test("the interface loads under the content security policy as written, with its
   else await expect(devLink).toBeVisible();
 });
 
-test("the navigation reaches every screen", async ({ launch, documents }) => {
-  seedCase(defaultCasesFolder(documents));
+test("the navigation reaches every screen", async ({ launch, home }) => {
+  seedCase(defaultCasesFolder(home));
   const page = await openApp(await launch());
 
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
@@ -159,8 +159,8 @@ test("the navigation reaches every screen", async ({ launch, documents }) => {
   await expect(heading(page)).toHaveText("Cases");
 });
 
-test("switching the language changes the screen and survives a restart", async ({ launch, profile, documents }) => {
-  seedCase(defaultCasesFolder(documents));
+test("switching the language changes the screen and survives a restart", async ({ launch, profile, home }, testInfo) => {
+  seedCase(defaultCasesFolder(home));
   let app = await launch();
   let page = await openApp(app);
   await page.getByRole("link", { name: "Settings", exact: true }).click();
@@ -173,7 +173,8 @@ test("switching the language changes the screen and survives a restart", async (
   // The switch reads ES EN, as in the reference.
   await expect(page.getByRole("group", { name: "Idioma de la pantalla" }).getByRole("button")).toHaveText(["ES", "EN"]);
   await expect(page.getByRole("button", { name: "Español" })).toHaveAttribute("aria-pressed", "true");
-  expect(JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8"))).toEqual({ version: 1, language: "es" });
+  const chosen = testInfo.project.name === "packaged" ? { casesFolder: defaultCasesFolder(home) } : {};
+  expect(JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8"))).toEqual({ version: 1, language: "es", ...chosen });
 
   // Clinical terms and section names stay in English, marked as English.
   await goTo(page, `/cases/${SAMPLE_CASE.id}/behaviors`);
@@ -202,7 +203,10 @@ test("switching the language changes the screen and survives a restart", async (
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
-test("a corrupt settings file does not stop the app, and the next change rewrites it", async ({ launch, profile }) => {
+test("a corrupt settings file does not stop the app, and the next change rewrites it", async ({ launch, profile }, testInfo) => {
+  // Without a usable settings file the cases folder is the default one, which the packaged
+  // app keeps in the real home folder: built app only.
+  test.skip(testInfo.project.name === "packaged", "needs the default cases folder (built app only)");
   const app = await launch({ settingsFile: "{ not json" });
   const page = await openApp(app);
   // The first-run language follows the system's, so either is right here, and the test
@@ -214,7 +218,9 @@ test("a corrupt settings file does not stop the app, and the next change rewrite
   expect(JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8"))).toEqual({ version: 1, language: to });
 });
 
-test("a language that cannot be saved still changes the screen, and the sidebar says it will not last", async ({ launch, profile }) => {
+test("a language that cannot be saved still changes the screen, and the sidebar says it will not last", async ({ launch, profile }, testInfo) => {
+  // No settings file can be read, so the cases folder is the default one: built app only (see above).
+  test.skip(testInfo.project.name === "packaged", "needs the default cases folder (built app only)");
   // A folder where settings.json should be: the app reads the defaults and cannot save, on every system.
   const settingsPath = path.join(profile, "settings.json");
   mkdirSync(settingsPath);
@@ -269,8 +275,8 @@ test("after two failed saves, the sidebar and Settings both name the language th
   await expect(page.getByRole("status").filter({ hasText: "Guardado" })).toHaveCount(0);
 });
 
-test("moving into and out of a case announces the new screen and puts focus on its title", async ({ launch, documents }) => {
-  seedCase(defaultCasesFolder(documents));
+test("moving into and out of a case announces the new screen and puts focus on its title", async ({ launch, home }) => {
+  seedCase(defaultCasesFolder(home));
   const page = await openApp(await launch());
 
   // Home -> case: the link that was followed is gone, so focus goes to the new title.
@@ -343,8 +349,8 @@ test("everything works from the keyboard, with the focus always visible", async 
   await expect(heading(page)).toHaveText("Ajustes");
 });
 
-test("a narrow window: the sidebar becomes a Menu panel and nothing spills sideways", async ({ launch, documents }) => {
-  seedCase(defaultCasesFolder(documents));
+test("a narrow window: the sidebar becomes a Menu panel and nothing spills sideways", async ({ launch, home }) => {
+  seedCase(defaultCasesFolder(home));
   const app = await launch();
   const page = await openApp(app);
   const overflows = () =>

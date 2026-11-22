@@ -47,7 +47,7 @@ export interface CasesFolderInfo {
    * 2026-11-22). Display text only: no function of window.aba accepts a path.
    */
   displayPath: string;
-  /** Documents/ABA Workbench, not a folder chosen in Settings. */
+  /** ABA Workbench in the home folder, not a folder chosen in Settings. */
   isDefault: boolean;
   state: CasesFolderState;
 }

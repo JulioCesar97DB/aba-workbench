@@ -254,21 +254,22 @@ test("durable write: a failed write leaves the old file as it was and no tempora
 
 /* The cases folder */
 
-test("cases folder: the default is Documents/ABA Workbench", () => {
-  assert.equal(defaultCasesFolder("/Users/ana/Documents", path.posix), "/Users/ana/Documents/ABA Workbench");
-  assert.equal(defaultCasesFolder("C:\\Users\\Ana\\Documents", path.win32), "C:\\Users\\Ana\\Documents\\ABA Workbench");
+test("cases folder: the default is ABA Workbench in the home folder, outside Documents", () => {
+  assert.equal(defaultCasesFolder("/Users/ana", path.posix), "/Users/ana/ABA Workbench");
+  assert.equal(defaultCasesFolder("/home/ana", path.posix), "/home/ana/ABA Workbench");
+  assert.equal(defaultCasesFolder("C:\\Users\\Ana", path.win32), "C:\\Users\\Ana\\ABA Workbench");
   assert.equal(DEFAULT_CASES_FOLDER_NAME, "ABA Workbench");
 });
 
 test("cases folder: ready, not made yet, missing or not a folder, and nothing is created", async () => {
-  const documents = tempFolder();
-  const fallback = defaultCasesFolder(documents);
+  const home = tempFolder();
+  const fallback = defaultCasesFolder(home);
   assert.equal(await inspectCasesFolder(fallback, true), "not-created-yet");
   // A folder the user chose that is gone is missing, never made again.
   assert.equal(await inspectCasesFolder(fallback, false), "missing");
-  // The default with no Documents folder at all.
-  assert.equal(await inspectCasesFolder(path.join(documents, "no-documents", DEFAULT_CASES_FOLDER_NAME), true), "missing");
-  assert.deepEqual(readdirSync(documents), []);
+  // The default with no home folder at all.
+  assert.equal(await inspectCasesFolder(path.join(home, "no-home", DEFAULT_CASES_FOLDER_NAME), true), "missing");
+  assert.deepEqual(readdirSync(home), []);
   writeFileSync(fallback, "a file");
   assert.equal(await inspectCasesFolder(fallback, true), "not-a-folder");
   assert.equal(await inspectCasesFolder(path.join(fallback, "inside-a-file"), false), "missing");
@@ -352,19 +353,19 @@ test("cases: a folder that appears with the chosen name is skipped, never writte
 });
 
 test("cases: the default folder is made on the first case, one level only", async () => {
-  const documents = tempFolder();
-  const fallback = defaultCasesFolder(documents);
+  const home = tempFolder();
+  const fallback = defaultCasesFolder(home);
   const { lib } = library(fallback, { location: async () => ({ folder: fallback, isDefault: true }) });
   assert.deepEqual((await lib.list()).folder.state, "not-created-yet");
-  assert.deepEqual(readdirSync(documents), []);
+  assert.deepEqual(readdirSync(home), []);
   assert.equal((await lib.create({ label: "Ana" })).outcome, "created");
-  assert.deepEqual(readdirSync(documents), [DEFAULT_CASES_FOLDER_NAME]);
+  assert.deepEqual(readdirSync(home), [DEFAULT_CASES_FOLDER_NAME]);
 
-  // No Documents folder: nothing is made.
-  const gone = path.join(documents, "missing-documents", DEFAULT_CASES_FOLDER_NAME);
+  // No home folder: nothing is made.
+  const gone = path.join(home, "missing-home", DEFAULT_CASES_FOLDER_NAME);
   const nowhere = library(gone, { location: async () => ({ folder: gone, isDefault: true }) }).lib;
   assert.deepEqual(await nowhere.create({ label: "Ana" }), { outcome: "folder-problem", problem: "missing" });
-  assert.deepEqual(readdirSync(documents), [DEFAULT_CASES_FOLDER_NAME]);
+  assert.deepEqual(readdirSync(home), [DEFAULT_CASES_FOLDER_NAME]);
 });
 
 test("cases: a chosen folder that is gone is reported, and not made again", async () => {

@@ -17,7 +17,7 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the int
 | `pnpm build` | Builds the main process, the preload and the interface into `out/`. |
 | `pnpm preview` | Starts the built app from `out/`. |
 | `pnpm package` | Builds, then packages an unpacked app for the current platform into `dist/` (`dist/mac-arm64/ABA Workbench.app`, `dist/win-unpacked/ABA Workbench.exe`). No installer and no signing yet. |
-| `pnpm test:e2e` | Builds the app and drives its window with Playwright: it opens on Home, a case is created, listed, and opened again after a restart, unreadable folders show as such, the cases folder changes in Settings, the navigation reaches every screen, the language changes and survives a restart, the keyboard and a narrow window work, and the development check's mock generation streams to completion. Every test uses a temporary Documents folder, never the real one. Needs a display (`xvfb-run` on a Linux machine without one). `pnpm test:e2e:packaged` runs the same tests on the app from `pnpm package`. |
+| `pnpm test:e2e` | Builds the app and drives its window with Playwright: it opens on Home, a case is created, listed, and opened again after a restart, unreadable folders show as such, the cases folder changes in Settings, the navigation reaches every screen, the language changes and survives a restart, the keyboard and a narrow window work, and the development check's mock generation streams to completion. Every test uses a temporary home folder or cases folder, never the real ones. Needs a display (`xvfb-run` on a Linux machine without one). `pnpm test:e2e:packaged` runs the same tests on the app from `pnpm package`. |
 | `pnpm lint` / `pnpm typecheck` | ESLint; TypeScript for the Node side and for the interface, separately. |
 | `pnpm test` | Unit tests (`node:test`): the provider layer, the rules, the spending cap, the main process's logic (the settings file, the case data file, folder names, durable writes and the cases folder included), both languages having the same strings, macOS's permission texts, and the design tokens' contrast. No keys, no network, no window. |
 | `pnpm phase0 --mock` | The Phase 0 run on the mock provider: no key, no cost. Without `--mock` it calls the real providers with the keys in `.env.phase0` (see [docs/phase0/REPORT.md](docs/phase0/REPORT.md)). |
@@ -33,7 +33,7 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the int
 | `src/lib/` | The Phase 0 provider layer (Claude, OpenAI, mock), pricing, prompt building and rules loading. Runs only in the main process and in scripts. |
 | `rules/` | The writing rules sent to the model, versioned Markdown ([rules/README.md](rules/README.md)). Shipped next to the packaged app. |
 | `fixtures/cases/` | Two invented cases. |
-| `packaging/macos/` | What macOS shows when the app first asks to open Documents, in each language (`<language>.lproj/InfoPlist.strings`). |
+| `packaging/macos/` | What macOS shows when the app first asks to open a protected folder the user chose (Documents, Desktop, Downloads, a drive, a cloud storage folder), in each language (`<language>.lproj/InfoPlist.strings`). |
 | `licenses/` | Licenses of what ships inside the app: the IBM Plex fonts' SIL Open Font License ([licenses/README.md](licenses/README.md)). Copied into the packaged app. |
 | `scripts/` | `phase0.mts` and its spending cap, the fixture PDF renderer, and the dev server's style nonce (`dev-style-nonce.ts`). |
 | `tests/` | Unit tests. |
@@ -41,7 +41,9 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the int
 
 ## Where cases live
 
-Each case is a folder inside the cases folder: `Documents/ABA Workbench` by default (`~/Documents/ABA Workbench` on macOS, `%USERPROFILE%\Documents\ABA Workbench` on Windows), or the folder chosen in Settings. The app makes the default folder when the first case is created, and never makes any other.
+Each case is a folder inside the cases folder: `ABA Workbench` in the user's home folder by default (`~/ABA Workbench` on macOS and Linux, `%USERPROFILE%\ABA Workbench` on Windows), or the folder chosen in Settings. The default is outside Documents on purpose: iCloud's "Desktop & Documents Folders" and OneDrive's folder backup often sync Documents, and the home folder itself is not synced by either (owner's decision, 2026-11-22; sources in [docs/desktop.md](docs/desktop.md#where)). The app makes the default folder when the first case is created, and never makes any other.
+
+ABA Workbench sends nothing anywhere. If the cases folder is one that a cloud service syncs (OneDrive, iCloud, Dropbox, Google Drive), that service copies the cases; Settings says so where the folder is chosen.
 
 ```text
 ABA Workbench/

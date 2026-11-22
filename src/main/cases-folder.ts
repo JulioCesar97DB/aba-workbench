@@ -4,11 +4,13 @@ import type { CasesFolderState } from "../shared/api.ts";
 import { TEMPORARY_SUFFIX } from "./durable-write.ts";
 
 /*
- * The cases folder: Documents/ABA Workbench unless the user chose another in Settings.
+ * The cases folder: "ABA Workbench" directly in the user's home folder (~/ABA Workbench,
+ * %USERPROFILE%\ABA Workbench), unless the user chose another in Settings. Not in
+ * Documents, which iCloud and OneDrive often sync (owner's decision, 2026-11-22).
  * Nothing here imports Electron, so it is unit-tested.
  *
  * The app never creates a folder the user did not ask for. The default folder is made
- * (one level, inside a Documents folder that must exist) only when the first case is
+ * (one level, inside a home folder that must exist) only when the first case is
  * created; a folder the user chose and that has since gone (an unplugged drive, a folder
  * moved away) is reported missing, never made again.
  */
@@ -16,8 +18,8 @@ import { TEMPORARY_SUFFIX } from "./durable-write.ts";
 export const DEFAULT_CASES_FOLDER_NAME = "ABA Workbench";
 
 /** `p` is only there so tests can check Windows paths on any machine. */
-export function defaultCasesFolder(documentsFolder: string, p: path.PlatformPath = path): string {
-  return p.join(documentsFolder, DEFAULT_CASES_FOLDER_NAME);
+export function defaultCasesFolder(homeFolder: string, p: path.PlatformPath = path): string {
+  return p.join(homeFolder, DEFAULT_CASES_FOLDER_NAME);
 }
 
 /** The file a write check makes and removes at once (Windows only, see canWrite). */
@@ -32,11 +34,12 @@ function errorCode(error: unknown): string | undefined {
  * Windows, with `probeWrite`, a write check makes one empty file and removes it).
  *
  * - "ready": a folder the app can read and write.
- * - "not-created-yet": the default folder, not made yet; Documents is there.
- * - "missing": the folder (or, for the default, Documents) does not exist.
+ * - "not-created-yet": the default folder, not made yet; the home folder is there.
+ * - "missing": the folder (or, for the default, the home folder) does not exist.
  * - "not-a-folder": a file is in its place.
  * - "not-allowed": the system refuses to let the app look inside. On macOS this is the
- *   answer to "allow access to the Documents folder" being no (EPERM).
+ *   answer to "allow access to the Documents folder" (or Desktop, Downloads, a drive, a
+ *   cloud storage folder) being no for a folder the user chose there (EPERM).
  * - "not-writable": the app can read it but cannot save into it.
  */
 export async function inspectCasesFolder(

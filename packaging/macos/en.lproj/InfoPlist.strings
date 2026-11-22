@@ -1,5 +1,5 @@
 /* What macOS shows when ABA Workbench first asks to open a protected folder (English). The same text is in electron-builder.yml, mac.extendInfo. */
-"NSDocumentsFolderUsageDescription" = "ABA Workbench keeps your cases in a folder inside Documents. It needs your permission to open and save them there.";
+"NSDocumentsFolderUsageDescription" = "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there.";
 "NSDesktopFolderUsageDescription" = "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there.";
 "NSDownloadsFolderUsageDescription" = "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there.";
 "NSRemovableVolumesUsageDescription" = "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there.";
