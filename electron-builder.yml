@@ -17,6 +17,12 @@ extraResources:
       - "**/*.md"
       # A contributor document; the app never reads it.
       - "!README.md"
+  # The IBM Plex fonts inside out/renderer/ are under the SIL Open Font License, which
+  # requires the license to travel with every copy (licenses/README.md).
+  - from: licenses
+    to: licenses
+    filter:
+      - "*.txt"
 # No native modules to rebuild.
 npmRebuild: false
 mac:

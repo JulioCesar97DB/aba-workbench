@@ -6,7 +6,7 @@ It is a desktop app for macOS and Windows (Electron, with a React interface buil
 
 Requirements: Node.js 24 or later; pnpm comes from the `packageManager` field in `package.json`.
 
-License: Apache License 2.0 (see [LICENSE](LICENSE)).
+License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the interface ships are under the SIL Open Font License 1.1 ([licenses/IBM-Plex-OFL.txt](licenses/IBM-Plex-OFL.txt)).
 
 ## Commands
 
@@ -33,6 +33,7 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)).
 | `src/lib/` | The Phase 0 provider layer (Claude, OpenAI, mock), pricing, prompt building and rules loading. Runs only in the main process and in scripts. |
 | `rules/` | The writing rules sent to the model, versioned Markdown ([rules/README.md](rules/README.md)). Shipped next to the packaged app. |
 | `fixtures/cases/` | Two invented cases. |
+| `licenses/` | Licenses of what ships inside the app: the IBM Plex fonts' SIL Open Font License ([licenses/README.md](licenses/README.md)). Copied into the packaged app. |
 | `scripts/` | `phase0.mts` and its spending cap, the fixture PDF renderer, and the dev server's style nonce (`dev-style-nonce.ts`). |
 | `tests/` | Unit tests. |
 | `e2e/` | Window tests (Playwright, Electron). |
