@@ -22,6 +22,7 @@ The fonts come from the `@fontsource/ibm-plex-sans` and `@fontsource/ibm-plex-mo
 | `src/renderer/src/screens/` | One file per screen: `Home` (the list of cases and the New case form), `Case` (the workspace's steps and report), `Settings`, `NotFound`, `DevCheck`. |
 | `src/renderer/src/open-case.tsx` | The open case: AppShell loads it when the address enters a case, so the sidebar shows its label and the screens its data. |
 | `src/renderer/src/language.tsx` | The screen language and the saved one, shared by the sidebar and Settings. |
+| `src/renderer/src/connections.tsx` | The AI connections' state, shared by the sidebar and Settings, kept current by the main process's updates ([connections.md](connections.md)). |
 | `src/renderer/src/format.ts`, `cases-folder.tsx` | Ages and dates in the screen language; the cases folder's problems in words, and "Show in Finder / Explorer". |
 | `src/renderer/src/i18n/` | The strings: `en.ts`, `es.ts`, the English-only clinical terms (`terms.ts`) and i18next's set-up. |
 | `src/shared/report-sections.ts` | The report's sections and their English titles, shared with the main process. |
@@ -36,7 +37,7 @@ React Router keeps the address in the URL's hash (`#/settings`). The app's page 
 | `#/` | Home: the cases in the cases folder, newest first (label, client age, created, last saved, PDFs), "New case", and below them the folders that could not be opened. When there are none, what to do; when the cases folder cannot be used, why and a way to choose another. |
 | `#/cases/<id>/sources`, `/behaviors`, `/interventions`, `/report`, `/review` | The case workspace's five steps, for the case with that id. The sidebar shows its label and age; the rail lists the PDFs in its folder. Each step is still a placeholder that says what it will hold. An id that is not a case, or a case that cannot be opened, says so. |
 | `#/cases/<id>/report/<section-id>` | One section of the report (ids in `src/shared/report-sections.ts`). |
-| `#/settings` | The screen language and the cases folder (its path, "Choose another folder…", "Show in Finder", and a message when the folder cannot be shown or checked); room for the AI connection, which arrives later. |
+| `#/settings` | The screen language; the cases folder (its path, "Choose another folder…", "Show in Finder", and a message when the folder cannot be shown or checked); the AI connection, one card for ChatGPT (Continue with ChatGPT, signing in, signed in as, check, manage usage, sign out, needs attention) and one for Claude (paste, check and save, check, remove), each with its state in words (`screens/Connections.tsx`); About. |
 | `#/dev-check` | The development check (mock generation). Linked from the sidebar only when the app runs from the repository (`getAppInfo().developmentBuild`); the packaged app has no link to it, and the window tests open it by address. It is a developer screen, in English only. |
 
 ## Design tokens
@@ -56,10 +57,10 @@ Each component in `src/renderer/src/components/` wraps a Base UI part (`@base-ui
 - `Button` (`primary`, `secondary`, `nav`; `md` 44 px or `sm` 32 px), and `ButtonLink` for a link that looks like one.
 - `TextLink`: an underlined link inside text. Every link goes to a screen of the app.
 - `Select`: a labelled list with an optional description, announced with the control.
-- `Dialog`: modal; focus moves in and returns to the trigger; Escape and the backdrop close it. `variant="sheet"` is the navigation panel on a narrow window.
+- `Dialog`: modal; focus moves in and returns to the trigger; Escape and the backdrop close it. `variant="sheet"` is the navigation panel on a narrow window. Without a `trigger` the screen opens it itself (`open`), as for the one-time "You're using your ChatGPT plan".
 - `Tooltip`: hover and keyboard focus. It repeats the control's own name; it is never the only place a piece of information lives.
 - `Table` and its parts: plain HTML tables with column or row headers.
-- `StatusBadge`: a status in words; the color only repeats them. Two tones today: `neutral` and `accent`.
+- `StatusBadge`: a status in words; the color only repeats them. Four tones: `neutral`, `accent`, `success` ("Connected") and `warning` ("Needs attention").
 - `NavItem`, `SectionNavItem`: the sidebar's links; the current one is `aria-current="page"`. A section shows one state today, "not started".
 - `TextField`: a labelled text input (Base UI Field) with an optional description and an error, wired to the input. The New case form uses it.
 - `Term`, `TransWithTerms`: English terms inside the interface (below).
