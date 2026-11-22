@@ -148,6 +148,19 @@ app.whenReady().then(() => {
   });
 });
 
+/*
+ * A renewed ChatGPT sign-in that could not be saved (a full or read-only disk) lives only
+ * in memory: one last try to write it before the app quits, for at most 3 seconds, so the
+ * rotated refresh token is not lost if the disk has recovered.
+ */
+let lastSaveTried = false;
+app.on("before-quit", (event) => {
+  if (lastSaveTried || !credentials.hasUnsavedChange) return;
+  lastSaveTried = true;
+  event.preventDefault();
+  void Promise.race([credentials.saveUnsaved(), new Promise((resolve) => setTimeout(resolve, 3000))]).finally(() => app.quit());
+});
+
 // Platform convention: on macOS an app stays running with no windows; elsewhere it quits.
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

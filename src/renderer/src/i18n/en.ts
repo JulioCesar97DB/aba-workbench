@@ -222,9 +222,9 @@ export const en = {
     manageUsage: "Manage usage in ChatGPT",
     usageNote: "Drafts made with ChatGPT count toward your ChatGPT plan's usage. You can see and limit ABA Workbench's usage in ChatGPT's settings.",
     planNotAllowed:
-      "You signed in, but ChatGPT did not let ABA Workbench use your plan: it was not allowed in the browser, or this account has no paid plan such as Plus or Pro. Sign in again and allow it, or connect Claude with an API key instead.",
+      "You signed in, but ChatGPT did not allow ABA Workbench to use this account's plan. It may not have been allowed in the browser, or a paid ChatGPT plan, such as Plus or Pro, may be needed. Sign in again and allow it, or connect Claude with an API key instead.",
     planNotEligible:
-      "This ChatGPT account cannot use its plan in other apps, which needs a paid plan such as Plus or Pro. Sign out and sign in with an account that has one, or connect Claude with an API key instead.",
+      "ChatGPT did not allow ABA Workbench to use this account's plan. A paid ChatGPT plan, such as Plus or Pro, may be needed, or the account's workspace or a policy may not allow it. You can sign out and sign in with another ChatGPT account, or connect Claude with an API key instead.",
     notSaved:
       "ChatGPT works, but its renewed sign-in could not be saved, so it will be lost when you quit ABA Workbench. Check that your computer has free space; ABA Workbench keeps trying to save it.",
     allowPlan: "Sign in again and allow",
@@ -238,7 +238,7 @@ export const en = {
       "Another app is using the usual address for your browser's answer, so ABA Workbench is using a different one. If ChatGPT's page shows an error about the address, close the other app, such as Codex, and try again.",
     resultSignedIn: "Signed in. ChatGPT is connected.",
     resultAccessDenied:
-      "ChatGPT did not let ABA Workbench use this account, so nothing was saved: it needs a paid ChatGPT plan such as Plus or Pro, and access allowed in the browser. Sign in with an account that has one, or connect Claude with an API key instead.",
+      "ChatGPT did not allow ABA Workbench to use this account's plan, so nothing was saved. Access may not have been allowed in the browser, or a paid ChatGPT plan, such as Plus or Pro, may be needed. You can sign in again, or connect Claude with an API key instead.",
     resultCancelled: "Sign-in cancelled. Nothing was saved.",
     resultTimedOut: "The browser did not come back in time, so the sign-in stopped. Nothing was saved. Try again when you are ready.",
     resultPortInUse: "ABA Workbench could not open a local connection to receive your browser's answer. Quit and reopen ABA Workbench, then try again.",
@@ -256,6 +256,7 @@ export const en = {
     welcomeTitle: "You're using your ChatGPT plan",
     welcomeBody: "When ABA Workbench drafts with ChatGPT, it uses your ChatGPT plan. You can see and manage that usage in ChatGPT's settings.",
     welcomeDismiss: "Got it",
+    welcomeNotSaved: "ABA Workbench could not remember that you saw this, so it may show again next time.",
   },
   claude: {
     title: "Claude",

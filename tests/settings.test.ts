@@ -188,3 +188,12 @@ test("settings file: the ChatGPT plan welcome, once dismissed, is remembered; a 
   assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { version: 1, language: "en", chatgptWelcomeShown: true });
   assert.equal((await new SettingsStore(file, () => DEFAULTS, () => undefined).get()).chatgptWelcomeShown, true);
 });
+
+test("settings file: the ChatGPT plan welcome is remembered for this run when the file cannot be written", async () => {
+  const file = tempFile();
+  mkdirSync(file); // a folder where the file should be: every save fails
+  const store = new SettingsStore(file, () => EN, () => undefined);
+  await assert.rejects(store.markChatGptWelcomeShown());
+  assert.equal((await store.get()).chatgptWelcomeShown, true);
+  assert.equal((await store.markChatGptWelcomeShown()).chatgptWelcomeShown, true, "no second failing save");
+});

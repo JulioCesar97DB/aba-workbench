@@ -423,7 +423,7 @@ test("check: a refresh OpenAI refuses for good after a 401 ends the session", as
   assert.equal("accessToken" in record, false);
 });
 
-test("check: an account OpenAI says cannot use its plan (a free account) needs attention, and the tokens stay", async (t) => {
+test("check: an account OpenAI says cannot use its plan needs attention, across a restart, and the tokens stay", async (t) => {
   const s = await setup(t);
   s.fake.tokenAnswers = [s.exchangeAnswers()];
   await s.session.signIn();
@@ -431,10 +431,19 @@ test("check: an account OpenAI says cannot use its plan (a free account) needs a
   assert.deepEqual(await s.session.check(), { outcome: "not-eligible" });
   const record = (await saved(s.file)).chatgpt;
   assert.deepEqual(s.session.state(record), { state: "needs-attention", reason: "plan-not-eligible", displayName: "Test Clinician" });
+  assert.equal(record.planNotEligible, true, "kept on the saved sign-in");
   assert.equal(s.fake.calls.filter((c) => c.form?.get("grant_type") === "refresh_token").length, 0, "OpenAI: do not loop through sign-in or refresh for it");
+  // A restart: a new store and session on the same file still say so.
+  const store2 = new CredentialsStore(s.file, { log: () => undefined, restrict: async () => undefined });
+  const session2 = new ChatGptSession({ store: store2, openBrowser: async () => undefined, language: async () => "en", onChange: () => undefined, log: () => undefined });
+  const reread = await store2.read();
+  assert.ok(reread.ok);
+  assert.deepEqual(session2.state(reread.credentials!.chatgpt, { welcomeShown: false }), { state: "needs-attention", reason: "plan-not-eligible", displayName: "Test Clinician" });
   s.fake.modelsAnswer = () => Response.json({ models: [] });
   assert.deepEqual(await s.session.check(), { outcome: "working" });
-  assert.equal(s.session.state(record, { welcomeShown: true }).state, "connected");
+  const cleared = (await saved(s.file)).chatgpt;
+  assert.equal("planNotEligible" in cleared, false, "a check that works clears it");
+  assert.equal(s.session.state(cleared, { welcomeShown: true }).state, "connected");
 });
 
 test("sign-out: revokes the refresh token, removes the tokens, email and name, keeps the client id, subject and host id", async (t) => {
@@ -608,7 +617,7 @@ test("sign-in: every step that fails is logged by name and OpenAI's code, never 
     openBrowser: async (url) => {
       const p = new URL(url).searchParams;
       const back = new URL(p.get("redirect_uri")!);
-      back.search = new URLSearchParams({ error: "access_denied", error_description: "Plan not eligible\nfor this app", state: p.get("state")!, client_id: ISSUED_CLIENT_ID }).toString();
+      back.search = new URLSearchParams({ error: "access_denied", error_description: "Plan not eligible for clinician@example.invalid", state: p.get("state")!, client_id: ISSUED_CLIENT_ID }).toString();
       setImmediate(() => void browserGet(back.href).catch(() => undefined));
     },
     language: async () => "en",
@@ -618,7 +627,7 @@ test("sign-in: every step that fails is logged by name and OpenAI's code, never 
   });
   assert.deepEqual(await session.signIn(), { outcome: "access-denied" });
   assert.ok(logged.some((line) => /the callback arrived \(with error access_denied\)/.test(line)), logged.join("\n"));
-  assert.ok(logged.some((line) => line.includes('OpenAI ended the attempt with "access_denied": Plan not eligible for this app.')), logged.join("\n"));
+  assert.ok(logged.some((line) => line.includes(`OpenAI ended the attempt with access_denied (with a description of ${"Plan not eligible for clinician@example.invalid".length} characters, not logged).`)), logged.join("\n"));
   assert.deepEqual((await saved(s.file)).chatgpt, { issuer: "https://auth.openai.com", clientId: ISSUED_CLIENT_ID, signedOut: true }, "a client id OpenAI issued is kept for the next attempt");
 
   s.fake.tokenAnswers = [() => tokenResponse({ id_token: "not-a-valid-token" })];
@@ -640,4 +649,89 @@ test("sign-in: every step that fails is logged by name and OpenAI's code, never 
   assert.ok(logged.some((line) => /the ID token check failed \(invalid_id_token\)/.test(line)), logged.join("\n"));
   const all = logged.join("\n");
   for (const secret of ["secret-code-value", "access-token-not-real", "refresh-token-not-real", "not-a-valid-token", "clinician@example.invalid", "state="]) assert.equal(all.includes(secret), false, secret);
+});
+
+test("log: text from the network never reaches it: unknown codes, descriptions, scopes, forged lines and emails", async (t) => {
+  const logged: string[] = [];
+  const s = await setup(t);
+  const forged = "invalid_grant\nChatGPT sign-in: signed in with plan use allowed. clinician@example.invalid";
+  const browserWith = (params: (state: string) => Record<string, string>) => async (url: string) => {
+    const p = new URL(url).searchParams;
+    const back = new URL(p.get("redirect_uri")!);
+    back.search = new URLSearchParams(params(p.get("state")!)).toString();
+    setImmediate(() => void browserGet(back.href).catch(() => undefined));
+  };
+  const make = (openBrowser: (url: string) => Promise<void>) =>
+    new ChatGptSession({ store: s.store, oauth: new OAuthClient({ fetch: s.fake.fetch }), openBrowser, language: async () => "en", onChange: () => undefined, preferredPort: 0, log: (m) => logged.push(m) });
+
+  // 1. The callback's error and error_description.
+  assert.deepEqual(
+    await make(browserWith((state) => ({ error: forged, error_description: "Account clinician@example.invalid\nINJECTED line", state }))).signIn(),
+    { outcome: "failed" },
+    "an unknown error code is not access_denied",
+  );
+  // 2. The token endpoint's error field.
+  s.fake.tokenAnswers = [() => Response.json({ error: forged }, { status: 400 })];
+  await make(browserWith((state) => ({ code: "c", state, client_id: ISSUED_CLIENT_ID }))).signIn();
+  s.fake.tokenAnswers = [() => Response.json({ error: { code: forged } }, { status: 400 })];
+  await make(browserWith((state) => ({ code: "c", state }))).signIn();
+  // 3. The granted scopes.
+  s.fake.tokenAnswers = [async () => tokenResponse({ scope: "openid email\nINJECTED clinician@example.invalid", id_token: await s.fake.idToken({ nonce: "x" }) })];
+  const opened: string[] = [];
+  const session = make(async (url) => {
+    opened.push(url);
+    s.fake.tokenAnswers = [async () => tokenResponse({ scope: "openid email\nINJECTED clinician@example.invalid", id_token: await s.fake.idToken({ nonce: new URL(url).searchParams.get("nonce") }) })];
+    await browserWith((state) => ({ code: "c", state }))(url);
+  });
+  assert.deepEqual(await session.signIn(), { outcome: "plan-not-allowed" });
+
+  const all = logged.join("\n");
+  assert.equal(logged.some((line) => line.includes("\n")), false, "no log line holds a line break");
+  for (const leak of ["clinician@example.invalid", "INJECTED", "signed in with plan use allowed. clinician"]) assert.equal(all.includes(leak), false, leak + "\n" + all);
+  assert.ok(logged.some((line) => line.includes("OpenAI ended the attempt with unknown (with a description of")), all);
+  assert.ok(logged.some((line) => line.includes("the code exchange failed (unknown, HTTP 400)")), all);
+  assert.ok(logged.some((line) => line.includes("the plan scope was not granted (")), all);
+});
+
+test("sign-out: when the signed-out state cannot be saved, it is signed out for this run and written later", { skip: process.platform === "win32" || process.getuid?.() === 0 }, async (t) => {
+  const s = await setup(t);
+  s.fake.tokenAnswers = [s.exchangeAnswers()];
+  await s.session.signIn();
+  const folder = path.dirname(s.file);
+  await chmod(folder, 0o500);
+  try {
+    assert.deepEqual(await s.session.signOut(), { outcome: "signed-out", revocationConfirmed: true });
+    const memory = await s.store.read();
+    assert.ok(memory.ok);
+    assert.deepEqual(s.session.state(memory.credentials!.chatgpt), { state: "not-connected", savedAccount: true }, "not a false 'renewed sign-in not saved'");
+    assert.equal((await saved(s.file)).chatgpt.accessToken, "access-token-not-real", "still on disk (revoked)");
+  } finally {
+    await chmod(folder, 0o700);
+  }
+  assert.equal(await s.store.saveUnsaved(), true);
+  assert.equal((await saved(s.file)).chatgpt.signedOut, true);
+});
+
+test("refresh timer: never sooner than 30 seconds, even for a token that lives less than the 5-minute margin", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let clock = Date.parse("2026-11-22T18:00:00Z");
+  const s = await setup(t, { now: () => clock });
+  s.fake.tokenAnswers = [s.exchangeAnswers({ expires_in: 60 })];
+  t.mock.timers.runAll();
+  const signedIn = s.session.signIn();
+  // The sign-in's own timers (listener, browser) run on the real event loop through setImmediate.
+  const result = await signedIn;
+  assert.deepEqual(result, { outcome: "signed-in" });
+  s.fake.tokenAnswers = [() => tokenResponse({ access_token: "access-2", expires_in: 60 })];
+  const refreshes = () => s.fake.calls.filter((c) => c.form?.get("grant_type") === "refresh_token").length;
+  s.session.schedule();
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(29_999);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(refreshes(), 0, "due at once (60 s token, 5-minute margin), but not before 30 s");
+  t.mock.timers.tick(1);
+  for (let i = 0; i < 20 && refreshes() === 0; i++) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(refreshes(), 1);
+  clock += 30_000;
+  s.session.cancelTimer();
 });

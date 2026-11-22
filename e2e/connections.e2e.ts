@@ -1,5 +1,5 @@
 import { exportJWK, generateKeyPair, SignJWT, type CryptoKey, type JWK } from "jose";
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import path from "node:path";
 import type { Page } from "@playwright/test";
@@ -105,7 +105,8 @@ test("ChatGPT: sign in through the system browser, see the account, survive a re
   await expect(welcome).toBeVisible();
   await welcome.getByRole("button", { name: "Got it" }).click();
   await expect(welcome).toBeHidden();
-  expect(JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8")).chatgptWelcomeShown).toBe(true);
+  // The dialog closes at once; the main process saves that it was seen just after.
+  await expect.poll(() => JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8")).chatgptWelcomeShown).toBe(true);
   await expect(card.getByText("Connected", { exact: true })).toBeVisible();
   await expect(page.getByTestId("chatgpt-account")).toHaveText("Signed in as Test Clinician");
   await expect(page.getByTestId("ai-status")).toHaveText("ChatGPT connected");
@@ -149,7 +150,7 @@ test("ChatGPT: sign in through the system browser, see the account, survive a re
   expect(after.chatgpt).toEqual({ issuer: "https://auth.openai.com", clientId: CLIENT_ID, subject: SUBJECT, signedOut: true });
 });
 
-test("ChatGPT: access denied (a free account, or not allowed) says a paid plan is needed and offers Claude; a plan scope not granted needs attention", async ({ app, profile }) => {
+test("ChatGPT: access denied says what happened, a paid plan as a possibility, and offers Claude; a plan scope not granted needs attention", async ({ app, profile }) => {
   const { jwks } = await signingKey();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
   const page = await app.firstWindow();
@@ -166,7 +167,7 @@ test("ChatGPT: access denied (a free account, or not allowed) says a paid plan i
     },
   });
   await expect(page.getByTestId("chatgpt-message")).toHaveText(
-    "ChatGPT did not let ABA Workbench use this account, so nothing was saved: it needs a paid ChatGPT plan such as Plus or Pro, and access allowed in the browser. Sign in with an account that has one, or connect Claude with an API key instead.",
+    "ChatGPT did not allow ABA Workbench to use this account's plan, so nothing was saved. Access may not have been allowed in the browser, or a paid ChatGPT plan, such as Plus or Pro, may be needed. You can sign in again, or connect Claude with an API key instead.",
   );
   await expect(card.getByText("Not connected")).toBeVisible();
   const saved = existsSync(path.join(profile, "credentials.json")) ? JSON.parse(readFileSync(path.join(profile, "credentials.json"), "utf8")) : null;
@@ -175,13 +176,14 @@ test("ChatGPT: access denied (a free account, or not allowed) says a paid plan i
   await card.getByRole("button", { name: "Continue with ChatGPT" }).click();
   await completeSignIn(app, { scope: "openid profile email offline_access" });
   await expect(card.getByText("Needs attention")).toBeVisible();
-  await expect(page.getByTestId("chatgpt-attention")).toContainText("this account has no paid plan such as Plus or Pro");
+  await expect(page.getByTestId("chatgpt-attention")).toContainText("ChatGPT did not allow ABA Workbench to use this account's plan.");
+  await expect(page.getByTestId("chatgpt-attention")).toContainText("a paid ChatGPT plan, such as Plus or Pro, may be needed");
   await expect(page.getByTestId("chatgpt-attention")).toContainText("connect Claude with an API key instead");
   await expect(page.getByTestId("ai-status")).toHaveText("AI connection needs attention");
   await expect(card.getByRole("button", { name: "Sign in again and allow" })).toBeVisible();
 });
 
-test("ChatGPT: an account that cannot use its plan, then a session revoked elsewhere, each say what to do", async ({ app }) => {
+test("ChatGPT: an account that cannot use its plan, then a session revoked elsewhere, each say what to do", async ({ app, profile }) => {
   const { jwks } = await signingKey();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
   const page = await app.firstWindow();
@@ -190,12 +192,14 @@ test("ChatGPT: an account that cannot use its plan, then a session revoked elsew
   await card.getByRole("button", { name: "Continue with ChatGPT" }).click();
   await completeSignIn(app);
   await page.getByRole("button", { name: "Got it" }).click();
-  // OpenAI says this account cannot use its plan in apps (a free account): it needs attention, plainly.
+  // OpenAI says this account cannot use its plan in apps: it needs attention, plainly, and stays so after a restart.
   await setStubAnswers(app, { chatgptModelsStatus: 403 });
   await card.getByRole("button", { name: "Check connection" }).click();
   await expect(page.getByTestId("chatgpt-attention")).toHaveText(
-    "This ChatGPT account cannot use its plan in other apps, which needs a paid plan such as Plus or Pro. Sign out and sign in with an account that has one, or connect Claude with an API key instead.",
+    "ChatGPT did not allow ABA Workbench to use this account's plan. A paid ChatGPT plan, such as Plus or Pro, may be needed, or the account's workspace or a policy may not allow it. You can sign out and sign in with another ChatGPT account, or connect Claude with an API key instead.",
   );
+  await expect(card.getByRole("button", { name: "Check connection" })).toHaveCount(0);
+  expect(JSON.parse(readFileSync(path.join(profile, "credentials.json"), "utf8")).chatgpt.planNotEligible).toBe(true);
   await expect(page.getByTestId("ai-status")).toHaveText("AI connection needs attention");
   await setStubAnswers(app, { chatgptModelsStatus: 200 });
   await card.getByRole("button", { name: "Sign out" }).click();
@@ -317,4 +321,41 @@ test("the connection screen in Spanish", async ({ launch }) => {
   await expect(page.getByRole("button", { name: "Continuar con ChatGPT" })).toBeVisible();
   await expect(page.getByLabel("Clave de API de Claude")).toBeVisible();
   await expect(page.getByTestId("ai-status")).toHaveText("IA sin conectar");
+});
+
+test("ChatGPT: the plan welcome always closes, and says so when the settings file cannot remember it", async ({ launch, profile }) => {
+  const credentials = {
+    version: 1,
+    hostId: "urn:uuid:5b6f0f8e-2d7a-4c1e-9b3a-7e2f4d6c8a10",
+    claude: null,
+    chatgpt: {
+      issuer: "https://auth.openai.com",
+      clientId: CLIENT_ID,
+      subject: SUBJECT,
+      email: null,
+      name: "Test Clinician",
+      idToken: "id-token-not-real",
+      accessToken: "access-token-not-real",
+      refreshToken: "refresh-token-not-real",
+      tokenType: "Bearer",
+      // Far ahead, so the app never tries to refresh these invented tokens.
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      earliestRefreshAt: null,
+      scopes: ["chatgpt.tokens.use.direct", "openid"],
+      savedAt: "2026-11-22T18:00:00.000Z",
+    },
+  };
+  writeFileSync(path.join(profile, "credentials.json"), JSON.stringify(credentials), { mode: 0o600 });
+  const app = await launch();
+  const page = await app.firstWindow();
+  // A folder where settings.json should be: no save can succeed from now on.
+  rmSync(path.join(profile, "settings.json"));
+  mkdirSync(path.join(profile, "settings.json"));
+  await openSettings(page);
+  const welcome = page.getByRole("dialog", { name: "You're using your ChatGPT plan" });
+  await expect(welcome).toBeVisible();
+  await welcome.getByRole("button", { name: "Got it" }).click();
+  await expect(welcome).toBeHidden();
+  await expect(page.getByTestId("chatgpt-message")).toHaveText("ABA Workbench could not remember that you saw this, so it may show again next time.");
+  await expect(page.getByTestId("chatgpt-card").getByText("Connected", { exact: true })).toBeVisible();
 });

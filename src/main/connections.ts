@@ -157,10 +157,17 @@ export class ConnectionService {
     return this.chatgpt.forgetAccount();
   }
 
-  /** "Got it" on "You're using your ChatGPT plan": never shown again on this computer. */
+  /**
+   * "Got it" on "You're using your ChatGPT plan": never shown again on this computer.
+   * When that cannot be saved it is still dismissed for this run, and the error reaches
+   * the interface, which says it may show again next time.
+   */
   async dismissChatGptWelcome(): Promise<void> {
-    await this.welcome.markShown();
-    await this.changed();
+    try {
+      await this.welcome.markShown();
+    } finally {
+      await this.changed();
+    }
   }
 
   /**

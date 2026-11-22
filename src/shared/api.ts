@@ -206,10 +206,11 @@ export type ChatGptConnection =
   | { state: "connected"; displayName: string | null; showWelcome: boolean }
   /**
    * Signed in, but it cannot be used as it is:
-   * - "plan-not-allowed": OpenAI gave no permission to use the ChatGPT plan (not allowed in
-   *   the browser, or an account with no plan apps can use);
-   * - "plan-not-eligible": OpenAI said this account, workspace or policy cannot use its plan
-   *   in apps (a free account, for example);
+   * - "plan-not-allowed": OpenAI gave no permission to use the ChatGPT plan (it was not
+   *   allowed in the browser, or the account cannot use its plan in apps; OpenAI does not
+   *   say which);
+   * - "plan-not-eligible": OpenAI said the account's plan, workspace or a policy does not let
+   *   it be used in apps (kept across restarts until the next sign-in or sign-out);
    * - "session-ended": revoked, disconnected in ChatGPT's settings, or unused for 30 days;
    *   it needs a new sign-in;
    * - "not-saved": it works, but its renewed sign-in could not be written to the disk, so
@@ -263,8 +264,8 @@ export type ChatGptSignInResult =
   /** Signed in, but OpenAI gave no permission to use the ChatGPT plan. */
   | { outcome: "plan-not-allowed" }
   /**
-   * OpenAI ended the attempt with access_denied: the user did not allow it, or the account
-   * has no plan apps can use (OpenAI's answer does not say which); nothing was saved.
+   * OpenAI ended the attempt with access_denied: it was not allowed in the browser, or the
+   * account cannot use its plan in apps (OpenAI's answer does not say which); nothing was saved.
    */
   | { outcome: "access-denied" }
   /** Cancelled in the app. */

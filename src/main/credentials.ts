@@ -75,6 +75,12 @@ const ChatGptSignedInSchema = z.looseObject({
   earliestRefreshAt: Timestamp.nullable(),
   scopes: z.array(z.string().min(1).max(200)).max(50),
   savedAt: Timestamp,
+  /**
+   * Set when OpenAI answered subscription_sharing_user_not_eligible: this account's plan,
+   * workspace or a policy does not let it be used in apps. Kept across restarts; the next
+   * sign-in, a sign-out or a check that works clears it.
+   */
+  planNotEligible: z.literal(true).optional(),
 });
 
 const CredentialsFileSchema = z.looseObject({

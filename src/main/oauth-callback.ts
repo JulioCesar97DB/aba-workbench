@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Language } from "../shared/api.ts";
-import { CALLBACK_PATH, sameSecret } from "./chatgpt-oauth.ts";
+import { CALLBACK_PATH, knownOAuthCode, sameSecret } from "./chatgpt-oauth.ts";
 
 /*
  * The loopback callback of Sign in with ChatGPT: a one-time HTTP listener on 127.0.0.1,
@@ -20,11 +20,11 @@ export type CallbackAnswer =
   /** OpenAI sent the user back with a code. `clientId`: the issued id, on a first registration. */
   | { kind: "code"; code: string; clientId: string | null; scope: string | null }
   /**
-   * OpenAI sent the user back with an OAuth error (access_denied: access was not given).
-   * `description` is OpenAI's own wording, for the main process's log only; `clientId` is
-   * there when OpenAI had already issued one.
+   * OpenAI sent the user back with an OAuth error (access_denied: access was not given),
+   * as a known code or "unknown". OpenAI's error_description is never kept: only how long
+   * it was, for the log. `clientId` is there when OpenAI had already issued one.
    */
-  | { kind: "error"; error: string; description: string | null; clientId: string | null };
+  | { kind: "error"; error: string; descriptionLength: number | null; clientId: string | null };
 
 export interface CallbackListener {
   port: number;
@@ -104,12 +104,10 @@ export function readCallback(url: URL): CallbackAnswer {
   const clientId = url.searchParams.get("client_id");
   if (error !== null) {
     const description = url.searchParams.get("error_description");
-    // Printable text only, and short: it goes to a log line.
-    const clean = (text: string) => text.replace(/[^\x20-\x7e]/g, " ").slice(0, 200);
-    return { kind: "error", error: clean(error).slice(0, 100), description: description === null ? null : clean(description), clientId };
+    return { kind: "error", error: knownOAuthCode(error), descriptionLength: description === null ? null : description.length, clientId };
   }
   const code = url.searchParams.get("code");
-  if (!code) return { kind: "error", error: "missing_code", description: null, clientId };
+  if (!code) return { kind: "error", error: "missing_code", descriptionLength: null, clientId };
   return { kind: "code", code, clientId: url.searchParams.get("client_id"), scope: url.searchParams.get("scope") };
 }
 

@@ -164,7 +164,9 @@ function ChatGptCard({ connection, blocked }: { connection: ChatGptConnection | 
   const [message, setMessage] = useState<Message>(null);
   const state = connection?.state ?? null;
   // OpenAI's guidelines: once, the first time plan use is allowed on this computer, until "Got it".
-  const welcome = connection?.state === "connected" && connection.showWelcome;
+  // Closed here at once, whether or not the main process manages to save that it was seen.
+  const [welcomeClosed, setWelcomeClosed] = useState(false);
+  const welcome = connection?.state === "connected" && connection.showWelcome && !welcomeClosed;
 
   async function signIn() {
     setMessage(null);
@@ -298,7 +300,9 @@ function ChatGptCard({ connection, blocked }: { connection: ChatGptConnection | 
       <Dialog
         open={welcome}
         onOpenChange={(open) => {
-          if (!open) void window.aba.dismissChatGptWelcome().catch(() => undefined);
+          if (open) return;
+          setWelcomeClosed(true);
+          void window.aba.dismissChatGptWelcome().catch(() => setMessage({ text: t("chatgpt.welcomeNotSaved"), problem: true }));
         }}
         title={t("chatgpt.welcomeTitle")}
       >

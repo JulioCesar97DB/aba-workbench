@@ -214,9 +214,9 @@ export const es: Messages = {
     manageUsage: "Administrar el uso en ChatGPT",
     usageNote: "Los borradores hechos con ChatGPT cuentan para el uso de tu plan de ChatGPT. Puedes ver y limitar el uso de ABA Workbench en la configuración de ChatGPT.",
     planNotAllowed:
-      "Iniciaste sesión, pero ChatGPT no dejó que ABA Workbench use tu plan: no se permitió en el navegador, o esta cuenta no tiene un plan de pago como Plus o Pro. Vuelve a iniciar sesión y permítelo, o conecta Claude con una clave de API.",
+      "Iniciaste sesión, pero ChatGPT no permitió que ABA Workbench usara el plan de esta cuenta. Puede que no se haya permitido en el navegador, o puede hacer falta un plan de pago de ChatGPT, como Plus o Pro. Vuelve a iniciar sesión y permítelo, o conecta Claude con una clave de API.",
     planNotEligible:
-      "Esta cuenta de ChatGPT no puede usar su plan en otras apps, porque para eso hace falta un plan de pago como Plus o Pro. Cierra sesión e inicia sesión con una cuenta que lo tenga, o conecta Claude con una clave de API.",
+      "ChatGPT no permitió que ABA Workbench usara el plan de esta cuenta. Puede hacer falta un plan de pago de ChatGPT, como Plus o Pro, o puede que el espacio de trabajo de la cuenta o una política no lo permitan. Puedes cerrar sesión e iniciar sesión con otra cuenta de ChatGPT, o conectar Claude con una clave de API.",
     notSaved:
       "ChatGPT funciona, pero su sesión renovada no se pudo guardar, así que se perderá cuando cierres ABA Workbench. Revisa que tu computadora tenga espacio libre; ABA Workbench sigue intentando guardarla.",
     allowPlan: "Volver a iniciar sesión y permitir",
@@ -230,7 +230,7 @@ export const es: Messages = {
       "Otra app está usando la dirección habitual para la respuesta de tu navegador, así que ABA Workbench usa otra. Si la página de ChatGPT muestra un error sobre la dirección, cierra la otra app, como Codex, e inténtalo de nuevo.",
     resultSignedIn: "Sesión iniciada. ChatGPT está conectado.",
     resultAccessDenied:
-      "ChatGPT no dejó que ABA Workbench use esta cuenta, así que no se guardó nada: hace falta un plan de pago de ChatGPT como Plus o Pro, y permitir el acceso en el navegador. Inicia sesión con una cuenta que lo tenga, o conecta Claude con una clave de API.",
+      "ChatGPT no permitió que ABA Workbench usara el plan de esta cuenta, así que no se guardó nada. Puede que no se haya permitido el acceso en el navegador, o puede hacer falta un plan de pago de ChatGPT, como Plus o Pro. Puedes volver a iniciar sesión, o conectar Claude con una clave de API.",
     resultCancelled: "Inicio de sesión cancelado. No se guardó nada.",
     resultTimedOut: "El navegador no respondió a tiempo, así que el inicio de sesión se detuvo. No se guardó nada. Inténtalo de nuevo cuando quieras.",
     resultPortInUse: "ABA Workbench no pudo abrir una conexión local para recibir la respuesta de tu navegador. Cierra y vuelve a abrir ABA Workbench, e inténtalo de nuevo.",
@@ -248,6 +248,7 @@ export const es: Messages = {
     welcomeTitle: "Estás usando tu plan de ChatGPT",
     welcomeBody: "Cuando ABA Workbench redacte con ChatGPT, usará tu plan de ChatGPT. Puedes ver y administrar ese uso en la configuración de ChatGPT.",
     welcomeDismiss: "Entendido",
+    welcomeNotSaved: "ABA Workbench no pudo recordar que ya viste esto, así que puede volver a aparecer la próxima vez.",
   },
   claude: {
     title: "Claude",

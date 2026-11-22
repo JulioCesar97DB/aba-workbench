@@ -235,7 +235,7 @@ export function registerIpc(options: {
   ipcMain.handle(IPC_CHANNELS.dismissChatGptWelcome, (event): Promise<void> => {
     assertTrusted(event);
     return options.connections.dismissChatGptWelcome().catch((error: unknown) => {
-      throw safeError(error, "That could not be saved.");
+      throw safeError(error, "That could not be saved, so it may show again next time.");
     });
   });
 

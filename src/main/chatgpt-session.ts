@@ -10,7 +10,7 @@ import type {
   RemoveConnectionResult,
 } from "../shared/api.ts";
 import { DYNAMIC_CLIENT_ID, PLAN_SCOPE, OAuthClient, OAuthError, TERMINAL_REFRESH_ERRORS, authorizeUrl, isIssuedClientId, newAttempt, randomToken, type Attempt, type TokenSet } from "./chatgpt-oauth.ts";
-import { OPENAI_ISSUER, isSignedIn, type ChatGptRecord, type ChatGptSignedIn, type CredentialsStore } from "./credentials.ts";
+import { OPENAI_ISSUER, isSignedIn, type ChatGptRecord, type ChatGptSignedIn, type CredentialsStore, type StoredCredentials } from "./credentials.ts";
 import { startCallbackListener, type CallbackAnswer, type CallbackListener } from "./oauth-callback.ts";
 
 /*
@@ -77,12 +77,6 @@ export class ChatGptSession {
   /** The refresh running now: every caller waits on the same one, so a rotating token is never used twice. */
   private refreshing: Promise<string> | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  /**
-   * Set when OpenAI said this account cannot use its plan in apps
-   * (subscription_sharing_user_not_eligible), until the next sign-in or sign-out. OpenAI
-   * asks apps not to repeat the request or loop through sign-in for it.
-   */
-  private notEligible = false;
 
   private readonly store: CredentialsStore;
   private readonly oauth: OAuthClient;
@@ -131,7 +125,7 @@ export class ChatGptSession {
       return record.sessionEnded ? { state: "needs-attention", reason: "session-ended", displayName: null } : { state: "not-connected", savedAccount: true };
     }
     if (!hasPlanScope(record)) return { state: "needs-attention", reason: "plan-not-allowed", displayName: record.name };
-    if (this.notEligible) return { state: "needs-attention", reason: "plan-not-eligible", displayName: record.name };
+    if (record.planNotEligible) return { state: "needs-attention", reason: "plan-not-eligible", displayName: record.name };
     if (this.store.hasUnsavedChange) return { state: "needs-attention", reason: "not-saved", displayName: record.name };
     return { state: "connected", displayName: record.name, showWelcome: options.welcomeShown === false };
   }
@@ -234,7 +228,9 @@ export class ChatGptSession {
     if (answer.kind === "error") {
       // Nothing is exchanged or saved. access_denied: the user did not allow it, or the
       // account has no plan apps can use; OpenAI's answer does not say which.
-      this.log(`ChatGPT sign-in: OpenAI ended the attempt with "${answer.error}"${answer.description ? `: ${answer.description}` : ""}.`);
+      // Only a known code, and whether OpenAI gave a description: never its text, which
+      // comes from the network and could hold an email or a forged log line.
+      this.log(`ChatGPT sign-in: OpenAI ended the attempt with ${answer.error}${answer.descriptionLength === null ? "" : ` (with a description of ${answer.descriptionLength} characters, not logged)`}.`);
       return { outcome: answer.error === "access_denied" ? "access-denied" : "failed" };
     }
     // A first registration gets its client id from the callback; a later sign-in keeps its
@@ -305,9 +301,8 @@ export class ChatGptSession {
       await this.revokeQuietly(clientId, tokens.refreshToken);
       return { outcome: "not-saved" };
     }
-    this.notEligible = false;
     if (!hasPlanScope(record)) {
-      this.log(`ChatGPT sign-in: signed in, but the plan scope was not granted (scopes: ${scopes.join(" ") || "none"}).`);
+      this.log(`ChatGPT sign-in: signed in, but the plan scope was not granted (${scopes.length} other scopes).`);
       return { outcome: "plan-not-allowed" };
     }
     this.log("ChatGPT sign-in: signed in with plan use allowed.");
@@ -408,6 +403,31 @@ export class ChatGptSession {
     return next.accessToken;
   }
 
+  /**
+   * Remembers, on the saved sign-in, that OpenAI said this account cannot use its plan in
+   * apps (or that it can again), so a restart does not show it as connected.
+   */
+  private async markNotEligible(notEligible: boolean): Promise<void> {
+    const read = await this.store.read();
+    const record = read.ok ? (read.credentials?.chatgpt ?? null) : null;
+    if (!isSignedIn(record) || (record.planNotEligible === true) === notEligible) return;
+    const change = (current: StoredCredentials): StoredCredentials => {
+      const chatgpt = current.chatgpt;
+      if (!isSignedIn(chatgpt)) return current;
+      const next: ChatGptSignedIn = { ...chatgpt };
+      if (notEligible) next.planNotEligible = true;
+      else delete next.planNotEligible;
+      return { ...current, chatgpt: next };
+    };
+    try {
+      await this.store.update(change);
+    } catch (error) {
+      this.log(`ChatGPT: whether this account can use its plan could not be saved (${errorCode(error)}).`);
+      this.store.keepUnsaved(change);
+    }
+    this.onChange();
+  }
+
   /** Writes a refreshed sign-in that could not be saved before; tells the interface when it worked. */
   private async retryUnsaved(): Promise<void> {
     if (!this.store.hasUnsavedChange) return;
@@ -447,17 +467,14 @@ export class ChatGptSession {
       }
       try {
         await this.openai.listModels({ kind: "chatgpt", accessToken: token }, AbortSignal.timeout(20_000));
-        if (this.notEligible) {
-          this.notEligible = false;
-          this.onChange();
-        }
+        await this.markNotEligible(false);
         return { outcome: "working" };
       } catch (error) {
         const safe = toSafeError(error);
         this.log(`ChatGPT: the connection check failed (${safe.code}${safe.status === null ? "" : `, HTTP ${safe.status}`}).`);
         if (safe.code === "chatgpt_not_eligible") {
-          this.notEligible = true;
-          this.onChange();
+          // OpenAI asks apps not to repeat the request or loop through sign-in for it.
+          await this.markNotEligible(true);
           return { outcome: "not-eligible" };
         }
         if (safe.code === "chatgpt_signed_out" && attempt === 0) continue;
@@ -499,10 +516,11 @@ export class ChatGptSession {
     try {
       await this.store.update((credentials) => ({ ...credentials, chatgpt: signedOut(latest, false) }));
     } catch (error) {
-      this.log(`ChatGPT sign-out: it could not be saved (${errorCode(error)}).`);
-      return { outcome: "not-saved" };
+      // The session is revoked: signed out it is, here and now. The file still holds the
+      // revoked tokens until the next save (or the last try when the app quits).
+      this.log(`ChatGPT sign-out: it could not be saved (${errorCode(error)}); it is kept until it can be.`);
+      this.store.keepUnsaved((credentials) => ({ ...credentials, chatgpt: signedOut(latest, false) }));
     }
-    this.notEligible = false;
     this.onChange();
     return { outcome: "signed-out", revocationConfirmed: confirmed };
   }

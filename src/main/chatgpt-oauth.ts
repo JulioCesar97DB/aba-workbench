@@ -103,10 +103,11 @@ export class OAuthError extends Error {
   readonly code: string;
   readonly status: number | null;
   constructor(code: string, status: number | null) {
-    // Only the code and the status: an error body could echo a token back.
-    super(`OpenAI sign-in error: ${code}${status === null ? "" : ` (HTTP ${status})`}`);
+    // Only a known code and the status: an error body could echo a token back.
+    const known = knownOAuthCode(code);
+    super(`OpenAI sign-in error: ${known}${status === null ? "" : ` (HTTP ${status})`}`);
     this.name = "OAuthError";
-    this.code = code;
+    this.code = known;
     this.status = status;
   }
 }
@@ -168,12 +169,55 @@ function readTime(value: number | string | null | undefined): string | null {
   return null;
 }
 
-/** OpenAI's error code from an OAuth error body: {"error": "invalid_grant"} or {"error": {"code": "..."}}. */
+/**
+ * The OAuth error codes the app knows: RFC 6749's and OpenID Connect's, OpenAI's refresh
+ * errors, and the app's own. Text from the network is never used as it is: a code that is
+ * not on this list becomes "unknown", so nothing OpenAI (or anyone answering in its name)
+ * sends can reach the log or the logic as free text.
+ */
+export const KNOWN_OAUTH_CODES = new Set([
+  "access_denied",
+  "invalid_request",
+  "unauthorized_client",
+  "unsupported_response_type",
+  "invalid_scope",
+  "server_error",
+  "temporarily_unavailable",
+  "invalid_grant",
+  "invalid_client",
+  "unsupported_grant_type",
+  "invalid_token",
+  "login_required",
+  "consent_required",
+  "interaction_required",
+  "account_selection_required",
+  "invalid_refresh_token",
+  "token_expired",
+  "refresh_token_expired",
+  "refresh_token_invalidated",
+  "refresh_token_reused",
+  // The app's own.
+  "unreachable",
+  "cancelled",
+  "token_error",
+  "invalid_token_response",
+  "invalid_id_token",
+  "invalid_jwks",
+  "missing_code",
+  "unknown",
+]);
+
+/** A code from the network, as the app may use and log it: one from KNOWN_OAUTH_CODES, or "unknown". */
+export function knownOAuthCode(value: unknown): string {
+  return typeof value === "string" && KNOWN_OAUTH_CODES.has(value) ? value : "unknown";
+}
+
+/** OpenAI's error code from an OAuth error body ({"error": "invalid_grant"} or {"error": {"code": "..."}}), known codes only. */
 export function oauthErrorCode(body: unknown): string | null {
   if (typeof body !== "object" || body === null) return null;
   const error = (body as { error?: unknown }).error;
-  if (typeof error === "string") return error.slice(0, 100);
-  if (typeof error === "object" && error !== null && typeof (error as { code?: unknown }).code === "string") return (error as { code: string }).code.slice(0, 100);
+  if (typeof error === "string") return knownOAuthCode(error);
+  if (typeof error === "object" && error !== null && "code" in error) return knownOAuthCode((error as { code: unknown }).code);
   return null;
 }
 

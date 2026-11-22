@@ -202,3 +202,46 @@ test("ChatGPT welcome: shown once plan use is allowed, until it is dismissed", a
   assert.deepEqual((await connections.get()).chatgpt, { state: "connected", displayName: null, showWelcome: false });
   assert.deepEqual(changes.at(-1)?.chatgpt, { state: "connected", displayName: null, showWelcome: false });
 });
+
+test("ChatGPT welcome: dismissed for this run even when that cannot be saved, and the error says so", async (t) => {
+  const { backend } = await credentials(t);
+  await backend.update((c) => ({
+    ...c,
+    chatgpt: {
+      issuer: "https://auth.openai.com",
+      clientId: "oaiapp_x",
+      subject: "s",
+      email: null,
+      name: null,
+      idToken: "i",
+      accessToken: "a",
+      refreshToken: "r",
+      tokenType: "Bearer",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      earliestRefreshAt: null,
+      scopes: ["chatgpt.tokens.use.direct"],
+      savedAt: "2026-11-22T18:00:00.000Z",
+    },
+  }));
+  let shown = false;
+  const changes: Connections[] = [];
+  const connections = new ConnectionService({
+    store: backend,
+    chatgpt: new ChatGptSession({ store: backend, openBrowser: async () => undefined, language: async () => "en", onChange: () => undefined, log: () => undefined }),
+    claude: createAnthropicProvider({ fetch: anthropic().fetchStub }),
+    // Like SettingsStore.markChatGptWelcomeShown when the file cannot be written.
+    welcome: {
+      shown: async () => shown,
+      markShown: async () => {
+        shown = true;
+        throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      },
+    },
+    onChange: (c) => changes.push(c),
+    log: () => undefined,
+  });
+  assert.deepEqual((await connections.get()).chatgpt, { state: "connected", displayName: null, showWelcome: true });
+  await assert.rejects(connections.dismissChatGptWelcome(), /EACCES/);
+  assert.deepEqual((await connections.get()).chatgpt, { state: "connected", displayName: null, showWelcome: false });
+  assert.deepEqual(changes.at(-1)?.chatgpt, { state: "connected", displayName: null, showWelcome: false }, "the interface is told, so the dialog closes");
+});

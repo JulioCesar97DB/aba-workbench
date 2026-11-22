@@ -155,10 +155,20 @@ export class SettingsStore {
     return this.update({ casesFolder: folder });
   }
 
-  /** Remembers that the ChatGPT plan welcome was seen. */
+  /**
+   * Remembers that the ChatGPT plan welcome was seen. If the file cannot be written, it
+   * is still remembered for this run (the dialog never stays stuck open) and the error is
+   * thrown, so the interface can say it may show again next time.
+   */
   async markChatGptWelcomeShown(): Promise<StoredSettings> {
-    if ((await this.get()).chatgptWelcomeShown) return this.get();
-    return this.update({ chatgptWelcomeShown: true });
+    const current = await this.get();
+    if (current.chatgptWelcomeShown) return current;
+    try {
+      return await this.update({ chatgptWelcomeShown: true });
+    } catch (error) {
+      this.current = { ...(this.current ?? current), chatgptWelcomeShown: true };
+      throw error;
+    }
   }
 
   private update(change: Partial<StoredSettings>): Promise<StoredSettings> {
