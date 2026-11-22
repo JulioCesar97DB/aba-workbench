@@ -5,23 +5,35 @@
  *
  *   pnpm build && pnpm phase0           real runs, for every provider whose key is set
  *   pnpm phase0 --mock                  plumbing check with the mock provider: no key, no cost
- *   pnpm phase0 --only=claude-opus-5-5  only the listed model ids (comma-separated)
- *   pnpm phase0 --case=case-a-mateo     only the listed case ids (comma-separated)
- *   pnpm phase0 --budget=5              do not start a call that could take the total past $5
+ *   pnpm phase0 --only claude-opus-5-5  only these model ids (comma-separated)
+ *   pnpm phase0 --case case-a-mateo     only these case ids (comma-separated)
+ *   pnpm phase0 --budget 5              never start a call that could take the total past $5
  *   pnpm phase0 --no-prewarm            skip the cache pre-warm request
- *   pnpm phase0 --base-url=http://...   use a server that is already running
+ *   pnpm phase0 --base-url http://...   use a server that is already running
  *
- * Keys come from ANTHROPIC_API_KEY and OPENAI_API_KEY (the pnpm script loads .env.local).
- * They are sent to the route in a header, as the browser will send the user's key, and
- * never printed or written to disk.
+ * Keys: ANTHROPIC_API_KEY and OPENAI_API_KEY in .env.phase0 (gitignored; the pnpm script
+ * loads it). Not in .env.local: Next.js loads that file into the server, and the server
+ * must run without keys so that only the per-request key can ever be used. The keys are
+ * sent to the route in a header, as the browser will send the user's key, and are never
+ * printed or written to disk.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { MAX_REQUEST_BODY_BYTES, requestTooLargeMessage } from "../src/lib/limits.ts";
-import { costUsd, generationCostUsd, PRICES, PRICES_CHECKED_ON } from "../src/lib/pricing.ts";
+import { costUsd, generationCostUsd, PRICES_CHECKED_ON } from "../src/lib/pricing.ts";
 import type { SourceDocument, TokenUsage, UsageAttempt } from "../src/lib/providers/types.ts";
+import { buildPrompt } from "../src/lib/rules.ts";
+import {
+  countPdfPages,
+  inputTokensUpperBound,
+  parseArgs,
+  SpendTracker,
+  UnknownPriceError,
+  worstCaseCallUsd,
+  type Phase0Args,
+} from "./budget.mts";
 
 // ---------- what is under test ----------
 
@@ -45,25 +57,9 @@ const MOCK_MODELS: ModelUnderTest[] = [{ provider: "mock", model: "mock-echo", e
 
 const SECTION = "medical-necessity";
 const MAX_OUTPUT_TOKENS = 32_000;
-/** Typical output per call, used only to decide whether a call fits the remaining budget. */
-const BUDGET_OUTPUT_TOKENS_GUESS = 12_000;
-
-// ---------- arguments ----------
-
-const args = new Map(
-  process.argv.slice(2).map((arg) => {
-    const [key, value] = arg.replace(/^--/, "").split("=");
-    return [key, value ?? "true"] as const;
-  }),
-);
-const mock = args.has("mock");
-const only = args.get("only")?.split(",");
-const onlyCases = args.get("case")?.split(",");
-const budgetUsd = Number(args.get("budget") ?? 5);
-const prewarm = !args.has("no-prewarm");
-const outDir = path.resolve(mock ? "tmp/phase0-mock" : "docs/phase0/outputs");
-const port = 3517;
-const baseUrl = args.get("base-url") ?? `http://127.0.0.1:${port}`;
+/** The env files Next.js loads into the server at start. Keys must not be in them. */
+const NEXT_ENV_FILES = [".env", ".env.local", ".env.production", ".env.production.local"];
+const PORT = 3517;
 
 // ---------- cases ----------
 
@@ -73,47 +69,77 @@ interface CaseFixture {
   sources: SourceDocument[];
   bodyBytes: number;
   pdfBytes: number;
-}
-
-async function loadCases(): Promise<CaseFixture[]> {
-  const root = path.resolve("fixtures/cases");
-  const cases: CaseFixture[] = [];
-  for (const dir of (await readdir(root)).sort()) {
-    if (onlyCases && !onlyCases.includes(dir)) continue;
-    const meta = JSON.parse(await readFile(path.join(root, dir, "case.json"), "utf8"));
-    const sources: SourceDocument[] = [];
-    let pdfBytes = 0;
-    for (const s of meta.sources) {
-      const file = path.join(root, dir, s.file);
-      if (s.file.endsWith(".pdf")) {
-        const data = await readFile(file);
-        pdfBytes += data.length;
-        sources.push({ id: s.id, title: s.title, kind: "pdf", filename: path.basename(s.file), base64: data.toString("base64") });
-      } else {
-        sources.push({ id: s.id, title: s.title, kind: "text", text: await readFile(file, "utf8") });
-      }
-    }
-    const bodyBytes = Buffer.byteLength(JSON.stringify(requestBody(REAL_MODELS[0], sources, "generate")));
-    cases.push({ id: meta.id, label: meta.label, sources, bodyBytes, pdfBytes });
-  }
-  return cases;
+  pdfPages: number;
+  /** Characters of everything sent as text: rules, section request and text sources. */
+  promptChars: number;
 }
 
 function requestBody(m: ModelUnderTest, sources: SourceDocument[], mode: "generate" | "prewarm") {
   return { provider: m.provider, model: m.model, section: SECTION, effort: m.effort, maxOutputTokens: MAX_OUTPUT_TOKENS, mode, sources };
 }
 
+async function loadCases(only: string[] | null): Promise<CaseFixture[]> {
+  const root = path.resolve("fixtures/cases");
+  const cases: CaseFixture[] = [];
+  for (const dir of (await readdir(root)).sort()) {
+    if (only && !only.includes(dir)) continue;
+    const meta = JSON.parse(await readFile(path.join(root, dir, "case.json"), "utf8"));
+    const sources: SourceDocument[] = [];
+    let pdfBytes = 0;
+    let pdfPages = 0;
+    for (const s of meta.sources) {
+      const file = path.join(root, dir, s.file);
+      if (s.file.endsWith(".pdf")) {
+        const data = await readFile(file);
+        pdfBytes += data.length;
+        pdfPages += countPdfPages(data);
+        sources.push({ id: s.id, title: s.title, kind: "pdf", filename: path.basename(s.file), base64: data.toString("base64") });
+      } else {
+        sources.push({ id: s.id, title: s.title, kind: "text", text: await readFile(file, "utf8") });
+      }
+    }
+    const { prompt } = await buildPrompt(SECTION, sources);
+    const promptChars =
+      prompt.system.length + prompt.task.length + sources.reduce((n, s) => n + (s.kind === "text" ? s.text.length + s.title.length + 60 : 200), 0);
+    const bodyBytes = Buffer.byteLength(JSON.stringify(requestBody(REAL_MODELS[0], sources, "generate")));
+    cases.push({ id: meta.id, label: meta.label, sources, bodyBytes, pdfBytes, pdfPages, promptChars });
+  }
+  if (only) {
+    const missing = only.filter((id) => !cases.some((c) => c.id === id));
+    if (missing.length) throw new Error(`Unknown case id: ${missing.join(", ")}.`);
+  }
+  return cases;
+}
+
 // ---------- server ----------
 
-async function startServer(): Promise<ChildProcess | null> {
-  if (args.has("base-url")) return null;
+async function keysInNextEnvFiles(): Promise<string[]> {
+  const found: string[] = [];
+  for (const name of NEXT_ENV_FILES) {
+    if (!existsSync(name)) continue;
+    const text = await readFile(name, "utf8");
+    for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]) {
+      if (new RegExp(`^\\s*(export\\s+)?${key}\\s*=\\s*\\S`, "m").test(text)) found.push(`${name}: ${key}`);
+    }
+  }
+  return found;
+}
+
+async function startServer(args: Phase0Args, baseUrl: string): Promise<ChildProcess | null> {
+  if (args.baseUrl) return null;
   if (!existsSync(".next/BUILD_ID")) throw new Error("No production build found. Run `pnpm build` first.");
-  const env: NodeJS.ProcessEnv = { ...process.env, PORT: String(port) };
-  // The server never needs the provider keys: they travel with each request.
+  const leaked = await keysInNextEnvFiles();
+  if (leaked.length) {
+    throw new Error(
+      `Next.js would load provider keys into the server (${leaked.join("; ")}). ` +
+        "Move them to .env.phase0: the server must run without keys so only the per-request key is used.",
+    );
+  }
+  const env: NodeJS.ProcessEnv = { ...process.env, PORT: String(PORT) };
   delete env.ANTHROPIC_API_KEY;
   delete env.OPENAI_API_KEY;
-  if (mock) env.ABA_ENABLE_MOCK_PROVIDER = "1";
-  const server = spawn("pnpm", ["exec", "next", "start", "-p", String(port)], { env, stdio: ["ignore", "ignore", "inherit"] });
+  if (args.mock) env.ABA_ENABLE_MOCK_PROVIDER = "1";
+  const server = spawn("pnpm", ["exec", "next", "start", "-p", String(PORT)], { env, stdio: ["ignore", "ignore", "inherit"] });
   for (let i = 0; i < 120; i++) {
     try {
       if ((await fetch(baseUrl)).ok) return server;
@@ -131,7 +157,7 @@ async function startServer(): Promise<ChildProcess | null> {
 interface StreamResult {
   text: string;
   meta: Record<string, unknown> | null;
-  done: { stopReason: string; servedModel: string; usage: TokenUsage; attempts: UsageAttempt[] | null } | null;
+  done: { complete: boolean; stopReason: string; servedModel: string; usage: TokenUsage; attempts: UsageAttempt[] | null } | null;
   fallbacks: { from: string; to: string }[];
   refusal: { category: string | null; explanation: string | null } | null;
   error: { code: string; message: string } | null;
@@ -140,12 +166,12 @@ interface StreamResult {
   msTotal: number;
 }
 
-async function callGenerate(m: ModelUnderTest, c: CaseFixture, mode: "generate" | "prewarm"): Promise<StreamResult> {
+async function callGenerate(baseUrl: string, m: ModelUnderTest, c: CaseFixture, mode: "generate" | "prewarm"): Promise<StreamResult> {
   const started = performance.now();
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (m.keyVar) headers["x-provider-key"] = process.env[m.keyVar] ?? "";
-  else headers["x-provider-key"] = "mock";
-  const response = await fetch(`${baseUrl}/api/generate`, { method: "POST", headers, body: JSON.stringify(requestBody(m, c.sources, mode)) });
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "x-provider-key": m.keyVar ? (process.env[m.keyVar] ?? "") : "mock",
+  };
   const result: StreamResult = {
     text: "",
     meta: null,
@@ -153,92 +179,99 @@ async function callGenerate(m: ModelUnderTest, c: CaseFixture, mode: "generate" 
     fallbacks: [],
     refusal: null,
     error: null,
-    httpStatus: response.status,
+    httpStatus: 0,
     msToFirstText: null,
     msTotal: 0,
   };
-
-  if (!response.ok || !response.body) {
-    const body = (await response.json().catch(() => null)) as { error?: { code: string; message: string } } | null;
-    result.error = body?.error ?? { code: `http_${response.status}`, message: response.statusText };
-    result.msTotal = performance.now() - started;
-    return result;
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-  const reader = response.body.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let boundary: number;
-    while ((boundary = buffer.indexOf("\n\n")) !== -1) {
-      const raw = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      let event = "message";
-      let data = "";
-      for (const line of raw.split("\n")) {
-        if (line.startsWith("event: ")) event = line.slice(7);
-        else if (line.startsWith("data: ")) data += line.slice(6);
-      }
-      if (!data) continue; // keep-alive comment
-      const payload = JSON.parse(data);
-      if (event === "text") {
-        result.msToFirstText ??= performance.now() - started;
-        result.text += payload.delta;
-      } else if (event === "meta") result.meta = payload;
-      else if (event === "done") result.done = payload;
-      else if (event === "refusal") result.refusal = payload;
-      else if (event === "fallback") result.fallbacks.push(payload);
-      else if (event === "error") result.error = payload;
+  try {
+    const response = await fetch(`${baseUrl}/api/generate`, { method: "POST", headers, body: JSON.stringify(requestBody(m, c.sources, mode)) });
+    result.httpStatus = response.status;
+    if (!response.ok || !response.body) {
+      const body = (await response.json().catch(() => null)) as { error?: { code: string; message: string } } | null;
+      result.error = body?.error ?? { code: `http_${response.status}`, message: response.statusText };
+      return result;
     }
+    const decoder = new TextDecoder();
+    const reader = response.body.getReader();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let boundary: number;
+      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        let event = "message";
+        let data = "";
+        for (const line of raw.split("\n")) {
+          if (line.startsWith("event: ")) event = line.slice(7);
+          else if (line.startsWith("data: ")) data += line.slice(6);
+        }
+        if (!data) continue; // keep-alive comment
+        const payload = JSON.parse(data);
+        if (event === "text") {
+          result.msToFirstText ??= performance.now() - started;
+          result.text += payload.delta;
+        } else if (event === "meta") result.meta = payload;
+        else if (event === "done") result.done = payload;
+        else if (event === "refusal") result.refusal = payload;
+        else if (event === "fallback") result.fallbacks.push(payload);
+        else if (event === "error") result.error = payload;
+      }
+    }
+  } catch (error) {
+    result.error = { code: "connection", message: error instanceof Error ? error.message : String(error) };
+  } finally {
+    result.msTotal = performance.now() - started;
   }
-  result.msTotal = performance.now() - started;
   return result;
 }
 
-// ---------- budget ----------
+type RunStatus = "complete" | "incomplete" | "refused" | "error";
 
-function estimateCallCost(m: ModelUnderTest, c: CaseFixture): number {
-  const price = PRICES[m.model];
-  if (!price) return 0;
-  // Rough upper estimate: about 4 characters per text token, about 3,000 tokens per PDF page
-  // (2 pages per report), everything written to cache, plus a typical output.
-  const textChars = c.sources.reduce((n, s) => n + (s.kind === "text" ? s.text.length : 0), 0) + 40_000;
-  const pdfTokens = c.sources.filter((s) => s.kind === "pdf").length * 2 * 3_000;
-  const inputTokens = textChars / 4 + pdfTokens;
-  return (inputTokens * price.cacheWrite + BUDGET_OUTPUT_TOKENS_GUESS * price.output) / 1_000_000;
+function statusOf(run: StreamResult): { status: RunStatus; reason: string } {
+  if (run.refusal) return { status: "refused", reason: `refusal${run.refusal.category ? ` (${run.refusal.category})` : ""}` };
+  if (run.error) return { status: "error", reason: `${run.error.code}: ${run.error.message}` };
+  if (!run.done) return { status: "error", reason: "the stream ended without a done event" };
+  if (!run.done.complete) return { status: "incomplete", reason: `stopped with ${run.done.stopReason}` };
+  return { status: "complete", reason: run.done.stopReason };
 }
 
 // ---------- main ----------
 
-function fmtUsd(n: number | null) {
-  return n === null ? "n/a" : `$${n.toFixed(4)}`;
-}
-
 async function main() {
-  const cases = await loadCases();
+  const args = parseArgs(process.argv.slice(2));
+  const baseUrl = args.baseUrl ?? `http://127.0.0.1:${PORT}`;
+  const outDir = path.resolve(args.mock ? "tmp/phase0-mock" : "docs/phase0/outputs");
+
+  const cases = await loadCases(args.cases);
   for (const c of cases) {
-    const mb = (c.bodyBytes / 1_000_000).toFixed(3);
-    console.log(`${c.id}: request body ${mb} MB (PDFs ${(c.pdfBytes / 1_000_000).toFixed(3)} MB raw)`);
+    console.log(`${c.id}: request body ${(c.bodyBytes / 1_000_000).toFixed(3)} MB (PDFs ${(c.pdfBytes / 1_000_000).toFixed(3)} MB raw, ${c.pdfPages} pages)`);
     const tooLarge = requestTooLargeMessage(c.bodyBytes);
     if (tooLarge) throw new Error(`${c.id}: ${tooLarge} (limit ${MAX_REQUEST_BODY_BYTES} bytes)`);
   }
 
-  const models = (mock ? MOCK_MODELS : REAL_MODELS).filter((m) => !only || only.includes(m.model));
+  const pool = args.mock ? MOCK_MODELS : REAL_MODELS;
+  if (args.only) {
+    const unknown = args.only.filter((id) => !pool.some((m) => m.model === id));
+    if (unknown.length) throw new Error(`Unknown model id for this mode: ${unknown.join(", ")}.`);
+  }
+  const models = pool.filter((m) => !args.only || args.only.includes(m.model));
   const missingKeys = [...new Set(models.filter((m) => m.keyVar && !process.env[m.keyVar]).map((m) => m.keyVar!))];
-  for (const key of missingKeys) console.log(`${key} is not set: its models are skipped. Put it in .env.local.`);
+  for (const key of missingKeys) console.log(`${key} is not set: its models are skipped. Put it in .env.phase0.`);
   const runnable = models.filter((m) => !m.keyVar || process.env[m.keyVar]);
   if (runnable.length === 0) {
     console.log("Nothing to run. Use --mock to check the plumbing without keys.");
     return;
   }
 
-  const server = await startServer();
+  const tracker = new SpendTracker(args.budgetUsd);
   const records: Record<string, unknown>[] = [];
-  let spent = 0;
+  let stopped: string | null = null;
+  const server = await startServer(args, baseUrl);
   try {
+    await mkdir(outDir, { recursive: true });
     // The model-list route, once per provider.
     for (const provider of [...new Set(runnable.map((m) => m.provider))]) {
       const keyVar = runnable.find((m) => m.provider === provider)!.keyVar;
@@ -248,54 +281,62 @@ async function main() {
       const body = (await res.json()) as { defaultModel?: string; models?: { id: string }[]; error?: { message: string } };
       const ids = body.models?.map((x) => x.id) ?? [];
       console.log(`/api/models ${provider}: HTTP ${res.status}, ${ids.length} models, default ${body.defaultModel ?? "none"}${body.error ? `, error: ${body.error.message}` : ""}`);
-      await mkdir(outDir, { recursive: true });
       await writeFile(path.join(outDir, `models-${provider}.json`), JSON.stringify({ status: res.status, defaultModel: body.defaultModel ?? null, ids, error: body.error ?? null }, null, 2) + "\n");
     }
 
-    for (const c of cases) {
+    outer: for (const c of cases) {
       for (const m of runnable) {
-        const estimate = estimateCallCost(m, c);
-        if (spent + estimate > budgetUsd) {
-          console.log(`${c.id} / ${m.model}: skipped, the estimated $${estimate.toFixed(2)} would pass the $${budgetUsd} budget (spent $${spent.toFixed(2)}).`);
-          records.push({ case: c.id, model: m.model, skipped: "budget" });
+        const inputTokens = inputTokensUpperBound(c.promptChars, c.pdfPages);
+        const worst = worstCaseCallUsd({ provider: m.provider, model: m.model, inputTokens, maxOutputTokens: MAX_OUTPUT_TOKENS, prewarm: args.prewarm });
+        if (!tracker.canStart(worst)) {
+          console.log(`${c.id} / ${m.model}: skipped; its worst case $${worst.toFixed(2)} could take the total past $${args.budgetUsd} (spent $${tracker.spentUsd.toFixed(2)}).`);
+          records.push({ case: c.id, model: m.model, skipped: "budget", worstCaseUsd: worst });
           continue;
         }
 
         let warm: StreamResult | null = null;
-        if (prewarm) {
-          warm = await callGenerate(m, c, "prewarm");
-          if (warm.error) console.log(`${c.id} / ${m.model}: pre-warm failed: ${warm.error.message}`);
+        let warmCost: number | null = null;
+        if (args.prewarm) {
+          warm = await callGenerate(baseUrl, m, c, "prewarm");
+          warmCost = warm.done ? costUsd(m.model, warm.done.usage) : null;
+          if (m.provider !== "mock" && !tracker.charge(warmCost, worst).known) {
+            stopped = `${c.id} / ${m.model}: the pre-warm's cost is unknown (${warm.error?.message ?? "no done event"}); charged its worst case and stopped.`;
+          }
         }
-        const run = await callGenerate(m, c, "generate");
-        const warmCost = warm?.done ? costUsd(m.model, warm.done.usage) : null;
-        const runCost = run.done ? generationCostUsd(m.model, run.done.usage, run.done.attempts) : null;
-        spent += (warmCost ?? 0) + (runCost ?? 0);
+        const run: StreamResult | null = stopped ? null : await callGenerate(baseUrl, m, c, "generate");
+        const runCost = run?.done ? generationCostUsd(m.model, run.done.usage, run.done.attempts) : null;
+        if (run && m.provider !== "mock" && !tracker.charge(runCost, worst).known) {
+          stopped = `${c.id} / ${m.model}: the generation's cost is unknown (${run.error?.message ?? (run.done ? "a model without a price answered" : "no done event")}); charged its worst case and stopped.`;
+        }
 
-        const words = run.text.trim() ? run.text.trim().split(/\s+/).length : 0;
+        const outcome = run ? statusOf(run) : { status: "error" as RunStatus, reason: "not run after the pre-warm failed" };
         const record = {
           case: c.id,
           provider: m.provider,
           model: m.model,
-          servedModel: run.done?.servedModel ?? null,
-          fallbackUsed: run.fallbacks.length > 0 || (run.done?.attempts?.some((a) => a.fallback) ?? false),
-          fallbacks: run.fallbacks,
-          attempts: run.done?.attempts ?? null,
+          servedModel: run?.done?.servedModel ?? null,
+          status: outcome.status,
+          statusReason: outcome.reason,
+          fallbackUsed: (run?.fallbacks.length ?? 0) > 0 || (run?.done?.attempts?.some((a) => a.fallback) ?? false),
+          fallbacks: run?.fallbacks ?? [],
+          attempts: run?.done?.attempts ?? null,
           effort: m.effort,
           maxOutputTokens: MAX_OUTPUT_TOKENS,
-          rulesVersions: run.meta?.rulesVersions ?? null,
+          rulesVersions: run?.meta?.rulesVersions ?? null,
           requestBodyBytes: c.bodyBytes,
+          worstCaseUsd: worst,
           prewarm: warm ? { usage: warm.done?.usage ?? null, costUsd: warmCost, msTotal: Math.round(warm.msTotal), error: warm.error } : null,
-          stopReason: run.done?.stopReason ?? null,
-          refusal: run.refusal,
-          error: run.error,
-          usage: run.done?.usage ?? null,
+          stopReason: run?.done?.stopReason ?? null,
+          refusal: run?.refusal ?? null,
+          error: run?.error ?? null,
+          usage: run?.done?.usage ?? null,
           costUsd: runCost,
           totalCostUsd: (warmCost ?? 0) + (runCost ?? 0),
-          msToFirstText: run.msToFirstText === null ? null : Math.round(run.msToFirstText),
-          msTotal: Math.round(run.msTotal),
-          words,
-          missingMarkers: (run.text.match(/\[MISSING:/g) ?? []).length,
-          checkMarkers: (run.text.match(/\[CHECK:/g) ?? []).length,
+          msToFirstText: run?.msToFirstText == null ? null : Math.round(run.msToFirstText),
+          msTotal: run ? Math.round(run.msTotal) : null,
+          words: run?.text.trim() ? run.text.trim().split(/\s+/).length : 0,
+          missingMarkers: (run?.text.match(/\[MISSING:/g) ?? []).length,
+          checkMarkers: (run?.text.match(/\[CHECK:/g) ?? []).length,
           pricesCheckedOn: PRICES_CHECKED_ON,
           generatedAt: new Date().toISOString(),
         };
@@ -304,27 +345,38 @@ async function main() {
         const caseDir = path.join(outDir, c.id);
         await mkdir(caseDir, { recursive: true });
         await writeFile(path.join(caseDir, `${m.model}.json`), JSON.stringify(record, null, 2) + "\n");
-        // A refused generation keeps no text: a partial answer must not look like a draft.
-        const body = run.refusal ? "" : run.text.trim();
-        await writeFile(
-          path.join(caseDir, `${m.model}.md`),
-          `<!-- ${c.label} | Medical Necessity | requested ${m.model} (effort ${m.effort}) | written by ${record.servedModel ?? "none"} | invented case -->\n\n${body || "(no text: see the .json file for the stop reason or error)"}\n`,
-        );
+        const header = `<!-- ${c.label} | Medical Necessity | requested ${m.model} (effort ${m.effort}) | written by ${record.servedModel ?? "none"} | invented case -->`;
+        if (outcome.status === "complete") {
+          await writeFile(path.join(caseDir, `${m.model}.md`), `${header}\n\n${run!.text.trim()}\n`);
+        } else {
+          // Only a complete answer may look like a draft. A refusal's text is discarded
+          // (provider contract); other partial text is kept apart for diagnosis.
+          await writeFile(path.join(caseDir, `${m.model}.md`), `${header}\n\nINCOMPLETE (${outcome.status}): ${outcome.reason}. This is not a usable section.\n`);
+          if (outcome.status !== "refused" && run?.text.trim()) {
+            await writeFile(path.join(caseDir, `${m.model}.partial.md`), `${header}\n\nPARTIAL TEXT, NOT A DRAFT (${outcome.reason})\n\n${run.text.trim()}\n`);
+          }
+        }
         console.log(
-          `${c.id} / ${m.model}: ${run.error ? `ERROR ${run.error.message}` : run.done?.stopReason}, ${words} words, ` +
-            `${(run.msTotal / 1000).toFixed(1)} s, ${fmtUsd(record.totalCostUsd)} (total so far $${spent.toFixed(2)})`,
+          `${c.id} / ${m.model}: ${outcome.status} (${outcome.reason}), ${record.words} words, ` +
+            `${((record.msTotal ?? 0) / 1000).toFixed(1)} s, $${record.totalCostUsd.toFixed(4)} (spent so far $${tracker.spentUsd.toFixed(2)})`,
         );
+        if (stopped) break outer;
       }
     }
   } finally {
     server?.kill();
   }
 
-  await writeFile(path.join(outDir, "runs.json"), JSON.stringify({ budgetUsd, spentUsd: spent, runs: records }, null, 2) + "\n");
-  console.log(`Done. Spent $${spent.toFixed(4)}. Outputs in ${path.relative(process.cwd(), outDir)}.`);
+  await writeFile(
+    path.join(outDir, "runs.json"),
+    JSON.stringify({ budgetUsd: args.budgetUsd, spentUsd: tracker.spentUsd, stopped, runs: records }, null, 2) + "\n",
+  );
+  if (stopped) throw new Error(`Stopped: ${stopped}`);
+  console.log(`Done. Spent $${tracker.spentUsd.toFixed(4)}. Outputs in ${path.relative(process.cwd(), outDir)}.`);
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+  const message = error instanceof UnknownPriceError || error instanceof Error ? error.message : String(error);
+  console.error(message);
   process.exit(1);
 });
