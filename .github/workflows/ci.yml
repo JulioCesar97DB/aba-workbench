@@ -12,10 +12,14 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request cancels the run it supersedes. Runs on dev and
-# main are never cancelled, so every commit there keeps its result.
+# Pull requests: each pull request has one group, and a new push cancels the
+# run it supersedes, whether that run is in progress or still pending.
+# Pushes to dev and main: each run gets a group of its own (its run id), so no
+# other run can queue behind it or replace it. GitHub keeps only one pending
+# run per group, so a shared group per branch would cancel the middle one of
+# three quick merges and leave that commit without a result.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
