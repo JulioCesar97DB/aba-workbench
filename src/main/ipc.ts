@@ -16,14 +16,15 @@ export function registerIpc(options: { rulesDir: string; isTrustedSender: (event
   // A generation belongs to the page that started it. When that page goes away (reload,
   // navigation, renderer crash, window closed), nobody can see or cancel it any more, so
   // it stops: once real providers are connected, it would otherwise keep spending.
+  // "did-navigate" fires only when a main-frame navigation commits (a reload does), so a
+  // navigation the app blocks (security.ts) leaves the page and its generations alone;
+  // "did-start-navigation" would fire before the block and kill them for nothing.
   const watched = new WeakSet<WebContents>();
   const watch = (contents: WebContents) => {
     if (watched.has(contents)) return;
     watched.add(contents);
     const id = contents.id;
-    contents.on("did-start-navigation", (details) => {
-      if (details.isMainFrame && !details.isSameDocument) generations.orphan(id);
-    });
+    contents.on("did-navigate", () => generations.orphan(id));
     contents.on("render-process-gone", () => generations.orphan(id));
     contents.once("destroyed", () => generations.orphan(id));
   };

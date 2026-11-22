@@ -53,6 +53,44 @@ test("a mock generation streams to completion, with the rules found", async ({ a
   await expect(page.getByRole("button", { name: "Run mock generation" })).toBeEnabled();
 });
 
+test("a navigation the app blocks leaves the running generation alone", async ({ app }) => {
+  const page = await app.firstWindow();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+  // All in the page: Playwright would otherwise wait for a navigation that never finishes.
+  const result = await page.evaluate(
+    () =>
+      new Promise<{ types: string[]; textBeforeBlock: number; urlAfter: string }>((resolve) => {
+        const inPage = globalThis as unknown as InPage & { location: { href: string; assign(url: string): void } };
+        const id = inPage.crypto.randomUUID();
+        const types: string[] = [];
+        let textBeforeBlock = 0;
+        let blocked = false;
+        const stop = inPage.aba.onGenerationUpdate((update) => {
+          if (update.generationId !== id) return;
+          types.push(update.event.type);
+          if (update.event.type === "text" && !blocked) {
+            textBeforeBlock++;
+            blocked = true;
+            // Each of these is blocked by the app (src/main/security.ts).
+            inPage.location.href = "https://example.com/";
+            inPage.location.assign("file:///etc/hosts");
+          }
+          if (update.event.type === "finished") {
+            stop();
+            resolve({ types, textBeforeBlock, urlAfter: inPage.location.href });
+          }
+        });
+        void inPage.aba.startMockGeneration(id);
+        // Without a "finished", show what did arrive rather than hang until the test times out.
+        setTimeout(() => resolve({ types, textBeforeBlock, urlAfter: inPage.location.href }), 10_000);
+      }),
+  );
+  expect(result.textBeforeBlock).toBe(1);
+  expect(result.urlAfter).not.toMatch(/example\.com|^file:/);
+  expect(result.types.filter((type) => type === "text").length).toBeGreaterThan(10);
+  expect(result.types.slice(-2)).toEqual(["done", "finished"]);
+});
+
 test("a reload stops the running generation: nothing more arrives for it", async ({ app }) => {
   const page = await app.firstWindow();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
