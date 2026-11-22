@@ -20,11 +20,13 @@
   },
   "include": [
     "electron.vite.config.ts",
+    "playwright.config.ts",
     "src/main/**/*",
     "src/preload/**/*",
     "src/lib/**/*",
     "src/shared/**/*",
     "scripts/**/*",
-    "tests/**/*"
+    "tests/**/*",
+    "e2e/**/*"
   ]
 }
