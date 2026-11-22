@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_REQUEST_BODY_BYTES, readBodyWithLimit, requestTooLargeMessage } from "../src/lib/limits.ts";
+import { MAX_REQUEST_BODY_BYTES, requestTooLargeMessage } from "../src/lib/limits.ts";
 import { parseGenerateBody } from "../src/lib/request.ts";
 
 test("size guard: 4.5 MB passes, one byte more is refused with the paste-the-text message", () => {
@@ -8,28 +8,6 @@ test("size guard: 4.5 MB passes, one byte more is refused with the paste-the-tex
   assert.match(requestTooLargeMessage(MAX_REQUEST_BODY_BYTES + 1) ?? "", /Paste the text/);
   assert.match(requestTooLargeMessage(5_000_000, false) ?? "", /are larger than the 4\.5 MB/);
   assert.match(requestTooLargeMessage(5_000_000) ?? "", /add up to 5\.0 MB, more than the 4\.5 MB/);
-});
-
-function chunkedRequest(totalBytes: number): Request {
-  const chunk = new Uint8Array(500_000).fill(120);
-  let sent = 0;
-  const body = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      if (sent >= totalBytes) return controller.close();
-      const size = Math.min(chunk.length, totalBytes - sent);
-      controller.enqueue(chunk.subarray(0, size));
-      sent += size;
-    },
-  });
-  return new Request("http://localhost/api/generate", { method: "POST", body, duplex: "half" } as RequestInit);
-}
-
-test("size guard: a chunked body without Content-Length is cut at the limit", async () => {
-  const over = await readBodyWithLimit(chunkedRequest(5_000_000));
-  assert.equal(over.ok, false);
-  const under = await readBodyWithLimit(chunkedRequest(1_000_000));
-  assert.ok(under.ok);
-  assert.equal(under.text.length, 1_000_000);
 });
 
 const valid = {

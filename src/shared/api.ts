@@ -1,0 +1,47 @@
+import type { GenerationEvent } from "../lib/generation-events.ts";
+
+/*
+ * The contract between the interface (renderer) and the main process. The preload
+ * exposes exactly these functions as window.aba; the interface has no other way in.
+ * Rules for growing it: one narrow function per action, plain data in and out, no
+ * generic "invoke", and never a key, a token or a file path the user did not choose.
+ */
+
+export interface AppInfo {
+  name: string;
+  version: string;
+}
+
+/** What the main process reports about a generation, in order. "finished" is always last. */
+export type GenerationUpdateEvent = GenerationEvent | { type: "finished"; cancelled: boolean };
+
+export interface GenerationUpdate {
+  generationId: string;
+  event: GenerationUpdateEvent;
+}
+
+export interface AbaApi {
+  getAppInfo(): Promise<AppInfo>;
+  /**
+   * Development check: runs the mock provider (no AI call, no key, no cost) with the real
+   * prompt builder and rules. The interface picks the id (see isGenerationId) so it can
+   * match the updates that may arrive before this promise settles.
+   */
+  startMockGeneration(generationId: string): Promise<void>;
+  /** Stops a running generation; unknown or finished ids are ignored. */
+  cancelGeneration(generationId: string): Promise<void>;
+  /** Subscribes to generation updates; returns the function that unsubscribes. */
+  onGenerationUpdate(listener: (update: GenerationUpdate) => void): () => void;
+}
+
+export const IPC_CHANNELS = {
+  getAppInfo: "app:get-info",
+  startMockGeneration: "generation:start-mock",
+  cancelGeneration: "generation:cancel",
+  generationUpdate: "generation:update",
+} as const;
+
+/** Generation ids are UUIDs (crypto.randomUUID()); anything else is refused. */
+export function isGenerationId(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
+}

@@ -1,8 +1,11 @@
 import type { Effort, SourceDocument } from "./providers/types.ts";
 import { isSectionId, type SectionId } from "./rules.ts";
 
-/** The header that carries the user's own provider key. It is never stored or logged. */
-export const KEY_HEADER = "x-provider-key";
+/*
+ * Validation of a generation request that arrives from outside the trusted code. The
+ * Phase 0 HTTP route used it on the request body; the desktop app will use it on what
+ * the interface sends once the interface can request real generations.
+ */
 
 const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 
