@@ -1,4 +1,4 @@
-import { open, readdir, rename, rm, stat } from "node:fs/promises";
+import { lstat, open, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 /*
@@ -43,8 +43,12 @@ export async function writeFileDurably(file: string, text: string): Promise<void
 }
 
 /**
- * How old another process's temporary file must be before it counts as left behind. A
- * save takes milliseconds; this leaves room for a slow disk or network volume.
+ * How long another process's temporary file must have been untouched before it is
+ * treated as left behind by a save that was cut short. A save takes milliseconds; this
+ * leaves room for a slow disk or network volume. It is a guess from the file's modified
+ * time, so it can be wrong (a network server's clock far behind, a save hung for over a
+ * minute); it is only used to decide when to finish a case's interrupted creation
+ * (src/main/cases.ts), never to delete anything.
  */
 export const STALE_TEMPORARY_AFTER_MS = 60_000;
 
@@ -53,29 +57,58 @@ export function isTemporaryFileOf(fileName: string, name: string): boolean {
   return name.startsWith(`${fileName}.`) && /^\.[0-9]+\.tmp$/.test(name.slice(fileName.length));
 }
 
+/** Whether `name` is this process's own temporary file (a save it may be making now). */
+function isOwnTemporaryFile(name: string): boolean {
+  return name.endsWith(`.${process.pid}${TEMPORARY_SUFFIX}`);
+}
+
 /**
  * Whether the temporary file `name` in `folder` was left behind by a save cut short (a
- * crash, a power cut): not this process's own, and untouched for STALE_TEMPORARY_AFTER_MS.
- * One copy of the app runs per profile (src/main/index.ts), but two profiles or two
- * computers can share a cases folder (a network or synced folder); the age keeps one from
- * removing a temporary file the other is still writing.
+ * crash, a power cut): a plain file (lstat: a link is never followed), not this process's
+ * own, and untouched for STALE_TEMPORARY_AFTER_MS. One copy of the app runs per profile
+ * (src/main/index.ts), but two profiles or two computers can share a cases folder (a
+ * network or synced folder): a file untouched for a minute is treated as left behind.
  */
 export async function isLeftBehind(folder: string, name: string, now = Date.now()): Promise<boolean> {
-  if (name.endsWith(`.${process.pid}${TEMPORARY_SUFFIX}`)) return false;
+  if (isOwnTemporaryFile(name)) return false;
   try {
-    return now - (await stat(path.join(folder, name))).mtimeMs >= STALE_TEMPORARY_AFTER_MS;
+    const info = await lstat(path.join(folder, name));
+    return info.isFile() && now - info.mtimeMs >= STALE_TEMPORARY_AFTER_MS;
   } catch {
     return false;
   }
 }
 
 /**
- * Removes the temporary files a save cut short left next to `file` (isLeftBehind):
- * exactly "<name>.<digits>.tmp", never anything else. They are full or partial copies of
- * the file and would otherwise stay for good, since each run's temporary name holds its
- * own process id. Failures are ignored.
+ * Finishes a save a crash interrupted between flushing its temporary file and renaming
+ * it: renames `temporary` to `file` and flushes the folder, as writeFileDurably would
+ * have. Never replaces an existing `file`: false if one is there, or if the rename fails.
  */
-export async function removeStaleTemporaryFiles(file: string): Promise<void> {
+export async function finishInterruptedSave(temporary: string, file: string): Promise<boolean> {
+  try {
+    await lstat(file);
+    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
+  }
+  try {
+    await rename(temporary, file);
+  } catch {
+    return false;
+  }
+  await flushFolder(path.dirname(file));
+  return true;
+}
+
+/**
+ * The settings file only (never a case folder: there the app deletes nothing, see
+ * src/main/cases.ts): removes the temporary files a save cut short left next to `file`,
+ * exactly "<name>.<digits>.tmp" and plain files, but not this process's own. One copy of
+ * the app runs per profile, so no other process writes this profile's settings, and no
+ * age is needed. A settings file holds only the app's own preferences, rewritten whole by
+ * the next save. Failures are ignored.
+ */
+export async function removeLeftoverSettingsTemporaryFiles(file: string): Promise<void> {
   const folder = path.dirname(file);
   const base = path.basename(file);
   let names: string[];
@@ -85,8 +118,12 @@ export async function removeStaleTemporaryFiles(file: string): Promise<void> {
     return;
   }
   for (const name of names) {
-    if (!isTemporaryFileOf(base, name) || !(await isLeftBehind(folder, name))) continue;
-    await rm(path.join(folder, name), { force: true }).catch(() => undefined);
+    if (!isTemporaryFileOf(base, name) || isOwnTemporaryFile(name)) continue;
+    const isFile = await lstat(path.join(folder, name)).then(
+      (info) => info.isFile(),
+      () => false,
+    );
+    if (isFile) await rm(path.join(folder, name), { force: true }).catch(() => undefined);
   }
 }
 

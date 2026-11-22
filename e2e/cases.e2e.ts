@@ -1,5 +1,5 @@
 import type { ElectronApplication, Page } from "@playwright/test";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { defaultCasesFolder, expect, goTo, SAMPLE_CASE, seedCase, startSecondCopy, stubFileManager, stubFolderDialog, test } from "./app.ts";
 
@@ -177,7 +177,7 @@ test("change the cases folder in Settings; it is remembered, and the list follow
   await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(home));
   // The built app takes it as its default; the packaged app was given it as a chosen folder.
   await expect(section.getByText("Default", { exact: true })).toHaveCount(testInfo.project.name === "built" ? 1 : 0);
-  await expect(section.getByText("A folder that OneDrive, iCloud, Dropbox or Google Drive syncs sends your cases to that service.")).toBeVisible();
+  await expect(section.getByText("If OneDrive, iCloud, Dropbox or Google Drive syncs this folder, your cases are copied to that service.")).toBeVisible();
 
   // Cancelling the dialog changes nothing.
   await stubFolderDialog(app, null);
@@ -331,4 +331,29 @@ test("--home-folder moves the default cases folder in development only; the pack
   await expect(section.getByTestId("cases-folder-path")).toHaveText(casesFolder);
   await expect(section.getByText("Default", { exact: true })).toHaveCount(testInfo.project.name === "packaged" ? 0 : 1);
   expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(testInfo.project.name === "packaged");
+});
+
+test("a case whose creation was cut short is finished on Home, or shown as unfinished; nothing is deleted", async ({ launch, home }) => {
+  const casesFolder = defaultCasesFolder(home);
+  mkdirSync(casesFolder, { recursive: true });
+  const then = new Date(Date.now() - 2 * 60_000);
+  // Complete: the crash came after the save was flushed, before the rename.
+  const complete = JSON.stringify({ schemaVersion: 1, files: [], ...SAMPLE_CASE, label: "Finished after a crash" }, null, 2);
+  mkdirSync(path.join(casesFolder, "Finished after a crash"));
+  writeFileSync(path.join(casesFolder, "Finished after a crash", "aba-case.json.4242.tmp"), complete);
+  utimesSync(path.join(casesFolder, "Finished after a crash", "aba-case.json.4242.tmp"), then, then);
+  // Partial: the crash came before the save was flushed.
+  mkdirSync(path.join(casesFolder, "Cut short"));
+  writeFileSync(path.join(casesFolder, "Cut short", "aba-case.json.4243.tmp"), complete.slice(0, 40));
+  utimesSync(path.join(casesFolder, "Cut short", "aba-case.json.4243.tmp"), then, then);
+
+  const page = await openApp(await launch());
+  await expect(page.getByRole("link", { name: "Finished after a crash" })).toBeVisible();
+  const group = page.getByRole("region", { name: "Folders that could not be opened" });
+  await expect(group.getByRole("row", { name: /Cut short/ })).toContainText("A case that was not finished being created");
+  expect(readdirSync(path.join(casesFolder, "Finished after a crash"))).toEqual(["aba-case.json"]);
+  expect(readFileSync(path.join(casesFolder, "Finished after a crash", "aba-case.json"), "utf8")).toBe(complete);
+  expect(readdirSync(path.join(casesFolder, "Cut short"))).toEqual(["aba-case.json.4243.tmp"]);
+  await page.getByRole("link", { name: "Finished after a crash" }).click();
+  await expect(heading(page)).toHaveText("Sources");
 });

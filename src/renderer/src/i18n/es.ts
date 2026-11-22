@@ -78,6 +78,7 @@ export const es: Messages = {
     duplicate: "Es una copia de otro caso. Abre el otro, o saca esta copia de la carpeta de casos.",
     "cannot-read": "Tu computadora no dejó que ABA Workbench lo leyera.",
     link: "Es un enlace a una carpeta que está en otro lugar. ABA Workbench no sigue enlaces: mueve aquí la carpeta misma para abrirla.",
+    unfinished: "Un caso que no se terminó de crear, quizás porque la aplicación o la computadora se detuvo. ABA Workbench lo deja tal como está.",
   },
   newCase: {
     title: "Nuevo caso",

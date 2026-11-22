@@ -83,6 +83,7 @@ export const en = {
     duplicate: "A copy of another case. Open the other one, or move this copy out of the cases folder.",
     "cannot-read": "Your computer did not let ABA Workbench read it.",
     link: "A link to a folder somewhere else. ABA Workbench does not follow links: move the folder itself in here to open it.",
+    unfinished: "A case that was not finished being created, perhaps because the app or the computer stopped. ABA Workbench leaves it as it is.",
   },
   newCase: {
     title: "New case",
@@ -173,7 +174,7 @@ export const en = {
     languageNotSaved: "Shown in {{language}} for now, but the choice could not be saved: the app will open in {{previous}} next time.",
     casesFolderHeading: "Cases folder",
     casesFolderBody: "Each case is a folder in here, with its data file and its PDFs. ABA Workbench sends nothing anywhere.",
-    casesFolderSyncNote: "A folder that OneDrive, iCloud, Dropbox or Google Drive syncs sends your cases to that service.",
+    casesFolderSyncNote: "If OneDrive, iCloud, Dropbox or Google Drive syncs this folder, your cases are copied to that service.",
     casesFolderLabel: "Folder",
     casesFolderChangeNote: "Cases already in another folder stay there. Choose that folder again to see them.",
     aiHeading: "AI connection",

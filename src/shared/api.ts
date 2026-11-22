@@ -131,9 +131,13 @@ export interface CaseDetail extends CaseSummary {
  * - "cannot-read": the system did not let the app read it.
  * - "link": a symbolic link to a folder elsewhere, which the app never follows. (A Finder
  *   alias or a Windows shortcut is a file, not a folder: it is not listed at all.)
- * The app never changes such a folder.
+ * - "unfinished": a case the app was creating when it stopped (a crash, a power cut): it
+ *   holds the temporary data file of that creation, and the app could not finish it.
+ * The app never changes such a folder. The one thing it does in a case folder with no
+ * data file is finish an interrupted creation: when the folder holds only the complete
+ * temporary data file of a case, that file becomes its aba-case.json (src/main/cases.ts).
  */
-export type UnreadableReason = "not-a-case" | "damaged" | "newer-version" | "duplicate" | "cannot-read" | "link";
+export type UnreadableReason = "not-a-case" | "damaged" | "newer-version" | "duplicate" | "cannot-read" | "link" | "unfinished";
 
 export interface UnreadableFolder {
   /** The folder's name inside the cases folder (not a path), to show and to reveal it. */

@@ -32,6 +32,21 @@ function makeOld(file: string): void {
 
 const BACKSLASH = String.fromCharCode(92);
 
+/** Each named file's bytes, as base64, to compare before and after. */
+function bytesOf(folder: string, names: string[]): Record<string, string> {
+  return Object.fromEntries(names.map((name) => [name, readFileSync(path.join(folder, name)).toString("base64")]));
+}
+
+/** Every entry under `folder` with its bytes (folders as "dir"): to prove nothing changed. */
+function everything(folder: string): string[] {
+  return readdirSync(folder, { recursive: true, withFileTypes: true })
+    .map((entry) => {
+      const full = path.join(entry.parentPath, entry.name);
+      return `${path.relative(folder, full)}:${entry.isFile() ? readFileSync(full).toString("base64") : entry.isSymbolicLink() ? "link" : "dir"}`;
+    })
+    .sort();
+}
+
 function sample(overrides: Partial<CaseData> = {}): CaseData {
   return { ...newCaseData({ id: ID, label: "M.F. initial assessment", clientAge: { years: 4, months: 2 }, now: NOW }), ...overrides };
 }
@@ -659,27 +674,23 @@ test("S2: a case folder renamed while the app is open still opens, without going
   assert.deepEqual(readdirSync(folder), []);
 });
 
-test("S3: temporary copies a crash left behind are removed when the case is opened, and nothing else is", async () => {
+test("S3 and R3-1: a temporary file a save cut short left in a case folder is never removed", async () => {
   const folder = tempFolder();
   const { lib } = library(folder);
   const created = await lib.create({ label: "Ana" });
   assert.ok(created.outcome === "created");
   const caseFolder = path.join(folder, "Ana");
-  for (const name of ["aba-case.json.99999.tmp", "aba-case.json.1.tmp", "aba-case.json.12a.tmp", "aba-case.json.tmp", "notes.99999.tmp", "a.pdf"]) {
-    writeFileSync(path.join(caseFolder, name), "{ half a fi");
-    makeOld(path.join(caseFolder, name));
-  }
-  // Another copy of the app (another profile or computer sharing the folder) is saving right now: kept.
+  // A complete newer copy (a crash between flush and rename), a partial one, look-alikes and a fresh one.
+  writeFileSync(path.join(caseFolder, "aba-case.json.99999.tmp"), serializeCaseFile(sample({ id: created.case.id, label: "Ana, newer" })));
+  writeFileSync(path.join(caseFolder, "aba-case.json.1.tmp"), "{ half a fi");
+  for (const name of ["aba-case.json.99999.tmp", "aba-case.json.1.tmp"]) makeOld(path.join(caseFolder, name));
   writeFileSync(path.join(caseFolder, "aba-case.json.77777.tmp"), "{ being written");
+  writeFileSync(path.join(caseFolder, "a.pdf"), "%PDF");
+  const before = bytesOf(caseFolder, ["aba-case.json.99999.tmp", "aba-case.json.1.tmp", "aba-case.json.77777.tmp"]);
   assert.equal((await lib.open(created.case.id)).outcome, "opened");
-  assert.deepEqual(readdirSync(caseFolder).sort(), ["a.pdf", "aba-case.json", "aba-case.json.12a.tmp", "aba-case.json.77777.tmp", "aba-case.json.tmp", "notes.99999.tmp"].sort());
-
-  // An unreadable case's folder is never cleaned: the app does not change it at all.
-  mkdirSync(path.join(folder, "Broken"));
-  writeFileSync(path.join(folder, "Broken", CASE_FILE_NAME), "{ half");
-  writeFileSync(path.join(folder, "Broken", "aba-case.json.99999.tmp"), "{ whole?");
+  assert.ok(await lib.update(created.case.id, (data) => ({ ...data, label: "Ana R." })));
   await lib.list();
-  assert.deepEqual(readdirSync(path.join(folder, "Broken")).sort(), [CASE_FILE_NAME, "aba-case.json.99999.tmp"].sort());
+  assert.deepEqual(bytesOf(caseFolder, ["aba-case.json.99999.tmp", "aba-case.json.1.tmp", "aba-case.json.77777.tmp"]), before);
 });
 
 test("M1: an unknown key inside clientAge is kept on save; the interface sees only years and months", async () => {
@@ -810,28 +821,149 @@ test("R2-2: a number that would not be written back as itself makes the file dam
   assert.equal(readFileSync(path.join(folder, "Decimal", CASE_FILE_NAME), "utf8"), text);
 });
 
-test("R2-3: a case the app stopped while creating is cleared away when Home lists the cases; anything else stays", async () => {
+
+/* Review round 3: a case whose creation was interrupted is finished or shown, never deleted */
+
+/** A case folder as a crash during create leaves it, holding one temporary data file. */
+function interruptedCreate(casesFolder: string, name: string, text: string, { old = true, pid = 4242 } = {}): string {
+  const folder = path.join(casesFolder, name);
+  mkdirSync(folder);
+  const temporary = path.join(folder, `${CASE_FILE_NAME}.${pid}.tmp`);
+  writeFileSync(temporary, text);
+  if (old) makeOld(temporary);
+  return temporary;
+}
+
+const COMPLETE = serializeCaseFile(sample({ label: "Interrupted" }));
+
+test("R3-1: a crash before the temporary file was flushed leaves a partial file: shown as unfinished, nothing changed", async () => {
   const folder = tempFolder();
-  // Left by a crash between making the folder and saving the data file.
-  mkdirSync(path.join(folder, "Ana"));
-  writeFileSync(path.join(folder, "Ana", "aba-case.json.4242.tmp"), '{ "label": "Ana"');
-  makeOld(path.join(folder, "Ana", "aba-case.json.4242.tmp"));
-  // Being created right now by another copy of the app: kept.
-  mkdirSync(path.join(folder, "Beto"));
-  writeFileSync(path.join(folder, "Beto", "aba-case.json.4243.tmp"), "{");
-  // A temporary file next to something else, and an empty folder: not the app's, kept.
-  mkdirSync(path.join(folder, "Carla"));
-  writeFileSync(path.join(folder, "Carla", "aba-case.json.4244.tmp"), "{");
-  makeOld(path.join(folder, "Carla", "aba-case.json.4244.tmp"));
-  writeFileSync(path.join(folder, "Carla", "notes.txt"), "mine");
-  mkdirSync(path.join(folder, "Empty"));
+  interruptedCreate(folder, "Cut short", COMPLETE.slice(0, 60));
+  interruptedCreate(folder, "Empty file", "");
+  const before = everything(folder);
+  const { lib } = library(folder);
+  const list = await lib.list();
+  assert.deepEqual(list.cases, []);
+  assert.deepEqual(list.unreadable, [
+    { folderName: "Cut short", reason: "unfinished" },
+    { folderName: "Empty file", reason: "unfinished" },
+  ]);
+  assert.deepEqual(everything(folder), before);
+  assert.deepEqual(await lib.open(ID), { outcome: "not-found" });
+  assert.deepEqual(everything(folder), before);
+});
+
+test("R3-1: a crash after the flush (before or after the rename) leaves a complete case: the listing finishes or lists it", async () => {
+  const folder = tempFolder();
+  interruptedCreate(folder, "Interrupted", COMPLETE);
+  // After the rename (and before the folder was flushed): an ordinary case.
+  mkdirSync(path.join(folder, "Renamed"));
+  writeFileSync(path.join(folder, "Renamed", CASE_FILE_NAME), serializeCaseFile(sample({ id: "88888888-8888-4888-8888-888888888888", label: "Renamed" })));
   const { lib, logged } = library(folder);
   const list = await lib.list();
+  assert.deepEqual(list.unreadable, []);
   assert.deepEqual(
-    list.unreadable.map((entry) => entry.folderName),
-    ["Beto", "Carla", "Empty"],
+    list.cases.map((c) => [c.id, c.label]).sort(),
+    [
+      [ID, "Interrupted"],
+      ["88888888-8888-4888-8888-888888888888", "Renamed"],
+    ],
   );
-  assert.deepEqual(readdirSync(folder).sort(), ["Beto", "Carla", "Empty"]);
-  assert.deepEqual(readdirSync(path.join(folder, "Carla")).sort(), ["aba-case.json.4244.tmp", "notes.txt"]);
+  assert.deepEqual(readdirSync(path.join(folder, "Renamed")), [CASE_FILE_NAME]);
+  // The same bytes, now under the data file's name; nothing else in the folder.
+  assert.deepEqual(readdirSync(path.join(folder, "Interrupted")), [CASE_FILE_NAME]);
+  assert.equal(readFileSync(path.join(folder, "Interrupted", CASE_FILE_NAME), "utf8"), COMPLETE);
   assert.equal(logged.length, 1);
+  assert.equal((await lib.open(ID)).outcome, "opened");
+});
+
+test("R3-1: a complete temporary file still being written (this process's own, or changed in the last minute) waits", async () => {
+  const folder = tempFolder();
+  interruptedCreate(folder, "Fresh", COMPLETE, { old: false });
+  interruptedCreate(folder, "Own", serializeCaseFile(sample({ id: "22222222-2222-4222-8222-222222222222", label: "Own" })), { pid: process.pid });
+  const before = everything(folder);
+  const { lib } = library(folder);
+  assert.deepEqual((await lib.list()).unreadable, [
+    { folderName: "Fresh", reason: "unfinished" },
+    { folderName: "Own", reason: "unfinished" },
+  ]);
+  assert.deepEqual(everything(folder), before);
+  // A minute later, the one another process left is finished.
+  makeOld(path.join(folder, "Fresh", `${CASE_FILE_NAME}.4242.tmp`));
+  assert.deepEqual(
+    (await lib.list()).cases.map((c) => c.label),
+    ["Interrupted"],
+  );
+});
+
+test("R3-1: a folder holding a temporary data file and anything else is never touched", async () => {
+  const folder = tempFolder();
+  const withPdf = interruptedCreate(folder, "With a PDF", COMPLETE);
+  writeFileSync(path.join(path.dirname(withPdf), "a.pdf"), "%PDF");
+  const withDsStore = interruptedCreate(folder, "With .DS_Store", serializeCaseFile(sample({ id: "33333333-3333-4333-8333-333333333333" })));
+  writeFileSync(path.join(path.dirname(withDsStore), ".DS_Store"), "x");
+  const withFolder = interruptedCreate(folder, "With a folder", serializeCaseFile(sample({ id: "44444444-4444-4444-8444-444444444444" })));
+  mkdirSync(path.join(path.dirname(withFolder), `${CASE_FILE_NAME}.2.tmp`));
+  // Two complete candidates: which one the user wants cannot be told.
+  const two = interruptedCreate(folder, "Two copies", serializeCaseFile(sample({ id: "55555555-5555-4555-8555-555555555555" })));
+  writeFileSync(path.join(path.dirname(two), `${CASE_FILE_NAME}.4243.tmp`), serializeCaseFile(sample({ id: "66666666-6666-4666-8666-666666666666" })));
+  makeOld(path.join(path.dirname(two), `${CASE_FILE_NAME}.4243.tmp`));
+  // Complete but not lossless (R2-1), and complete but with the id of a case already there.
+  interruptedCreate(folder, "Proto", COMPLETE.replace('"files": []', '"files": [],\n  "__proto__": {}'));
+  mkdirSync(path.join(folder, "Existing"));
+  writeFileSync(path.join(folder, "Existing", CASE_FILE_NAME), serializeCaseFile(sample({ id: "77777777-7777-4777-8777-777777777777", label: "Existing" })));
+  interruptedCreate(folder, "Same id", serializeCaseFile(sample({ id: "77777777-7777-4777-8777-777777777777", label: "Same id" })));
+  const before = everything(folder);
+  const { lib } = library(folder);
+  const list = await lib.list();
+  assert.deepEqual(
+    list.cases.map((c) => c.label),
+    ["Existing"],
+  );
+  assert.deepEqual(list.unreadable, [
+    { folderName: "Proto", reason: "unfinished" },
+    { folderName: "Same id", reason: "unfinished" },
+    { folderName: "Two copies", reason: "unfinished" },
+    { folderName: "With .DS_Store", reason: "unfinished" },
+    { folderName: "With a PDF", reason: "unfinished" },
+    { folderName: "With a folder", reason: "unfinished" },
+  ]);
+  assert.deepEqual(everything(folder), before);
+});
+
+test("R3-1 and M3-1: a link named like a temporary data file is never followed or finished", { skip: process.platform === "win32" }, async () => {
+  const folder = tempFolder();
+  const elsewhere = tempFolder();
+  writeFileSync(path.join(elsewhere, "a case.json"), COMPLETE);
+  makeOld(path.join(elsewhere, "a case.json"));
+  mkdirSync(path.join(folder, "Linked"));
+  symlinkSync(path.join(elsewhere, "a case.json"), path.join(folder, "Linked", `${CASE_FILE_NAME}.1.tmp`));
+  const before = [...everything(folder), ...everything(elsewhere)];
+  const { lib } = library(folder);
+  const list = await lib.list();
+  assert.deepEqual(list.cases, []);
+  assert.deepEqual(list.unreadable, [{ folderName: "Linked", reason: "not-a-case" }]);
+  assert.deepEqual([...everything(folder), ...everything(elsewhere)], before);
+});
+
+test("R3-1: a creation that crashed for real (the save never renamed its file) is finished on the next listing", async () => {
+  const folder = tempFolder();
+  // The save writes its temporary file under a dead process's id, then the process dies before the rename.
+  const crashing = library(folder, {
+    writeFile: async (file, text) => {
+      writeFileSync(`${file}.4242.tmp`, text);
+      makeOld(`${file}.4242.tmp`);
+      throw new Error("the process stopped here (simulated)");
+    },
+  });
+  // In a real crash nothing after this runs; here the failed save reports not-saved, and
+  // its cleanup cannot remove the folder because the temporary file is in it.
+  assert.deepEqual(await crashing.lib.create({ label: "Ana" }), { outcome: "not-saved" });
+  assert.deepEqual(readdirSync(path.join(folder, "Ana")), [`${CASE_FILE_NAME}.4242.tmp`]);
+  const { lib } = library(folder);
+  assert.deepEqual(
+    (await lib.list()).cases.map((c) => c.label),
+    ["Ana"],
+  );
+  assert.deepEqual(readdirSync(path.join(folder, "Ana")), [CASE_FILE_NAME]);
 });

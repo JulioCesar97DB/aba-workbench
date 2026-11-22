@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
@@ -18,7 +18,7 @@ import {
 import { CASE_FILE_NAME, ClientAgeSchema, MAX_CASE_FILE_BYTES, MAX_LISTED_FILES, newCaseData, nextUpdatedAt, readCaseFile, serializeCaseFile, type CaseData } from "./case-file.ts";
 import { caseFolderNames } from "./case-folder-name.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
-import { isLeftBehind, isTemporaryFileOf, removeStaleTemporaryFiles, writeFileDurably } from "./durable-write.ts";
+import { finishInterruptedSave, isLeftBehind, isTemporaryFileOf, writeFileDurably } from "./durable-write.ts";
 
 /*
  * The cases in the cases folder: listing, creating, opening and saving them. Only the
@@ -112,28 +112,53 @@ export async function scanCaseFiles(folder: string): Promise<CaseFile[]> {
   return files.slice(0, MAX_LISTED_FILES);
 }
 
-/**
- * A case folder the app itself was making when it stopped (a crash or a power cut between
- * making the folder and saving its data file): it holds nothing but a temporary data file
- * left behind (isLeftBehind). Removes that file and the folder, and says whether it did.
- * rmdir never removes a folder that holds anything else, so nothing else can be lost.
+/*
+ * A case the app was creating when it stopped (a crash or a power cut) leaves a folder
+ * with no aba-case.json, only the temporary file the save was writing. The app never
+ * deletes a case folder or anything in it (owner's decision, 2026-11-22): it finishes
+ * the creation if it can, or shows the folder as unfinished and changes nothing.
  */
-export async function removeHalfMadeCase(folder: string): Promise<boolean> {
+
+type Unfinished = { kind: "none" } | { kind: "unfinished"; recoverable: { temporary: string; data: CaseData } | null };
+
+/**
+ * What a case folder with no data file holds of one being created. "none": no temporary
+ * data file at all (an ordinary "not-a-case" folder). "unfinished": at least one plain file
+ * named "aba-case.json.<digits>.tmp"; it is recoverable only when the folder holds nothing
+ * else (every entry a plain temporary data file, checked with lstat so a link is never
+ * followed), none of them is still being written (isLeftBehind: not this process's own,
+ * untouched for a minute), and exactly one reads as a complete case under the same strict
+ * reading as aba-case.json. Reads only; never writes.
+ */
+export async function inspectUnfinishedCase(folder: string): Promise<Unfinished> {
   let names: string[];
   try {
     names = await readdir(folder);
   } catch {
-    return false;
+    return { kind: "none" };
   }
-  if (names.length === 0 || !names.every((name) => isTemporaryFileOf(CASE_FILE_NAME, name))) return false;
-  for (const name of names) if (!(await isLeftBehind(folder, name))) return false;
-  try {
-    for (const name of names) await rm(path.join(folder, name));
-    await rmdir(folder);
-    return true;
-  } catch {
-    return false;
+  const plainFile = async (name: string) =>
+    lstat(path.join(folder, name)).then(
+      (info) => info.isFile(),
+      () => false,
+    );
+  const temporaries: string[] = [];
+  for (const name of names) if (isTemporaryFileOf(CASE_FILE_NAME, name) && (await plainFile(name))) temporaries.push(name);
+  if (temporaries.length === 0) return { kind: "none" };
+  if (temporaries.length !== names.length) return { kind: "unfinished", recoverable: null };
+  const complete: Array<{ temporary: string; data: CaseData }> = [];
+  for (const name of temporaries) {
+    if (!(await isLeftBehind(folder, name))) return { kind: "unfinished", recoverable: null };
+    const file = path.join(folder, name);
+    try {
+      if ((await lstat(file)).size > MAX_CASE_FILE_BYTES) continue;
+      const read = readCaseFile(await readFile(file));
+      if (read.ok) complete.push({ temporary: file, data: read.data });
+    } catch {
+      // Unreadable: not one to recover.
+    }
   }
+  return { kind: "unfinished", recoverable: complete.length === 1 ? complete[0] : null };
 }
 
 function sameFiles(a: readonly CaseFile[], b: readonly CaseFile[]): boolean {
@@ -215,12 +240,17 @@ export class CaseLibrary {
     const folders = new Map<string, string>();
     const cases: Array<{ data: CaseData; name: string }> = [];
     const unreadable: UnreadableFolder[] = links.map((name) => ({ folderName: name, reason: "link" }));
+    // Cases the app was creating when it stopped: finished (their complete temporary file
+    // becomes aba-case.json) after every readable case is known, so a recovered one never
+    // takes the id of a case that is already there; otherwise shown as unfinished.
+    const unfinished: Array<{ name: string; state: Extract<Unfinished, { kind: "unfinished" }> }> = [];
     for (const { name, read } of reads) {
-      // A case the app was making when it stopped: its temporary data file is a copy of
-      // client data in a folder Home would call "not a case". Clear it away instead.
-      if (read.kind === "unreadable" && read.reason === "not-a-case" && (await removeHalfMadeCase(path.join(folder, name)))) {
-        this.options.log("A case left half-made by an earlier run was removed.");
-        continue;
+      if (read.kind === "unreadable" && read.reason === "not-a-case") {
+        const state = await inspectUnfinishedCase(path.join(folder, name));
+        if (state.kind === "unfinished") {
+          unfinished.push({ name, state });
+          continue;
+        }
       }
       if (read.kind === "unreadable") unreadable.push({ folderName: name, reason: read.reason });
       else if (folders.has(read.data.id)) unreadable.push({ folderName: name, reason: "duplicate" });
@@ -228,6 +258,21 @@ export class CaseLibrary {
         folders.set(read.data.id, path.join(folder, name));
         cases.push({ data: read.data, name });
       }
+    }
+    for (const { name, state } of unfinished) {
+      const caseFolder = path.join(folder, name);
+      const recoverable = state.recoverable;
+      if (recoverable && !folders.has(recoverable.data.id) && (await finishInterruptedSave(recoverable.temporary, path.join(caseFolder, CASE_FILE_NAME)))) {
+        // Read back as any case is, so what is listed is what is now on disk.
+        const read = await readCaseFolder(caseFolder);
+        if (read.kind === "case" && read.data.id === recoverable.data.id) {
+          this.options.log("A case whose creation was interrupted was finished.");
+          folders.set(read.data.id, caseFolder);
+          cases.push({ data: read.data, name });
+          continue;
+        }
+      }
+      unreadable.push({ folderName: name, reason: "unfinished" });
     }
     unreadable.sort((a, b) => (a.folderName < b.folderName ? -1 : a.folderName > b.folderName ? 1 : 0));
     this.folders = folders;
@@ -331,8 +376,8 @@ export class CaseLibrary {
       if (read.kind === "unreadable" && read.reason === "not-a-case") return "moved";
       if (read.kind === "unreadable") return { outcome: "unreadable", reason: read.reason };
       if (read.data.id !== caseId) return "moved";
-      // A save cut short in an earlier run left a copy of the data file: remove it.
-      await removeStaleTemporaryFiles(path.join(folder, CASE_FILE_NAME));
+      // A temporary file a save cut short left next to the data file is never removed: it
+      // may hold the user's latest change. It stays, untouched, for the user to see.
       let data = read.data;
       let files: CaseFile[];
       try {
@@ -368,7 +413,6 @@ export class CaseLibrary {
         // Damaged, newer or unreadable: never written to.
         if (read.kind === "unreadable") return null;
         if (read.data.id !== caseId) return "moved";
-        await removeStaleTemporaryFiles(path.join(folder, CASE_FILE_NAME));
         return this.write(folder, change(read.data), { strict: true });
       });
       if (saved !== "moved") return saved;
