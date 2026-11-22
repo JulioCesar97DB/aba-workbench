@@ -6,7 +6,7 @@ import { Select } from "../components/Select.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
 import { Table, TableBody, TableCell, TableRow, TableRowHeader } from "../components/Table.tsx";
 import { TransWithTerms } from "../components/Trans.tsx";
-import { LanguageNotSavedError, useLanguage } from "../language.ts";
+import { useLanguage } from "../language.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { WorkArea } from "../shell/WorkArea.tsx";
 
@@ -14,17 +14,14 @@ import { WorkArea } from "../shell/WorkArea.tsx";
 export function SettingsScreen() {
   const { t } = useTranslation();
   const info = useAppInfo();
-  const { language, changeLanguage } = useLanguage();
-  // After a change: saved, or shown for now but not saved (with the language that comes back next time).
-  const [result, setResult] = useState<{ saved: true } | { saved: false; previous: Language } | null>(null);
+  const { language, savedLanguage, changeLanguage } = useLanguage();
+  // True after a change made here was saved, to confirm it.
+  const [justSaved, setJustSaved] = useState(false);
+  // The screen and the settings file disagree: the last choice, here or in the sidebar, was not saved.
+  const notSaved = language !== savedLanguage;
 
   async function onLanguageChange(next: Language) {
-    try {
-      await changeLanguage(next);
-      setResult({ saved: true });
-    } catch (error) {
-      setResult({ saved: false, previous: error instanceof LanguageNotSavedError ? error.previous : language });
-    }
+    setJustSaved(await changeLanguage(next));
   }
   const inSentence = (lng: Language) => t(`languageInSentence.${lng}`);
 
@@ -38,9 +35,12 @@ export function SettingsScreen() {
           options={LANGUAGES.map((option) => ({ value: option, label: t(`languages.${option}`), lang: option }))}
           onValueChange={(next) => void onLanguageChange(next)}
         />
-        <p role="status" className={result?.saved === false ? "text-sm font-medium text-danger" : "text-sm text-fg-muted"}>
-          {result?.saved ? t("settings.languageSaved", { language: inSentence(language) }) : null}
-          {result?.saved === false ? t("settings.languageNotSaved", { language: inSentence(language), previous: inSentence(result.previous) }) : null}
+        <p role="status" className={notSaved ? "text-sm font-medium text-danger" : "text-sm text-fg-muted"}>
+          {notSaved
+            ? t("settings.languageNotSaved", { language: inSentence(language), previous: inSentence(savedLanguage) })
+            : justSaved
+              ? t("settings.languageSaved", { language: inSentence(language) })
+              : null}
         </p>
       </SettingsSection>
 
