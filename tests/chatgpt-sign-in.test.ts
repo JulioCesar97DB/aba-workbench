@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm } from "node:fs/promises";
 import { request as httpRequest, createServer } from "node:http";
 import net, { type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -210,7 +210,7 @@ const saved = async (file: string) => JSON.parse(await readFile(file, "utf8"));
 test("sign-in: first registration end to end, then a check with the model list", async (t) => {
   const s = await setup(t);
   s.fake.tokenAnswers = [s.exchangeAnswers()];
-  assert.deepEqual(await s.session.signIn(), { outcome: "signed-in", firstTime: true });
+  assert.deepEqual(await s.session.signIn(), { outcome: "signed-in" });
   const exchange = s.fake.calls.find((c) => c.url.endsWith("/oauth/token"))!;
   const authorize = s.opened[0].searchParams;
   assert.equal(exchange.form?.get("grant_type"), "authorization_code");
@@ -228,7 +228,8 @@ test("sign-in: first registration end to end, then a check with the model list",
   assert.equal(file.chatgpt.accessToken, "access-token-not-real");
   assert.equal(file.chatgpt.refreshToken, "refresh-token-not-real");
   assert.ok(file.chatgpt.scopes.includes("chatgpt.tokens.use.direct"));
-  assert.deepEqual(s.session.state(file.chatgpt), { state: "connected", displayName: "Test Clinician" });
+  assert.deepEqual(s.session.state(file.chatgpt, { welcomeShown: false }), { state: "connected", displayName: "Test Clinician", showWelcome: true });
+  assert.deepEqual(s.session.state(file.chatgpt, { welcomeShown: true }), { state: "connected", displayName: "Test Clinician", showWelcome: false });
 
   assert.deepEqual(await s.session.check(), { outcome: "working" });
   const models = s.fake.calls.find((c) => c.url === "https://api.openai.com/v1/models")!;
@@ -241,7 +242,7 @@ test("sign-in: a later sign-in reuses the issued client id and host id, with the
   await s.session.signIn();
   const hostId = s.opened[0].searchParams.get("ext_agent_host_id");
   s.fake.tokenAnswers = [s.exchangeAnswers()];
-  assert.deepEqual(await s.session.signIn(), { outcome: "signed-in", firstTime: false });
+  assert.deepEqual(await s.session.signIn(), { outcome: "signed-in" });
   const second = s.opened[1].searchParams;
   assert.equal(second.get("client_id"), ISSUED_CLIENT_ID);
   assert.equal(second.get("ext_agent_host_id"), hostId);
@@ -253,9 +254,10 @@ test("sign-in: a later sign-in reuses the issued client id and host id, with the
   s.fake.tokenAnswers = [s.exchangeAnswers({ access_token: "someone-elses-token" }, { sub: "another-person" })];
   assert.deepEqual(await s.session.signIn(), { outcome: "different-account" });
   assert.equal(await readFile(s.file, "utf8"), before, "the saved sign-in is untouched");
+  assert.equal(s.fake.calls.filter((c) => c.url.endsWith("/oauth/revoke")).length, 1, "the session it will not keep is ended with OpenAI");
 });
 
-test("sign-in: the user declines, cancels, or closes the browser: nothing is saved", async (t) => {
+test("sign-in: access denied (not allowed, or no plan apps can use), cancelled, or the browser closed: nothing is saved", async (t) => {
   const s = await setup(t);
   s.setBrowser(async (url) => {
     const back = new URL(url.searchParams.get("redirect_uri")!);
@@ -263,7 +265,7 @@ test("sign-in: the user declines, cancels, or closes the browser: nothing is sav
     back.searchParams.set("state", url.searchParams.get("state")!);
     await browserGet(back.href);
   });
-  assert.deepEqual(await s.session.signIn(), { outcome: "declined" });
+  assert.deepEqual(await s.session.signIn(), { outcome: "access-denied" });
   assert.equal(s.fake.calls.filter((c) => c.url.endsWith("/oauth/token")).length, 0, "no code is exchanged");
 
   s.setBrowser(async () => undefined); // the user closed the browser
@@ -294,11 +296,11 @@ test("sign-in: a callback with the wrong state is ignored, the right one still c
     back.searchParams.set("client_id", ISSUED_CLIENT_ID);
     await browserGet(back.href);
   });
-  assert.deepEqual(await s.session.signIn(), { outcome: "signed-in", firstTime: true });
+  assert.deepEqual(await s.session.signIn(), { outcome: "signed-in" });
   assert.equal(s.fake.calls.find((c) => c.url.endsWith("/oauth/token"))?.form?.get("code"), "code-not-real");
 });
 
-test("sign-in: a registration without an issued client id, an ID token that fails, or invalid_grant save nothing", async (t) => {
+test("sign-in: a registration without an issued client id saves nothing; after a failed exchange or ID token the issued client id is kept for the retry", async (t) => {
   const s = await setup(t);
   s.setBrowser(async (url) => {
     const back = new URL(url.searchParams.get("redirect_uri")!);
@@ -307,12 +309,22 @@ test("sign-in: a registration without an issued client id, an ID token that fail
     await browserGet(back.href);
   });
   assert.deepEqual(await s.session.signIn(), { outcome: "failed" }, "registration incomplete");
+  assert.equal((await saved(s.file)).chatgpt, null);
+
   const s2 = await setup(t);
-  s2.fake.tokenAnswers = [async () => tokenResponse({ id_token: await s2.fake.idToken({ nonce: "not-this-attempts" }) })];
-  assert.deepEqual(await s2.session.signIn(), { outcome: "failed" }, "nonce mismatch");
   s2.fake.tokenAnswers = [() => Response.json({ error: "invalid_grant" }, { status: 400 })];
   assert.deepEqual(await s2.session.signIn(), { outcome: "failed" }, "invalid_grant: the code is discarded");
-  assert.equal((await saved(s2.file)).chatgpt, null);
+  assert.deepEqual((await saved(s2.file)).chatgpt, { issuer: "https://auth.openai.com", clientId: ISSUED_CLIENT_ID, signedOut: true }, "the issued client id is kept, with no account yet");
+  assert.deepEqual(s2.session.state((await saved(s2.file)).chatgpt), { state: "not-connected", savedAccount: true });
+  // OpenAI's docs: start a fresh authorization with the issued client id retained for this attempt.
+  s2.fake.tokenAnswers = [async () => tokenResponse({ id_token: await s2.fake.idToken({ nonce: "not-this-attempts" }) })];
+  assert.deepEqual(await s2.session.signIn(), { outcome: "failed" }, "nonce mismatch");
+  assert.equal(s2.opened[1].searchParams.get("client_id"), ISSUED_CLIENT_ID, "no second registration");
+  assert.equal(s2.opened[1].searchParams.has("agent_name_hint"), false);
+  assert.equal(s2.fake.calls.filter((c) => c.url.endsWith("/oauth/revoke")).length, 1, "the tokens of the refused ID token are revoked");
+  s2.fake.tokenAnswers = [s2.exchangeAnswers()];
+  assert.deepEqual(await s2.session.signIn(), { outcome: "signed-in" });
+  assert.equal((await saved(s2.file)).chatgpt.subject, SUBJECT, "the account is recorded once an ID token is verified");
 });
 
 test("sign-in: declining the plan permission keeps the sign-in but needs attention; asking again forces consent", async (t) => {
@@ -323,7 +335,7 @@ test("sign-in: declining the plan permission keeps the sign-in but needs attenti
   assert.deepEqual(await s.session.check(), { outcome: "not-connected" }, "no request is made for plan use without the permission");
   assert.equal(s.fake.calls.filter((c) => c.url.includes("api.openai.com")).length, 0);
   s.fake.tokenAnswers = [s.exchangeAnswers()];
-  assert.deepEqual(await s.session.signIn(), { outcome: "signed-in", firstTime: false });
+  assert.deepEqual(await s.session.signIn(), { outcome: "signed-in" });
   assert.equal(s.opened[1].searchParams.get("prompt"), "consent");
   assert.equal(s.opened[1].searchParams.get("scope"), "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct", "the complete scope set again");
 });
@@ -388,16 +400,41 @@ test("refresh: a network failure keeps the tokens; an unusable refresh token end
   }
 });
 
-test("check: a revoked session (401 again after a refresh) needs a new sign-in", async (t) => {
+test("check: a 401 gets one forced refresh; if the refresh works, the session is alive and its tokens are kept", async (t) => {
   const s = await setup(t);
-  s.fake.tokenAnswers = [s.exchangeAnswers(), () => tokenResponse({ access_token: "access-2" })];
+  s.fake.tokenAnswers = [s.exchangeAnswers(), () => tokenResponse({ access_token: "access-2", refresh_token: "refresh-2" })];
+  await s.session.signIn();
+  s.fake.modelsAnswer = () => Response.json({ detail: "Unauthorized" }, { status: 401 });
+  assert.deepEqual(await s.session.check(), { outcome: "provider-error" });
+  assert.equal(s.fake.calls.filter((c) => c.form?.get("grant_type") === "refresh_token").length, 1, "one forced refresh first");
+  const record = (await saved(s.file)).chatgpt;
+  assert.equal(record.refreshToken, "refresh-2", "the live refresh token is kept, never dropped unrevoked");
+  assert.equal(record.signedOut, undefined);
+});
+
+test("check: a refresh OpenAI refuses for good after a 401 ends the session", async (t) => {
+  const s = await setup(t);
+  s.fake.tokenAnswers = [s.exchangeAnswers(), () => Response.json({ error: "refresh_token_invalidated" }, { status: 400 })];
   await s.session.signIn();
   s.fake.modelsAnswer = () => Response.json({ detail: "Unauthorized" }, { status: 401 });
   assert.deepEqual(await s.session.check(), { outcome: "rejected" });
-  assert.equal(s.fake.calls.filter((c) => c.form?.get("grant_type") === "refresh_token").length, 1, "one forced refresh first");
   const record = (await saved(s.file)).chatgpt;
   assert.equal(record.sessionEnded, true);
   assert.equal("accessToken" in record, false);
+});
+
+test("check: an account OpenAI says cannot use its plan (a free account) needs attention, and the tokens stay", async (t) => {
+  const s = await setup(t);
+  s.fake.tokenAnswers = [s.exchangeAnswers()];
+  await s.session.signIn();
+  s.fake.modelsAnswer = () => Response.json({ error: { message: "not eligible", type: "x", code: "subscription_sharing_user_not_eligible", param: null } }, { status: 403 });
+  assert.deepEqual(await s.session.check(), { outcome: "not-eligible" });
+  const record = (await saved(s.file)).chatgpt;
+  assert.deepEqual(s.session.state(record), { state: "needs-attention", reason: "plan-not-eligible", displayName: "Test Clinician" });
+  assert.equal(s.fake.calls.filter((c) => c.form?.get("grant_type") === "refresh_token").length, 0, "OpenAI: do not loop through sign-in or refresh for it");
+  s.fake.modelsAnswer = () => Response.json({ models: [] });
+  assert.deepEqual(await s.session.check(), { outcome: "working" });
+  assert.equal(s.session.state(record, { welcomeShown: true }).state, "connected");
 });
 
 test("sign-out: revokes the refresh token, removes the tokens, email and name, keeps the client id, subject and host id", async (t) => {
@@ -461,4 +498,146 @@ test("sign-in: no port at all means port-in-use, and nothing opens", async (t) =
     net.Server.prototype.listen = listen;
   }
   assert.equal(s.opened.length, 0);
+});
+
+test("refresh: when the renewed sign-in cannot be saved, the new refresh token is kept and used, the interface is told, and it is saved later", { skip: process.platform === "win32" || process.getuid?.() === 0 }, async (t) => {
+  let clock = Date.parse("2026-11-22T18:00:00Z");
+  const s = await setup(t, { now: () => clock });
+  s.fake.tokenAnswers = [s.exchangeAnswers()];
+  await s.session.signIn();
+  const folder = path.dirname(s.file);
+  await chmod(folder, 0o500); // read-only: no temporary file can be made
+  try {
+    clock = Date.parse("2026-11-22T18:56:00Z");
+    s.fake.tokenAnswers = [() => tokenResponse({ access_token: "access-2", refresh_token: "refresh-2" }), () => tokenResponse({ access_token: "access-3", refresh_token: "refresh-3" })];
+    assert.equal(await s.session.accessToken(), "access-2");
+    const memory = await s.store.read();
+    assert.ok(memory.ok);
+    assert.deepEqual(s.session.state(memory.credentials!.chatgpt), { state: "needs-attention", reason: "not-saved", displayName: "Test Clinician" });
+    clock = Date.parse("2026-11-22T19:52:00Z");
+    assert.equal(await s.session.accessToken(), "access-3");
+    const refreshes = s.fake.calls.filter((c) => c.form?.get("grant_type") === "refresh_token").map((c) => c.form?.get("refresh_token"));
+    assert.deepEqual(refreshes, ["refresh-token-not-real", "refresh-2"], "the replaced refresh token is never sent again");
+    assert.equal((await saved(s.file)).chatgpt.refreshToken, "refresh-token-not-real", "still the old one on disk");
+  } finally {
+    await chmod(folder, 0o700);
+  }
+  assert.equal(await s.session.accessToken(), "access-3", "the next use writes it");
+  assert.equal((await saved(s.file)).chatgpt.refreshToken, "refresh-3");
+  assert.equal(s.store.hasUnsavedChange, false);
+  assert.equal(s.session.state((await saved(s.file)).chatgpt, { welcomeShown: true }).state, "connected");
+});
+
+test("refresh: an earliest_refresh_at after the expiry never hands out an expired token", async (t) => {
+  let clock = Date.parse("2026-11-22T18:00:00Z");
+  const s = await setup(t, { now: () => clock });
+  s.fake.tokenAnswers = [s.exchangeAnswers({ expires_in: 600, earliest_refresh_at: "2026-11-22T18:20:00Z" })];
+  await s.session.signIn();
+  clock = Date.parse("2026-11-22T18:15:00Z"); // expired at 18:10
+  s.fake.tokenAnswers = [() => tokenResponse({ access_token: "access-2" })];
+  assert.equal(await s.session.accessToken(), "access-2");
+});
+
+test("sign-in: OpenAI's keys that cannot be fetched read as unreachable, not as a bad token", async (t) => {
+  const s = await setup(t);
+  s.fake.tokenAnswers = [s.exchangeAnswers()];
+  const inner = s.fake.fetch;
+  s.fake.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url.endsWith("/jwks.json")) throw new TypeError("fetch failed");
+    return inner(input, init);
+  }) as typeof fetch;
+  const session = new ChatGptSession({
+    store: s.store,
+    oauth: new OAuthClient({ fetch: (input, init) => s.fake.fetch(input, init) }),
+    openBrowser: async (url) => {
+      s.opened.push(new URL(url));
+      const p = new URL(url).searchParams;
+      const back = new URL(p.get("redirect_uri")!);
+      back.search = new URLSearchParams({ code: "c", state: p.get("state")!, client_id: ISSUED_CLIENT_ID }).toString();
+      setImmediate(() => void browserGet(back.href).catch(() => undefined));
+    },
+    language: async () => "en",
+    onChange: () => undefined,
+    preferredPort: 0,
+    log: () => undefined,
+  });
+  assert.deepEqual(await session.signIn(), { outcome: "unreachable" });
+});
+
+test("sign-in: Cancel also stops a code exchange that is under way", async (t) => {
+  const s = await setup(t);
+  let release!: () => void;
+  s.fake.tokenAnswers = [() => new Promise<Response>((resolve) => (release = () => resolve(tokenResponse())))];
+  const inner = s.fake.fetch;
+  const session = new ChatGptSession({
+    store: s.store,
+    oauth: new OAuthClient({
+      fetch: (input, init) =>
+        new Promise((resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+          void inner(input, init).then(resolve, reject);
+        }),
+    }),
+    openBrowser: async (url) => {
+      const p = new URL(url).searchParams;
+      const back = new URL(p.get("redirect_uri")!);
+      back.search = new URLSearchParams({ code: "c", state: p.get("state")!, client_id: ISSUED_CLIENT_ID }).toString();
+      setImmediate(() => void browserGet(back.href).catch(() => undefined));
+    },
+    language: async () => "en",
+    onChange: () => undefined,
+    preferredPort: 0,
+    log: () => undefined,
+  });
+  const pending = session.signIn();
+  while (!s.fake.calls.some((c) => c.url.endsWith("/oauth/token"))) await new Promise((resolve) => setTimeout(resolve, 10));
+  session.cancelSignIn();
+  assert.deepEqual(await pending, { outcome: "cancelled" });
+  release();
+  const record = (await saved(s.file)).chatgpt;
+  assert.equal("accessToken" in record, false, "nothing from the cancelled exchange is saved");
+});
+
+test("sign-in: every step that fails is logged by name and OpenAI's code, never with a token, a code or an email", async (t) => {
+  const logged: string[] = [];
+  const s = await setup(t);
+  const session = new ChatGptSession({
+    store: s.store,
+    oauth: new OAuthClient({ fetch: s.fake.fetch }),
+    openBrowser: async (url) => {
+      const p = new URL(url).searchParams;
+      const back = new URL(p.get("redirect_uri")!);
+      back.search = new URLSearchParams({ error: "access_denied", error_description: "Plan not eligible\nfor this app", state: p.get("state")!, client_id: ISSUED_CLIENT_ID }).toString();
+      setImmediate(() => void browserGet(back.href).catch(() => undefined));
+    },
+    language: async () => "en",
+    onChange: () => undefined,
+    preferredPort: 0,
+    log: (message) => logged.push(message),
+  });
+  assert.deepEqual(await session.signIn(), { outcome: "access-denied" });
+  assert.ok(logged.some((line) => /the callback arrived \(with error access_denied\)/.test(line)), logged.join("\n"));
+  assert.ok(logged.some((line) => line.includes('OpenAI ended the attempt with "access_denied": Plan not eligible for this app.')), logged.join("\n"));
+  assert.deepEqual((await saved(s.file)).chatgpt, { issuer: "https://auth.openai.com", clientId: ISSUED_CLIENT_ID, signedOut: true }, "a client id OpenAI issued is kept for the next attempt");
+
+  s.fake.tokenAnswers = [() => tokenResponse({ id_token: "not-a-valid-token" })];
+  const session2 = new ChatGptSession({
+    store: s.store,
+    oauth: new OAuthClient({ fetch: s.fake.fetch }),
+    openBrowser: async (url) => {
+      const p = new URL(url).searchParams;
+      const back = new URL(p.get("redirect_uri")!);
+      back.search = new URLSearchParams({ code: "secret-code-value", state: p.get("state")!, client_id: ISSUED_CLIENT_ID }).toString();
+      setImmediate(() => void browserGet(back.href).catch(() => undefined));
+    },
+    language: async () => "en",
+    onChange: () => undefined,
+    preferredPort: 0,
+    log: (message) => logged.push(message),
+  });
+  assert.deepEqual(await session2.signIn(), { outcome: "failed" });
+  assert.ok(logged.some((line) => /the ID token check failed \(invalid_id_token\)/.test(line)), logged.join("\n"));
+  const all = logged.join("\n");
+  for (const secret of ["secret-code-value", "access-token-not-real", "refresh-token-not-real", "not-a-valid-token", "clinician@example.invalid", "state="]) assert.equal(all.includes(secret), false, secret);
 });

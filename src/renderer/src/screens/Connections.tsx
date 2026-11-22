@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatGptConnection, ChatGptSignInResult, CheckConnectionResult, ClaudeConnection, CredentialsProblem, SaveClaudeKeyResult } from "../../../shared/api.ts";
 import { Button } from "../components/Button.tsx";
@@ -26,12 +26,34 @@ function StatusLine({ message, testId }: { message: Message; testId: string }) {
   );
 }
 
-function Card({ title, badge, children, testId }: { title: string; badge: { label: string; tone: StatusTone } | null; children: ReactNode; testId: string }) {
+/**
+ * One connection. When its state changes, the button that had focus is often gone (Sign
+ * out, Remove key, Continue with ChatGPT): focus then moves to the card's heading, so a
+ * keyboard or screen-reader user stays where they were instead of starting from the top.
+ */
+function Card({ title, badge, children, testId, stateKey }: { title: string; badge: { label: string; tone: StatusTone } | null; children: ReactNode; testId: string; stateKey: string }) {
   const headingId = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const section = useRef<HTMLElement>(null);
+  const hadFocus = useRef(false);
+  useEffect(() => {
+    const focused = document.activeElement;
+    if (hadFocus.current && (!focused || focused === document.body || !focused.isConnected)) heading.current?.focus();
+  }, [stateKey]);
   return (
-    <section aria-labelledby={headingId} data-testid={testId} className="flex flex-col gap-2.5 rounded-lg border border-border p-4">
+    <section
+      ref={section}
+      aria-labelledby={headingId}
+      data-testid={testId}
+      className="flex flex-col gap-2.5 rounded-lg border border-border p-4"
+      onFocus={() => (hadFocus.current = true)}
+      onBlur={(event) => {
+        // Focus that moves elsewhere on the screen is not "lost": only a removed button's is.
+        if (event.relatedTarget && !section.current?.contains(event.relatedTarget as Node)) hadFocus.current = false;
+      }}
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h3 id={headingId} className="text-base font-semibold">
+        <h3 id={headingId} ref={heading} tabIndex={-1} className="text-base font-semibold">
           {title}
         </h3>
         {badge ? <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge> : null}
@@ -109,6 +131,7 @@ function checkMessage(t: ReturnType<typeof useTranslation>["t"], provider: "chat
     case "working":
       return { text: t(`${provider}.checkWorking`), problem: false };
     case "rejected":
+    case "not-eligible":
       // The card now says it needs attention, and why: saying it twice is noise.
       return null;
     case "unreachable":
@@ -123,7 +146,7 @@ function checkMessage(t: ReturnType<typeof useTranslation>["t"], provider: "chat
 const SIGN_IN_MESSAGES: Record<Exclude<ChatGptSignInResult["outcome"], "credentials-problem">, { key: string; problem: boolean }> = {
   "signed-in": { key: "chatgpt.resultSignedIn", problem: false },
   "plan-not-allowed": { key: "chatgpt.planNotAllowed", problem: true },
-  declined: { key: "chatgpt.resultDeclined", problem: true },
+  "access-denied": { key: "chatgpt.resultAccessDenied", problem: true },
   cancelled: { key: "chatgpt.resultCancelled", problem: false },
   "timed-out": { key: "chatgpt.resultTimedOut", problem: true },
   "port-in-use": { key: "chatgpt.resultPortInUse", problem: true },
@@ -139,8 +162,9 @@ function ChatGptCard({ connection, blocked }: { connection: ChatGptConnection | 
   const badge = useBadge();
   const [busy, setBusy] = useState<"checking" | "signing-out" | null>(null);
   const [message, setMessage] = useState<Message>(null);
-  const [welcome, setWelcome] = useState(false);
   const state = connection?.state ?? null;
+  // OpenAI's guidelines: once, the first time plan use is allowed on this computer, until "Got it".
+  const welcome = connection?.state === "connected" && connection.showWelcome;
 
   async function signIn() {
     setMessage(null);
@@ -148,9 +172,8 @@ function ChatGptCard({ connection, blocked }: { connection: ChatGptConnection | 
     if (result === null) return setMessage({ text: t("connections.failed"), problem: true });
     if (result.outcome === "credentials-problem") return setMessage(null);
     const { key, problem } = SIGN_IN_MESSAGES[result.outcome];
-    setMessage({ text: t(key as "chatgpt.resultSignedIn"), problem });
-    // OpenAI's guidelines: say once, after the first sign-in, that the app uses the ChatGPT plan.
-    if (result.outcome === "signed-in" && result.firstTime) setWelcome(true);
+    // The card itself explains a plan that was not allowed.
+    setMessage(result.outcome === "plan-not-allowed" ? null : { text: t(key as "chatgpt.resultSignedIn"), problem });
   }
 
   async function check() {
@@ -216,21 +239,37 @@ function ChatGptCard({ connection, blocked }: { connection: ChatGptConnection | 
       </>
     );
   } else if (connection?.state === "needs-attention") {
-    const planNotAllowed = connection.reason === "plan-not-allowed";
+    const reason = connection.reason;
+    const signOutButton = (
+      <Button disabled={busy !== null} focusableWhenDisabled onClick={() => void signOut()}>
+        {busy === "signing-out" ? t("chatgpt.signingOut") : t("chatgpt.signOut")}
+      </Button>
+    );
+    const text = { "plan-not-allowed": "chatgpt.planNotAllowed", "plan-not-eligible": "chatgpt.planNotEligible", "session-ended": "chatgpt.sessionEnded", "not-saved": "chatgpt.notSaved" } as const;
     body = (
       <>
-        <p className="max-w-measure font-medium text-warning">{t(planNotAllowed ? "chatgpt.planNotAllowed" : "chatgpt.sessionEnded")}</p>
+        {connection.displayName ? (
+          <p className="font-medium" data-testid="chatgpt-account">
+            {t("chatgpt.signedInAs", { name: connection.displayName })}
+          </p>
+        ) : null}
+        <p className="max-w-measure font-medium text-warning" data-testid="chatgpt-attention">
+          {t(text[reason])}
+        </p>
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" disabled={blocked} focusableWhenDisabled onClick={() => void signIn()}>
-            {t(planNotAllowed ? "chatgpt.allowPlan" : "chatgpt.signInAgain")}
-          </Button>
-          {planNotAllowed ? (
-            <Button disabled={busy !== null} focusableWhenDisabled onClick={() => void signOut()}>
-              {busy === "signing-out" ? t("chatgpt.signingOut") : t("chatgpt.signOut")}
+          {reason === "plan-not-allowed" || reason === "session-ended" ? (
+            <Button variant="primary" disabled={blocked} focusableWhenDisabled onClick={() => void signIn()}>
+              {t(reason === "plan-not-allowed" ? "chatgpt.allowPlan" : "chatgpt.signInAgain")}
             </Button>
           ) : null}
+          {reason === "not-saved" ? (
+            <Button disabled={busy !== null} focusableWhenDisabled onClick={() => void check()}>
+              {busy === "checking" ? t("connections.checking") : t("connections.check")}
+            </Button>
+          ) : null}
+          {reason === "session-ended" ? null : signOutButton}
         </div>
-        {planNotAllowed ? null : differentAccount}
+        {reason === "session-ended" ? differentAccount : null}
       </>
     );
   } else {
@@ -247,11 +286,22 @@ function ChatGptCard({ connection, blocked }: { connection: ChatGptConnection | 
   }
 
   return (
-    <Card title={t("chatgpt.title")} badge={state && !blocked ? badge(state) : blocked && connection ? badge("not-connected") : null} testId="chatgpt-card">
+    <Card
+      title={t("chatgpt.title")}
+      badge={state && !blocked ? badge(state) : blocked && connection ? badge("not-connected") : null}
+      testId="chatgpt-card"
+      stateKey={`${state}-${connection?.state === "needs-attention" ? connection.reason : ""}-${connection?.state === "not-connected" && connection.savedAccount}`}
+    >
       <p className="max-w-measure text-fg-muted">{t("chatgpt.body")}</p>
       {body}
       <StatusLine message={message} testId="chatgpt-message" />
-      <Dialog open={welcome} onOpenChange={setWelcome} title={t("chatgpt.welcomeTitle")}>
+      <Dialog
+        open={welcome}
+        onOpenChange={(open) => {
+          if (!open) void window.aba.dismissChatGptWelcome().catch(() => undefined);
+        }}
+        title={t("chatgpt.welcomeTitle")}
+      >
         <DialogDescription className="mt-2 text-fg-muted">{t("chatgpt.welcomeBody")}</DialogDescription>
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button onClick={() => void window.aba.openChatGptUsage().catch(() => undefined)}>{t("chatgpt.manageUsage")}</Button>
@@ -320,7 +370,12 @@ function ClaudeCard({ connection, blocked }: { connection: ClaudeConnection | nu
 
   const showForm = state === "not-connected" || state === "needs-attention" || replacing || blocked;
   return (
-    <Card title={t("claude.title")} badge={state && !blocked ? badge(state) : blocked && connection ? badge("not-connected") : null} testId="claude-card">
+    <Card
+      title={t("claude.title")}
+      badge={state && !blocked ? badge(state) : blocked && connection ? badge("not-connected") : null}
+      testId="claude-card"
+      stateKey={`${state}-${replacing}`}
+    >
       <p className="max-w-measure text-fg-muted">{t("claude.body")}</p>
       {state === "needs-attention" && !blocked ? <p className="max-w-measure font-medium text-warning">{t("claude.keyRejected")}</p> : null}
       {state === "connected" && !blocked ? <p className="font-medium">{t("claude.keySaved")}</p> : null}

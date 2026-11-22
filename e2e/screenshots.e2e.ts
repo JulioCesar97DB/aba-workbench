@@ -34,7 +34,7 @@ const signedIn = (scopes: string[]) => ({
 const PLAN = ["chatgpt.tokens.use.direct", "email", "offline_access", "openid", "profile", "resource.invoke"];
 const CLAUDE = { apiKey: "sk-ant-api03-screenshot-not-real", savedAt: "2026-11-22T18:00:00.000Z" };
 
-const STATES: Array<{ name: string; file?: unknown; raw?: string; act?: (page: Page) => Promise<void> }> = [
+const STATES: Array<{ name: string; file?: unknown; raw?: string; act?: (page: Page) => Promise<void>; welcome?: boolean }> = [
   { name: "1-not-connected" },
   { name: "2-chatgpt-signing-in", act: async (page) => page.getByTestId("chatgpt-card").getByRole("button").first().click() },
   { name: "3-both-connected", file: { version: 1, hostId: HOST_ID, claude: CLAUDE, chatgpt: signedIn(PLAN) } },
@@ -46,6 +46,12 @@ const STATES: Array<{ name: string; file?: unknown; raw?: string; act?: (page: P
   { name: "5-chatgpt-session-ended", file: { version: 1, hostId: HOST_ID, claude: null, chatgpt: { issuer: "https://auth.openai.com", clientId: "oaiapp_x", subject: "s", signedOut: true, sessionEnded: true } } },
   { name: "6-signed-out-saved-account", file: { version: 1, hostId: HOST_ID, claude: null, chatgpt: { issuer: "https://auth.openai.com", clientId: "oaiapp_x", subject: "s", signedOut: true } } },
   { name: "7-damaged-file", raw: "{ damaged" },
+  {
+    name: "8-chatgpt-plan-not-eligible",
+    file: { version: 1, hostId: HOST_ID, claude: null, chatgpt: signedIn(PLAN) },
+    act: async (page) => page.getByTestId("chatgpt-card").getByRole("button").first().click(),
+  },
+  { name: "9-chatgpt-welcome", file: { version: 1, hostId: HOST_ID, claude: null, chatgpt: signedIn(PLAN) }, welcome: true },
 ];
 
 for (const language of ["en", "es"] as Language[]) {
@@ -53,11 +59,19 @@ for (const language of ["en", "es"] as Language[]) {
     test(`${language} ${state.name}`, async ({ launch, profile }) => {
       if (state.file) writeFileSync(path.join(profile, "credentials.json"), JSON.stringify(state.file), { mode: 0o600 });
       if (state.raw) writeFileSync(path.join(profile, "credentials.json"), state.raw, { mode: 0o600 });
-      const app = await launch({ language });
+      // The welcome dialog shows only in its own state; elsewhere it was already seen.
+      const app = await launch({ settingsFile: JSON.stringify({ version: 1, language, ...(state.welcome ? {} : { chatgptWelcomeShown: true }) }) });
       await stubConnections(app, { claudeKey: "not-this-one", jwks: { keys: [] } });
-      await setStubAnswers(app, { claudeStatus: 401 });
+      await setStubAnswers(app, { claudeStatus: 401, chatgptModelsStatus: 403 });
       const page = await app.firstWindow();
       await goTo(page, "/settings");
+      mkdirSync(out!, { recursive: true });
+      if (state.welcome) {
+        await expect(page.getByRole("dialog")).toBeVisible();
+        await page.waitForTimeout(500); // the dialog fades in
+        await page.screenshot({ path: path.join(out!, `${language}-${state.name}-window.png`) });
+        return;
+      }
       const section = page.getByRole("region", { name: language === "en" ? "AI connection" : "Conexión con la IA" });
       await expect(section).toBeVisible();
       if (state.act) {

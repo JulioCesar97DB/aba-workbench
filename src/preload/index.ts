@@ -29,6 +29,7 @@ const api: AbaApi = {
   signOutOfChatGpt: () => ipcRenderer.invoke(IPC_CHANNELS.signOutOfChatGpt),
   forgetChatGptAccount: () => ipcRenderer.invoke(IPC_CHANNELS.forgetChatGptAccount),
   openChatGptUsage: () => ipcRenderer.invoke(IPC_CHANNELS.openChatGptUsage),
+  dismissChatGptWelcome: () => ipcRenderer.invoke(IPC_CHANNELS.dismissChatGptWelcome),
   startOverConnections: () => ipcRenderer.invoke(IPC_CHANNELS.startOverConnections),
   onConnectionsChange: (listener) => {
     const handler = (_event: IpcRendererEvent, connections: Connections) => listener(connections);

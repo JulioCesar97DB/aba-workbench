@@ -129,8 +129,9 @@ const TokenResponseSchema = z.object({
   token_type: z.string().regex(/^bearer$/i),
   expires_in: z.number().int().positive().max(366 * 24 * 3600),
   scope: z.string().max(2_000).optional(),
-  // The token reference names it but not its form: Unix seconds or an ISO time are both read.
-  earliest_refresh_at: z.union([z.number(), z.string()]).nullish(),
+  // The token reference names it but not its form: Unix seconds or an ISO time are read;
+  // anything else is ignored rather than failing a sign-in that is otherwise fine.
+  earliest_refresh_at: z.union([z.number(), z.string()]).nullish().catch(null),
 });
 
 /** A token response, read: times as ISO strings, scopes as a list. */
@@ -207,15 +208,18 @@ export class OAuthClient {
   }
 
   /** Exchanges the callback's code. Needs the issued client id, the same redirect URI and the PKCE verifier. */
-  async exchangeCode(attempt: Attempt, code: string, clientId: string): Promise<TokenSet> {
-    return this.tokenRequest({
+  async exchangeCode(attempt: Attempt, code: string, clientId: string, signal?: AbortSignal): Promise<TokenSet> {
+    return this.tokenRequest(
+      {
       grant_type: "authorization_code",
       client_id: clientId,
       code,
       code_verifier: attempt.verifier,
       redirect_uri: attempt.redirectUri,
       resource: OPENAI_RESOURCE,
-    });
+      },
+      signal,
+    );
   }
 
   /** Standard refresh, with the issued client id; no scope, so the grant is kept. */
@@ -240,7 +244,7 @@ export class OAuthClient {
    * issuer, the audience (the issued client id), the expiry (5 seconds' tolerance), and,
    * after a sign-in, the nonce sent for that attempt.
    */
-  async verifyIdToken(idToken: string, expected: { clientId: string; nonce: string | null }): Promise<Identity> {
+  async verifyIdToken(idToken: string, expected: { clientId: string; nonce: string | null }, signal?: AbortSignal): Promise<Identity> {
     const verify = async (keys: ReturnType<typeof createLocalJWKSet>) =>
       jwtVerify(idToken, keys, {
         issuer: OPENAI_ISSUER,
@@ -250,14 +254,18 @@ export class OAuthClient {
         clockTolerance: 5,
         currentDate: new Date(this.now()),
       });
+    // Fetching the keys can fail on its own (no answer, a bad answer): that error passes
+    // through as it is, so "could not reach OpenAI" is never reported as a bad token.
     let result;
     try {
-      result = await verify(await this.keys(false));
+      result = await verify(await this.keys(false, signal));
     } catch (error) {
+      if (error instanceof OAuthError) throw error;
       // A key OpenAI added since the keys were fetched: fetch them again, once.
       if (!(error instanceof joseErrors.JWKSNoMatchingKey)) throw new OAuthError("invalid_id_token", null);
+      const keys = await this.keys(true, signal);
       try {
-        result = await verify(await this.keys(true));
+        result = await verify(keys);
       } catch {
         throw new OAuthError("invalid_id_token", null);
       }
@@ -269,13 +277,13 @@ export class OAuthClient {
     return { subject: claims.sub, email, name: displayName(claims.name) };
   }
 
-  private async keys(refetch: boolean): Promise<ReturnType<typeof createLocalJWKSet>> {
+  private async keys(refetch: boolean, signal?: AbortSignal): Promise<ReturnType<typeof createLocalJWKSet>> {
     if (this.jwks && !refetch) return this.jwks;
     let response: Response;
     try {
-      response = await this.fetch(JWKS_URL, { headers: { accept: "application/json" } });
+      response = await this.fetch(JWKS_URL, { headers: { accept: "application/json" }, signal: withTimeout(signal) });
     } catch {
-      throw new OAuthError("unreachable", null);
+      throw new OAuthError(signal?.aborted ? "cancelled" : "unreachable", null);
     }
     const body = await response.json().catch(() => null);
     const parsed = JwksSchema.safeParse(body);
@@ -284,8 +292,8 @@ export class OAuthClient {
     return this.jwks;
   }
 
-  private async tokenRequest(form: Record<string, string>): Promise<TokenSet> {
-    const response = await this.post(TOKEN_URL, form);
+  private async tokenRequest(form: Record<string, string>, signal?: AbortSignal): Promise<TokenSet> {
+    const response = await this.post(TOKEN_URL, form, signal);
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new OAuthError(oauthErrorCode(body) ?? (response.status >= 500 ? "server_error" : "token_error"), response.status);
     const tokens = readTokenResponse(body, this.now());
@@ -293,18 +301,23 @@ export class OAuthClient {
     return tokens;
   }
 
-  private async post(url: string, form: Record<string, string>): Promise<Response> {
+  private async post(url: string, form: Record<string, string>, signal?: AbortSignal): Promise<Response> {
     try {
       return await this.fetch(url, {
         method: "POST",
         headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams(form).toString(),
-        signal: AbortSignal.timeout(30_000),
+        signal: withTimeout(signal),
       });
-    } catch (error) {
+    } catch {
       // The pinned fetch's own refusals (another address, a redirect) count as no answer too.
-      if (error instanceof OAuthError) throw error;
-      throw new OAuthError("unreachable", null);
+      throw new OAuthError(signal?.aborted ? "cancelled" : "unreachable", null);
     }
   }
+}
+
+/** Every call to OpenAI's auth server gives up after 30 seconds, or when the sign-in is cancelled. */
+function withTimeout(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(30_000);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }

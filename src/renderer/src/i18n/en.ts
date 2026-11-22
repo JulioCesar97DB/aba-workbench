@@ -222,7 +222,11 @@ export const en = {
     manageUsage: "Manage usage in ChatGPT",
     usageNote: "Drafts made with ChatGPT count toward your ChatGPT plan's usage. You can see and limit ABA Workbench's usage in ChatGPT's settings.",
     planNotAllowed:
-      "You signed in, but did not allow ABA Workbench to use your ChatGPT plan, so ChatGPT cannot be used here. Sign in again and allow it, or connect Claude with an API key instead.",
+      "You signed in, but ChatGPT did not let ABA Workbench use your plan: it was not allowed in the browser, or this account has no paid plan such as Plus or Pro. Sign in again and allow it, or connect Claude with an API key instead.",
+    planNotEligible:
+      "This ChatGPT account cannot use its plan in other apps, which needs a paid plan such as Plus or Pro. Sign out and sign in with an account that has one, or connect Claude with an API key instead.",
+    notSaved:
+      "ChatGPT works, but its renewed sign-in could not be saved, so it will be lost when you quit ABA Workbench. Check that your computer has free space; ABA Workbench keeps trying to save it.",
     allowPlan: "Sign in again and allow",
     sessionEnded:
       "Your ChatGPT sign-in has ended: it was signed out from ChatGPT, or not used for 30 days. Sign in again to keep using ChatGPT.",
@@ -233,12 +237,11 @@ export const en = {
     otherPort:
       "Another app is using the usual address for your browser's answer, so ABA Workbench is using a different one. If ChatGPT's page shows an error about the address, close the other app, such as Codex, and try again.",
     resultSignedIn: "Signed in. ChatGPT is connected.",
-    resultDeclined:
-      "You declined in the browser, so nothing was saved. You can sign in again and allow ABA Workbench to use your ChatGPT plan, or connect Claude with an API key instead.",
+    resultAccessDenied:
+      "ChatGPT did not let ABA Workbench use this account, so nothing was saved: it needs a paid ChatGPT plan such as Plus or Pro, and access allowed in the browser. Sign in with an account that has one, or connect Claude with an API key instead.",
     resultCancelled: "Sign-in cancelled. Nothing was saved.",
     resultTimedOut: "The browser did not come back in time, so the sign-in stopped. Nothing was saved. Try again when you are ready.",
-    resultPortInUse:
-      "ABA Workbench could not wait for your browser's answer: another app is using what it needs. Close other apps that sign in to ChatGPT, such as Codex, and try again.",
+    resultPortInUse: "ABA Workbench could not open a local connection to receive your browser's answer. Quit and reopen ABA Workbench, then try again.",
     resultDifferentAccount: "The browser signed in to a different ChatGPT account from the one ABA Workbench uses. Nothing changed.",
     resultUnreachable: "OpenAI could not be reached. Check your internet connection and try again.",
     resultFailed: "The ChatGPT sign-in did not complete. Nothing was saved. Try again in a moment.",

@@ -127,6 +127,20 @@ test("credentials store: Start over renames the file aside, never deletes it, th
   assert.equal(await readFile(path.join(dir, unreadableFileName(now, 1)), "utf8"), "{ again");
 });
 
+test("credentials store: Start over makes the set-aside file owner-only, and a damaged file others can read is made owner-only when read", { skip: process.platform === "win32" }, async (t) => {
+  const dir = await folder(t);
+  const file = path.join(dir, CREDENTIALS_FILE_NAME);
+  await writeFile(file, '{ "claude": { "apiKey": "sk-ant-in-a-damaged-file"', { mode: 0o644 });
+  await chmod(file, 0o644);
+  const store = new CredentialsStore(file, quiet);
+  assert.deepEqual(await store.read(), { ok: false, problem: "damaged" });
+  assert.equal((await stat(file)).mode & 0o777, 0o600, "made owner-only although it cannot be read");
+  await chmod(file, 0o644);
+  const now = new Date("2026-11-22T18:00:00.000Z");
+  assert.equal(await store.startOver(now), true);
+  assert.equal((await stat(path.join(dir, unreadableFileName(now)))).mode & 0o777, 0o600);
+});
+
 test("credentials store: a file others can read is made owner-only again (macOS and Linux)", { skip: process.platform === "win32" }, async (t) => {
   const dir = await folder(t);
   const file = path.join(dir, CREDENTIALS_FILE_NAME);

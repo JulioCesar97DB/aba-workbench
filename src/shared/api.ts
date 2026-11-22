@@ -199,13 +199,23 @@ export type ChatGptConnection =
    * which OpenAI may refuse for a first sign-in.
    */
   | { state: "signing-in"; otherPort: boolean }
-  | { state: "connected"; displayName: string | null }
   /**
-   * Signed in, but it cannot be used: the user did not allow ABA Workbench to use their
-   * ChatGPT plan ("plan-not-allowed"), or the session ended (revoked, disconnected in
-   * ChatGPT's settings, or unused for 30 days: "session-ended") and needs a new sign-in.
+   * `showWelcome`: plan use was allowed for the first time on this computer and the user has
+   * not dismissed "You're using your ChatGPT plan" yet (OpenAI's UI guidelines).
    */
-  | { state: "needs-attention"; reason: "plan-not-allowed" | "session-ended"; displayName: string | null };
+  | { state: "connected"; displayName: string | null; showWelcome: boolean }
+  /**
+   * Signed in, but it cannot be used as it is:
+   * - "plan-not-allowed": OpenAI gave no permission to use the ChatGPT plan (not allowed in
+   *   the browser, or an account with no plan apps can use);
+   * - "plan-not-eligible": OpenAI said this account, workspace or policy cannot use its plan
+   *   in apps (a free account, for example);
+   * - "session-ended": revoked, disconnected in ChatGPT's settings, or unused for 30 days;
+   *   it needs a new sign-in;
+   * - "not-saved": it works, but its renewed sign-in could not be written to the disk, so
+   *   it would be lost when the app quits.
+   */
+  | { state: "needs-attention"; reason: "plan-not-allowed" | "plan-not-eligible" | "session-ended" | "not-saved"; displayName: string | null };
 
 export interface Connections {
   chatgpt: ChatGptConnection;
@@ -239,6 +249,8 @@ export type CheckConnectionResult =
   | { outcome: "not-connected" }
   /** The provider no longer accepts the key or the sign-in: the connection needs attention. */
   | { outcome: "rejected" }
+  /** ChatGPT only: OpenAI said this account cannot use its plan in apps; the connection needs attention. */
+  | { outcome: "not-eligible" }
   | { outcome: "unreachable" }
   | { outcome: "provider-error" };
 
@@ -246,12 +258,15 @@ export type RemoveConnectionResult = { outcome: "removed" } | { outcome: "not-sa
 
 /** How a ChatGPT sign-in ended. */
 export type ChatGptSignInResult =
-  /** Signed in with plan use allowed. `firstTime`: the first sign-in on this computer. */
-  | { outcome: "signed-in"; firstTime: boolean }
-  /** Signed in, but the user did not allow ABA Workbench to use their ChatGPT plan. */
+  /** Signed in with plan use allowed. */
+  | { outcome: "signed-in" }
+  /** Signed in, but OpenAI gave no permission to use the ChatGPT plan. */
   | { outcome: "plan-not-allowed" }
-  /** The user declined in the browser; nothing was saved. */
-  | { outcome: "declined" }
+  /**
+   * OpenAI ended the attempt with access_denied: the user did not allow it, or the account
+   * has no plan apps can use (OpenAI's answer does not say which); nothing was saved.
+   */
+  | { outcome: "access-denied" }
   /** Cancelled in the app. */
   | { outcome: "cancelled" }
   /** Nothing came back from the browser in time (closed, say). */
@@ -329,6 +344,8 @@ export interface AbaApi {
   forgetChatGptAccount(): Promise<RemoveConnectionResult>;
   /** Opens ChatGPT's usage settings (chatgpt.com/settings/usage) in the system browser. */
   openChatGptUsage(): Promise<void>;
+  /** Remembers that "You're using your ChatGPT plan" was seen, so it is never shown again. */
+  dismissChatGptWelcome(): Promise<void>;
   /**
    * When the credentials file could not be used: renames it aside (never deleting it)
    * and starts with no saved connections. The interface asks the user to confirm first.
@@ -361,6 +378,7 @@ export const IPC_CHANNELS = {
   signOutOfChatGpt: "connections:chatgpt-sign-out",
   forgetChatGptAccount: "connections:chatgpt-forget",
   openChatGptUsage: "connections:chatgpt-usage",
+  dismissChatGptWelcome: "connections:chatgpt-welcome-seen",
   startOverConnections: "connections:start-over",
 } as const;
 

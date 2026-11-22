@@ -100,10 +100,12 @@ test("ChatGPT: sign in through the system browser, see the account, survive a re
   expect(authorize.origin + authorize.pathname).toBe("https://auth.openai.com/api/accounts/authorize");
   expect(authorize.searchParams.get("redirect_uri")).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/auth\/callback$/);
 
-  // OpenAI's guidelines: once, after the first sign-in.
+  // OpenAI's guidelines: once, after the first sign-in with plan use.
   const welcome = page.getByRole("dialog", { name: "You're using your ChatGPT plan" });
   await expect(welcome).toBeVisible();
   await welcome.getByRole("button", { name: "Got it" }).click();
+  await expect(welcome).toBeHidden();
+  expect(JSON.parse(readFileSync(path.join(profile, "settings.json"), "utf8")).chatgptWelcomeShown).toBe(true);
   await expect(card.getByText("Connected", { exact: true })).toBeVisible();
   await expect(page.getByTestId("chatgpt-account")).toHaveText("Signed in as Test Clinician");
   await expect(page.getByTestId("ai-status")).toHaveText("ChatGPT connected");
@@ -111,7 +113,7 @@ test("ChatGPT: sign in through the system browser, see the account, survive a re
   // The interface never holds a token: not in the page, not in what window.aba returns.
   const html = await page.content();
   for (const secret of [TOKENS.access, TOKENS.refresh, CLIENT_ID, "clinician@example.invalid"]) expect(html).not.toContain(secret);
-  expect(JSON.stringify(await page.evaluate(() => (globalThis as unknown as { aba: AbaApi }).aba.getConnections()))).toBe(JSON.stringify({ chatgpt: { state: "connected", displayName: "Test Clinician" }, claude: { state: "not-connected" }, problem: null }));
+  expect(JSON.stringify(await page.evaluate(() => (globalThis as unknown as { aba: AbaApi }).aba.getConnections()))).toBe(JSON.stringify({ chatgpt: { state: "connected", displayName: "Test Clinician", showWelcome: false }, claude: { state: "not-connected" }, problem: null }));
 
   // The credentials file: owner-only, in the profile, holding the tokens.
   const file = path.join(profile, "credentials.json");
@@ -125,15 +127,19 @@ test("ChatGPT: sign in through the system browser, see the account, survive a re
   const models = (await connectionStubLog(app)).requests.find((r) => r.url === "https://api.openai.com/v1/models");
   expect(models?.authorization).toBe(`Bearer ${TOKENS.access}`);
 
-  // A restart keeps the sign-in.
+  // A restart keeps the sign-in, and the welcome is not shown again.
   await app.close();
   app = await launch();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
   page = await app.firstWindow();
   await openSettings(page);
   await expect(page.getByTestId("chatgpt-account")).toHaveText("Signed in as Test Clinician");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  await page.getByTestId("chatgpt-card").getByRole("button", { name: "Sign out" }).click();
+  // From the keyboard: the button that had focus goes away, and focus lands on the card's heading.
+  await page.getByTestId("chatgpt-card").getByRole("button", { name: "Sign out" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("chatgpt-card").getByRole("heading", { name: "ChatGPT" })).toBeFocused();
   await expect(page.getByTestId("chatgpt-message")).toHaveText("Signed out. Your ChatGPT sign-in was removed from ABA Workbench.");
   await expect(page.getByTestId("chatgpt-card").getByText("Not connected")).toBeVisible();
   await expect(page.getByRole("button", { name: "Use a different ChatGPT account" })).toBeVisible();
@@ -143,7 +149,7 @@ test("ChatGPT: sign in through the system browser, see the account, survive a re
   expect(after.chatgpt).toEqual({ issuer: "https://auth.openai.com", clientId: CLIENT_ID, subject: SUBJECT, signedOut: true });
 });
 
-test("ChatGPT: a declined plan permission needs attention and offers the alternatives; a declined sign-in saves nothing", async ({ app, profile }) => {
+test("ChatGPT: access denied (a free account, or not allowed) says a paid plan is needed and offers Claude; a plan scope not granted needs attention", async ({ app, profile }) => {
   const { jwks } = await signingKey();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
   const page = await app.firstWindow();
@@ -159,19 +165,23 @@ test("ChatGPT: a declined plan permission needs attention and offers the alterna
       return declined;
     },
   });
-  await expect(page.getByTestId("chatgpt-message")).toContainText("You declined in the browser, so nothing was saved.");
-  expect(existsSync(path.join(profile, "credentials.json")) ? JSON.parse(readFileSync(path.join(profile, "credentials.json"), "utf8")).chatgpt : null).toBeNull();
+  await expect(page.getByTestId("chatgpt-message")).toHaveText(
+    "ChatGPT did not let ABA Workbench use this account, so nothing was saved: it needs a paid ChatGPT plan such as Plus or Pro, and access allowed in the browser. Sign in with an account that has one, or connect Claude with an API key instead.",
+  );
+  await expect(card.getByText("Not connected")).toBeVisible();
+  const saved = existsSync(path.join(profile, "credentials.json")) ? JSON.parse(readFileSync(path.join(profile, "credentials.json"), "utf8")) : null;
+  expect(saved?.chatgpt ?? null).toEqual(saved?.chatgpt ? { issuer: "https://auth.openai.com", clientId: CLIENT_ID, signedOut: true } : null);
 
   await card.getByRole("button", { name: "Continue with ChatGPT" }).click();
   await completeSignIn(app, { scope: "openid profile email offline_access" });
   await expect(card.getByText("Needs attention")).toBeVisible();
-  await expect(card.getByText("did not allow ABA Workbench to use your ChatGPT plan", { exact: false }).first()).toBeVisible();
-  await expect(card.getByText("connect Claude with an API key instead", { exact: false }).first()).toBeVisible();
+  await expect(page.getByTestId("chatgpt-attention")).toContainText("this account has no paid plan such as Plus or Pro");
+  await expect(page.getByTestId("chatgpt-attention")).toContainText("connect Claude with an API key instead");
   await expect(page.getByTestId("ai-status")).toHaveText("AI connection needs attention");
   await expect(card.getByRole("button", { name: "Sign in again and allow" })).toBeVisible();
 });
 
-test("ChatGPT: a session revoked elsewhere shows as needing a new sign-in", async ({ app }) => {
+test("ChatGPT: an account that cannot use its plan, then a session revoked elsewhere, each say what to do", async ({ app }) => {
   const { jwks } = await signingKey();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
   const page = await app.firstWindow();
@@ -180,6 +190,17 @@ test("ChatGPT: a session revoked elsewhere shows as needing a new sign-in", asyn
   await card.getByRole("button", { name: "Continue with ChatGPT" }).click();
   await completeSignIn(app);
   await page.getByRole("button", { name: "Got it" }).click();
+  // OpenAI says this account cannot use its plan in apps (a free account): it needs attention, plainly.
+  await setStubAnswers(app, { chatgptModelsStatus: 403 });
+  await card.getByRole("button", { name: "Check connection" }).click();
+  await expect(page.getByTestId("chatgpt-attention")).toHaveText(
+    "This ChatGPT account cannot use its plan in other apps, which needs a paid plan such as Plus or Pro. Sign out and sign in with an account that has one, or connect Claude with an API key instead.",
+  );
+  await expect(page.getByTestId("ai-status")).toHaveText("AI connection needs attention");
+  await setStubAnswers(app, { chatgptModelsStatus: 200 });
+  await card.getByRole("button", { name: "Sign out" }).click();
+  await card.getByRole("button", { name: "Continue with ChatGPT" }).click();
+  await completeSignIn(app);
   // ChatGPT refuses the token, and the refresh token too.
   await setStubAnswers(app, { chatgptModelsStatus: 401, token: { error: "refresh_token_invalidated" }, tokenStatus: 400 });
   await card.getByRole("button", { name: "Check connection" }).click();

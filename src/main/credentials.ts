@@ -50,6 +50,12 @@ const RegistrationShape = {
 
 const ChatGptSignedOutSchema = z.looseObject({
   ...RegistrationShape,
+  /**
+   * Absent for a registration whose first sign-in did not finish (the code exchange or the
+   * ID token failed after OpenAI issued the client id): kept so the next attempt reuses
+   * that client id instead of registering another app, as OpenAI's docs ask.
+   */
+  subject: RegistrationShape.subject.optional(),
   signedOut: z.literal(true),
   /** Set when the session ended on OpenAI's side (revoked, expired), not by the user's sign-out. */
   sessionEnded: z.literal(true).optional(),
@@ -160,6 +166,12 @@ export class CredentialsStore {
   private readonly platform: NodeJS.Platform;
   private readonly log: (message: string) => void;
   private readonly restrict: (file: string) => Promise<void>;
+  /**
+   * Set when a change is kept in memory because it could not be written (a refreshed
+   * sign-in whose rotated refresh token must not be lost): the next successful save writes
+   * it, and until then the interface says the sign-in is not saved.
+   */
+  private unsavedChange = false;
 
   constructor(
     file: string,
@@ -198,10 +210,38 @@ export class CredentialsStore {
       await mkdir(path.dirname(this.file), { recursive: true });
       await writeFileDurably(this.file, serializeCredentials(next), { mode: 0o600, prepare: this.restrict });
       this.current = { ok: true, credentials: next };
+      this.unsavedChange = false;
       return next;
     });
     this.queue = save.catch(() => undefined);
     return save;
+  }
+
+  /**
+   * Keeps a change in memory when it could not be saved, so what the app uses is the
+   * latest (OpenAI rotates the refresh token on every refresh: the replaced one must never
+   * be sent again). The next update, or saveUnsaved, writes it.
+   */
+  keepUnsaved(change: (current: StoredCredentials) => StoredCredentials): void {
+    if (!this.current?.ok || !this.current.credentials) return;
+    this.current = { ok: true, credentials: change(this.current.credentials) };
+    this.unsavedChange = true;
+  }
+
+  /** True while a change kept by keepUnsaved is not on the disk. */
+  get hasUnsavedChange(): boolean {
+    return this.unsavedChange;
+  }
+
+  /** Tries again to write a change kept by keepUnsaved. True when it is now on the disk. */
+  async saveUnsaved(): Promise<boolean> {
+    if (!this.unsavedChange) return true;
+    try {
+      await this.update((current) => current);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** This computer's ext_agent_host_id, saved before it is first used and never changed. */
@@ -234,6 +274,8 @@ export class CredentialsStore {
           this.log(`The unreadable credentials file could not be set aside (${(error as NodeJS.ErrnoException).code ?? "error"}).`);
           return false;
         }
+        // The file set aside may still hold secrets: owner-only, whatever its mode was.
+        await this.makeOwnerOnly(target);
         this.current = { ok: true, credentials: null };
         return true;
       }
@@ -260,6 +302,9 @@ export class CredentialsStore {
       this.log("The credentials file is not a file this app wrote; it is left as it is.");
       return { ok: false, problem: "damaged" };
     }
+    // Someone widened its permissions (macOS and Linux): back to owner-only, whether or not
+    // it can be read, since even a damaged one may hold a key.
+    if (this.platform !== "win32" && (info.mode & 0o077) !== 0) await this.makeOwnerOnly(this.file);
     let bytes: Uint8Array;
     try {
       bytes = await readFile(this.file);
@@ -272,13 +317,16 @@ export class CredentialsStore {
       this.log(parsed.problem === "newer-version" ? "The credentials file was saved by a newer version of the app; it is left as it is." : "The credentials file is damaged; it is left as it is.");
       return parsed;
     }
-    // Someone widened its permissions (macOS and Linux): back to owner-only.
-    if (this.platform !== "win32" && (info.mode & 0o077) !== 0) {
-      await chmod(this.file, 0o600).then(
-        () => this.log("The credentials file could be read by others; it is owner-only again."),
-        () => this.log("The credentials file can be read by others, and its permissions could not be changed."),
-      );
-    }
     return { ok: true, credentials: parsed.credentials };
+  }
+
+  /** Owner-only access for a file the app keeps: mode 0600, or on Windows the current user's access list only. Logged when it fails. */
+  private async makeOwnerOnly(target: string): Promise<void> {
+    try {
+      if (this.platform === "win32") await this.restrict(target);
+      else await chmod(target, 0o600);
+    } catch (error) {
+      this.log(`A credentials file could not be made owner-only (${(error as NodeJS.ErrnoException).code ?? "error"}).`);
+    }
   }
 }

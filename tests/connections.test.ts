@@ -175,3 +175,30 @@ test("Claude key: removing it forgets it; checking with none saved says not conn
   assert.deepEqual(await connections.checkClaudeKey(), { outcome: "not-connected" });
   assert.equal(calls.length, 0);
 });
+
+test("ChatGPT welcome: shown once plan use is allowed, until it is dismissed", async (t) => {
+  const { backend } = await credentials(t);
+  await backend.update((c) => ({
+    ...c,
+    chatgpt: {
+      issuer: "https://auth.openai.com",
+      clientId: "oaiapp_x",
+      subject: "s",
+      email: null,
+      name: null,
+      idToken: "i",
+      accessToken: "a",
+      refreshToken: "r",
+      tokenType: "Bearer",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      earliestRefreshAt: null,
+      scopes: ["chatgpt.tokens.use.direct"],
+      savedAt: "2026-11-22T18:00:00.000Z",
+    },
+  }));
+  const { connections, changes } = service(backend, anthropic().fetchStub);
+  assert.deepEqual((await connections.get()).chatgpt, { state: "connected", displayName: null, showWelcome: true });
+  await connections.dismissChatGptWelcome();
+  assert.deepEqual((await connections.get()).chatgpt, { state: "connected", displayName: null, showWelcome: false });
+  assert.deepEqual(changes.at(-1)?.chatgpt, { state: "connected", displayName: null, showWelcome: false });
+});

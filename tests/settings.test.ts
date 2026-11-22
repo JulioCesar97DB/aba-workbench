@@ -175,3 +175,16 @@ test("R4-1: a settings save never touches a temporary file it did not create", a
   assert.equal(readFileSync(temporaryFileFor(file), "utf8"), "not this save's");
   assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { version: 1, language: "es" });
 });
+
+test("settings file: the ChatGPT plan welcome, once dismissed, is remembered; a bad value is ignored", async () => {
+  const seen: StoredSettings = { language: "en", casesFolder: null, chatgptWelcomeShown: true };
+  assert.deepEqual(readStoredSettings(serializeSettings(seen), DEFAULTS), { settings: seen, problem: null });
+  assert.doesNotMatch(serializeSettings(EN), /chatgptWelcomeShown/, "written only when true");
+  assert.deepEqual(readStoredSettings('{"version":1,"language":"en","chatgptWelcomeShown":"yes"}', DEFAULTS), { settings: EN, problem: "invalid" });
+  const file = tempFile();
+  const store = new SettingsStore(file, () => DEFAULTS, () => undefined);
+  await store.setLanguage("en");
+  await store.markChatGptWelcomeShown();
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { version: 1, language: "en", chatgptWelcomeShown: true });
+  assert.equal((await new SettingsStore(file, () => DEFAULTS, () => undefined).get()).chatgptWelcomeShown, true);
+});

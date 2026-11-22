@@ -79,6 +79,10 @@ const chatgpt = new ChatGptSession({
 const connections = new ConnectionService({
   store: credentials,
   chatgpt,
+  welcome: {
+    shown: async () => (await settings.get()).chatgptWelcomeShown === true,
+    markShown: async () => void (await settings.markChatGptWelcomeShown()),
+  },
   claude: anthropicProvider,
   onChange: (state) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC_CHANNELS.connectionsChanged, state);

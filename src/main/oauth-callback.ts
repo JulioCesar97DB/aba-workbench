@@ -19,8 +19,12 @@ export const PREFERRED_CALLBACK_PORT = 1455;
 export type CallbackAnswer =
   /** OpenAI sent the user back with a code. `clientId`: the issued id, on a first registration. */
   | { kind: "code"; code: string; clientId: string | null; scope: string | null }
-  /** OpenAI sent the user back with an OAuth error (access_denied: the user declined). */
-  | { kind: "error"; error: string };
+  /**
+   * OpenAI sent the user back with an OAuth error (access_denied: access was not given).
+   * `description` is OpenAI's own wording, for the main process's log only; `clientId` is
+   * there when OpenAI had already issued one.
+   */
+  | { kind: "error"; error: string; description: string | null; clientId: string | null };
 
 export interface CallbackListener {
   port: number;
@@ -97,9 +101,15 @@ export function checkCallbackRequest(
 /** The answer in a valid callback's address. */
 export function readCallback(url: URL): CallbackAnswer {
   const error = url.searchParams.get("error");
-  if (error !== null) return { kind: "error", error: error.slice(0, 100) };
+  const clientId = url.searchParams.get("client_id");
+  if (error !== null) {
+    const description = url.searchParams.get("error_description");
+    // Printable text only, and short: it goes to a log line.
+    const clean = (text: string) => text.replace(/[^\x20-\x7e]/g, " ").slice(0, 200);
+    return { kind: "error", error: clean(error).slice(0, 100), description: description === null ? null : clean(description), clientId };
+  }
   const code = url.searchParams.get("code");
-  if (!code) return { kind: "error", error: "missing_code" };
+  if (!code) return { kind: "error", error: "missing_code", description: null, clientId };
   return { kind: "code", code, clientId: url.searchParams.get("client_id"), scope: url.searchParams.get("scope") };
 }
 

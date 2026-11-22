@@ -37,6 +37,7 @@ export class ConnectionService {
 
   private readonly store: CredentialsStore;
   private readonly chatgpt: ChatGptSession;
+  private readonly welcome: { shown(): Promise<boolean>; markShown(): Promise<void> };
   private readonly claude: Provider;
   private readonly notify: (connections: Connections) => void;
   private readonly log: (message: string) => void;
@@ -44,6 +45,8 @@ export class ConnectionService {
   constructor(options: {
     store: CredentialsStore;
     chatgpt: ChatGptSession;
+    /** Whether "You're using your ChatGPT plan" was dismissed (kept in the settings file). */
+    welcome?: { shown(): Promise<boolean>; markShown(): Promise<void> };
     /** The Claude provider; tests pass one with a stub fetch. */
     claude: Provider;
     /** Told the new state after every change, to pass on to the interface. */
@@ -53,6 +56,7 @@ export class ConnectionService {
   }) {
     this.store = options.store;
     this.chatgpt = options.chatgpt;
+    this.welcome = options.welcome ?? memoryWelcome();
     this.claude = options.claude;
     this.notify = options.onChange ?? (() => undefined);
     this.log = options.log ?? ((message) => console.error(message));
@@ -61,8 +65,9 @@ export class ConnectionService {
   async get(): Promise<Connections> {
     const saved = await this.store.read();
     if (!saved.ok) return { chatgpt: this.chatgpt.state(null), claude: { state: "not-connected" }, problem: saved.problem };
+    const welcomeShown = await this.welcome.shown().catch(() => true);
     return {
-      chatgpt: this.chatgpt.state(saved.credentials?.chatgpt ?? null),
+      chatgpt: this.chatgpt.state(saved.credentials?.chatgpt ?? null, { welcomeShown }),
       claude: this.claudeState(saved.credentials?.claude?.apiKey ?? null),
       problem: null,
     };
@@ -152,6 +157,12 @@ export class ConnectionService {
     return this.chatgpt.forgetAccount();
   }
 
+  /** "Got it" on "You're using your ChatGPT plan": never shown again on this computer. */
+  async dismissChatGptWelcome(): Promise<void> {
+    await this.welcome.markShown();
+    await this.changed();
+  }
+
   /**
    * "Start over" (owner's decision, 2026-11-22): only when the credentials file cannot be
    * used. It is renamed aside, never deleted, and both connections start empty.
@@ -175,6 +186,17 @@ export class ConnectionService {
     this.queue = next.catch(() => undefined);
     return next;
   }
+}
+
+/** For tests: the welcome flag in memory. */
+function memoryWelcome() {
+  let shown = false;
+  return {
+    shown: async () => shown,
+    markShown: async () => {
+      shown = true;
+    },
+  };
 }
 
 /** A file error's code, for the log: never its message, which holds the path. */

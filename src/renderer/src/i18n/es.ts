@@ -214,23 +214,26 @@ export const es: Messages = {
     manageUsage: "Administrar el uso en ChatGPT",
     usageNote: "Los borradores hechos con ChatGPT cuentan para el uso de tu plan de ChatGPT. Puedes ver y limitar el uso de ABA Workbench en la configuración de ChatGPT.",
     planNotAllowed:
-      "Iniciaste sesión, pero no permitiste que ABA Workbench use tu plan de ChatGPT, así que ChatGPT no se puede usar aquí. Vuelve a iniciar sesión y permítelo, o conecta Claude con una clave de API.",
+      "Iniciaste sesión, pero ChatGPT no dejó que ABA Workbench use tu plan: no se permitió en el navegador, o esta cuenta no tiene un plan de pago como Plus o Pro. Vuelve a iniciar sesión y permítelo, o conecta Claude con una clave de API.",
+    planNotEligible:
+      "Esta cuenta de ChatGPT no puede usar su plan en otras apps, porque para eso hace falta un plan de pago como Plus o Pro. Cierra sesión e inicia sesión con una cuenta que lo tenga, o conecta Claude con una clave de API.",
+    notSaved:
+      "ChatGPT funciona, pero su sesión renovada no se pudo guardar, así que se perderá cuando cierres ABA Workbench. Revisa que tu computadora tenga espacio libre; ABA Workbench sigue intentando guardarla.",
     allowPlan: "Volver a iniciar sesión y permitir",
     sessionEnded:
       "Tu sesión de ChatGPT terminó: se cerró desde ChatGPT o no se usó en 30 días. Vuelve a iniciar sesión para seguir usando ChatGPT.",
     signInAgain: "Volver a iniciar sesión",
     differentAccount: "Usar otra cuenta de ChatGPT",
-    differentAccountDone: "Se olvidó la cuenta de ChatGPT guardada. Elige Continuar con ChatGPT para iniciar sesión con cualquier cuenta.",
+    differentAccountDone: "ABA Workbench olvidó la cuenta de ChatGPT guardada. Elige Continuar con ChatGPT para iniciar sesión con cualquier cuenta.",
     differentAccountFailed: "No se pudo guardar. Inténtalo de nuevo.",
     otherPort:
       "Otra app está usando la dirección habitual para la respuesta de tu navegador, así que ABA Workbench usa otra. Si la página de ChatGPT muestra un error sobre la dirección, cierra la otra app, como Codex, e inténtalo de nuevo.",
     resultSignedIn: "Sesión iniciada. ChatGPT está conectado.",
-    resultDeclined:
-      "Lo rechazaste en el navegador, así que no se guardó nada. Puedes volver a iniciar sesión y permitir que ABA Workbench use tu plan de ChatGPT, o conectar Claude con una clave de API.",
+    resultAccessDenied:
+      "ChatGPT no dejó que ABA Workbench use esta cuenta, así que no se guardó nada: hace falta un plan de pago de ChatGPT como Plus o Pro, y permitir el acceso en el navegador. Inicia sesión con una cuenta que lo tenga, o conecta Claude con una clave de API.",
     resultCancelled: "Inicio de sesión cancelado. No se guardó nada.",
     resultTimedOut: "El navegador no respondió a tiempo, así que el inicio de sesión se detuvo. No se guardó nada. Inténtalo de nuevo cuando quieras.",
-    resultPortInUse:
-      "ABA Workbench no pudo esperar la respuesta de tu navegador: otra app está usando lo que necesita. Cierra otras apps que inicien sesión en ChatGPT, como Codex, e inténtalo de nuevo.",
+    resultPortInUse: "ABA Workbench no pudo abrir una conexión local para recibir la respuesta de tu navegador. Cierra y vuelve a abrir ABA Workbench, e inténtalo de nuevo.",
     resultDifferentAccount: "El navegador inició sesión en una cuenta de ChatGPT distinta de la que usa ABA Workbench. No cambió nada.",
     resultUnreachable: "No se pudo contactar con OpenAI. Revisa tu conexión a internet e inténtalo de nuevo.",
     resultFailed: "El inicio de sesión en ChatGPT no se completó. No se guardó nada. Inténtalo de nuevo en un momento.",
@@ -238,7 +241,7 @@ export const es: Messages = {
     resultAlreadySigningIn: "Ya hay un inicio de sesión esperando a tu navegador.",
     resultSignedOut: "Sesión cerrada. Tu sesión de ChatGPT se quitó de ABA Workbench.",
     resultSignedOutNotConfirmed:
-      "Sesión cerrada en ABA Workbench, pero OpenAI no confirmó que terminó la sesión. Para estar seguro, desconecta ABA Workbench en la configuración de ChatGPT.",
+      "Sesión cerrada en ABA Workbench, pero OpenAI no confirmó que terminó la sesión. Para asegurarte, desconecta ABA Workbench en la configuración de ChatGPT.",
     checkWorking: "La conexión funciona.",
     checkUnreachable: "No se pudo contactar con OpenAI. Revisa tu conexión a internet.",
     checkProviderError: "OpenAI respondió con un error. Inténtalo de nuevo en un momento.",
