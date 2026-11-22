@@ -1,9 +1,20 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { DevCheck } from "./DevCheck.tsx";
+import type { Settings } from "../../shared/api.ts";
+import { App } from "./App.tsx";
+import { initI18n } from "./i18n/index.ts";
+import "./styles/fonts.ts";
+import "./styles/app.css";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <DevCheck />
-  </StrictMode>,
-);
+async function start() {
+  // The saved language first, so the first screen is already in it.
+  const settings: Settings = await window.aba.getSettings().catch(() => ({ language: "en" }));
+  await initI18n(settings.language);
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}
+
+void start();

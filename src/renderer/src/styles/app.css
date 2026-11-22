@@ -1,0 +1,60 @@
+/*
+ * The interface's only stylesheet: Tailwind, the design tokens, and the few base rules
+ * that apply everywhere. Components style themselves with Tailwind classes that use the
+ * tokens (src/renderer/src/components/).
+ */
+@import "tailwindcss";
+@import "./tokens.css";
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    color: var(--color-fg);
+    background: var(--color-surface);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Focus is always visible: every focusable element gets the same ring when it is
+   * reached from the keyboard. The sidebar (and anything dark) sets --focus-ring to its
+   * own color.
+   */
+  :root {
+    --focus-ring: var(--color-focus);
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  [data-surface="nav"] {
+    --focus-ring: var(--color-focus-on-nav);
+  }
+
+  ::selection {
+    background: var(--color-accent-subtle);
+    color: var(--color-fg-on-accent-subtle);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Base UI: portaled popups (dialogs, selects, tooltips) always sit above the page. */
+#root {
+  isolation: isolate;
+}
