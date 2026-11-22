@@ -1,0 +1,60 @@
+# Runs the same checks every pull request has passed by hand: install, lint,
+# typecheck, tests, build and the Phase 0 end-to-end run on the mock provider.
+# It uses no secrets and no API keys, and nothing in it calls a real provider.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+# The token only needs to read the repository.
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the run it supersedes. Runs on dev and
+# main are never cancelled, so every commit there keeps its result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Lint, typecheck, test, build, phase0 --mock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      # Actions are pinned to a full commit SHA; the comment names the release.
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Installs pnpm at the version in package.json's packageManager field and
+      # Node.js at the version in .nvmrc, then runs
+      # `pnpm install --frozen-lockfile` (require-lockfile).
+      - name: Set up pnpm and Node.js, install dependencies
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
+        with:
+          require-lockfile: true
+          cache: true
+          # Only runs on dev and main save the store; pull requests restore it.
+          save-cache: ${{ github.event_name == 'push' }}
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # The full pipeline against the mock provider: no keys, no spend.
+      - name: Phase 0 end-to-end run (mock provider)
+        run: pnpm phase0 --mock
