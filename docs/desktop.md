@@ -6,7 +6,7 @@ How aba-workbench is put together since it moved from a hosted Next.js site to a
 
 - **Main process** (`src/main/`, Node.js). Owns the window and everything with access to the computer: the provider layer in `src/lib/`, the rules files, and later the cases folder and the credentials file. Keys and tokens will live here and in that file, never in the interface.
 - **Preload** (`src/preload/index.ts`). Runs sandboxed before the interface loads and exposes `window.aba`: the functions below and nothing else.
-- **Interface** (`src/renderer/`, React). Runs sandboxed, without Node.js. It can reach the main process only through `window.aba`. ESLint refuses imports of `electron`, `node:*` or main-process code in it (types excepted).
+- **Interface** (`src/renderer/`, React; organized as described in [interface.md](interface.md)). Runs sandboxed, without Node.js. It can reach the main process only through `window.aba`. ESLint refuses imports of `electron`, `node:*` or main-process code in it (types excepted).
 
 `pnpm phase0` runs the same provider layer from a plain Node script, through the same function the app uses (`runGeneration` in `src/lib/generate.ts`), with no window and no server.
 
@@ -16,7 +16,9 @@ Defined in `src/shared/api.ts`, exposed by the preload, answered in `src/main/ip
 
 | Function | What it does |
 | --- | --- |
-| `getAppInfo()` | The app's name and version. |
+| `getAppInfo()` | The app's name and version, and `developmentBuild`: true when it runs from the repository (not packaged), which shows the development check's link. |
+| `getSettings()` | The saved settings (today only the screen language), or the defaults. |
+| `setLanguage(language)` | Saves the screen language, `"en"` or `"es"`; anything else is refused. Returns the settings as saved. |
 | `startMockGeneration(generationId)` | Development check: runs the mock provider (no AI call, no key, no cost) with the real prompt builder and rules. The interface picks the id, a UUID. |
 | `cancelGeneration(generationId)` | Stops a running generation. |
 | `onGenerationUpdate(listener)` | Receives each generation's events (meta, status, text, done, error...) and a final `finished`; returns the function that unsubscribes. |
@@ -30,8 +32,8 @@ Rules for adding to it: one narrow function per action, plain data in and out, n
 Following Electron's security checklist (https://www.electronjs.org/docs/latest/tutorial/security):
 
 - Context isolation on, sandbox on (also forced app-wide with `app.enableSandbox()`), no Node.js integration in the interface.
-- A content security policy in `src/renderer/index.html`: only the app's own scripts, styles and images; no inline scripts, no eval, no outside connections, no frames.
-- Navigation, redirects, new windows and `<webview>` are blocked for every page (`src/main/security.ts`).
+- A content security policy in `src/renderer/index.html`: only the app's own scripts, styles, images and fonts; no inline scripts or styles, no eval, no outside connections, no frames. Two changes made with the interface's base (owner's decision, 2026-11-22): `font-src 'self'`, so the IBM Plex fonts that ship inside the app can load (nothing comes from the network); and, under `pnpm dev` only, `scripts/dev-style-nonce.ts` adds a nonce, new on each run, to `style-src`, because Vite's dev server injects stylesheets as `<style>` elements. A built or packaged app carries the policy exactly as written in `index.html`; a window test checks it, and `tests/dev-style-nonce.test.ts` checks the plugin applies to the dev server only. Base UI's own inline styles are turned off (`CSPProvider`), so they need no exception.
+- Navigation, redirects, new windows and `<webview>` are blocked for every page (`src/main/security.ts`). The interface moves between screens with React Router, which keeps the address in the URL's hash: a hash change stays inside the page and is not a navigation, so it is not blocked and does not stop a running generation.
 - Every permission request and check (camera, microphone, notifications, devices...) is denied.
 - The built interface is served from `app://aba-workbench/` rather than `file://` (`src/main/protocol.ts`); only files inside the built interface can be reached through it.
 - IPC senders are validated (see above). Errors that reach the interface carry a safe message, never a path, a key or a request body.
@@ -44,9 +46,17 @@ Not done yet, by decision: Electron fuses, code signing, installers, automatic u
 
 `src/main/paths.ts` decides: in development and in `pnpm preview`, the repository's `rules/` (next to `package.json`); in a packaged app, the `rules` folder that electron-builder copies into the app's resources folder (`ABA Workbench.app/Contents/Resources/rules` on macOS, `resources\rules` next to the `.exe` on Windows). A packaged build reads each rules file once; `pnpm dev` re-reads them on every generation, so edits show at once. Rules files parse with LF or CRLF line endings, and `.gitattributes` checks them out with LF everywhere.
 
+## The settings file
+
+`src/main/settings.ts` keeps the user's settings in `settings.json` in the app's data folder (`app.getPath("userData")`: `~/Library/Application Support/ABA Workbench` on macOS, `%APPDATA%\ABA Workbench` on Windows). Today it holds the screen language: `{ "version": 1, "language": "es" }`. Only the main process reads or writes it; the interface asks through `getSettings` and `setLanguage`.
+
+- Read back through Zod, field by field: a missing file means a first run (the language follows the system's preferred languages, Spanish or else English); a file that is not JSON, or holds a value this version does not know, falls back to the defaults for what it cannot use and keeps the rest. The main-process log says so; the next change rewrites the file whole.
+- Written to a temporary file next to it, then renamed over it, so a crash mid-write leaves the old file intact. Saves run one after another.
+- `tests/settings.test.ts` covers a first run, a corrupt file, an outdated one, refused values, quick successive saves and a failed save.
+
 ## Packaging
 
-`pnpm package` runs `electron-vite build` and `electron-builder --dir` with `electron-builder.yml`: an unpacked app for the current platform and architecture in `dist/`, unsigned, with the default Electron icon. The app archive holds only `out/` and `package.json`; the provider SDKs are bundled into `out/main/index.js`.
+`pnpm package` runs `electron-vite build` and `electron-builder --dir` with `electron-builder.yml`: an unpacked app for the current platform and architecture in `dist/`, unsigned, with the default Electron icon. The app archive holds only `out/` and `package.json`; the provider SDKs and Zod are bundled into `out/main/index.js`, and the interface, with its fonts, is in `out/renderer/`.
 
 ## macOS and Windows
 
@@ -69,8 +79,8 @@ The 4.5 MB cap that Phase 0 had was Vercel's request limit; it no longer exists 
 
 ## Tests
 
-- `pnpm test`: unit tests with `node:test`, no window, no keys, no network. They cover the provider layer, the rules, the size limits, the spending cap and the main process's logic (rules folder, app:// paths, IPC sender checks, the generation registry).
-- `pnpm test:e2e`: builds the app and drives its window with Playwright's Electron support (`e2e/`): the app starts, the development check shows, the interface has `window.aba` and no Node.js, a mock generation streams to completion with the rules found, a navigation the app blocks leaves a running generation alone, a reload mid-stream stops it (nothing more arrives for it), and a third generation at once is refused. Each test starts the app with a temporary profile. It needs a display; on a Linux machine without one, run it under `xvfb-run`.
+- `pnpm test`: unit tests with `node:test`, no window, no keys, no network. They cover the provider layer, the rules, the size limits, the spending cap, the main process's logic (rules folder, app:// paths, IPC sender checks, the generation registry, the settings file), both languages having the same strings, the design tokens' contrast and the dev server's style nonce.
+- `pnpm test:e2e`: builds the app and drives its window with Playwright's Electron support (`e2e/`). `shell.e2e.ts`: the app opens on Home; the built page carries the content security policy as written and loads its own fonts, with no policy violation while dialogs, selects and tooltips open; the navigation reaches every screen; switching the language changes the screen, marks English terms, and survives a restart; a corrupt settings file does not stop the app; the keyboard reaches everything with a visible focus ring; a narrow window swaps the sidebar for a Menu panel and nothing spills sideways. `dev-check.e2e.ts`: the interface has `window.aba` and no Node.js, a mock generation streams to completion with the rules found, a navigation the app blocks leaves a running generation alone, a reload mid-stream stops it (nothing more arrives for it), and a third generation at once is refused. Each test starts the app with a temporary profile, with English written into its settings file unless the test says otherwise. It needs a display; on a Linux machine without one, run it under `xvfb-run`.
 - `pnpm test:e2e:packaged`: the same tests against the unpacked app from `pnpm package`.
 
 No test calls a real provider: the only generation the interface can start is the mock.
