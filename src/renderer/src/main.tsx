@@ -7,6 +7,16 @@ import { LanguageProvider } from "./language.tsx";
 import "./styles/fonts.ts";
 import "./styles/app.css";
 
+// A file dropped anywhere but where a screen takes it (the Sources step) does nothing:
+// without this the window would try to open it (the main process blocks that anyway).
+for (const type of ["dragover", "drop"] as const) {
+  window.addEventListener(type, (event) => {
+    if (event.defaultPrevented) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+  });
+}
+
 async function start() {
   // The saved language first, so the first screen is already in it.
   const settings: Settings = await window.aba.getSettings().catch(() => ({ language: "en" }));

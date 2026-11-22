@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSyn
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, migrateCaseData, newCaseData, nextUpdatedAt, parsesWithoutLoss, readCaseFile, serializeCaseFile, type CaseData } from "../src/main/case-file.ts";
+import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, MAX_CASE_FILE_BYTES, migrateCaseData, newCaseData, nextUpdatedAt, parsesWithoutLoss, readCaseFile, serializeCaseFile, type CaseData } from "../src/main/case-file.ts";
 import { caseFolderName, caseFolderNames, folderNameKey, MAX_FOLDER_NAME_LENGTH } from "../src/main/case-folder-name.ts";
 import { CaseLibrary, readCaseFolder, scanCaseFiles } from "../src/main/cases.ts";
 import { DEFAULT_CASES_FOLDER_NAME, defaultCasesFolder, inspectCasesFolder } from "../src/main/cases-folder.ts";
@@ -66,17 +66,18 @@ function library(folder: string, extra: Partial<ConstructorParameters<typeof Cas
 
 /* The data file */
 
-test("case file: a new case's data file has the version 1 shape, and reads back the same", () => {
+test("case file: a new case's data file has the version 2 shape, and reads back the same", () => {
   const data = sample();
   const text = serializeCaseFile(data);
   assert.deepEqual(JSON.parse(text), {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: ID,
     label: "M.F. initial assessment",
     clientAge: { years: 4, months: 2 },
     createdAt: "2026-11-22T15:00:00.000Z",
     updatedAt: "2026-11-22T15:00:00.000Z",
     files: [],
+    sources: [],
   });
   assert.deepEqual(readCaseFile(text), { ok: true, data, migratedFrom: null });
   // No age given: the key is left out.
@@ -154,9 +155,10 @@ test("case file: an older version is migrated one step at a time; a missing step
   for (const bad of [null, [], "x", {}, { schemaVersion: "2" }, { schemaVersion: 0 }, { schemaVersion: Number.MAX_SAFE_INTEGER + 2 }]) {
     assert.equal(migrateCaseData(bad, 3, migrations).ok, false, JSON.stringify(bad));
   }
-  // The real chain: version 1 is current, nothing to migrate.
-  assert.equal(CASE_SCHEMA_VERSION, 1);
-  assert.deepEqual(migrateCaseData({ schemaVersion: 1 }), { ok: true, data: { schemaVersion: 1 }, migratedFrom: null });
+  // The real chain: version 2 is current; a version 1 file gains an empty list of sources.
+  assert.equal(CASE_SCHEMA_VERSION, 2);
+  assert.deepEqual(migrateCaseData({ schemaVersion: 1 }), { ok: true, data: { schemaVersion: 2, sources: [] }, migratedFrom: 1 });
+  assert.deepEqual(migrateCaseData({ schemaVersion: 2 }), { ok: true, data: { schemaVersion: 2 }, migratedFrom: null });
 });
 
 test("case file: the updated time always moves forward", () => {
@@ -351,7 +353,10 @@ test("cases: create a case, list it, open it; the folder holds only its data fil
   assert.deepEqual(list.cases, [created.case]);
   assert.deepEqual(list.unreadable, []);
   const opened = await restarted.open(created.case.id);
-  assert.deepEqual(opened, { outcome: "opened", case: { ...created.case, files: [] } });
+  assert.deepEqual(opened, {
+    outcome: "opened",
+    case: { ...created.case, files: [], sources: { sources: [], files: [], totalPdfWarning: null, pdfLimits: { chatgpt: 37_500_000, claude: 96_000_000 }, updatedAt: created.case.updatedAt } },
+  });
 });
 
 test("cases: newest first; two cases with the same label get two folders, none overwritten", async () => {
@@ -420,9 +425,9 @@ test("cases: every kind of unreadable folder shows in the list, and is never cha
   writeFileSync(path.join(folder, "Not a case", "notes.txt"), "mine");
   write("Corrupt", "{ half a fi");
   write("Wrong shape", JSON.stringify({ schemaVersion: 1, id: "nope" }));
-  write("From a newer app", JSON.stringify({ ...JSON.parse(serializeCaseFile(good)), id: "11111111-2222-4333-8444-555555555555", schemaVersion: 2 }));
+  write("From a newer app", JSON.stringify({ ...JSON.parse(serializeCaseFile(good)), id: "11111111-2222-4333-8444-555555555555", schemaVersion: 3 }));
   write("Copy of a good case", serializeCaseFile(good));
-  write("Too big", " ".repeat(5_000_001));
+  write("Too big", " ".repeat(MAX_CASE_FILE_BYTES + 1));
   mkdirSync(path.join(folder, "Data file is a folder", CASE_FILE_NAME), { recursive: true });
   // Not listed at all: hidden folders and plain files.
   mkdirSync(path.join(folder, ".hidden"));

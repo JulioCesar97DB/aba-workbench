@@ -38,6 +38,15 @@ const api: AbaApi = {
       ipcRenderer.removeListener(IPC_CHANNELS.connectionsChanged, handler);
     };
   },
+  addTextSource: (caseId, input) => ipcRenderer.invoke(IPC_CHANNELS.addTextSource, caseId, input),
+  changeSource: (caseId, sourceId, change) => ipcRenderer.invoke(IPC_CHANNELS.changeSource, caseId, sourceId, change),
+  removeSource: (caseId, sourceId) => ipcRenderer.invoke(IPC_CHANNELS.removeSource, caseId, sourceId),
+  restoreSource: (caseId, sourceId) => ipcRenderer.invoke(IPC_CHANNELS.restoreSource, caseId, sourceId),
+  readSourceText: (caseId, sourceId) => ipcRenderer.invoke(IPC_CHANNELS.readSourceText, caseId, sourceId),
+  choosePdfs: (caseId) => ipcRenderer.invoke(IPC_CHANNELS.choosePdfs, caseId),
+  addDroppedPdf: (caseId, pdf) => ipcRenderer.invoke(IPC_CHANNELS.addDroppedPdf, caseId, pdf),
+  addFolderPdf: (caseId, fileName) => ipcRenderer.invoke(IPC_CHANNELS.addFolderPdf, caseId, fileName),
+  openSourcePdf: (caseId, sourceId) => ipcRenderer.invoke(IPC_CHANNELS.openSourcePdf, caseId, sourceId),
   onGenerationUpdate: (listener) => {
     const handler = (_event: IpcRendererEvent, update: GenerationUpdate) => listener(update);
     ipcRenderer.on(IPC_CHANNELS.generationUpdate, handler);

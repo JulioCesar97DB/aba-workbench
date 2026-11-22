@@ -179,7 +179,8 @@ export async function removeLeftoverAppDataTemporaryFiles(file: string): Promise
   }
 }
 
-async function flushFolder(folder: string): Promise<void> {
+/** Flushes a folder so a file just made or renamed in it survives a power cut (macOS and Linux). */
+export async function flushFolder(folder: string): Promise<void> {
   if (process.platform === "win32") return;
   let handle;
   try {

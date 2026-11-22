@@ -4,7 +4,7 @@ import { Outlet, useLocation, useMatch } from "react-router";
 import { SIDEBAR_BREAKPOINT } from "../../../shared/theme.ts";
 import { formatAge } from "../format.ts";
 import { useLanguage } from "../language.tsx";
-import { OpenCaseContext, useCaseLoader } from "../open-case.tsx";
+import { OpenCaseContext, SetCaseSourcesContext, useCaseLoader } from "../open-case.tsx";
 import { Button } from "../components/Button.tsx";
 import { Dialog, DialogClose } from "../components/Dialog.tsx";
 import { AppSidebar, CaseSidebar } from "./Sidebar.tsx";
@@ -21,7 +21,7 @@ export function AppShell() {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const inCase = useMatch("/cases/:caseId/*");
-  const openCase = useCaseLoader(inCase?.params.caseId);
+  const { state: openCase, setSources } = useCaseLoader(inCase?.params.caseId);
   const sidebar =
     openCase?.outcome === "opened" ? (
       <CaseSidebar
@@ -34,6 +34,7 @@ export function AppShell() {
     );
   return (
     <OpenCaseContext value={openCase}>
+    <SetCaseSourcesContext value={setSources}>
     <div className="flex h-dvh overflow-hidden">
       <SkipLink />
       <div data-surface="nav" className="hidden w-sidebar shrink-0 bg-nav text-fg-on-nav sidebar:block">
@@ -47,6 +48,7 @@ export function AppShell() {
       </div>
       <RouteAnnouncer />
     </div>
+    </SetCaseSourcesContext>
     </OpenCaseContext>
   );
 }

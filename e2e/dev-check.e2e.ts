@@ -38,11 +38,16 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
   });
   expect(seen).toEqual({
     api: [
+      "addDroppedPdf",
+      "addFolderPdf",
+      "addTextSource",
       "cancelChatGptSignIn",
       "cancelGeneration",
+      "changeSource",
       "checkChatGpt",
       "checkClaudeKey",
       "chooseCasesFolder",
+      "choosePdfs",
       "createCase",
       "dismissChatGptWelcome",
       "forgetChatGptAccount",
@@ -55,7 +60,11 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
       "onGenerationUpdate",
       "openCase",
       "openChatGptUsage",
+      "openSourcePdf",
+      "readSourceText",
       "removeClaudeKey",
+      "removeSource",
+      "restoreSource",
       "saveClaudeKey",
       "setLanguage",
       "showCasesFolder",

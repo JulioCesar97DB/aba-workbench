@@ -11,12 +11,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, Tabl
 import { TransWithTerms } from "../components/Trans.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
+import { CaseSavesProvider } from "../case-saves.tsx";
 import { useOpenCaseState, useOpenedCase } from "../open-case.tsx";
+import { sourceName, sourceNameLang } from "../source-labels.tsx";
 import { Placeholder } from "./Placeholder.tsx";
 
 /*
  * The case workspace: the five steps and the report's sections. AppShell opens the case
- * (src/renderer/src/open-case.tsx); the steps are placeholders until later phases fill them.
+ * (src/renderer/src/open-case.tsx). Sources has its own screens (Sources.tsx, SourceText.tsx);
+ * the other steps are placeholders until later phases fill them.
  */
 
 /** The case's screens, once it is open; otherwise why it cannot be. */
@@ -24,7 +27,13 @@ export function CaseRoute() {
   const { t } = useTranslation();
   const platform = useAppInfo()?.platform;
   const state = useOpenCaseState();
-  if (state?.outcome === "opened") return <Outlet />;
+  // The case's saves outlive its screens: leaving the text editor never drops one under way.
+  if (state?.outcome === "opened")
+    return (
+      <CaseSavesProvider key={state.case.id} caseId={state.case.id}>
+        <Outlet />
+      </CaseSavesProvider>
+    );
   if (state === null || state.outcome === "loading") {
     return (
       <WorkArea header={<PageHeader title={t("case.loading")} />}>
@@ -54,20 +63,19 @@ export function CaseIndex() {
   return <Navigate to="sources" replace />;
 }
 
-function useStepMeta(step: CaseStep): string {
+export function useStepMeta(step: CaseStep): string {
   const { t } = useTranslation();
   const opened = useOpenedCase();
   return `${opened.label} · ${t("steps.position", { number: CASE_STEPS.indexOf(step) + 1, total: CASE_STEPS.length })}`;
 }
 
 const STEP_BODIES = {
-  sources: "workspace.sourcesBody",
   behaviors: "workspace.behaviorsBody",
   interventions: "workspace.interventionsBody",
   review: "workspace.reviewBody",
 } as const;
 
-/** Sources, Behaviors, Interventions, Review and copy: placeholders for now. */
+/** Behaviors, Interventions, Review and copy: placeholders for now. */
 export function StepScreen({ step }: { step: keyof typeof STEP_BODIES }) {
   const { t } = useTranslation();
   const meta = useStepMeta(step);
@@ -147,9 +155,10 @@ export function ReportSectionScreen() {
 }
 
 /** The right rail: the case's sources, the PDFs in its folder, and the checks run on a draft. */
-function CaseRail() {
+export function CaseRail() {
   const { t } = useTranslation();
-  const { files } = useOpenedCase();
+  const { files, sources } = useOpenedCase();
+  const active = sources.sources.filter((source) => !source.removedAt);
   const sourcesId = useId();
   const filesId = useId();
   const checksId = useId();
@@ -160,7 +169,17 @@ function CaseRail() {
         <Eyebrow id={sourcesId} className="text-fg-muted">
           {t("rail.sources")}
         </Eyebrow>
-        <p className="text-sm text-fg-muted">{t("rail.noSources")}</p>
+        {active.length > 0 ? (
+          <ul className="flex flex-col gap-1 text-sm">
+            {active.map((source) => (
+              <li key={source.id} lang={sourceNameLang(source)} className="break-words">
+                {sourceName(t, source)}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-fg-muted">{t("rail.noSources")}</p>
+        )}
       </section>
       <section aria-labelledby={filesId} className="flex flex-col gap-1.5">
         <Eyebrow id={filesId} className="text-fg-muted">

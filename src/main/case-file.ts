@@ -1,14 +1,16 @@
 import { z } from "zod";
 import { checkCaseLabel, isCaseId, MAX_CLIENT_AGE_YEARS, type CaseFile, type ClientAge } from "../shared/api.ts";
+import { checkSourceTitle, isSourceDate, MAX_SOURCE_TEXT_LENGTH, MAX_SOURCES } from "../shared/sources.ts";
 
 /*
  * A case's data file: aba-case.json, inside the case's folder, next to its PDFs (which
  * stay as they are, never converted or embedded). JSON with a schema version, read back
  * through Zod. Nothing here imports Electron or touches the disk, so it is unit-tested.
  *
- * Version 1 holds what Phase 1 needs: the id, the label, the client's age if given, the
- * created and updated times, and the PDFs found in the folder. Later phases add their own
- * top-level keys (sources, behaviors, drafts) and raise the version, with a migration.
+ * Version 1 held what Phase 1 needed: the id, the label, the client's age if given, the
+ * created and updated times, and the PDFs found in the folder. Version 2 adds the case's
+ * sources (pasted texts, and PDFs copied into the folder). Later phases add their own
+ * top-level keys (behaviors, drafts) and raise the version, with a migration.
  *
  * Rules that keep a user's data safe:
  * - A key this version does not know is kept as it is when the file is saved.
@@ -19,9 +21,13 @@ import { checkCaseLabel, isCaseId, MAX_CLIENT_AGE_YEARS, type CaseFile, type Cli
 
 export const CASE_FILE_NAME = "aba-case.json";
 /** Raise it, and add a step to MIGRATIONS, when the shape changes. */
-export const CASE_SCHEMA_VERSION = 1;
-/** A data file larger than this is not one the app wrote (version 1 is a few kilobytes). */
-export const MAX_CASE_FILE_BYTES = 5_000_000;
+export const CASE_SCHEMA_VERSION = 2;
+/**
+ * A data file larger than this is not one the app wrote, and a save that would make one
+ * is refused. Pasted texts live in the file: a case with a dozen long reports is a few
+ * megabytes.
+ */
+export const MAX_CASE_FILE_BYTES = 50_000_000;
 /** The most PDFs a case lists. */
 export const MAX_LISTED_FILES = 10_000;
 
@@ -53,6 +59,60 @@ const FileEntrySchema = z.looseObject({
   modifiedAt: TimestampSchema,
 });
 
+/** A source's title is stored already checked: reading refuses one checkSourceTitle would change. */
+const StoredSourceTitleSchema = z
+  .string()
+  .max(1000)
+  .refine((value) => {
+    const checked = checkSourceTitle(value);
+    return checked.ok && checked.title === value;
+  });
+
+/** A file name inside the case's folder: one plain name, never a path. */
+const StoredFileNameSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .refine((name) => name !== "." && name !== ".." && !/[/\\\p{Cc}]/u.test(name));
+
+/*
+ * A source (version 2). The type is kept as written, even one this version does not know
+ * (a newer app's), so a save never changes it; the interface shows an unknown one as
+ * "other". "removedAt" marks a source the clinician removed: it stays in the file, with
+ * its text, and its PDF stays in the folder (nothing is ever deleted).
+ */
+const SourceShape = {
+  id: z.string().refine(isCaseId),
+  type: z
+    .string()
+    .max(64)
+    .regex(/^[a-z0-9][a-z0-9-]*$/),
+  title: StoredSourceTitleSchema.optional(),
+  date: z.string().refine(isSourceDate).optional(),
+  addedAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+  removedAt: TimestampSchema.optional(),
+};
+
+const TextSourceSchema = z.looseObject({
+  ...SourceShape,
+  kind: z.literal("text"),
+  text: z.string().max(MAX_SOURCE_TEXT_LENGTH),
+});
+
+const PdfSourceSchema = z.looseObject({
+  ...SourceShape,
+  kind: z.literal("pdf"),
+  /** The copy's name in the case's folder. */
+  file: StoredFileNameSchema,
+  bytes: z.int().min(0),
+});
+
+const SourceSchema = z.discriminatedUnion("kind", [TextSourceSchema, PdfSourceSchema]);
+export type StoredSource = z.infer<typeof SourceSchema>;
+export type StoredTextSource = z.infer<typeof TextSourceSchema>;
+export type StoredPdfSource = z.infer<typeof PdfSourceSchema>;
+
 const CaseFileSchema = z.looseObject({
   schemaVersion: z.literal(CASE_SCHEMA_VERSION),
   id: z.string().refine(isCaseId),
@@ -61,6 +121,11 @@ const CaseFileSchema = z.looseObject({
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
   files: z.array(FileEntrySchema).max(MAX_LISTED_FILES),
+  // Each id once: a change names its source by id.
+  sources: z
+    .array(SourceSchema)
+    .max(MAX_SOURCES)
+    .refine((sources) => new Set(sources.map((source) => source.id)).size === sources.length),
 });
 
 /** A case's data, as the app holds it; unknown keys ride along. */
@@ -69,8 +134,14 @@ export type CaseData = z.infer<typeof CaseFileSchema>;
 /** Turns a version-n file's data into version n+1 (the runner sets schemaVersion). */
 export type Migration = (data: Record<string, unknown>) => Record<string, unknown>;
 
-/** MIGRATIONS[n] upgrades a version-n file. None yet: version 1 is the first. */
-export const MIGRATIONS: Readonly<Record<number, Migration>> = {};
+/**
+ * MIGRATIONS[n] upgrades a version-n file. A version 1 file is read as version 2 with no
+ * sources; it is written as version 2 only when the case is next saved.
+ */
+export const MIGRATIONS: Readonly<Record<number, Migration>> = {
+  // A key "sources" in a version 1 file (none was ever written) is kept and must then read as version 2's.
+  1: (data) => ("sources" in data ? data : { ...data, sources: [] }),
+};
 
 export type CaseFileProblem = "damaged" | "newer-version";
 
@@ -205,10 +276,23 @@ export function readCaseFile(input: string | Uint8Array): ReadCaseFileResult {
   return { ok: true, data: parsed.data, migratedFrom: migrated.migratedFrom };
 }
 
+/** A source's keys in a fixed order (optional ones only when present), then any others as they were. */
+function orderedSource(source: StoredSource): Record<string, unknown> {
+  const { id, kind, type, title, date, addedAt, updatedAt, removedAt, ...rest } = source;
+  const optional = { ...(title === undefined ? {} : { title }), ...(date === undefined ? {} : { date }) };
+  const head = { id, kind, type, ...optional, addedAt, updatedAt, ...(removedAt === undefined ? {} : { removedAt }) };
+  if (source.kind === "text") {
+    const { text, ...others } = rest as { text: string };
+    return { ...head, text, ...others };
+  }
+  const { file, bytes, ...others } = rest as { file: string; bytes: number };
+  return { ...head, file, bytes, ...others };
+}
+
 /** The file's text: the known keys first, in a fixed order, then any others as they were. */
 export function serializeCaseFile(data: CaseData): string {
-  const { schemaVersion, id, label, clientAge, createdAt, updatedAt, files, ...rest } = data;
-  const ordered = { schemaVersion, id, label, ...(clientAge ? { clientAge } : {}), createdAt, updatedAt, files, ...rest };
+  const { schemaVersion, id, label, clientAge, createdAt, updatedAt, files, sources, ...rest } = data;
+  const ordered = { schemaVersion, id, label, ...(clientAge ? { clientAge } : {}), createdAt, updatedAt, files, sources: sources.map(orderedSource), ...rest };
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }
 
@@ -223,6 +307,7 @@ export function newCaseData(options: { id: string; label: string; clientAge: Cli
     createdAt: time,
     updatedAt: time,
     files: (options.files ?? []).map((file) => ({ ...file })),
+    sources: [],
   };
 }
 

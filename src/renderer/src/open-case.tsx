@@ -1,19 +1,22 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { isCaseId, type CaseDetail, type OpenCaseResult } from "../../shared/api.ts";
+import type { CaseSources } from "../../shared/sources.ts";
 
 /*
  * The case open in the workspace. AppShell loads it (window.aba.openCase) when the
  * address enters a case, so the sidebar can show its label and the screens its data;
  * each time the user opens the case again it is read again, which also picks up PDFs put
- * into its folder meanwhile.
+ * into its folder meanwhile. A change saved from a screen (a source added, say) answers
+ * with the case's sources as saved, which replace the ones held here (useSetCaseSources).
  */
 
 export type OpenCaseState = OpenCaseResult | { outcome: "loading" } | { outcome: "error" };
 
 export const OpenCaseContext = createContext<OpenCaseState | null>(null);
+export const SetCaseSourcesContext = createContext<((caseId: string, sources: CaseSources) => void) | null>(null);
 
 /** Loads the case in the address; null outside a case. */
-export function useCaseLoader(caseId: string | undefined): OpenCaseState | null {
+export function useCaseLoader(caseId: string | undefined): { state: OpenCaseState | null; setSources: (caseId: string, sources: CaseSources) => void } {
   const [loaded, setLoaded] = useState<{ id: string; state: OpenCaseState } | null>(null);
   useEffect(() => {
     if (!caseId || !isCaseId(caseId)) return;
@@ -30,10 +33,20 @@ export function useCaseLoader(caseId: string | undefined): OpenCaseState | null 
       current = false;
     };
   }, [caseId]);
-  if (!caseId) return null;
-  // An address that is not a case id is not sent to the main process at all.
-  if (!isCaseId(caseId)) return { outcome: "not-found" };
-  return loaded?.id === caseId ? loaded.state : { outcome: "loading" };
+  const setSources = useCallback((id: string, sources: CaseSources) => {
+    setLoaded((previous) => {
+      if (previous?.id !== id || previous.state.outcome !== "opened") return previous;
+      const opened = previous.state.case;
+      return { id, state: { outcome: "opened", case: { ...opened, sources, files: sources.files, pdfCount: sources.files.length, updatedAt: sources.updatedAt } } };
+    });
+  }, []);
+  const state = useMemo((): OpenCaseState | null => {
+    if (!caseId) return null;
+    // An address that is not a case id is not sent to the main process at all.
+    if (!isCaseId(caseId)) return { outcome: "not-found" };
+    return loaded?.id === caseId ? loaded.state : { outcome: "loading" };
+  }, [caseId, loaded]);
+  return { state, setSources };
 }
 
 export function useOpenCaseState(): OpenCaseState | null {
@@ -45,4 +58,11 @@ export function useOpenedCase(): CaseDetail {
   const state = useContext(OpenCaseContext);
   if (state?.outcome !== "opened") throw new Error("useOpenedCase is used outside an opened case.");
   return state.case;
+}
+
+/** Replaces the opened case's sources with the ones a save answered. */
+export function useSetCaseSources(): (caseId: string, sources: CaseSources) => void {
+  const set = useContext(SetCaseSourcesContext);
+  if (!set) throw new Error("useSetCaseSources is used outside AppShell.");
+  return set;
 }

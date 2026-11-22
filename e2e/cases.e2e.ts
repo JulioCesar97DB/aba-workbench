@@ -59,13 +59,14 @@ test("create a case, see it in the list, restart the app and open it again", asy
   expect(readdirSync(caseFolder)).toEqual(["aba-case.json"]);
   const data = JSON.parse(readFileSync(path.join(caseFolder, "aba-case.json"), "utf8"));
   expect(data).toEqual({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
     label: "R.T. initial assessment",
     clientAge: { years: 5, months: 3 },
     createdAt: expect.any(String),
     updatedAt: data.createdAt,
     files: [],
+    sources: [],
   });
 
   await page.getByRole("link", { name: "All cases" }).click();

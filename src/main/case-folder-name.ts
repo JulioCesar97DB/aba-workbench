@@ -38,18 +38,18 @@ function tidyEnds(text: string): string {
 }
 
 /** Steps 1 to 7, leaving `room` characters for a suffix. */
-function baseName(label: string, room = 0): string {
+function baseName(label: string, room = 0, max = MAX_FOLDER_NAME_LENGTH, empty = EMPTY_FOLDER_NAME): string {
   let name = label.normalize("NFC").replace(FORBIDDEN, "-").replace(/\s+/gu, " ");
-  name = tidyEnds(cut(tidyEnds(name), MAX_FOLDER_NAME_LENGTH - room));
+  name = tidyEnds(cut(tidyEnds(name), max - room));
   name = tidyEnds(name);
-  if (name === "") name = EMPTY_FOLDER_NAME;
+  if (name === "") name = empty;
   // Windows reads "CON.txt" and "CON .txt" as the device CON too: the part before the first dot counts.
   const dot = name.indexOf(".");
   const stem = (dot === -1 ? name : name.slice(0, dot)).trimEnd();
   if (RESERVED.test(stem)) {
     const rest = dot === -1 ? "" : name.slice(dot);
     name = `${stem} case${rest}`;
-    if (name.length > MAX_FOLDER_NAME_LENGTH - room) name = `${stem} case`;
+    if (name.length > max - room) name = `${stem} case`;
   }
   return name;
 }
@@ -77,4 +77,26 @@ export function* caseFolderNames(label: string, taken: Iterable<string> = []): G
 /** The first candidate: the folder name a new case would get. */
 export function caseFolderName(label: string, taken: Iterable<string> = []): string {
   return caseFolderNames(label, taken).next().value as string;
+}
+
+/*
+ * A PDF's name in a case's folder, when it is copied in (src/main/case-pdfs.ts): the
+ * original name's part before ".pdf" made safe by the same steps as a folder name (at
+ * most MAX_PDF_STEM_LENGTH characters, "Document" when nothing is left), then ".pdf". A
+ * name already in the folder, compared the same way, gets " 2", " 3" and so on before
+ * ".pdf". The file is then made with an exclusive create, so nothing is ever overwritten.
+ */
+export const MAX_PDF_STEM_LENGTH = 100;
+export const EMPTY_PDF_STEM = "Document";
+
+export function* pdfFileNames(original: string, taken: Iterable<string> = []): Generator<string> {
+  const used = new Set([...taken].map(folderNameKey));
+  const stem = original.normalize("NFC").replace(/\.pdf$/i, "");
+  const first = `${baseName(stem, 0, MAX_PDF_STEM_LENGTH, EMPTY_PDF_STEM)}.pdf`;
+  if (!used.has(folderNameKey(first))) yield first;
+  for (let n = 2; ; n++) {
+    const suffix = ` ${n}`;
+    const candidate = `${baseName(stem, suffix.length, MAX_PDF_STEM_LENGTH, EMPTY_PDF_STEM)}${suffix}.pdf`;
+    if (!used.has(folderNameKey(candidate))) yield candidate;
+  }
 }

@@ -58,6 +58,28 @@ export const PROVIDER_REQUEST_LIMITS: Record<Exclude<ProviderId, "mock">, Provid
   },
 };
 
+/**
+ * The largest PDF each provider could take in one request, by its size alone: base64
+ * makes a file a third larger (4 characters for every 3 bytes). OpenAI counts its 50 MB
+ * on the encoded files (the stricter reading, above): 37.5 MB of PDF. Claude counts its
+ * 128 MB on the whole request: at most 96 MB of PDF, less the rules and other sources.
+ */
+export const LARGEST_PDF_FOR = {
+  openai: Math.floor((PROVIDER_REQUEST_LIMITS.openai.maxBytes * 3) / 4),
+  anthropic: Math.floor((PROVIDER_REQUEST_LIMITS.anthropic.maxBytes * 3) / 4),
+} as const;
+
+/**
+ * Whether PDFs this large (one file, or a case's PDFs together) are over what a provider
+ * accepts in one request: "over-chatgpt" when only Claude could take them, "over-all"
+ * when neither could. Shown when a PDF is added, long before any generation.
+ */
+export function pdfSizeWarning(bytes: number): "over-chatgpt" | "over-all" | null {
+  if (bytes > LARGEST_PDF_FOR.anthropic) return "over-all";
+  if (bytes > LARGEST_PDF_FOR.openai) return "over-chatgpt";
+  return null;
+}
+
 export interface RequestSize {
   /** The prompt as JSON: rules, sources (PDFs as base64) and section request. */
   requestBytes: number;
