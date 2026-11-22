@@ -19,7 +19,10 @@ The fonts come from the `@fontsource/ibm-plex-sans` and `@fontsource/ibm-plex-mo
 | `src/renderer/src/styles/fonts.ts` | Which Plex weights ship. |
 | `src/renderer/src/components/` | **The project's own components**, on Base UI where it has the part: `Button`, `TextLink` and `ButtonLink`, `Select`, `Dialog` (a centered box or a side panel), `Tooltip`, `Table`, `StatusBadge`, `NavItem` and `SectionNavItem`, `Term`. |
 | `src/renderer/src/shell/` | The frame: `AppShell` (rendered once: the sidebar for the app or for the case, the working area, the Menu panel on a narrow window, the skip link, the announcement and focus after a navigation), `Sidebar`, `PageHeader`, `WorkArea` (a screen's `<main>`: header, content and right rail). |
-| `src/renderer/src/screens/` | One file per screen: `Home`, `Case` (the workspace's steps and report), `Settings`, `NotFound`, `DevCheck`. |
+| `src/renderer/src/screens/` | One file per screen: `Home` (the list of cases and the New case form), `Case` (the workspace's steps and report), `Settings`, `NotFound`, `DevCheck`. |
+| `src/renderer/src/open-case.tsx` | The open case: AppShell loads it when the address enters a case, so the sidebar shows its label and the screens its data. |
+| `src/renderer/src/language.tsx` | The screen language and the saved one, shared by the sidebar and Settings. |
+| `src/renderer/src/format.ts`, `cases-folder.tsx` | Ages and dates in the screen language; the cases folder's problems in words, and "Show in Finder / Explorer". |
 | `src/renderer/src/i18n/` | The strings: `en.ts`, `es.ts`, the English-only clinical terms (`terms.ts`) and i18next's set-up. |
 | `src/shared/report-sections.ts` | The report's sections and their English titles, shared with the main process. |
 | `src/shared/theme.ts` | The two design values code needs outside the stylesheet (the window's background, the sidebar breakpoint); a test keeps them equal to the tokens. |
@@ -30,10 +33,10 @@ React Router keeps the address in the URL's hash (`#/settings`). The app's page 
 
 | Address | Screen |
 | --- | --- |
-| `#/` | Home: the list of cases. Empty until cases can be created (next task), with what the user can do meanwhile. |
-| `#/cases/preview/sources`, `/behaviors`, `/interventions`, `/report`, `/review` | The case workspace's five steps. Only the preview case exists; each step is a placeholder that says what it will hold. |
-| `#/cases/preview/report/<section-id>` | One section of the report (ids in `src/shared/report-sections.ts`). |
-| `#/settings` | The screen language; room for the cases folder and the AI connection, which arrive later. |
+| `#/` | Home: the cases in the cases folder, newest first (label, client age, created, last saved, PDFs), "New case", and below them the folders that could not be opened. When there are none, what to do; when the cases folder cannot be used, why and a way to choose another. |
+| `#/cases/<id>/sources`, `/behaviors`, `/interventions`, `/report`, `/review` | The case workspace's five steps, for the case with that id. The sidebar shows its label and age; the rail lists the PDFs in its folder. Each step is still a placeholder that says what it will hold. An id that is not a case, or a case that cannot be opened, says so. |
+| `#/cases/<id>/report/<section-id>` | One section of the report (ids in `src/shared/report-sections.ts`). |
+| `#/settings` | The screen language and the cases folder (its path, "Choose another folder…", "Show in Finder"); room for the AI connection, which arrives later. |
 | `#/dev-check` | The development check (mock generation). Linked from the sidebar only when the app runs from the repository (`getAppInfo().developmentBuild`); the packaged app has no link to it, and the window tests open it by address. It is a developer screen, in English only. |
 
 ## Design tokens
@@ -58,9 +61,10 @@ Each component in `src/renderer/src/components/` wraps a Base UI part (`@base-ui
 - `Table` and its parts: plain HTML tables with column or row headers.
 - `StatusBadge`: a status in words; the color only repeats them. Two tones today: `neutral` and `accent`.
 - `NavItem`, `SectionNavItem`: the sidebar's links; the current one is `aria-current="page"`. A section shows one state today, "not started".
+- `TextField`: a labelled text input (Base UI Field) with an optional description and an error, wired to the input. The New case form uses it.
 - `Term`, `TransWithTerms`: English terms inside the interface (below).
 
-Not built yet, on purpose: a text field (no screen takes typed input until cases can be created), and anything else no screen uses.
+Not built yet, on purpose: anything no screen uses.
 
 Base UI's own inline `<style>` tags are turned off (`CSPProvider disableStyleElements` in `App.tsx`): the content security policy would block them, and no component used needs them.
 
@@ -73,7 +77,8 @@ Base UI's own inline `<style>` tags are turned off (`CSPProvider disableStyleEle
 The screens are in English or Spanish, chosen in Settings (or with ES/EN at the foot of the sidebar) and remembered across restarts. The assessment itself is always English.
 
 - The setting lives in the main process, in `settings.json` in the app's data folder (`src/main/settings.ts`, read back through Zod; a missing, corrupt or outdated file falls back to the defaults). The interface reaches it only through `window.aba.getSettings()` and `window.aba.setLanguage()`. On the first run the language follows the system's preferred languages: Spanish if Spanish comes before English, English otherwise.
-- A change is saved first, then shown. If the main process cannot save it (a read-only file, say), the screen still changes for this session, so the user can work in the language they chose, and a message where they changed it (the sidebar's footer or Settings) says it could not be saved and which language the app will open in next time.
+- A change is saved first, then shown. If the main process cannot save it (a read-only file, say), the screen still changes for this session, so the user can work in the language they chose, and the sidebar's footer and Settings both say it could not be saved and which language the app will open in next time: the one the main process has saved, read back from it, from one state both share (`language.tsx`).
+- Ages and dates take their words and shape from the system's `Intl` data in the screen language: "4 years 2 months", "4 años 2 meses"; "Nov 22, 2026", "22 nov 2026".
 - The sidebar's switch reads ES EN, as in the reference.
 - A language named inside a sentence uses `languageInSentence` ("will open in Spanish", "se abrirá en español"), not the language's own name (`languages`: "English", "Español"), which the switch and the Select show.
 - `<html lang>` follows the screen language. Clinical terms and section names stay English in the Spanish interface (Behaviors, Interventions, Medical Necessity Criteria...), because that is how the clinician and her forms name them, and they are marked `lang="en"` so a screen reader reads them in English. Spanish uses the informal "tú" and Latin American vocabulary ("computadora").
