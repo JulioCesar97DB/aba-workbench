@@ -1,0 +1,72 @@
+# Runs the same checks every pull request has passed by hand: install, lint,
+# typecheck, tests, build and the Phase 0 end-to-end run on the mock provider.
+# It uses no secrets and no API keys, and nothing in it calls a real provider.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+# The token only needs to read the repository.
+permissions:
+  contents: read
+
+# Pull requests: each pull request has one group, and a new push cancels the
+# run it supersedes, whether that run is in progress or still pending.
+# Pushes to dev and main: each run gets a group of its own (its run id), so no
+# other run can queue behind it or replace it. GitHub keeps only one pending
+# run per group, so a shared group per branch would cancel the middle one of
+# three quick merges and leave that commit without a result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Lint, typecheck, test, build, phase0 --mock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      # Actions are pinned to a full commit SHA; the comment names the release.
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Installs pnpm at the version in package.json's packageManager field and
+      # Node.js at the version in .nvmrc, then runs
+      # `pnpm install --frozen-lockfile` (require-lockfile).
+      - name: Set up pnpm and Node.js, install dependencies
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
+        with:
+          require-lockfile: true
+          cache: true
+          # Only runs on dev and main save the store; pull requests restore it.
+          save-cache: ${{ github.event_name == 'push' }}
+
+      # Shows which Node.js and pnpm the later steps use, so the log proves that
+      # the version from .nvmrc, not the runner's preinstalled one, runs them.
+      - name: Show Node.js and pnpm versions
+        run: |
+          command -v node
+          node --version
+          pnpm --version
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # The full pipeline against the mock provider: no keys, no spend.
+      - name: Phase 0 end-to-end run (mock provider)
+        run: pnpm phase0 --mock
