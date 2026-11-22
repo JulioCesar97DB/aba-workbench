@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { LANGUAGES, isLanguage, type Language, type Settings } from "../shared/api.ts";
@@ -6,7 +6,7 @@ import { LANGUAGES, isLanguage, type Language, type Settings } from "../shared/a
 /*
  * The user's settings, in one JSON file in the app's own data folder
  * (app.getPath("userData"): ~/Library/Application Support/ABA Workbench on macOS,
- * %APPDATA%\ABA Workbench on Windows). Only the main process reads or writes it; the
+ * %APPDATA%\ABA Workbench on Windows, ~/.config/ABA Workbench on Linux). Only the main process reads or writes it; the
  * interface asks through window.aba. Nothing here imports Electron, so it is unit-tested.
  *
  * Reading never fails: a missing file means a first run, and a file that is not JSON, or
@@ -114,11 +114,26 @@ export class SettingsStore {
     return save;
   }
 
-  /** Writes a temporary file next to the real one, then renames it over: a crash mid-write leaves the old file whole. */
+  /**
+   * Writes a temporary file next to the real one, flushes it to the disk, then renames it
+   * over the real one: a crash or a power cut mid-save leaves the old file or the new one,
+   * never half of either. A failed save removes the temporary file.
+   */
   private async write(settings: Settings): Promise<void> {
     await mkdir(path.dirname(this.file), { recursive: true });
     const temporary = `${this.file}.${process.pid}.tmp`;
-    await writeFile(temporary, serializeSettings(settings), "utf8");
-    await rename(temporary, this.file);
+    try {
+      const handle = await open(temporary, "w");
+      try {
+        await handle.writeFile(serializeSettings(settings), "utf8");
+        await handle.datasync();
+      } finally {
+        await handle.close();
+      }
+      await rename(temporary, this.file);
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => undefined);
+      throw error;
+    }
   }
 }
