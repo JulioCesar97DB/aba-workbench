@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { Deidentifier, type ClientSheet } from "../src/main/deidentify/index.ts";
-import { extractPdfText } from "../src/main/pdf-text/extract.ts";
+import { DEFAULT_LIMITS, extractPdfText } from "../src/main/pdf-text/extract.ts";
 import { pdfjsReader } from "../src/main/pdf-text/pdfjs-reader.ts";
+import { REVIEW_SHEET, REVIEW_TODAY } from "./deidentify-adversarial.ts";
+import { deepNesting, manyPages, pagesLoop, selfDrawingForm, spacedNames, textBomb, whitespaceBomb } from "./hostile-pdfs.ts";
 
 /*
  * The real reader (PDF.js) on the invented fixture PDFs: the score reports rendered from
@@ -30,6 +32,7 @@ for (const [file, text, pages] of GOLDEN) {
     if (result.status !== "text") return;
     assert.equal(result.pageCount, pages);
     assert.deepEqual(result.pagesWithoutText, []);
+    assert.deepEqual(result.pagesNeedingReview, []);
     assert.equal(result.text, expected(text));
   });
 }
@@ -56,7 +59,7 @@ test("PDF fixture: score tables keep a score's name, standard score and percenti
 test("PDF fixture: a scan has no text, a scanned page in a mixed PDF is marked and listed", async () => {
   assert.deepEqual(await extractPdfText(pdf("pdf-text/scan.pdf"), pdfjsReader), { status: "no-text", pageCount: 1 });
   const mixed = await extractPdfText(pdf("pdf-text/mixed.pdf"), pdfjsReader);
-  assert.deepEqual(mixed, { status: "text", pageCount: 2, pagesWithoutText: [2], text: expected("mixed.txt") });
+  assert.deepEqual(mixed, { status: "text", pageCount: 2, pagesWithoutText: [2], pagesNeedingReview: [], text: expected("mixed.txt") });
 });
 
 /** A minimal PDF with the objects given, its cross-reference table computed. */
@@ -118,4 +121,32 @@ test("PDF fixture: the extracted text de-identifies like any text, scores intact
   for (const line of ["Examinee | [CLIENT FULL NAME]", "Date of birth | [DOB]", "Respondent | [CAREGIVER 1 FULL NAME] (mother)", "Interviewer | [NAME 1], M.S., BCBA", "Interview date | 10/02/2026", "Communication | 23 | 62 | 57–67 | 1 | Low"]) {
     assert.ok(hiddenVineland.split("\n").includes(line), line);
   }
+});
+
+test("hostile PDFs: loops, self-drawing forms, deep nesting and thousands of pages end quickly with an answer", async () => {
+  assert.deepEqual(await extractPdfText(pagesLoop(), pdfjsReader), { status: "unreadable", reason: "damaged" });
+  assert.deepEqual(await extractPdfText(manyPages(5000), pdfjsReader), { status: "unreadable", reason: "too-many-pages" });
+  assert.deepEqual(await extractPdfText(deepNesting(200_000), pdfjsReader), { status: "no-text", pageCount: 1 });
+  const form = await extractPdfText(selfDrawingForm(), pdfjsReader);
+  assert.equal(form.status, "text");
+  assert.deepEqual(await extractPdfText(whitespaceBomb(16), pdfjsReader), { status: "no-text", pageCount: 1 });
+});
+
+test("hostile PDFs: a text bomb stops at the time limit in this process too (the app also kills its process: pdf-isolated.test.ts)", async () => {
+  const start = Date.now();
+  const result = await extractPdfText(textBomb(16), pdfjsReader, { ...DEFAULT_LIMITS, timeoutMs: 1_500 });
+  assert.equal(result.status, "unreadable");
+  assert.ok(Date.now() - start < 6_000);
+});
+
+test("letter-spaced PDF text: names come back as words, the page is flagged, and nothing on the sheet survives", async () => {
+  const result = await extractPdfText(spacedNames(), pdfjsReader);
+  assert.equal(result.status, "text");
+  if (result.status !== "text") return;
+  assert.deepEqual(result.pagesNeedingReview, [1]);
+  const lines = result.text.split("\n");
+  assert.ok(lines.includes("Examinee | Mateo Ficticio"), result.text);
+  assert.ok(lines.includes("Lucia Ficticio is the mother of the child."), result.text);
+  const hidden = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY }).deidentify(result.text).text;
+  for (const name of ["Mateo", "Ficticio", "Lucia", "teo", "3/14/2020", "4471"]) assert.ok(!hidden.toLowerCase().includes(name.toLowerCase()), `${name} in ${hidden}`);
 });

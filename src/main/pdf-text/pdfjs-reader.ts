@@ -8,6 +8,9 @@
  *   JavaScript (the path of CVE-2024-4367; its isEvalSupported option is gone, checked in
  *   pdfjs-dist 6.5.438), and the PDF's own scripts and XFA forms are never run;
  * - fonts are not loaded and nothing is drawn; no file, URL or network is used.
+ * - each page's text is read as a stream, and once it passes its character budget the
+ *   whole document is destroyed (cancelling only the stream makes PDF.js 6.5 throw when
+ *   its next piece arrives), so a page of millions of tiny text pieces stops early.
  * At first use PDF.js warns once that it cannot set up drawing (no canvas): expected.
  */
 import { getDocument, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -52,17 +55,29 @@ export const pdfjsReader: PdfReader = {
     }
     return {
       pageCount: doc.numPages,
-      async page(number: number): Promise<TextPiece[]> {
+      async page(number: number, maxCharacters: number): Promise<TextPiece[]> {
         const page = await doc.getPage(number);
+        const stream = page.streamTextContent().getReader();
         try {
-          const content = await page.getTextContent();
           const pieces: TextPiece[] = [];
-          for (const item of content.items) {
-            if (!("str" in item)) continue;
-            pieces.push({ str: item.str, x: item.transform[4], y: item.transform[5], width: item.width, height: item.height || Math.hypot(item.transform[2], item.transform[3]) });
+          let characters = 0;
+          for (;;) {
+            const { value, done } = await stream.read();
+            if (done) break;
+            for (const item of (value as { items: unknown[] }).items) {
+              if (!item || typeof item !== "object" || !("str" in item)) continue;
+              const text = item as { str: string; transform: number[]; width: number; height: number };
+              characters += text.str.length;
+              if (characters > maxCharacters) {
+                await task.destroy();
+                throw new PdfReadError("too-large");
+              }
+              pieces.push({ str: text.str, x: text.transform[4], y: text.transform[5], width: text.width, height: text.height || Math.hypot(text.transform[2], text.transform[3]) });
+            }
           }
           return pieces;
         } finally {
+          stream.releaseLock();
           page.cleanup();
         }
       },

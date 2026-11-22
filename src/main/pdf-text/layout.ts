@@ -6,6 +6,11 @@
  * whether the other cells sit on its first line or between its lines. Lines of a
  * paragraph are joined. Independent of the PDF library: it reads only text, position and size.
  *
+ * Letter-spaced text ("L u c i a", as PDF.js gives text drawn with character spacing or
+ * one glyph at a time) is joined back into words: pieces closer than 1.2 times their own
+ * letter advance belong to one word, farther ones are separate words. A page that had
+ * letter-spaced or overlapping text is flagged for review (`needsReview`).
+ *
  * Limits: one column of text per page is assumed (a two-column page reads across
  * both columns line by line); rotated text is read as if it were not rotated.
  */
@@ -25,7 +30,12 @@ interface Cell {
   x1: number;
   y: number;
   text: string;
+  /** The last piece was letter-spaced: its letter advance, for the next gap. */
+  advance?: number;
 }
+
+/** "L u c i a": every other character a space. */
+const LETTER_SPACED = /^\S(?: \S){1,}$/u;
 
 interface Line {
   y: number;
@@ -40,12 +50,38 @@ const INTERLEAVED = 0.75;
 /** A table line and a partial line this close (times the font height) can be one row. */
 const CONTINUATION = 1.35;
 
-function linesOf(pieces: TextPiece[]): Line[] {
-  const visible = pieces
-    .map((p) => ({ ...p, str: p.str.normalize("NFKC") }))
-    .filter((p) => p.str.trim() !== "")
+interface Review {
+  spaced: boolean;
+  overlapping: boolean;
+}
+
+interface Piece extends TextPiece {
+  spaced: boolean;
+  /** For letter-spaced text: the distance from one letter to the next. */
+  advance?: number;
+  /** The piece began with a space. */
+  leadingSpace: boolean;
+}
+
+/** Letter advance of a letter-spaced piece: its width less one glyph (about half the font height), over the gaps between its letters. */
+function letterAdvance(width: number, letters: number, height: number): number {
+  return letters > 1 ? Math.max(1, (width - 0.5 * height) / (letters - 1)) : Math.max(1, width);
+}
+
+function linesOf(pieces: TextPiece[], review: Review): Line[] {
+  const visible: Piece[] = pieces
+    .map((p) => {
+      const raw = p.str.normalize("NFKC");
+      const str = raw.trim();
+      const spaced = LETTER_SPACED.test(str);
+      if (spaced) review.spaced = true;
+      const letters = spaced ? str.replace(/ /gu, "") : str;
+      const advance = spaced || letters.length === 1 ? letterAdvance(p.width, letters.length, p.height || 10) : undefined;
+      return { ...p, str: letters, spaced, advance, leadingSpace: /^\s/u.test(raw) };
+    })
+    .filter((p) => p.str !== "")
     .sort((a, b) => b.y - a.y || a.x - b.x);
-  const lines: Array<{ y: number; height: number; pieces: TextPiece[] }> = [];
+  const lines: Array<{ y: number; height: number; pieces: Piece[] }> = [];
   for (const piece of visible) {
     const line = lines.find((l) => Math.abs(l.y - piece.y) <= Math.max(1, 0.2 * Math.min(l.height, piece.height || l.height)));
     if (line) {
@@ -63,12 +99,20 @@ function linesOf(pieces: TextPiece[]): Line[] {
       for (const piece of sorted) {
         const last = cells.at(-1);
         const gap = last ? piece.x - last.x1 : Infinity;
-        if (last && gap <= CELL_GAP * line.height) {
-          const space = gap > 0.15 * line.height && !last.text.endsWith(" ") && !piece.str.startsWith(" ") ? " " : "";
+        if (last && gap < -2) review.overlapping = true;
+        // Letter-spaced pieces next to each other: one word when the gap is under 1.2 letter advances, a space up to 3.
+        const advance = last?.advance && piece.advance ? Math.max(last.advance, piece.advance) : undefined;
+        if (last && advance !== undefined && gap <= 3 * advance) {
+          last.text += gap < 1.2 * advance ? piece.str : ` ${piece.str}`;
+          last.x1 = Math.max(last.x1, piece.x + piece.width);
+          last.advance = piece.advance;
+        } else if (last && gap <= CELL_GAP * line.height) {
+          const space = (gap > 0.15 * line.height || piece.leadingSpace) && !last.text.endsWith(" ") ? " " : "";
           last.text += space + piece.str;
           last.x1 = Math.max(last.x1, piece.x + piece.width);
+          last.advance = piece.spaced ? piece.advance : undefined;
         } else {
-          cells.push({ x0: piece.x, x1: piece.x + piece.width, y: line.y, text: piece.str });
+          cells.push({ x0: piece.x, x1: piece.x + piece.width, y: line.y, text: piece.str, advance: piece.spaced ? piece.advance : undefined });
         }
       }
       for (const cell of cells) cell.text = cell.text.replace(/\s+/gu, " ").trim();
@@ -159,9 +203,21 @@ function joinWrapped(parts: string[]): string {
   return parts.reduce((text, part) => (text === "" ? part : text.endsWith("-") ? text + part : `${text} ${part}`), "");
 }
 
+/** The text of one page, and whether it needs a look before sending (letter-spaced or overlapping text). */
+export function layoutPage(pieces: TextPiece[]): { text: string; needsReview: boolean } {
+  const review: Review = { spaced: false, overlapping: false };
+  const text = pageTextOf(linesOf(pieces, review));
+  const tokens = text.split(/\s+/u).filter((t) => /\p{L}/u.test(t));
+  const singles = tokens.filter((t) => /^\p{L}$/u.test(t)).length;
+  return { text, needsReview: review.spaced || review.overlapping || (tokens.length >= 10 && singles / tokens.length > 0.3) };
+}
+
 /** The text of one page. */
 export function pageText(pieces: TextPiece[]): string {
-  const lines = linesOf(pieces);
+  return layoutPage(pieces).text;
+}
+
+function pageTextOf(lines: Line[]): string {
   const rows = rowsOf(lines);
   const out: string[] = [];
   let paragraph: string[] = [];
@@ -205,4 +261,3 @@ export function garbledShare(text: string): number {
   if (!visible) return 0;
   return (visible.match(/[\u{E000}-\u{F8FF}\u{FFFD}]/gu) ?? []).length / visible.length;
 }
-

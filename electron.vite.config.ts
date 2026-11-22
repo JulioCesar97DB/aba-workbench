@@ -15,6 +15,13 @@ export default defineConfig(({ mode }) => ({
     // Same meaning as under Next.js: "production" in a build (the rules files are read
     // once and cached), "development" under `pnpm dev` (re-read on every generation).
     define: { "process.env.NODE_ENV": JSON.stringify(mode === "production" ? "production" : "development") },
+    build: {
+      rollupOptions: {
+        // The PDF reading process is a second entry: out/main/pdf-text-child.js, started as an
+        // Electron utility process for each PDF (src/main/pdf-text/electron-child.ts).
+        input: { index: "src/main/index.ts", "pdf-text-child": "src/main/pdf-text/child.ts" },
+      },
+    },
   },
   preload: {
     build: {

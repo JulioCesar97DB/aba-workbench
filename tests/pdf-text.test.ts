@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { extractPdfText, NO_TEXT_NOTE, PdfReadError, type PdfReader } from "../src/main/pdf-text/extract.ts";
-import { pageText, type TextPiece } from "../src/main/pdf-text/layout.ts";
+import { DEFAULT_LIMITS, extractPdfText, NO_TEXT_NOTE, PdfReadError, type PdfReader } from "../src/main/pdf-text/extract.ts";
+import { layoutPage, pageText, type TextPiece } from "../src/main/pdf-text/layout.ts";
 
 // Invented values only.
 
@@ -36,6 +36,19 @@ test("layout: label and value pairs, paragraphs joined, blocks separated, readin
   assert.equal(pageText(pieces), "Examinee | Pablo Desconocido\nRespondent | Marta Inexistente (mother)\n\nThe first line of a note that wraps onto a third one.\n\nScore note");
 });
 
+test("layout: letter-spaced text is joined back into words and flagged for review", () => {
+  // "6 Tc" spacing: each word one piece with a space between letters; words farther apart.
+  const words = [["L u c i a", 72, 53], ["F i c t i c i o", 140, 79], ["i s", 235, 15], ["h e r e", 265, 41]] as const;
+  const spaced = layoutPage(words.map(([str, x, width]) => ({ str, x, y: 650, width, height: 12 })));
+  assert.equal(spaced.text, "Lucia Ficticio is here");
+  assert.equal(spaced.needsReview, true);
+  // One glyph at a time, 12 points apart: kept letter-spaced (the de-identifier reads it: deidentify-adversarial.ts), and flagged.
+  const glyphs = [..."Mateo"].map((ch, i) => ({ str: ch, x: 200 + i * 12, y: 700, width: 6, height: 12 }));
+  glyphs.push(...[..."Ficticio"].map((ch, i) => ({ str: ch, x: 272 + i * 12, y: 700, width: 6, height: 12 })));
+  assert.deepEqual(layoutPage(glyphs), { text: "M a t e o | F i c t i c i o", needsReview: true });
+  assert.equal(layoutPage([at("Ordinary text on a page with nothing odd about it at all.", 53, 700)]).needsReview, false);
+});
+
 test("layout: ligatures and odd spacing are normalized", () => {
   assert.equal(pageText([at("ﬁne motor", 53, 700), at("  skills  ", 103, 700)]), "fine motor skills");
 });
@@ -48,7 +61,10 @@ function fakeReader(pages: TextPiece[][], options: { fail?: PdfReadError | Error
       if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
       return {
         pageCount: pages.length,
-        page: async (n: number) => pages[n - 1],
+        page: async (n: number, maxCharacters: number) => {
+          if (pages[n - 1].reduce((sum, p) => sum + p.str.length, 0) > maxCharacters) throw new PdfReadError("too-large");
+          return pages[n - 1];
+        },
         close: async () => {
           reader.closed++;
         },
@@ -68,6 +84,7 @@ test("extract: pages marked, a page without text marked and listed", async () =>
     status: "text",
     pageCount: 3,
     pagesWithoutText: [2, 3],
+    pagesNeedingReview: [],
     text: `--- Page 1 of 3 ---\nCommunication standard score 62, percentile 1.\n\n--- Page 2 of 3 ---\n${NO_TEXT_NOTE}\n\n--- Page 3 of 3 ---\n${NO_TEXT_NOTE}`,
   });
   assert.equal(reader.closed, 1);
@@ -84,7 +101,12 @@ test("extract: unreadable files say why", async () => {
   assert.deepEqual(await extractPdfText(PDF, fakeReader([], { fail: new PdfReadError("password") })), { status: "unreadable", reason: "password" });
   assert.deepEqual(await extractPdfText(PDF, fakeReader([], { fail: new Error("bad xref") })), { status: "unreadable", reason: "damaged" });
   const many = fakeReader([textPage, textPage, textPage]);
-  assert.deepEqual(await extractPdfText(PDF, many, { maxPages: 2, timeoutMs: 1000 }), { status: "unreadable", reason: "too-many-pages" });
+  assert.deepEqual(await extractPdfText(PDF, many, { ...DEFAULT_LIMITS, maxPages: 2 }), { status: "unreadable", reason: "too-many-pages" });
   assert.equal(many.closed, 1);
-  assert.deepEqual(await extractPdfText(PDF, fakeReader([textPage], { delayMs: 200 }), { maxPages: 10, timeoutMs: 20 }), { status: "unreadable", reason: "timed-out" });
+  assert.deepEqual(await extractPdfText(PDF, fakeReader([textPage], { delayMs: 200 }), { ...DEFAULT_LIMITS, timeoutMs: 20 }), { status: "unreadable", reason: "timed-out" });
+  // Too many bytes, too much text on a page, too much text in all.
+  assert.deepEqual(await extractPdfText(PDF, fakeReader([textPage]), { ...DEFAULT_LIMITS, maxBytes: 5 }), { status: "unreadable", reason: "too-large" });
+  assert.deepEqual(await extractPdfText(PDF, fakeReader([textPage]), { ...DEFAULT_LIMITS, maxPageCharacters: 10 }), { status: "unreadable", reason: "too-large" });
+  const long = [at("x".repeat(60), 53, 700)];
+  assert.deepEqual(await extractPdfText(PDF, fakeReader([long, long, long]), { ...DEFAULT_LIMITS, maxCharacters: 150 }), { status: "unreadable", reason: "too-large" });
 });
