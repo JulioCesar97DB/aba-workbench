@@ -2,7 +2,7 @@
 
 Research gathered before the build, kept so later phases don't repeat it.
 
-Decisions taken after these notes (2026-11-21, owner via coordinator): Anthropic server-side fallbacks ON in the `"default"` form; PDFs over Vercel's 4.5 MB body limit are refused with a clear message (no workaround); 5-minute Claude cache; maxDuration 300 s; inline [MISSING]/[CHECK] markers. See REPORT.md.
+Decisions taken after these notes (owner via coordinator): Anthropic server-side fallbacks ON in the `"default"` form; PDFs over the 4.5 MB body limit are refused with a clear message (no workaround); 5-minute Claude cache; maxDuration 300 s; inline [MISSING]/[CHECK] markers (2026-11-21). On 2026-11-22: aba-workbench will be a local app rather than a Vercel-hosted one, and the real runs are deferred. See REPORT.md.
 
 ## State
 - Branch JulioCesar97DB/phase-0, base is `dev` (equals main at 252efec). Coordinator update: commit only, no push or PR until a reviewer reads the diff against dev.
