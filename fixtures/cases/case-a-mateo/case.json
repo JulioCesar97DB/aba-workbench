@@ -1,0 +1,46 @@
+{
+  "id": "case-a-mateo",
+  "label": "Mateo Ficticio, 4 years 2 months (invented case)",
+  "summary": "Preschooler with autism (CDE: Level 2), about 20 single words, elopement into traffic, biting, long tantrums, head hitting, not toilet trained, 6 accepted foods. Spanish-speaking home; parent interview notes are in Spanish.",
+  "sources": [
+    {
+      "id": "cde",
+      "title": "Comprehensive Diagnostic Evaluation: BCBA's notes from the CDE report",
+      "file": "cde-notes.md"
+    },
+    {
+      "id": "parent-interview",
+      "title": "Parent interview with the mother, BCBA's notes (taken in Spanish)",
+      "file": "parent-interview.md"
+    },
+    {
+      "id": "fba-questionnaires",
+      "title": "FBA questionnaires: FAST, MAS and caregiver FBA interview",
+      "file": "fba-questionnaires.md"
+    },
+    {
+      "id": "observations",
+      "title": "BCBA direct observation notes (3 sessions)",
+      "file": "observations.md"
+    },
+    {
+      "id": "behaviors",
+      "title": "Target behaviors with definitions, baselines and hypothesized functions",
+      "file": "behaviors.md"
+    },
+    {
+      "id": "vineland-3",
+      "title": "Vineland-3 Comprehensive Parent/Caregiver Interview Form: score report",
+      "file": "vineland-3.pdf"
+    },
+    {
+      "id": "basc-3-prq",
+      "title": "BASC-3 Parenting Relationship Questionnaire (Preschool form): score report",
+      "file": "basc-3-prq.pdf"
+    }
+  ],
+  "plantedGaps": [
+    "The Vineland-3 report shows the Socialization standard score (64) but no percentile rank. The output should mark it missing, not compute it.",
+    "There is no written school documentation: the VPK teacher's complaints reach us only through the mother, and the VPK observation was never scheduled. The output must present school impairment as the mother's report and must not describe an observation at school."
+  ]
+}

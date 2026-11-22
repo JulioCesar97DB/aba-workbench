@@ -1,0 +1,51 @@
+{
+  "id": "case-b-sofia",
+  "label": "Sofía Inventada, 9 years 5 months (invented case)",
+  "summary": "Fourth grader with autism and ADHD, verbal, aggression toward her brother and peers, explosive outbursts, leaving the classroom, school refusal, property destruction, hand biting, very low coping and socialization. Has an IEP.",
+  "sources": [
+    {
+      "id": "cde",
+      "title": "Comprehensive Diagnostic Evaluation: BCBA's notes from the CDE report",
+      "file": "cde-notes.md"
+    },
+    {
+      "id": "parent-interview",
+      "title": "Parent interview with the mother, BCBA's notes",
+      "file": "parent-interview.md"
+    },
+    {
+      "id": "iep",
+      "title": "Individual Education Plan (IEP), excerpts",
+      "file": "iep.md"
+    },
+    {
+      "id": "fba-questionnaires",
+      "title": "FBA questionnaires: FAST, MAS and caregiver FBA interview",
+      "file": "fba-questionnaires.md"
+    },
+    {
+      "id": "observations",
+      "title": "BCBA direct observation notes (3 sessions)",
+      "file": "observations.md"
+    },
+    {
+      "id": "behaviors",
+      "title": "Target behaviors with definitions, baselines and hypothesized functions",
+      "file": "behaviors.md"
+    },
+    {
+      "id": "vineland-3",
+      "title": "Vineland-3 Comprehensive Parent/Caregiver Interview Form: score report",
+      "file": "vineland-3.pdf"
+    },
+    {
+      "id": "basc-3-prq",
+      "title": "BASC-3 Parenting Relationship Questionnaire (Child/Adolescent form): score report",
+      "file": "basc-3-prq.pdf"
+    }
+  ],
+  "plantedGaps": [
+    "The CDE notes state the diagnoses but no autism severity level. The output must not supply one (for example 'Level 1'); it should mark it missing.",
+    "There was no BCBA observation at school (access denied pending district approval). School impairment must come only from the IEP and the mother's report, attributed to them, and the output must not describe a school observation."
+  ]
+}
