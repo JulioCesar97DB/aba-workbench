@@ -61,13 +61,14 @@ test("the interface loads under the content security policy as written, with its
   expect(served).toBe(written);
   expect(served).not.toContain("nonce");
 
-  // IBM Plex comes from the app's own files.
+  // IBM Plex comes from the app's own files. Fonts load when first used, so ask for each
+  // face: the load goes through the policy (font-src 'self') like any other.
   const fonts = await page.evaluate(async () => {
-    const doc = (globalThis as unknown as { document: { fonts: { ready: Promise<unknown>; check(font: string): boolean } } }).document;
-    await doc.fonts.ready;
-    return { sans: doc.fonts.check('16px "IBM Plex Sans"'), mono: doc.fonts.check('12px "IBM Plex Mono"') };
+    const doc = (globalThis as unknown as { document: { fonts: { load(font: string): Promise<unknown[]>; check(font: string): boolean } } }).document;
+    const loaded = await Promise.all(['16px "IBM Plex Sans"', '600 16px "IBM Plex Sans"', '12px "IBM Plex Mono"'].map((font) => doc.fonts.load(font)));
+    return { faces: loaded.map((faces) => faces.length > 0), sans: doc.fonts.check('16px "IBM Plex Sans"'), mono: doc.fonts.check('12px "IBM Plex Mono"') };
   });
-  expect(fonts).toEqual({ sans: true, mono: true });
+  expect(fonts).toEqual({ faces: [true, true, true], sans: true, mono: true });
 
   // Popups (dialog, select, tooltip) render without inline styles the policy would block.
   await page.getByRole("button", { name: "New case" }).click();
