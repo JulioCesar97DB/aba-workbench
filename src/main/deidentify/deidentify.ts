@@ -83,6 +83,8 @@ interface Candidate {
   source: "sheet" | "pattern";
   /** Lower wins at equal length. */
   rank: number;
+  /** For a surname alone: which of the sheet's surname words it used. */
+  surnameWords?: string;
   /** Assigns the placeholder, once the span is kept: numbers follow the reading order and only kept values enter the map. */
   create: () => void;
   /** Cut from a longer value that another span partly covers. */
@@ -169,6 +171,8 @@ export class Deidentifier {
   readonly #literals: Array<{ regex: RegExp; key: string; kind: FoundKind; capitalizedOnly: boolean }> = [];
   /** Street-line keys of the sheet's addresses, to give a pattern-found address the sheet's number. */
   readonly #sheetAddressKeys: Array<{ key: string; slot: string }> = [];
+  /** For each surname-alone placeholder, how often each part of the surname was used. */
+  readonly #surnamesSeen = new Map<string, Map<string, number>>();
 
   constructor(sheet: ClientSheet, options: DeidentifyOptions = {}) {
     this.#sheet = sheet;
@@ -243,12 +247,32 @@ export class Deidentifier {
   get map(): RestoreMap {
     const seen = new Set<string>();
     const entries: MapEntry[] = [];
-    for (const slot of this.#slots.values()) {
+    for (const [key, slot] of this.#slots) {
       if (seen.has(slot.placeholder)) continue;
       seen.add(slot.placeholder);
-      entries.push({ placeholder: slot.placeholder, value: slot.value, kind: slot.kind });
+      entries.push({ placeholder: slot.placeholder, value: this.#surnameAsWritten(key) ?? slot.value, kind: slot.kind });
     }
     return { entries };
+  }
+
+  /**
+   * A surname alone restores as the text wrote it most often: "Mrs. Ficticio" stays
+   * "Ficticio" when the sheet says "Ficticio Gómez", in the sheet's own spelling.
+   */
+  #surnameAsWritten(key: string): string | undefined {
+    const seen = this.#surnamesSeen.get(key);
+    const person = this.#people.find((p) => key === personKey(p, "last"));
+    const lastName = person?.sheet.lastName?.normalize("NFC").trim();
+    if (!seen || !lastName) return undefined;
+    const [words] = [...seen.entries()].sort((a, b) => b[1] - a[1])[0];
+    const parts = lastName.split(/([\s-]+)/u);
+    const folded = parts.map((part, i) => (i % 2 === 0 ? foldString(part).replace(/[^\p{L}']/gu, "") : ""));
+    const wanted = words.split(" ");
+    for (let i = 0; i < parts.length; i += 2) {
+      const j = i + 2 * (wanted.length - 1);
+      if (j < parts.length && wanted.every((w, k) => folded[i + 2 * k] === w)) return parts.slice(i, j + 1).join("");
+    }
+    return undefined;
   }
 
   #personSlot(person: Person, form: NameForm): void {
@@ -290,7 +314,7 @@ export class Deidentifier {
         possible.push({ text: text.slice(start, end), start, end, reason: "common-word-name", placeholder: personPlaceholder(person.group, person.index, form), kind: person.group });
         continue;
       }
-      candidates.push({ start, end, key: personKey(person, form), kind: person.group, source: "sheet", rank: 0, create: () => this.#personSlot(person, form) });
+      candidates.push({ start, end, key: personKey(person, form), kind: person.group, source: "sheet", rank: 0, surnameWords: match.surnameWords, create: () => this.#personSlot(person, form) });
     }
     for (const literal of this.#literals) {
       for (const m of folded.text.matchAll(literal.regex)) {
@@ -320,6 +344,11 @@ export class Deidentifier {
         // Once a person is mentioned, the model may use any form of their name: all of them restore.
         const person = this.#people.find((p) => span.key.startsWith(`person:${p.priority}:`));
         if (person) for (const form of NAME_FORMS) if (form !== "initials" || person.initials) this.#personSlot(person, form);
+        if (person && span.key.endsWith(":last") && span.surnameWords) {
+          const seen = this.#surnamesSeen.get(span.key) ?? new Map<string, number>();
+          seen.set(span.surnameWords, (seen.get(span.surnameWords) ?? 0) + 1);
+          this.#surnamesSeen.set(span.key, seen);
+        }
       }
       const slot = this.#slots.get(span.key)!;
       out += text.slice(at, span.start) + slot.placeholder;

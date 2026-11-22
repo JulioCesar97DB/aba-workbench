@@ -231,8 +231,9 @@ test("reidentify: puts back what models do to placeholders and reports what it c
   );
   assert.equal(
     restored.text,
-    "Mateo Ficticio Gómez. Mateo's mother Lucía and Lucía; Lucía said Mateo's name. Ficticio Gómez 08/03/2022 " +
-      "Lucía Ficticio Ficticio Gómez Ficticio Gómez and Lucía Lucía Ficticio. The client (client) [sic].",
+    // "Mrs. Ficticio" was how the text wrote the surname alone, so it comes back that way, not as "Ficticio Gómez".
+    "Mateo Ficticio Gómez. Mateo's mother Lucía and Lucía; Lucía said Mateo's name. Ficticio 08/03/2022 " +
+      "Lucía Ficticio Ficticio Ficticio and Lucía Lucía Ficticio. The client (client) [sic].",
   );
   assert.deepEqual(restored.unrestored, []);
   const reported = reidentify("CLIENT INFORMATION: [CLIENT] met [CAREGIVER 2] on [DATE 1]; [INSERT SCHOOL]. [Name]. See [the notes](notes.md).", map);
@@ -248,6 +249,13 @@ test("reidentify: puts back what models do to placeholders and reports what it c
     ],
   );
   assert.deepEqual(restored.restored.find((r) => r.placeholder === "[CLIENT FULL NAME]"), { placeholder: "[CLIENT FULL NAME]", count: 1, repaired: 0 });
+});
+
+test("a surname alone restores as the text wrote it most often, in the sheet's spelling", () => {
+  const sheet: ClientSheet = { client: { firstName: "Ana", lastName: "Ejemplar de la Fuente" }, caregivers: [{ firstName: "Rita", lastName: "Rodríguez-Peña" }] };
+  const hidden = hide("Ms. de la fuente and MS. DE LA FUENTE, then Ejemplar once; Mrs. Rodriguez; Mrs. Rodríguez.", sheet);
+  assert.equal(hidden.text, "Ms. [CLIENT LAST NAME] and MS. [CLIENT LAST NAME], then [CLIENT LAST NAME] once; Mrs. [CAREGIVER 1 LAST NAME]; Mrs. [CAREGIVER 1 LAST NAME].");
+  assert.equal(reidentify("Ms. [CLIENT LAST NAME] and Mrs. [CAREGIVER 1 LAST NAME].", hidden.map).text, "Ms. de la Fuente and Mrs. Rodríguez.");
 });
 
 test("round trip: a text written with the sheet's own spellings comes back exactly", () => {

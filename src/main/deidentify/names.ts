@@ -42,6 +42,8 @@ export interface NameMatch {
   end: number;
   /** One full word only, and that word is an everyday word ("Will", "Rosa"). */
   ambiguous: boolean;
+  /** The surname words used, folded, in order ("ficticio", "de la fuente"). */
+  surnameWords: string;
 }
 
 function parts(name: string | undefined): string[] {
@@ -221,7 +223,8 @@ export function findNames(folded: Folded, people: Person[]): NameMatch[] {
     const ambiguous = full.length === 1 && isCommonWordName(full[0].word);
     // A lone initial before or after an ambiguous word does not make it a name.
     const kept = ambiguous ? full : pieces;
-    matches.push({ person: best.person, form: formOf(kept), start: kept[0].start, end: kept.at(-1)!.end, ambiguous });
+    const surnameWords = kept.filter((p) => p.role === "surname" || p.role === "particle").map((p) => p.word).join(" ");
+    matches.push({ person: best.person, form: formOf(kept), start: kept[0].start, end: kept.at(-1)!.end, ambiguous, surnameWords });
     i = best.next;
   }
   // Dotted initials: "M.F.", "M. F."
@@ -230,7 +233,7 @@ export function findNames(folded: Folded, people: Person[]): NameMatch[] {
     const person = people.find((p) => p.initials === initials);
     const start = m.index;
     const end = m.index + m[0].length;
-    if (person && !matches.some((n) => n.start < end && start < n.end)) matches.push({ person, form: "initials", start, end, ambiguous: false });
+    if (person && !matches.some((n) => n.start < end && start < n.end)) matches.push({ person, form: "initials", start, end, ambiguous: false, surnameWords: "" });
   }
   return matches.sort((a, b) => a.start - b.start);
 }
