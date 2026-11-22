@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import { IPC_CHANNELS, type AbaApi, type GenerationUpdate } from "../shared/api.ts";
+import { IPC_CHANNELS, type AbaApi, type Connections, type GenerationUpdate } from "../shared/api.ts";
 
 /*
  * Runs sandboxed, before the interface loads. It exposes the functions of AbaApi and
@@ -19,6 +19,24 @@ const api: AbaApi = {
   createCase: (input) => ipcRenderer.invoke(IPC_CHANNELS.createCase, input),
   openCase: (caseId) => ipcRenderer.invoke(IPC_CHANNELS.openCase, caseId),
   showUnreadableFolder: (folderName) => ipcRenderer.invoke(IPC_CHANNELS.showUnreadableFolder, folderName),
+  getConnections: () => ipcRenderer.invoke(IPC_CHANNELS.getConnections),
+  saveClaudeKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.saveClaudeKey, key),
+  checkClaudeKey: () => ipcRenderer.invoke(IPC_CHANNELS.checkClaudeKey),
+  removeClaudeKey: () => ipcRenderer.invoke(IPC_CHANNELS.removeClaudeKey),
+  signInToChatGpt: () => ipcRenderer.invoke(IPC_CHANNELS.signInToChatGpt),
+  cancelChatGptSignIn: () => ipcRenderer.invoke(IPC_CHANNELS.cancelChatGptSignIn),
+  checkChatGpt: () => ipcRenderer.invoke(IPC_CHANNELS.checkChatGpt),
+  signOutOfChatGpt: () => ipcRenderer.invoke(IPC_CHANNELS.signOutOfChatGpt),
+  forgetChatGptAccount: () => ipcRenderer.invoke(IPC_CHANNELS.forgetChatGptAccount),
+  openChatGptUsage: () => ipcRenderer.invoke(IPC_CHANNELS.openChatGptUsage),
+  startOverConnections: () => ipcRenderer.invoke(IPC_CHANNELS.startOverConnections),
+  onConnectionsChange: (listener) => {
+    const handler = (_event: IpcRendererEvent, connections: Connections) => listener(connections);
+    ipcRenderer.on(IPC_CHANNELS.connectionsChanged, handler);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.connectionsChanged, handler);
+    };
+  },
   onGenerationUpdate: (listener) => {
     const handler = (_event: IpcRendererEvent, update: GenerationUpdate) => listener(update);
     ipcRenderer.on(IPC_CHANNELS.generationUpdate, handler);
