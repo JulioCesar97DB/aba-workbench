@@ -6,6 +6,7 @@ import { registerIpc } from "./ipc.ts";
 import { resolveRulesDir } from "./paths.ts";
 import { APP_ORIGIN, registerAppScheme, serveRenderer } from "./protocol.ts";
 import { denyAllPermissions, hardenWebContents } from "./security.ts";
+import { defaultLanguage, SETTINGS_FILE_NAME, SettingsStore } from "./settings.ts";
 import { isTrustedFrame } from "./trust.ts";
 
 // electron-vite sets ELECTRON_RENDERER_URL in development (its Vite dev server). A packaged
@@ -22,15 +23,27 @@ registerAppScheme();
 
 let mainWindow: BrowserWindow | null = null;
 
+// The user's settings, in the app's own data folder. The first-run language follows the
+// system's preferred languages (read only when first needed, after the app is ready).
+const settings = new SettingsStore(path.join(app.getPath("userData"), SETTINGS_FILE_NAME), () => ({
+  language: defaultLanguage(app.getPreferredSystemLanguages()),
+}));
+
 registerIpc({
   rulesDir,
+  settings,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
 });
 
 function createWindow(): void {
   const window = new BrowserWindow({
-    width: 960,
-    height: 720,
+    width: 1280,
+    height: 820,
+    // Below this the interface still works, but a window this small is more likely a mistake.
+    minWidth: 480,
+    minHeight: 480,
+    // The sidebar's color, so the window does not flash white before the interface paints.
+    backgroundColor: "#1b2530",
     show: false,
     title: app.getName(),
     webPreferences: {
