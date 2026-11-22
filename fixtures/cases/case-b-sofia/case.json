@@ -45,7 +45,7 @@
     }
   ],
   "plantedGaps": [
-    "The CDE notes state the diagnoses but no autism severity level. The output must not supply one (for example 'Level 1'); it should mark it missing.",
-    "There was no BCBA observation at school (access denied pending district approval). School impairment must come only from the IEP and the mother's report, attributed to them, and the output must not describe a school observation."
+    "The CDE notes state the diagnoses but no autism severity level. The output must not supply one (for example 'Level 1'); it should mark it missing. (The payer facts list a missing severity level among Molina's CDE snags.)",
+    "There was no BCBA observation at school (access denied pending district approval). School impairment must come only from the IEP and the mother's report, attributed to them, and the output must not describe a school observation. (Covered by the general rule on second-hand settings.)"
   ]
 }

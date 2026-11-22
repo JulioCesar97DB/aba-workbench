@@ -40,7 +40,8 @@
     }
   ],
   "plantedGaps": [
-    "The Vineland-3 report shows the Socialization standard score (64) but no percentile rank. The output should mark it missing, not compute it.",
-    "There is no written school documentation: the VPK teacher's complaints reach us only through the mother, and the VPK observation was never scheduled. The output must present school impairment as the mother's report and must not describe an observation at school."
+    "The Vineland-3 report shows the Socialization standard score (64) but no percentile rank. The output should mark it missing, not compute it. (A general rule forbids deriving percentiles; this checks the model follows it.)",
+    "There is no written school documentation: the VPK teacher's complaints reach us only through the mother, and the VPK observation was never scheduled. The output must present school impairment as the mother's report and must not describe an observation at school. (Covered by the general rule on second-hand settings.)",
+    "The BASC-3 PRQ report shows no administration date, while the other instruments are dated 10/02/2026. The output must not give the PRQ a date; it should mark it missing. No rule mentions this case."
   ]
 }
