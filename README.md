@@ -19,23 +19,24 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the int
 | `pnpm package` | Builds, then packages an unpacked app for the current platform into `dist/` (`dist/mac-arm64/ABA Workbench.app`, `dist/win-unpacked/ABA Workbench.exe`). No installer and no signing yet. |
 | `pnpm test:e2e` | Builds the app and drives its window with Playwright: it opens on Home, a case is created, listed, and opened again after a restart, unreadable folders show as such, the cases folder changes in Settings, the navigation reaches every screen, the language changes and survives a restart, the keyboard and a narrow window work, ChatGPT sign-in and the Claude key work on the AI connection screen with both providers faked, and the development check's mock generation streams to completion. Every test uses a temporary home folder or cases folder, never the real ones. Needs a display (`xvfb-run` on a Linux machine without one). `pnpm test:e2e:packaged` runs the same tests on the app from `pnpm package`. |
 | `pnpm lint` / `pnpm typecheck` | ESLint; TypeScript for the Node side and for the interface, separately. |
-| `pnpm test` | Unit tests (`node:test`): the provider layer, the rules, the spending cap, the main process's logic (the settings file, the case data file, folder names, durable writes, the cases folder, the credentials file and the ChatGPT sign-in included), both languages having the same strings, macOS's permission texts, and the design tokens' contrast. No keys, no network, no window. |
+| `pnpm test` | Unit tests (`node:test`): the provider layer, the rules, the spending cap, the main process's logic (the settings file, the case data file, folder names, durable writes, the cases folder, the credentials file and the ChatGPT sign-in included), both languages having the same strings, macOS's permission texts, and the design tokens' contrast. De-identification and PDF text extraction on invented clients and the fixture PDFs ([docs/deidentification.md](docs/deidentification.md#tests)). No keys, no network, no window. |
 | `pnpm phase0 --mock` | The Phase 0 run on the mock provider: no key, no cost. Without `--mock` it calls the real providers with the keys in `.env.phase0` (see [docs/phase0/REPORT.md](docs/phase0/REPORT.md)). |
 
 ## Layout
 
 | Path | What it holds |
 | --- | --- |
-| `src/main/` | The main process: the window, security settings, the app:// protocol, the IPC handlers, the settings file, the cases (`cases.ts`, `case-file.ts`, `case-folder-name.ts`, `cases-folder.ts`, `durable-write.ts`), and the AI connections (`connections.ts`, `credentials.ts`, `owner-only.ts`, `claude-key.ts`, `chatgpt-oauth.ts`, `oauth-callback.ts`, `chatgpt-session.ts`). |
+| `src/main/` | The main process: the window, security settings, the app:// protocol, the IPC handlers, the settings file, the cases (`cases.ts`, `case-file.ts`, `case-folder-name.ts`, `cases-folder.ts`, `durable-write.ts`), and the AI connections (`connections.ts`, `credentials.ts`, `owner-only.ts`, `claude-key.ts`, `chatgpt-oauth.ts`, `oauth-callback.ts`, `chatgpt-session.ts`), the de-identification of what is sent to an AI (`deidentify/`) and the PDF text extraction (`pdf-text/`). |
 | `src/preload/` | The preload script: exposes the interface's only functions as `window.aba`. |
 | `src/shared/` | The typed contract between the interface and the main process (`api.ts`), and the report's sections. |
 | `src/renderer/` | The interface (React, Tailwind, Base UI, React Router, react-i18next). Tokens in `src/renderer/src/styles/tokens.css`, components in `src/renderer/src/components/`, strings in `src/renderer/src/i18n/`. |
 | `src/lib/` | The provider layer (Claude, OpenAI with an API key or the ChatGPT sign-in, mock), pricing, prompt building and rules loading. Runs only in the main process and in scripts. |
 | `rules/` | The writing rules sent to the model, versioned Markdown ([rules/README.md](rules/README.md)). Shipped next to the packaged app. |
 | `fixtures/cases/` | Two invented cases. |
+| `fixtures/pdf-text/` | Invented PDFs for the text extraction (a layout check, a scan, a scan inside a text PDF), the HTML they are made from, and the expected text of every fixture PDF. |
 | `packaging/macos/` | What macOS shows when the app first asks to open a protected folder the user chose (Documents, Desktop, Downloads, a drive, a cloud storage folder), in each language (`<language>.lproj/InfoPlist.strings`). |
 | `licenses/` | Licenses of what ships inside the app: the IBM Plex fonts' SIL Open Font License ([licenses/README.md](licenses/README.md)). Copied into the packaged app. |
-| `scripts/` | `phase0.mts` and its spending cap, the fixture PDF renderer, and the dev server's style nonce (`dev-style-nonce.ts`). |
+| `scripts/` | `phase0.mts` and its spending cap, the fixture PDF renderer (`render-fixture-pdfs.mts`), and the dev server's style nonce (`dev-style-nonce.ts`). |
 | `tests/` | Unit tests. |
 | `e2e/` | Window tests (Playwright, Electron). |
 
@@ -71,6 +72,10 @@ ABA Workbench/
 
 Later phases add their own keys and raise the version, with a migration from the one before. A file from a newer version of the app is shown as unreadable and never written to; keys this version does not know are kept when it saves. The full rules (the schema, the versioning, the folder names, unreadable folders, the macOS permission) are in [docs/desktop.md](docs/desktop.md#cases).
 
+## De-identification
+
+Before anything is sent to an AI, the client is de-identified on the computer: the names, date of birth, school, addresses, phone numbers, emails and IDs from the case's client sheet, and the same kinds of values found by their shape in any text, become placeholders such as `[CLIENT]`, `[CAREGIVER 1]`, `[DOB]` or `[SCHOOL 1]`, and are put back in the text the AI returns. PDFs are never sent as files: their text is extracted on the computer (tables kept one row per line) and de-identified like any text; a scanned PDF is reported so its scores can be pasted. The age is sent as is. The core is in `src/main/deidentify/` and `src/main/pdf-text/`; the client sheet in a case, the review screen before each send and the wiring into requests come next. What is hidden, what is not, and the known limits: [docs/deidentification.md](docs/deidentification.md).
+
 ## AI connections
 
 ChatGPT connects with **Sign in with ChatGPT**: the user signs in in the system browser and allows ABA Workbench to use their own ChatGPT plan, with no API key, through OpenAI's flow for open-source apps that run on the user's computer. Claude connects with an **API key** the user pastes (Anthropic does not let other apps offer Claude.ai sign-in); it is checked with Anthropic before it is saved. Both live in `credentials.json` in the app's own data folder, readable by the user only, never sent to the interface, never logged. How each connection works step by step, the file's format, and exactly what goes to each provider and what never does: [docs/connections.md](docs/connections.md).
@@ -80,3 +85,5 @@ How the processes fit together, what the interface may call and how the app is h
 ## Dependencies
 
 Every package is a devDependency on purpose: electron-vite bundles everything that is not in `dependencies` into the build, so the provider SDKs, Zod and jose (which verifies ChatGPT's ID tokens) end up inside the main-process bundle, the interface's libraries and fonts inside the interface's, and the packaged app ships no `node_modules`. A package that cannot be bundled (a native module, say) would go in `dependencies`.
+
+PDF.js (`pdfjs-dist`, pinned) is bundled the same way, for reading PDFs' text in the main process. Its optional native canvas package is never installed (`ignoredOptionalDependencies` in `pnpm-workspace.yaml`): the app only reads text, and a bundled main process could not load a native module.
