@@ -22,3 +22,7 @@ npmRebuild: false
 mac:
   # No code signing yet, even if a signing identity is in the keychain.
   identity: null
+linux:
+  # Stated rather than left to the default (the lowercased package name): the packaged
+  # window tests look for this file (e2e/app.ts).
+  executableName: aba-workbench

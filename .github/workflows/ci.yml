@@ -1,7 +1,7 @@
 # Runs the same checks every pull request has passed by hand, on Linux, Windows
 # and macOS: install, lint, typecheck, unit tests, the Electron app's build, the
-# Phase 0 run on the mock provider and the window tests (Playwright driving the
-# Electron app). It uses no secrets and no API keys, and nothing in it calls a
+# Phase 0 run on the mock provider, the window tests (Playwright driving the
+# Electron app), packaging the unpacked app, and the window tests again on it. It uses no secrets and no API keys, and nothing in it calls a
 # real provider: the only provider the window can reach is the mock.
 name: CI
 
@@ -98,4 +98,20 @@ jobs:
             xvfb-run --auto-servernum pnpm test:e2e
           else
             pnpm test:e2e
+          fi
+
+      # Assembles the unpacked app for this system with electron-builder (dist/): no
+      # installer, no signing (mac identity is null in electron-builder.yml; no signing
+      # certificate is configured for Windows), no secrets.
+      - name: Package the app (unpacked, unsigned)
+        run: pnpm package
+
+      # The same window tests, against the packaged app: it starts from dist/ and finds
+      # its rules in its own resources folder.
+      - name: Window tests on the packaged app
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run --auto-servernum pnpm test:e2e:packaged
+          else
+            pnpm test:e2e:packaged
           fi
