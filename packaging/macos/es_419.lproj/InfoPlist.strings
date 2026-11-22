@@ -1,0 +1,7 @@
+/* Latin American Spanish (es-419): the same text as es.lproj, because a Mac set to es-419 looks in this folder first. */
+"NSDocumentsFolderUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes. Necesita tu permiso para abrirlos y guardarlos ahí.";
+"NSDesktopFolderUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes. Necesita tu permiso para abrirlos y guardarlos ahí.";
+"NSDownloadsFolderUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes. Necesita tu permiso para abrirlos y guardarlos ahí.";
+"NSRemovableVolumesUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes. Necesita tu permiso para abrirlos y guardarlos ahí.";
+"NSNetworkVolumesUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes. Necesita tu permiso para abrirlos y guardarlos ahí.";
+"NSFileProviderDomainUsageDescription" = "ABA Workbench guarda tus casos en la carpeta que elegiste en Ajustes, que administra tu aplicación de almacenamiento en la nube. Necesita tu permiso para abrirlos y guardarlos ahí.";

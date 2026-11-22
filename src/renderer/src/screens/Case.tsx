@@ -2,36 +2,52 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Outlet, useParams } from "react-router";
 import { findReportSection, REPORT_SECTIONS } from "../../../shared/report-sections.ts";
-import { CASE_STEPS, casePath, PREVIEW_CASE_ID, stepTitle, stepTitleLang, type CaseStep } from "../case-steps.tsx";
+import { useAppInfo } from "../app-info.tsx";
+import { CASE_STEPS, casePath, stepTitle, stepTitleLang, type CaseStep } from "../case-steps.tsx";
+import { casesFolderProblemText } from "../cases-folder.tsx";
 import { TextLink } from "../components/Link.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, TableRowHeader } from "../components/Table.tsx";
 import { TransWithTerms } from "../components/Trans.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
+import { useOpenCaseState, useOpenedCase } from "../open-case.tsx";
 import { Placeholder } from "./Placeholder.tsx";
 
 /*
- * The case workspace. Only the preview case exists until cases can be created and opened
- * (the next task): it shows the layout, the five steps and the report's sections, with
- * a placeholder on each screen that says what will be there.
+ * The case workspace: the five steps and the report's sections. AppShell opens the case
+ * (src/renderer/src/open-case.tsx); the steps are placeholders until later phases fill them.
  */
 
-/** The case's screens; the sidebar shows the case (AppShell). Any case but the preview is not found. */
+/** The case's screens, once it is open; otherwise why it cannot be. */
 export function CaseRoute() {
   const { t } = useTranslation();
-  const { caseId = "" } = useParams();
-  if (caseId !== PREVIEW_CASE_ID) {
+  const platform = useAppInfo()?.platform;
+  const state = useOpenCaseState();
+  if (state?.outcome === "opened") return <Outlet />;
+  if (state === null || state.outcome === "loading") {
     return (
-      <WorkArea header={<PageHeader title={t("case.notFoundTitle")} />}>
-        <div className="flex max-w-measure flex-col items-start gap-3">
-          <p className="text-md">{t("case.notFoundBody")}</p>
-          <TextLink to="/">{t("case.backToCases")}</TextLink>
-        </div>
+      <WorkArea header={<PageHeader title={t("case.loading")} />}>
+        <span />
       </WorkArea>
     );
   }
-  return <Outlet />;
+  const [title, body] =
+    state.outcome === "unreadable"
+      ? [t("case.unreadableTitle"), t(`unreadable.${state.reason}`)]
+      : state.outcome === "folder-problem"
+        ? [t("case.folderProblemTitle"), casesFolderProblemText(t, state.problem, platform)]
+        : state.outcome === "error"
+          ? [t("case.unreadableTitle"), t("case.openFailed")]
+          : [t("case.notFoundTitle"), t("case.notFoundBody")];
+  return (
+    <WorkArea header={<PageHeader title={title} />}>
+      <div className="flex max-w-measure flex-col items-start gap-3">
+        <p className="text-md">{body}</p>
+        <TextLink to="/">{t("case.backToCases")}</TextLink>
+      </div>
+    </WorkArea>
+  );
 }
 
 export function CaseIndex() {
@@ -40,7 +56,8 @@ export function CaseIndex() {
 
 function useStepMeta(step: CaseStep): string {
   const { t } = useTranslation();
-  return `${t("case.previewName")} · ${t("steps.position", { number: CASE_STEPS.indexOf(step) + 1, total: CASE_STEPS.length })}`;
+  const opened = useOpenedCase();
+  return `${opened.label} · ${t("steps.position", { number: CASE_STEPS.indexOf(step) + 1, total: CASE_STEPS.length })}`;
 }
 
 const STEP_BODIES = {
@@ -66,7 +83,7 @@ export function StepScreen({ step }: { step: keyof typeof STEP_BODIES }) {
 /** The report: its sections, each with its status. */
 export function ReportScreen() {
   const { t } = useTranslation();
-  const { caseId = PREVIEW_CASE_ID } = useParams();
+  const caseId = useOpenedCase().id;
   const meta = useStepMeta("report");
   return (
     <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />}>
@@ -107,7 +124,9 @@ export function ReportScreen() {
 /** One section of the report. */
 export function ReportSectionScreen() {
   const { t } = useTranslation();
-  const { caseId = PREVIEW_CASE_ID, sectionId } = useParams();
+  const opened = useOpenedCase();
+  const caseId = opened.id;
+  const { sectionId } = useParams();
   const section = findReportSection(sectionId);
   if (!section) return <Navigate to={casePath(caseId, "report")} replace />;
   const number = REPORT_SECTIONS.indexOf(section) + 1;
@@ -117,7 +136,7 @@ export function ReportSectionScreen() {
         <PageHeader
           title={section.title}
           titleLang="en"
-          meta={`${t("case.previewName")} · ${t("workspace.sectionPosition", { number, total: REPORT_SECTIONS.length })}`}
+          meta={`${opened.label} · ${t("workspace.sectionPosition", { number, total: REPORT_SECTIONS.length })}`}
         />
       }
       rail={<CaseRail />}
@@ -127,10 +146,12 @@ export function ReportSectionScreen() {
   );
 }
 
-/** The right rail: the case's sources and the checks run on a draft. Empty for now. */
+/** The right rail: the case's sources, the PDFs in its folder, and the checks run on a draft. */
 function CaseRail() {
   const { t } = useTranslation();
+  const { files } = useOpenedCase();
   const sourcesId = useId();
+  const filesId = useId();
   const checksId = useId();
   const checks = [t("rail.checkStructure"), t("rail.checkMissing"), t("rail.checkContradictions")];
   return (
@@ -140,6 +161,22 @@ function CaseRail() {
           {t("rail.sources")}
         </Eyebrow>
         <p className="text-sm text-fg-muted">{t("rail.noSources")}</p>
+      </section>
+      <section aria-labelledby={filesId} className="flex flex-col gap-1.5">
+        <Eyebrow id={filesId} className="text-fg-muted">
+          {t("rail.filesHeading")}
+        </Eyebrow>
+        {files.length > 0 ? (
+          <ul className="flex flex-col gap-1 text-sm">
+            {files.map((pdf) => (
+              <li key={pdf.name} className="break-all">
+                {pdf.name}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-fg-muted">{t("rail.noFiles")}</p>
+        )}
       </section>
       <section aria-labelledby={checksId} className="flex flex-col gap-1.5">
         <Eyebrow id={checksId} className="text-fg-muted">

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useMatch } from "react-router";
 import { SIDEBAR_BREAKPOINT } from "../../../shared/theme.ts";
-import { PREVIEW_CASE_ID } from "../case-steps.tsx";
+import { formatAge } from "../format.ts";
+import { useLanguage } from "../language.tsx";
+import { OpenCaseContext, useCaseLoader } from "../open-case.tsx";
 import { Button } from "../components/Button.tsx";
 import { Dialog, DialogClose } from "../components/Dialog.tsx";
 import { AppSidebar, CaseSidebar } from "./Sidebar.tsx";
@@ -17,14 +19,21 @@ import { Eyebrow } from "./WorkArea.tsx";
  */
 export function AppShell() {
   const { t } = useTranslation();
+  const { language } = useLanguage();
   const inCase = useMatch("/cases/:caseId/*");
+  const openCase = useCaseLoader(inCase?.params.caseId);
   const sidebar =
-    inCase?.params.caseId === PREVIEW_CASE_ID ? (
-      <CaseSidebar caseId={PREVIEW_CASE_ID} caseName={t("case.previewName")} caseDetail={t("case.previewDetail")} />
+    openCase?.outcome === "opened" ? (
+      <CaseSidebar
+        caseId={openCase.case.id}
+        caseName={openCase.case.label}
+        caseDetail={formatAge(t, language, openCase.case.clientAge) ?? t("case.ageNotGiven")}
+      />
     ) : (
       <AppSidebar />
     );
   return (
+    <OpenCaseContext value={openCase}>
     <div className="flex h-dvh overflow-hidden">
       <SkipLink />
       <div data-surface="nav" className="hidden w-sidebar shrink-0 bg-nav text-fg-on-nav sidebar:block">
@@ -38,6 +47,7 @@ export function AppShell() {
       </div>
       <RouteAnnouncer />
     </div>
+    </OpenCaseContext>
   );
 }
 

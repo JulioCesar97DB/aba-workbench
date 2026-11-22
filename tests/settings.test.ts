@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { defaultLanguage, readStoredSettings, serializeSettings, SETTINGS_FILE_NAME, SettingsStore } from "../src/main/settings.ts";
-import type { Settings } from "../src/shared/api.ts";
+import { temporaryFileFor } from "../src/main/durable-write.ts";
+import { defaultLanguage, MAX_FOLDER_PATH_LENGTH, readStoredSettings, serializeSettings, SETTINGS_FILE_NAME, SettingsStore, type StoredSettings } from "../src/main/settings.ts";
 
-const DEFAULTS: Settings = { language: "es" };
+const DEFAULTS: StoredSettings = { language: "es", casesFolder: null };
+const EN: StoredSettings = { language: "en", casesFolder: null };
+const NUL = String.fromCharCode(0);
 const folders: string[] = [];
 after(() => folders.forEach((folder) => rmSync(folder, { recursive: true, force: true })));
 
@@ -23,7 +25,7 @@ test("settings file: no file is a first run, with the defaults and no complaint"
 });
 
 test("settings file: a current file is used whole", () => {
-  assert.deepEqual(readStoredSettings(serializeSettings({ language: "en" }), DEFAULTS), { settings: { language: "en" }, problem: null });
+  assert.deepEqual(readStoredSettings(serializeSettings(EN), DEFAULTS), { settings: EN, problem: null });
 });
 
 test("settings file: a corrupt file falls back to the defaults", () => {
@@ -37,16 +39,16 @@ test("settings file: a corrupt file falls back to the defaults", () => {
 
 test("settings file: an outdated or foreign file keeps what it can and fills in the rest", () => {
   // No version (an older file): its language is still used, and it is flagged for rewriting.
-  assert.deepEqual(readStoredSettings('{"language":"en"}', DEFAULTS), { settings: { language: "en" }, problem: "invalid" });
+  assert.deepEqual(readStoredSettings('{"language":"en"}', DEFAULTS), { settings: EN, problem: "invalid" });
   // A language this version does not have, or not a string.
   assert.deepEqual(readStoredSettings('{"version":1,"language":"fr"}', DEFAULTS), { settings: DEFAULTS, problem: "invalid" });
   assert.deepEqual(readStoredSettings('{"version":1,"language":["en"]}', DEFAULTS), { settings: DEFAULTS, problem: "invalid" });
   // Language codes are exact: the file only ever holds what serializeSettings writes.
   assert.deepEqual(readStoredSettings('{"version":1,"language":"EN"}', DEFAULTS), { settings: DEFAULTS, problem: "invalid" });
   // Unknown keys (from an older or newer version) are dropped, not an error.
-  assert.deepEqual(readStoredSettings('{"version":1,"language":"en","theme":"dark"}', DEFAULTS), { settings: { language: "en" }, problem: null });
+  assert.deepEqual(readStoredSettings('{"version":1,"language":"en","theme":"dark"}', DEFAULTS), { settings: EN, problem: null });
   // Another version's file: what is understood is kept.
-  assert.deepEqual(readStoredSettings('{"version":2,"language":"en"}', DEFAULTS), { settings: { language: "en" }, problem: "invalid" });
+  assert.deepEqual(readStoredSettings('{"version":2,"language":"en"}', DEFAULTS), { settings: EN, problem: "invalid" });
 });
 
 test("settings file: the first-run language follows the system's preferred languages", () => {
@@ -64,12 +66,12 @@ test("settings store: saves the language, reads it back after a restart, leaves 
   const logged: string[] = [];
   const store = new SettingsStore(file, () => DEFAULTS, (message) => logged.push(message));
   assert.deepEqual(await store.get(), DEFAULTS);
-  assert.deepEqual(await store.setLanguage("en"), { language: "en" });
+  assert.deepEqual(await store.setLanguage("en"), EN);
   assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { version: 1, language: "en" });
   assert.deepEqual(readdirSync(path.dirname(file)), [SETTINGS_FILE_NAME]);
 
   const restarted = new SettingsStore(file, () => DEFAULTS, (message) => logged.push(message));
-  assert.deepEqual(await restarted.get(), { language: "en" });
+  assert.deepEqual(await restarted.get(), EN);
   assert.deepEqual(logged, []);
 });
 
@@ -85,13 +87,13 @@ test("settings store: a corrupt file is replaced by the next save", async () => 
 });
 
 test("settings store: refuses anything but a known language, and changes nothing", async () => {
-  const file = tempFile(serializeSettings({ language: "en" }));
+  const file = tempFile(serializeSettings(EN));
   const store = new SettingsStore(file, () => DEFAULTS, () => undefined);
   for (const bad of ["fr", "EN", "", null, undefined, 1, { language: "es" }, ["es"]]) {
     await assert.rejects(store.setLanguage(bad), /Refused: unknown language/, JSON.stringify(bad));
   }
-  assert.deepEqual(await store.get(), { language: "en" });
-  assert.equal(readFileSync(file, "utf8"), serializeSettings({ language: "en" }));
+  assert.deepEqual(await store.get(), EN);
+  assert.equal(readFileSync(file, "utf8"), serializeSettings(EN));
 });
 
 test("settings store: quick changes are saved in order, the last one wins", async () => {
@@ -123,4 +125,53 @@ test("settings store: a failed save keeps the settings in use as they were", asy
   assert.deepEqual(await store.get(), DEFAULTS);
   // The store still works after a failure.
   await assert.rejects(store.setLanguage("en"));
+});
+
+test("settings file: a chosen cases folder is kept; a bad one is ignored, never guessed", () => {
+  const folder = process.platform === "win32" ? "C:\\Users\\Ana\\Casos" : "/Users/ana/Casos";
+  const saved = serializeSettings({ language: "en", casesFolder: folder });
+  assert.deepEqual(JSON.parse(saved), { version: 1, language: "en", casesFolder: folder });
+  assert.deepEqual(readStoredSettings(saved, DEFAULTS), { settings: { language: "en", casesFolder: folder }, problem: null });
+  // Windows paths are understood on every system (a settings file can be copied across).
+  assert.equal(readStoredSettings(JSON.stringify({ version: 1, language: "en", casesFolder: "D:\\Casos" }), DEFAULTS).settings.casesFolder, "D:\\Casos");
+  // The default is not written: a later default (another Documents folder) still applies.
+  assert.deepEqual(JSON.parse(serializeSettings(EN)), { version: 1, language: "en" });
+  for (const bad of ["relative/folder", "", 42, null, ["/a"], `/a${NUL}b`, `/${"a".repeat(MAX_FOLDER_PATH_LENGTH)}`]) {
+    assert.deepEqual(readStoredSettings(JSON.stringify({ version: 1, language: "en", casesFolder: bad }), DEFAULTS), { settings: EN, problem: "invalid" }, JSON.stringify(bad));
+  }
+});
+
+test("settings store: remembers the cases folder with the language, and refuses a path that is not absolute", async () => {
+  const file = tempFile();
+  const folder = path.dirname(file);
+  const store = new SettingsStore(file, () => DEFAULTS, () => undefined);
+  await store.setLanguage("en");
+  assert.deepEqual(await store.setCasesFolder(folder), { language: "en", casesFolder: folder });
+  assert.deepEqual(await new SettingsStore(file, () => DEFAULTS, () => undefined).get(), { language: "en", casesFolder: folder });
+  for (const bad of ["relative", "", `/a${NUL}b`]) await assert.rejects(store.setCasesFolder(bad), /Refused/, bad);
+  // Changing the language keeps the folder.
+  assert.deepEqual(await store.setLanguage("es"), { language: "es", casesFolder: folder });
+});
+
+test("S3: a settings save cut short in an earlier run leaves no temporary copy after the next start", async () => {
+  const file = tempFile(serializeSettings(EN));
+  const folder = path.dirname(file);
+  writeFileSync(`${file}.99999.tmp`, "{ half");
+  const then = new Date(Date.now() - 2 * 60_000);
+  utimesSync(`${file}.99999.tmp`, then, then);
+  writeFileSync(`${file}.backup`, "kept");
+  const store = new SettingsStore(file, () => DEFAULTS, () => undefined);
+  assert.deepEqual(await store.get(), EN);
+  assert.deepEqual(readdirSync(folder).sort(), [SETTINGS_FILE_NAME, `${SETTINGS_FILE_NAME}.backup`].sort());
+});
+
+test("R4-1: a settings save never touches a temporary file it did not create", async () => {
+  const file = tempFile(serializeSettings(EN));
+  const store = new SettingsStore(file, () => DEFAULTS, () => undefined);
+  await store.get();
+  // Appears after start (the leftover cleanup has run): a save must use another name and leave it.
+  writeFileSync(temporaryFileFor(file), "not this save's");
+  assert.deepEqual(await store.setLanguage("es"), { language: "es", casesFolder: null });
+  assert.equal(readFileSync(temporaryFileFor(file), "utf8"), "not this save's");
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { version: 1, language: "es" });
 });

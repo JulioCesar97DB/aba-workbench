@@ -28,6 +28,25 @@ npmRebuild: false
 mac:
   # No code signing yet, even if a signing identity is in the keychain.
   identity: null
+  # macOS asks the user before an app opens Documents, the Desktop, Downloads, an external
+  # or a network drive, or a folder a cloud storage app such as OneDrive, Dropbox or Google
+  # Drive manages through a File Provider, showing this text. The default cases folder is in
+  # the home folder, which macOS does not protect this way; these are for a folder the user
+  # chooses in Settings in one of those places.
+  # Its Spanish (and English) words are in packaging/macos/<language>.lproj/InfoPlist.strings,
+  # which macOS uses in place of these when the system is in that language.
+  extendInfo:
+    NSDocumentsFolderUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there."
+    NSDesktopFolderUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there."
+    NSDownloadsFolderUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there."
+    NSRemovableVolumesUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there."
+    NSNetworkVolumesUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings. It needs your permission to open and save them there."
+    NSFileProviderDomainUsageDescription: "ABA Workbench keeps your cases in the folder you chose in Settings, which your cloud storage app manages. It needs your permission to open and save them there."
+  extraResources:
+    - from: packaging/macos
+      to: .
+      filter:
+        - "*.lproj/InfoPlist.strings"
 linux:
   # Stated rather than left to the default (the lowercased package name): the packaged
   # window tests look for this file (e2e/app.ts).

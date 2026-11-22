@@ -2,8 +2,10 @@ import { app, BrowserWindow } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { CaseLibrary } from "./cases.ts";
+import { defaultCasesFolder } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
-import { resolveRulesDir } from "./paths.ts";
+import { resolveHomeFolder, resolveRulesDir } from "./paths.ts";
 import { APP_ORIGIN, registerAppScheme, serveRenderer } from "./protocol.ts";
 import { denyAllPermissions, hardenWebContents } from "./security.ts";
 import { defaultLanguage, SETTINGS_FILE_NAME, SettingsStore } from "./settings.ts";
@@ -19,6 +21,15 @@ const rulesDir = resolveRulesDir({ isPackaged: app.isPackaged, resourcesPath: pr
 const preloadPath = fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
 const rendererDir = fileURLToPath(new URL("../renderer", import.meta.url));
 
+/*
+ * One copy of the app at a time, per profile. A second copy would have its own save
+ * queues and could write the same case or settings file as the first, the last rename
+ * winning; it would also take the first's temporary files for leftovers of a crash
+ * (src/main/durable-write.ts). A second start shows the window already open and quits.
+ */
+const isFirstInstance = app.requestSingleInstanceLock();
+if (!isFirstInstance) app.quit();
+
 hardenWebContents();
 registerAppScheme();
 
@@ -28,11 +39,31 @@ let mainWindow: BrowserWindow | null = null;
 // system's preferred languages (read only when first needed, after the app is ready).
 const settings = new SettingsStore(path.join(app.getPath("userData"), SETTINGS_FILE_NAME), () => ({
   language: defaultLanguage(app.getPreferredSystemLanguages()),
+  casesFolder: null,
 }));
+
+/**
+ * The home folder, where the default cases folder goes (src/main/paths.ts). The window
+ * tests start the built app with --home-folder=<a temporary folder>; a packaged app
+ * ignores the option. It only moves the default; a folder chosen in Settings wins.
+ */
+function homeFolder(): string {
+  return resolveHomeFolder({ isPackaged: app.isPackaged, override: app.commandLine.getSwitchValue("home-folder"), home: app.getPath("home") });
+}
+
+// The cases, in the folder chosen in Settings or in <home>/ABA Workbench.
+const cases = new CaseLibrary({
+  location: async () => {
+    const fallback = defaultCasesFolder(homeFolder());
+    const chosen = (await settings.get()).casesFolder;
+    return { folder: chosen ?? fallback, isDefault: chosen === null || chosen === fallback };
+  },
+});
 
 registerIpc({
   rulesDir,
   settings,
+  cases,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
 });
 
@@ -63,7 +94,15 @@ function createWindow(): void {
   void window.loadURL(devServerUrl ?? `${APP_ORIGIN}/index.html`);
 }
 
+app.on("second-instance", () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+
 app.whenReady().then(() => {
+  if (!isFirstInstance) return;
   denyAllPermissions();
   serveRenderer(rendererDir);
   if (!existsSync(path.join(rulesDir, "assessment.md"))) {

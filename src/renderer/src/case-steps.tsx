@@ -3,9 +3,6 @@ import type { ReactNode } from "react";
 import { Term } from "./components/Term.tsx";
 import { TERMS } from "./i18n/terms.ts";
 
-/** The case shown while cases cannot be created yet: the workspace's layout, with no data. */
-export const PREVIEW_CASE_ID = "preview";
-
 /** The five steps of a case, in order. Their path is also their id. */
 export const CASE_STEPS = ["sources", "behaviors", "interventions", "report", "review"] as const;
 export type CaseStep = (typeof CASE_STEPS)[number];

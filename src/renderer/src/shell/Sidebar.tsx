@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import type { Language } from "../../../shared/api.ts";
@@ -8,7 +8,7 @@ import { CASE_STEPS, casePath, StepLabel } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { NavItem, SectionNavItem } from "../components/NavItem.tsx";
 import { Tooltip } from "../components/Tooltip.tsx";
-import { LanguageNotSavedError, useLanguage } from "../language.ts";
+import { useLanguage } from "../language.tsx";
 import { Eyebrow } from "./WorkArea.tsx";
 
 /** The reference shows the switch as ES EN. */
@@ -121,18 +121,10 @@ function SidebarFrame({ top, children, footerExtra }: { top: ReactNode; children
 
 function SidebarFooter({ extra }: { extra?: ReactNode }) {
   const { t } = useTranslation();
-  const { language, changeLanguage } = useLanguage();
-  // Set when the last change could not be saved: the language that will come back next time.
-  const [notSaved, setNotSaved] = useState<Language | null>(null);
+  const { language, savedLanguage, changeLanguage } = useLanguage();
 
   async function choose(option: Language) {
-    if (option === language) return;
-    try {
-      await changeLanguage(option);
-      setNotSaved(null);
-    } catch (error) {
-      setNotSaved(error instanceof LanguageNotSavedError ? error.previous : language);
-    }
+    if (option !== language) await changeLanguage(option);
   }
 
   return (
@@ -159,7 +151,10 @@ function SidebarFooter({ extra }: { extra?: ReactNode }) {
       </div>
       {/* Always rendered, even empty, so a screen reader announces the message when it appears. */}
       <p role="status" className="px-2 text-xs text-fg-on-nav-warning">
-        {notSaved ? t("settings.languageNotSaved", { language: t(`languageInSentence.${language}`), previous: t(`languageInSentence.${notSaved}`) }) : null}
+        {/* The same message as in Settings, from the same state, naming the language that was saved. */}
+        {language !== savedLanguage
+          ? t("settings.languageNotSaved", { language: t(`languageInSentence.${language}`), previous: t(`languageInSentence.${savedLanguage}`) })
+          : null}
       </p>
     </div>
   );

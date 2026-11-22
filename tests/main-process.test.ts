@@ -4,7 +4,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { runDevCheckGeneration } from "../src/main/dev-check.ts";
 import { GenerationRegistry, MAX_RUNNING_PER_WINDOW } from "../src/main/generations.ts";
-import { resolveRendererFile, resolveRulesDir } from "../src/main/paths.ts";
+import { resolveHomeFolder, resolveRendererFile, resolveRulesDir } from "../src/main/paths.ts";
 import { isTrustedFrame } from "../src/main/trust.ts";
 import type { GenerationEvent } from "../src/lib/generation-events.ts";
 import type { GenerationUpdate } from "../src/shared/api.ts";
@@ -162,4 +162,15 @@ test("development check: the mock streams through the real rules to a complete d
   assert.equal(seen.at(-1)?.type, "done");
   const text = seen.map((e) => (e.type === "text" ? e.delta : "")).join("");
   assert.match(text, /MOCK OUTPUT/);
+});
+
+test("home folder: --home-folder stands in for it in development only; the packaged app ignores it", () => {
+  const home = "/Users/ana";
+  assert.equal(resolveHomeFolder({ isPackaged: false, override: "/tmp/test-home", home }, path.posix), "/tmp/test-home");
+  assert.equal(resolveHomeFolder({ isPackaged: true, override: "/tmp/test-home", home }, path.posix), home);
+  // Not given, or not an absolute path: the real home folder.
+  assert.equal(resolveHomeFolder({ isPackaged: false, override: "", home }, path.posix), home);
+  assert.equal(resolveHomeFolder({ isPackaged: false, override: "relative/home", home }, path.posix), home);
+  assert.equal(resolveHomeFolder({ isPackaged: false, override: "D:\\test-home", home: "C:\\Users\\Ana" }, path.win32), "D:\\test-home");
+  assert.equal(resolveHomeFolder({ isPackaged: true, override: "D:\\test-home", home: "C:\\Users\\Ana" }, path.win32), "C:\\Users\\Ana");
 });
