@@ -9,9 +9,14 @@ import type { FoundKind, PersonGroup } from "./sheet.ts";
 const GROUP_LABELS: Record<PersonGroup, string> = { client: "CLIENT", caregiver: "CAREGIVER", family: "FAMILY", professional: "PERSON" };
 const FORM_SUFFIXES: Record<NameForm, string> = { first: "", full: " FULL NAME", last: " LAST NAME", initials: " INITIALS" };
 
-export function personPlaceholder(group: PersonGroup, index: number, form: NameForm): string {
+/**
+ * [CLIENT], [CAREGIVER 1 FULL NAME]; a surname alone is [CLIENT LAST NAME] for the whole
+ * surname and [CLIENT LAST NAME 1], [CLIENT LAST NAME 2] for each of its parts, so each
+ * restores exactly what it stood for.
+ */
+export function personPlaceholder(group: PersonGroup, index: number, form: NameForm, surnamePart = ""): string {
   const base = group === "client" ? GROUP_LABELS.client : `${GROUP_LABELS[group]} ${index + 1}`;
-  return `[${base}${FORM_SUFFIXES[form]}]`;
+  return `[${base}${FORM_SUFFIXES[form]}${form === "last" && surnamePart ? ` ${surnamePart}` : ""}]`;
 }
 
 export type NumberedKind = Exclude<FoundKind, PersonGroup | "dob">;
@@ -20,6 +25,7 @@ const KIND_LABELS: Record<NumberedKind, string> = {
   "unlisted-name": "NAME",
   school: "SCHOOL",
   address: "ADDRESS",
+  city: "CITY",
   phone: "PHONE",
   email: "EMAIL",
   id: "ID",

@@ -45,6 +45,7 @@ export type FoundKind =
   | "unlisted-name"
   | "school"
   | "address"
+  | "city"
   | "phone"
   | "email"
   | "id"

@@ -58,11 +58,8 @@ test("battery: nothing identifying survives, clinical words do, and every placeh
   assert.deepEqual({ leaks, overHidden }, { leaks: KNOWN_LEAKS, overHidden: [] });
 });
 
-/** What the battery knows slips through, documented in docs/deidentification.md. */
-const KNOWN_LEAKS = [
-  // A relative named in the text only: not on the sheet, after no title and no label.
-  "Spanish names, accents, a family sharing the surname, a school named after a person: Bruno",
-];
+/** What the battery knows slips through: nothing today (the cousin "Su primo Bruno" is caught by "primo" used as a title). */
+const KNOWN_LEAKS: string[] = [];
 
 test("fixture cases: the invented notes keep no name, with the sheet she would fill in", (t) => {
   const sheets: Record<string, ClientSheet> = {
@@ -119,9 +116,12 @@ test("names: every form of the client and a caregiver", () => {
     ["Mateo F. and M. Ficticio and M.F.", "[CLIENT FULL NAME] and [CLIENT FULL NAME] and [CLIENT INITIALS]"],
     ["Mateo Ficticio-Gómez", "[CLIENT FULL NAME]"],
     ["Lucia Ficticio and Lucía", "[CAREGIVER 1 FULL NAME] and [CAREGIVER 1]"],
-    ["Mrs. Ficticio said", "Mrs. [CLIENT LAST NAME] said"],
-    ["the Ficticios came", "the [CLIENT LAST NAME]s came"],
-    ["Mateos and Lucíana are other words", "Mateos and Lucíana are other words"],
+    // One of the client's two surnames: its own placeholder, so it restores exactly.
+    ["Mrs. Ficticio said", "Mrs. [CLIENT LAST NAME 1] said"],
+    ["Mrs. Ficticio Gómez said", "Mrs. [CLIENT LAST NAME] said"],
+    ["the Ficticios came", "the [CLIENT LAST NAME 1]s came"],
+    // A plural or possessive s without an apostrophe; a longer name is only reported.
+    ["Mateos toys and Lucíana", "[CLIENT]s toys and Lucíana"],
   ];
   for (const [input, expected] of cases) assert.equal(hide(input).text, expected, input);
 });
@@ -225,13 +225,12 @@ test("findings: kind, source, count and each way it was written", () => {
 test("reidentify: puts back what models do to placeholders and reports what it cannot", () => {
   const { map } = hide("Mateo Ficticio, Lucía, Mrs. Ficticio, DOB 08/03/2022, Lucía Ficticio.");
   const restored = reidentify(
-    "[CLIENT FULL NAME]. [Client]'s mother [caregiver 1] and [CAREGIVER_1]; [CAREGIVER1] said [CLIENT 'S] name. \\[CLIENT LAST NAME\\] [[DOB]] " +
-      "{CAREGIVER 1 FULL NAME} (CLIENT LAST NAME) [CLIENT LAST NAME and CAREGIVER 1] CAREGIVER 1 FULL NAME. The client (client) [sic].",
+    "[CLIENT FULL NAME]. [Client]'s mother [caregiver 1] and [CAREGIVER_1]; [CAREGIVER1] said [CLIENT 'S] name. \\[CLIENT LAST NAME 1\\] [[DOB]] " +
+      "{CAREGIVER 1 FULL NAME} (CLIENT LAST NAME 1) [CLIENT LAST NAME 1 and [CAREGIVER 1 CAREGIVER 1 FULL NAME. The client (client) [sic].",
     map,
   );
   assert.equal(
     restored.text,
-    // "Mrs. Ficticio" was how the text wrote the surname alone, so it comes back that way, not as "Ficticio Gómez".
     "Mateo Ficticio Gómez. Mateo's mother Lucía and Lucía; Lucía said Mateo's name. Ficticio 08/03/2022 " +
       "Lucía Ficticio Ficticio Ficticio and Lucía Lucía Ficticio. The client (client) [sic].",
   );
@@ -251,11 +250,17 @@ test("reidentify: puts back what models do to placeholders and reports what it c
   assert.deepEqual(restored.restored.find((r) => r.placeholder === "[CLIENT FULL NAME]"), { placeholder: "[CLIENT FULL NAME]", count: 1, repaired: 0 });
 });
 
-test("a surname alone restores as the text wrote it most often, in the sheet's spelling", () => {
+test("each part of a surname has its own placeholder and restores as the text wrote it, in the sheet's spelling", () => {
   const sheet: ClientSheet = { client: { firstName: "Ana", lastName: "Ejemplar de la Fuente" }, caregivers: [{ firstName: "Rita", lastName: "Rodríguez-Peña" }] };
-  const hidden = hide("Ms. de la fuente and MS. DE LA FUENTE, then Ejemplar once; Mrs. Rodriguez; Mrs. Rodríguez.", sheet);
-  assert.equal(hidden.text, "Ms. [CLIENT LAST NAME] and MS. [CLIENT LAST NAME], then [CLIENT LAST NAME] once; Mrs. [CAREGIVER 1 LAST NAME]; Mrs. [CAREGIVER 1 LAST NAME].");
-  assert.equal(reidentify("Ms. [CLIENT LAST NAME] and Mrs. [CAREGIVER 1 LAST NAME].", hidden.map).text, "Ms. de la Fuente and Mrs. Rodríguez.");
+  const hidden = hide("Ms. de la fuente and MS. DE LA FUENTE, then Ejemplar once; Mrs. Rodriguez; Mrs. Rodríguez; Ejemplar de la Fuente.", sheet);
+  assert.equal(
+    hidden.text,
+    "Ms. [CLIENT LAST NAME 2] and MS. [CLIENT LAST NAME 2], then [CLIENT LAST NAME 1] once; Mrs. [CAREGIVER 1 LAST NAME 1]; Mrs. [CAREGIVER 1 LAST NAME 1]; [CLIENT LAST NAME].",
+  );
+  assert.equal(
+    reidentify("Ms. [CLIENT LAST NAME 2], [CLIENT LAST NAME 1], [CLIENT LAST NAME] and Mrs. [CAREGIVER 1 LAST NAME 1].", hidden.map).text,
+    "Ms. de la Fuente, Ejemplar, Ejemplar de la Fuente and Mrs. Rodríguez.",
+  );
 });
 
 test("round trip: a text written with the sheet's own spellings comes back exactly", () => {

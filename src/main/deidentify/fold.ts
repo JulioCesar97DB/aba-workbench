@@ -2,7 +2,8 @@
  * Folding: a lowercase, accent-free copy of a text that still knows where each of its
  * characters came from, so a match found in the copy maps back to the original.
  * "Lucía", "LUCIA" and "lucia" fold to the same "lucia"; typographic apostrophes and
- * dashes fold to "'" and "-"; a soft hyphen and stray combining marks fold to nothing.
+ * dashes fold to "'" and "-"; invisible format characters (a soft hyphen, a zero-width
+ * joiner, a word joiner) and stray combining marks fold to nothing.
  */
 
 export interface Folded {
@@ -17,7 +18,8 @@ export interface Folded {
 const APOSTROPHES = /[\u{2018}\u{2019}\u{02BC}\u{0060}\u{00B4}]/u;
 const DASHES = /[\u{2010}-\u{2015}\u{2212}\u{FE58}\u{FE63}\u{FF0D}]/u;
 const SPACES = /[\u{00A0}\u{2000}-\u{200A}\u{202F}\u{205F}\u{3000}]/u;
-const INVISIBLE = /[\u{00AD}\u{200B}\u{FEFF}]/u;
+/** Format characters (soft hyphen, zero-width space and joiners, word joiner, bidi marks...): invisible, so they never split a name. */
+const INVISIBLE = /\p{Cf}/u;
 
 /** One character folded: lowercase, accents removed. */
 export function foldChar(ch: string): string {
