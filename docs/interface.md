@@ -19,8 +19,10 @@ The fonts come from the `@fontsource/ibm-plex-sans` and `@fontsource/ibm-plex-mo
 | `src/renderer/src/styles/fonts.ts` | Which Plex weights ship. |
 | `src/renderer/src/components/` | **The project's own components**, on Base UI where it has the part: `Button`, `TextLink` and `ButtonLink`, `Select`, `Dialog` (a centered box or a side panel), `Tooltip`, `Table`, `StatusBadge`, `NavItem` and `SectionNavItem`, `Term`. |
 | `src/renderer/src/shell/` | The frame: `AppShell` (rendered once: the sidebar for the app or for the case, the working area, the Menu panel on a narrow window, the skip link, the announcement and focus after a navigation), `Sidebar`, `PageHeader`, `WorkArea` (a screen's `<main>`: header, content and right rail). |
-| `src/renderer/src/screens/` | One file per screen: `Home` (the list of cases and the New case form), `Case` (the workspace's steps and report), `Settings`, `NotFound`, `DevCheck`. |
-| `src/renderer/src/open-case.tsx` | The open case: AppShell loads it when the address enters a case, so the sidebar shows its label and the screens its data. |
+| `src/renderer/src/screens/` | One file per screen: `Home` (the list of cases and the New case form), `Case` (the workspace's steps, report and right rail), `Sources` (the Sources step), `SourceText` (a pasted text), `Settings`, `NotFound`, `DevCheck`. |
+| `src/renderer/src/open-case.tsx` | The open case: AppShell loads it when the address enters a case, so the sidebar shows its label and the screens its data; a saved change to its sources replaces them there. |
+| `src/renderer/src/case-saves.tsx` | The case's saves and the one save state the screens show ("Saving…", "All changes saved", what was not saved and "Try again"). |
+| `src/renderer/src/source-labels.tsx` | A source's name, type, size and date as the screens show them. |
 | `src/renderer/src/language.tsx` | The screen language and the saved one, shared by the sidebar and Settings. |
 | `src/renderer/src/connections.tsx` | The AI connections' state, shared by the sidebar and Settings, kept current by the main process's updates ([connections.md](connections.md)). |
 | `src/renderer/src/format.ts`, `cases-folder.tsx` | Ages and dates in the screen language; the cases folder's problems in words, and "Show in Finder / Explorer". |
@@ -35,7 +37,9 @@ React Router keeps the address in the URL's hash (`#/settings`). The app's page 
 | Address | Screen |
 | --- | --- |
 | `#/` | Home: the cases in the cases folder, newest first (label, client age, created, last saved, PDFs), "New case", and below them the folders that could not be opened. When there are none, what to do; when the cases folder cannot be used, why and a way to choose another. |
-| `#/cases/<id>/sources`, `/behaviors`, `/interventions`, `/report`, `/review` | The case workspace's five steps, for the case with that id. The sidebar shows its label and age; the rail lists the PDFs in its folder. Each step is still a placeholder that says what it will hold. An id that is not a case, or a case that cannot be opened, says so. |
+| `#/cases/<id>/sources` | The Sources step: the case's sources, PDFs in its folder that are not sources, removed sources (below). |
+| `#/cases/<id>/sources/text/<source-id>`, `#/cases/<id>/sources/new/<type>` | A pasted text, to read and edit; a new one of that type. |
+| `#/cases/<id>/behaviors`, `/interventions`, `/report`, `/review` | The case workspace's other steps, for the case with that id. The sidebar shows its label and age; the rail lists its sources and the PDFs in its folder. Each of these steps is still a placeholder that says what it will hold. An id that is not a case, or a case that cannot be opened, says so. |
 | `#/cases/<id>/report/<section-id>` | One section of the report (ids in `src/shared/report-sections.ts`). |
 | `#/settings` | The screen language; the cases folder (its path, "Choose another folder…", "Show in Finder", and a message when the folder cannot be shown or checked); the AI connection, one card for ChatGPT (Continue with ChatGPT, signing in, signed in as, check, manage usage, sign out, needs attention) and one for Claude (paste, check and save, check, remove), each with its state in words (`screens/Connections.tsx`); About. |
 | `#/dev-check` | The development check (mock generation). Linked from the sidebar only when the app runs from the repository (`getAppInfo().developmentBuild`); the packaged app has no link to it, and the window tests open it by address. It is a developer screen, in English only. |
@@ -62,7 +66,9 @@ Each component in `src/renderer/src/components/` wraps a Base UI part (`@base-ui
 - `Table` and its parts: plain HTML tables with column or row headers.
 - `StatusBadge`: a status in words; the color only repeats them. Four tones: `neutral`, `accent`, `success` ("Connected") and `warning` ("Needs attention").
 - `NavItem`, `SectionNavItem`: the sidebar's links; the current one is `aria-current="page"`. A section shows one state today, "not started".
-- `TextField`: a labelled text input (Base UI Field) with an optional description and an error, wired to the input. The New case form uses it.
+- `TextField`: a labelled text input (Base UI Field) with an optional description and an error, wired to the input. The New case form and a source's details use it (a source's date is `type="date"`, the system's own date field).
+- `MenuButton`: a button that opens a short list of actions (Base UI Menu): "Paste text" lists the types.
+- `ConfirmDialog`: a question before something happens (Base UI AlertDialog), opened by the caller; focus starts on Cancel, Escape cancels.
 - `Term`, `TransWithTerms`: English terms inside the interface (below).
 
 Not built yet, on purpose: anything no screen uses.
@@ -72,6 +78,17 @@ Base UI's own inline `<style>` tags are turned off (`CSPProvider disableStyleEle
 ## Layout
 
 `AppShell`, rendered once for every screen: the sidebar (16rem) and the working area side by side, each scrolling on its own; inside the sidebar the case and the footer stay put and the lists scroll. Below `--breakpoint-sidebar` (48rem) the sidebar leaves the screen: a dark bar with a Menu button takes its place and opens it as a side panel, which closes when a link is followed or the window widens again. Each screen is a `WorkArea`: one `<main>` with the screen's header and content, and the right rail beside the content when the working area is at least `--container-split` (50rem) wide, below it otherwise; it is a container query, so it follows the working area's own width whether the sidebar shows or not. Titles, steps and section names wrap rather than cut off, which matters in Spanish, whose strings run longer.
+
+## The Sources step
+
+What the assessment is drafted from. Built for a clinician who is not technical: nothing to save by hand, nothing lost by a slip.
+
+- **Adding.** "Paste text" opens a menu of the text types (CDE, Parent interview, Direct observation, FBA questionnaire, IEP, Other); choosing one opens an empty text with the focus in it. "Add PDF…" opens the system's dialog (several at once); PDFs can also be dropped anywhere on the window while the step is open, which shows "Drop PDFs to add them to this case". Each PDF is copied into the case's folder; the original is not touched. What was added, and why anything was not (not a PDF, already a source, too large...), is said in a line above the list.
+- **The list.** Each source shows its type (an English clinical term, `lang="en"`, except "Other"), its name (its title, else its type or its file), what it is (pasted text and its length, or PDF and its size), its date, a pasted text's first words, and warnings in words: a PDF missing from the folder, a PDF over ChatGPT's or both providers' size limit. Its actions: Open (a pasted text opens in the app; a PDF in the system's viewer), Details (type, title, date) and Remove. The rail lists the sources too.
+- **Saving.** Every change is saved at once: a pasted text when typing pauses (600 ms), when the field is left and when the screen is left; a title the same way; a type or a date as soon as it changes. The header says "Saving…" and then "All changes saved"; a save that fails says what happened, with "Try again", until it or a later save of the same thing succeeds. The saves belong to the case, not the screen (`case-saves.tsx`), so leaving the text editor never drops one.
+- **Removing.** Remove asks first ("Remove “…” from this case?"), and says the text or the file is kept. A removed source moves to "Removed sources", collapsed at the foot of the step, with Restore; right after removing, a line says so with Undo, which takes the focus (the row is gone), and Cmd+Z / Ctrl+Z (outside a text field) does the same.
+- **PDFs in the folder** that are not sources (put there in Finder or Explorer) are listed under "Also in this case's folder", each with "Add as a source".
+- **Long texts.** The text area is not controlled by React: only its length is kept in state, so a very long paste stays quick. Measured in the built app (Apple silicon): pasting 600,000 characters in paragraphs takes about 0.1 s and typing in it stays immediate. One single paragraph that long, with no line break at all, is slow in Chromium's text area (seconds per keystroke); reports have paragraphs, so this is noted, not handled.
 
 ## Languages
 
