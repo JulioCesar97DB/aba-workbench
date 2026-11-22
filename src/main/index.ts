@@ -22,7 +22,7 @@ registerAppScheme();
 
 let mainWindow: BrowserWindow | null = null;
 
-const ipc = registerIpc({
+registerIpc({
   rulesDir,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
 });
@@ -42,8 +42,8 @@ function createWindow(): void {
   });
   mainWindow = window;
   window.once("ready-to-show", () => window.show());
+  // Its generations stop when its page goes away (src/main/ipc.ts).
   window.on("closed", () => {
-    ipc.cancelAll();
     mainWindow = null;
   });
   void window.loadURL(devServerUrl ?? `${APP_ORIGIN}/index.html`);

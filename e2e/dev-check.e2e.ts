@@ -1,4 +1,8 @@
+import type { AbaApi, GenerationUpdate } from "../src/shared/api.ts";
 import { expect, test } from "./app.ts";
+
+/** window.aba inside the page; typed by hand because the e2e code has no DOM types. */
+type InPage = { aba: AbaApi; crypto: { randomUUID(): string } };
 
 test("the app starts and shows the development check", async ({ app }) => {
   const page = await app.firstWindow();
@@ -47,4 +51,51 @@ test("a mock generation streams to completion, with the rules found", async ({ a
   expect(final).toContain("Rules sent as the cached prefix");
   await expect(page.getByText(/^Rules: /)).toHaveText(/^Rules: assessment \S+, payer-florida-molina \S+, instruments \S+, section-medical-necessity \S+$/);
   await expect(page.getByRole("button", { name: "Run mock generation" })).toBeEnabled();
+});
+
+test("a reload stops the running generation: nothing more arrives for it", async ({ app }) => {
+  const page = await app.firstWindow();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+  const oldId = await page.evaluate(async () => {
+    const { aba, crypto } = globalThis as unknown as InPage;
+    const id = crypto.randomUUID();
+    await aba.startMockGeneration(id);
+    return id;
+  });
+  // Mid-stream: the mock thinks for 0.3 s, then writes for about 2 s.
+  await page.waitForTimeout(600);
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+
+  // Listen for longer than the old generation would have taken to finish.
+  const arrived = await page.evaluate(
+    (id) =>
+      new Promise<GenerationUpdate[]>((resolve) => {
+        const { aba } = globalThis as unknown as InPage;
+        const seen: GenerationUpdate[] = [];
+        const stop = aba.onGenerationUpdate((update) => {
+          if (update.generationId === id) seen.push(update);
+        });
+        setTimeout(() => {
+          stop();
+          resolve(seen);
+        }, 3_000);
+      }),
+    oldId,
+  );
+  expect(arrived).toEqual([]);
+});
+
+test("a window runs at most two generations at once", async ({ app }) => {
+  const page = await app.firstWindow();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("ABA Workbench");
+  const results = await page.evaluate(async () => {
+    const { aba, crypto } = globalThis as unknown as InPage;
+    const ids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+    const settled = await Promise.allSettled(ids.map((id) => aba.startMockGeneration(id)));
+    await Promise.all(ids.map((id) => aba.cancelGeneration(id)));
+    return settled.map((result) => (result.status === "fulfilled" ? "started" : String(result.reason)));
+  });
+  expect(results.slice(0, 2)).toEqual(["started", "started"]);
+  expect(results[2]).toMatch(/2 generations are already running in this window/);
 });
