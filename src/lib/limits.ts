@@ -107,8 +107,18 @@ export function providerTooLargeMessage(provider: Exclude<ProviderId, "mock">): 
   return `The request was refused as too large; ${PROVIDER_REQUEST_LIMITS[provider].label}. ${WHAT_TO_DO}`;
 }
 
-/** For Claude's error when the PDFs have more pages than it reads in one request. */
+/**
+ * Whether a Claude refusal is about the PDF page limit. Anthropic documents the limit but
+ * not the error's wording (and advises against matching messages), so this asks for the
+ * shape of a limit: PDFs, pages, and a word such as "maximum" or "exceed". A refusal that
+ * does not match keeps Claude's own message, unchanged.
+ */
+export function isPdfPageLimitError(providerMessage: string): boolean {
+  return /\bpdf/i.test(providerMessage) && /\bpages?\b/i.test(providerMessage) && /\b(maximum|max|exceed(s|ed)?|limit|too many|at most|more than|up to)\b/i.test(providerMessage);
+}
+
+/** For Claude's error when the PDFs have more pages than it accepts in one request. */
 export function pdfPageLimitMessage(providerMessage: string): string {
   const pages = PROVIDER_REQUEST_LIMITS.anthropic.maxPdfPages;
-  return `The PDFs in this request have more pages than Claude reads in one request (at most ${pages}). ${WHAT_TO_DO} Claude said: "${providerMessage.slice(0, 200)}"`;
+  return `The PDFs in this request have more pages than Claude accepts in one request (${pages} for the models this app uses). ${WHAT_TO_DO} Claude said: "${providerMessage.slice(0, 200)}"`;
 }

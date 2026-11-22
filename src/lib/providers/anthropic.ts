@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { pdfPageLimitMessage, providerTooLargeMessage } from "../limits.ts";
+import { isPdfPageLimitError, pdfPageLimitMessage, providerTooLargeMessage } from "../limits.ts";
 import { ANTHROPIC_BASE_URL, pinnedFetch, removeEnvHeaders } from "./endpoints.ts";
 import {
   ProviderError,
@@ -151,9 +151,9 @@ export function toProviderError(error: unknown): ProviderError | null {
     return new ProviderError("request_too_large", providerTooLargeMessage("anthropic"), status);
   }
   if (error instanceof Anthropic.BadRequestError) {
-    // The documentation does not give the wording of the PDF page-limit error, so any
-    // refusal that names PDFs and pages is explained as one, with Claude's own words kept.
-    if (/pdf/i.test(error.message) && /page/i.test(error.message)) {
+    // The documentation does not give the wording of the PDF page-limit error; a refusal
+    // shaped like one is explained, with Claude's own words kept (limits.ts).
+    if (isPdfPageLimitError(error.message)) {
       return new ProviderError("too_many_pdf_pages", pdfPageLimitMessage(error.message), status);
     }
     return new ProviderError("bad_request", `Anthropic refused the request: ${error.message.slice(0, 300)}`, status);
