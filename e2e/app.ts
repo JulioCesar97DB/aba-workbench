@@ -100,6 +100,15 @@ export const test = base.extend<Fixtures>({
           ? await electron.launch({ executablePath: packagedExecutable(), args, env })
           : await electron.launch({ args: [root, ...args], cwd: root, env });
       started.push(app);
+      // The tests drive the window with Playwright's own input, sent straight to the page.
+      // The computer's real pointer must not reach it: a person moving the mouse over a test
+      // window (the windows open mid-screen) moves the hover the tests rely on, and closed a
+      // tooltip a test was waiting for. Each window lets the real mouse pass through.
+      await app.evaluate(({ app: electronApp, BrowserWindow }) => {
+        const ignore = (window: Electron.BrowserWindow) => window.setIgnoreMouseEvents(true);
+        BrowserWindow.getAllWindows().forEach(ignore);
+        electronApp.on("browser-window-created", (_event, window) => ignore(window));
+      });
       return app;
     });
     for (const app of started) await app.close().catch(() => undefined);
@@ -237,7 +246,10 @@ export async function stubConnections(app: ElectronApplication, options: { claud
       if (url === "https://auth.openai.com/api/accounts/oauth/token") return json(stub.token ?? { error: "invalid_grant" }, stub.token ? stub.tokenStatus : 400);
       if (url === "https://auth.openai.com/api/accounts/oauth/revoke") return new Response(null, { status: stub.revokeStatus });
       if (url === "https://api.openai.com/v1/models") {
-        return stub.chatgptModelsStatus === 200 ? json({ models: [{ slug: "gpt-6.2-sol", display_name: "GPT-6.2 Sol", visibility: "list" }] }) : json({ detail: "Unauthorized" }, stub.chatgptModelsStatus);
+        if (stub.chatgptModelsStatus === 200) return json({ models: [{ slug: "gpt-6.2-sol", display_name: "GPT-6.2 Sol", visibility: "list" }] });
+        // 403: what OpenAI answers for an account that cannot use its plan in apps.
+        if (stub.chatgptModelsStatus === 403) return json({ error: { message: "not eligible", type: "invalid_request_error", code: "subscription_sharing_user_not_eligible", param: null } }, 403);
+        return json({ detail: "Unauthorized" }, stub.chatgptModelsStatus);
       }
       throw new Error(`The test refused a request to ${new URL(url).host}: no test reaches a real provider.`);
     }) as typeof fetch;
