@@ -45,7 +45,7 @@ test("create a case, see it in the list, restart the app and open it again", asy
 
   await createCase(page, "R.T. initial assessment", { years: "5", months: "3" });
   // The new case opens on its first step, with its label and age in the sidebar.
-  await expect(heading(page)).toHaveText("Sources");
+  await expect(heading(page)).toHaveText("Documents");
   await expect(page.getByText("R.T. initial assessment · Step 1 of 5")).toBeVisible();
   const sidebar = page.getByRole("navigation", { name: "Steps of the case" }).locator("xpath=ancestor::div[@data-surface='nav'][1]");
   await expect(sidebar.getByText("R.T. initial assessment", { exact: true })).toBeVisible();
@@ -77,7 +77,7 @@ test("create a case, see it in the list, restart the app and open it again", asy
   app = await launch();
   page = await openApp(app);
   await page.getByRole("link", { name: "R.T. initial assessment" }).click();
-  await expect(heading(page)).toHaveText("Sources");
+  await expect(heading(page)).toHaveText("Documents");
   await expect(page.getByText("R.T. initial assessment · Step 1 of 5")).toBeVisible();
   expect(page.url()).toContain(`#/cases/${data.id}/sources`);
 });
@@ -139,7 +139,7 @@ test("folders that are not cases show plainly as unreadable and are never change
   await goTo(page, "/cases/0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d/sources");
   await expect(heading(page)).toHaveText("This case was not found");
   await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
-  await expect(heading(page)).toHaveText("Sources");
+  await expect(heading(page)).toHaveText("Documents");
   expect(snapshot(casesFolder)).toEqual(before);
 });
 
@@ -148,7 +148,7 @@ test("a PDF put into the case's folder shows when the case is opened again, and 
   const app = await launch();
   const page = await openApp(app);
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  const rail = page.getByRole("complementary", { name: "Sources and checks" });
+  const rail = page.getByRole("complementary", { name: "Documents and checks" });
   await expect(rail).toContainText("None yet. PDFs you put in the case's folder show here.");
 
   writeFileSync(path.join(caseFolder, "vineland-3.pdf"), "%PDF-1.4 invented test file");
@@ -329,7 +329,7 @@ test("a second start of the app on the same profile quits and leaves the first o
   expect(await startSecondCopy(testInfo.project.name, profile, home)).toBe(0);
   expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  await expect(heading(page)).toHaveText("Sources");
+  await expect(heading(page)).toHaveText("Documents");
 });
 
 test("Settings says so when the cases folder cannot be shown or checked", async ({ app }) => {
@@ -342,7 +342,7 @@ test("Settings says so when the cases folder cannot be shown or checked", async 
   await page.getByRole("button", { name: "New case" }).click();
   await page.getByRole("dialog", { name: "New case" }).getByRole("textbox", { name: "Label" }).fill("Ana");
   await page.getByRole("dialog", { name: "New case" }).getByRole("button", { name: "Create case" }).click();
-  await expect(heading(page)).toHaveText("Sources");
+  await expect(heading(page)).toHaveText("Documents");
   await goTo(page, "/settings");
   const showLabel = process.platform === "darwin" ? "Show in Finder" : process.platform === "win32" ? "Show in Explorer" : "Show in file manager";
   await section.getByRole("button", { name: showLabel }).click();
@@ -397,5 +397,5 @@ test("a case whose creation was cut short is finished on Home, or shown as unfin
   expect(readFileSync(path.join(casesFolder, "Finished after a crash", "aba-case.json"), "utf8")).toBe(complete);
   expect(readdirSync(path.join(casesFolder, "Cut short"))).toEqual(["aba-case.json.4243.tmp"]);
   await page.getByRole("link", { name: "Finished after a crash" }).click();
-  await expect(heading(page)).toHaveText("Sources");
+  await expect(heading(page)).toHaveText("Documents");
 });

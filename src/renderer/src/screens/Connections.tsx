@@ -74,7 +74,8 @@ function useBadge() {
   };
 }
 
-export function ConnectionsSection() {
+/** The AI connection, first in Settings; `children` (the model line) follows the two cards. */
+export function ConnectionsSection({ children }: { children?: ReactNode }) {
   const { t } = useTranslation();
   const { connections, failed } = useConnections();
   const problem = connections?.problem ?? null;
@@ -87,6 +88,7 @@ export function ConnectionsSection() {
         <ChatGptCard connection={connections?.chatgpt ?? null} blocked={problem !== null || connections === null} />
         <ClaudeCard connection={connections?.claude ?? null} blocked={problem !== null || connections === null} />
       </div>
+      {children}
     </SettingsSection>
   );
 }

@@ -12,10 +12,14 @@ import type { MapPartId, MapRequestKind } from "../../../shared/case-map.ts";
 export type MapDraftOutcome =
   /** Both requests saved their parts. */
   | { kind: "saved" }
-  /** Stopped (or failed) after the first request saved its parts. */
-  | { kind: "partial"; message: string | null }
+  /**
+   * Stopped (or failed) after the first request saved its parts. A failure keeps the
+   * provider's error code (src/renderer/src/ai-errors.ts says what it means) and its English
+   * message, which the screen shows only under "Technical details" (owner's decision T11).
+   */
+  | { kind: "partial"; message: string | null; code: string | null }
   | { kind: "stopped" }
-  | { kind: "failed"; message: string }
+  | { kind: "failed"; message: string; code: string | null }
   | { kind: "refused" };
 
 export interface MapDraft {
@@ -70,18 +74,18 @@ function apply(update: GenerationUpdate) {
         for (const listener of savedListeners) listener(current.caseId, result);
         set({ ...current, saved: [...current.saved, event.step], written: [...current.written, ...event.written], kept: [...current.kept, ...event.kept], problems: current.problems + event.problems });
       } else {
-        set({ ...current, outcome: { kind: "failed", message: "" } });
+        set({ ...current, outcome: { kind: "failed", message: "", code: null } });
       }
       return;
     case "refusal":
       set({ ...current, outcome: { kind: "refused" } });
       return;
     case "error":
-      set({ ...current, outcome: current.saved.length > 0 ? { kind: "partial", message: event.message } : { kind: "failed", message: event.message } });
+      set({ ...current, outcome: current.saved.length > 0 ? { kind: "partial", message: event.message, code: event.code } : { kind: "failed", message: event.message, code: event.code } });
       return;
     case "finished": {
       const outcome: MapDraftOutcome =
-        current.outcome ?? (current.saved.length === 2 ? { kind: "saved" } : current.saved.length > 0 ? { kind: "partial", message: null } : event.cancelled ? { kind: "stopped" } : { kind: "failed", message: "" });
+        current.outcome ?? (current.saved.length === 2 ? { kind: "saved" } : current.saved.length > 0 ? { kind: "partial", message: null, code: null } : event.cancelled ? { kind: "stopped" } : { kind: "failed", message: "", code: null });
       set({ ...current, phase: "done", outcome });
       return;
     }
@@ -125,7 +129,7 @@ export async function startMapDraft(caseId: string, provider: DraftingProvider):
     return result.outcome;
   } catch {
     notStarted.delete(id);
-    set({ id, caseId, provider, step: null, phase: "done", characters: 0, saved: [], written: [], kept: [], problems: 0, outcome: { kind: "failed", message: "" } });
+    set({ id, caseId, provider, step: null, phase: "done", characters: 0, saved: [], written: [], kept: [], problems: 0, outcome: { kind: "failed", message: "", code: null } });
     return "error";
   }
 }

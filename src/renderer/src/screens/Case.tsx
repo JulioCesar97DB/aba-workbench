@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Navigate, Outlet } from "react-router";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
-import { CASE_STEPS, casePath, stepTitle, stepTitleLang, type CaseStep } from "../case-steps.tsx";
+import { CASE_STEPS, casePath, stepTitle, type CaseStep } from "../case-steps.tsx";
 import { casesFolderProblemText } from "../cases-folder.tsx";
 import { TextLink } from "../components/Link.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
@@ -21,8 +21,9 @@ import type { SectionSummary } from "../../../shared/sections.ts";
 
 /*
  * The case workspace: the five steps and the report's sections. AppShell opens the case
- * (src/renderer/src/open-case.tsx). Sources has its own screens (Sources.tsx, SourceText.tsx);
- * the other steps are placeholders until later phases fill them.
+ * (src/renderer/src/open-case.tsx). Documents has its own screens (Sources.tsx, SourceText.tsx),
+ * and so does the case map (CaseMap.tsx); Plan and Review and copy are placeholders until
+ * later phases fill them.
  */
 
 /** The case's screens, once it is open; otherwise why it cannot be. */
@@ -72,12 +73,12 @@ const STEP_BODIES = {
   review: "workspace.reviewBody",
 } as const;
 
-/** Interventions, Review and copy: placeholders for now. */
+/** Plan, Review and copy: placeholders for now. */
 export function StepScreen({ step }: { step: keyof typeof STEP_BODIES }) {
   const { t } = useTranslation();
   const meta = useStepMeta(step);
   return (
-    <WorkArea header={<PageHeader title={stepTitle(t, step)} titleLang={stepTitleLang(step)} meta={meta} />} rail={<CaseRail />}>
+    <WorkArea header={<PageHeader title={stepTitle(t, step)} meta={meta} />} rail={<CaseRail />}>
       <Placeholder>
         <TransWithTerms i18nKey={STEP_BODIES[step]} />
       </Placeholder>

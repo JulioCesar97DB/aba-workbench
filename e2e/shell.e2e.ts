@@ -128,18 +128,18 @@ test("the navigation reaches every screen", async ({ launch, home }) => {
   const page = await openApp(await launch());
 
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  await expect(heading(page)).toHaveText("Sources");
+  await expect(heading(page)).toHaveText("Documents");
   await expect(page.getByText(`${SAMPLE_CASE.label} · Step 1 of 5`)).toBeVisible();
-  const rail = page.getByRole("complementary", { name: "Sources and checks" });
-  await expect(rail).toContainText("No sources yet.");
+  const rail = page.getByRole("complementary", { name: "Documents and checks" });
+  await expect(rail).toContainText("No documents yet.");
 
   const steps = page.getByRole("navigation", { name: "Steps of the case" });
   const expected: Array<[string, string]> = [
     ["Case map", "Case map"],
-    ["Interventions", "Interventions"],
+    ["Plan", "Plan"],
     ["Report", "Report"],
     ["Review and copy", "Review and copy"],
-    ["Sources", "Sources"],
+    ["Documents", "Documents"],
   ];
   for (const [link, title] of expected) {
     await steps.getByRole("link", { name: link }).click();
@@ -201,18 +201,20 @@ test("switching the language changes the screen and survives a restart", async (
   await expect(heading(page)).toHaveText("Mapa del caso");
   await expect(page.getByText(`${SAMPLE_CASE.label} · Paso 2 de 5`)).toBeVisible();
 
-  // Clinical terms and section names stay in English, marked as English.
+  // Every step is named in the screen's language (owner's decision P1), its path unchanged (T13).
   await goTo(page, `/cases/${SAMPLE_CASE.id}/interventions`);
-  await expect(heading(page)).toHaveText("Interventions");
-  await expect(heading(page)).toHaveAttribute("lang", "en");
+  await expect(heading(page)).toHaveText("Plan");
+  await expect(heading(page)).not.toHaveAttribute("lang", "en");
   await expect(page.getByText(`${SAMPLE_CASE.label} · Paso 3 de 5`)).toBeVisible();
   // The age in Spanish words, under the case's label in the sidebar.
   await expect(page.getByText("4 años 2 meses")).toBeVisible();
   const steps = page.getByRole("navigation", { name: "Pasos del caso" });
-  await expect(steps.getByRole("link", { name: "Fuentes" })).toBeVisible();
-  await expect(steps.locator('[lang="en"]')).toHaveText(["Interventions"]);
-  // The title and the sentence that names the step: both marked English.
-  await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText(["Interventions", "Interventions"]);
+  for (const name of ["Documentos", "Mapa del caso", "Plan", "Informe", "Revisión y copia"]) await expect(steps.getByRole("link", { name })).toBeVisible();
+  // Under each name, what the step holds; outside the report, where its sections are not listed.
+  for (const subtitle of ["Lo que ya tienes del cliente", "Conductas y funciones", "Intervenciones", "Las 9 secciones", "Todo junto, a ABA Matrix"]) await expect(steps).toContainText(subtitle);
+  await expect(steps.locator('[lang="en"]')).toHaveCount(0);
+  // Clinical terms stay in English, marked as English: the sentence that names the Interventions.
+  await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText(["Interventions"]);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report`);
   const sections = page.getByRole("navigation", { name: "Secciones" });
   await expect(sections.locator('[lang="en"]')).toHaveText(REPORT_SECTIONS.map((section) => section.title));
@@ -307,8 +309,8 @@ test("moving into and out of a case announces the new screen and puts focus on i
 
   // Home -> case: the link that was followed is gone, so focus goes to the new title.
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  await expect(heading(page)).toHaveText("Sources");
-  await expect(announcement(page)).toHaveText("Sources · ABA Workbench");
+  await expect(heading(page)).toHaveText("Documents");
+  await expect(announcement(page)).toHaveText("Documents · ABA Workbench");
   await expect(heading(page)).toBeFocused();
 
   // Inside the case the sidebar stays, and so does the focus, on the link followed.
@@ -356,7 +358,7 @@ test("the frame: the trial line is on every screen; the header and the rail stay
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/background-information`);
   await expect(page.getByTestId("section-view")).toContainText("Paragraph 30");
   const header = page.getByRole("main").locator("header");
-  const rail = page.getByRole("complementary", { name: "Sources and checks" });
+  const rail = page.getByRole("complementary", { name: "Documents and checks" });
   // The rail is beside the text, not below it.
   const [textBox, railBox] = [await page.getByTestId("section-view").boundingBox(), await rail.boundingBox()];
   expect(railBox!.x).toBeGreaterThan(textBox!.x + textBox!.width);

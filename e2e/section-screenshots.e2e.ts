@@ -42,7 +42,7 @@ for (const language of ["en", "es"] as Language[]) {
     await page.getByTestId("session-notes").fill(es ? "La mamá confirmó hoy que la escuela ya aplica el plan de comunicación." : "The mother confirmed today that the school started the communication plan.");
     await page.getByTestId("session-notes").blur();
     await shot(page, "02-pasting-hers");
-    await page.getByRole("button", { name: es ? "Dejarla así" : "Keep it as it is" }).click();
+    await page.getByRole("button", { name: es ? "Listo, dejarla así" : "Done, keep it as it is" }).click();
     await expect(page.getByTestId("section-view")).toBeVisible();
     await shot(page, "03-hers");
 
@@ -91,7 +91,7 @@ for (const language of ["en", "es"] as Language[]) {
 
     // The model choice in Settings.
     await goTo(page, "/settings");
-    await page.getByRole("heading", { name: es ? "Modelo de IA" : "AI model" }).scrollIntoViewIfNeeded();
+    await page.getByRole("button", { name: es ? "Cambiar" : "Change" }).click();
     await shot(page, "10-settings-model");
 
     // No AI connected.

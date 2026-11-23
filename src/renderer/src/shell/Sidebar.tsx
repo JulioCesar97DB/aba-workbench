@@ -7,7 +7,7 @@ import { Link, NavLink, useLocation } from "react-router";
 import type { Language } from "../../../shared/api.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
-import { CASE_STEPS, casePath, StepLabel } from "../case-steps.tsx";
+import { CASE_STEPS, casePath, stepSubtitle, stepTitle } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { NavItem, SectionNavItem, StepNavItem } from "../components/NavItem.tsx";
 import { readySections, stepCount, stepState, type StepState } from "../step-states.ts";
@@ -147,8 +147,8 @@ export function CaseSidebar({
                     : t("nav.reportCount", count.spoken.values as { done: number; total: number });
             return (
               <li key={step}>
-                <StepNavItem to={casePath(caseId, step)} number={index + 1} state={state} stateText={t(STATE_TEXT_KEYS[state])} laterTag={t("nav.stepLaterTag")} detail={count?.shown} compact={inReport}>
-                  <StepLabel t={t} step={step} />
+                <StepNavItem to={casePath(caseId, step)} number={index + 1} state={state} stateText={t(STATE_TEXT_KEYS[state])} laterTag={t("nav.stepLaterTag")} detail={count?.shown} subtitle={stepSubtitle(t, step)} compact={inReport}>
+                  {stepTitle(t, step)}
                   {spoken ? <span className="sr-only">, {spoken}</span> : null}
                 </StepNavItem>
                 {step === "report" && inReport ? (

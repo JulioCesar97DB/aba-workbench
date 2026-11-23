@@ -1,10 +1,11 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { THRESHOLDS_DRAFT } from "../../../shared/case-map-thresholds.ts";
+import { aiErrorKind, aiErrorNeedsSettings } from "../ai-errors.ts";
 import { trackSave } from "../case-saves.tsx";
 import { Button } from "../components/Button.tsx";
 import { Dialog, DialogClose } from "../components/Dialog.tsx";
-import { TextLink } from "../components/Link.tsx";
+import { ButtonLink, TextLink } from "../components/Link.tsx";
 import { PROVIDER_NAMES, useProviders } from "../drafting-provider.tsx";
 import { Eyebrow } from "../shell/WorkArea.tsx";
 import { dismissMapDraft, isDrafting, startMapDraft, stopMapDraft, useMapDraft, type MapDraft } from "./draft.ts";
@@ -125,13 +126,30 @@ function Finished({ draft }: { draft: MapDraft }) {
           : outcome?.kind === "refused"
             ? t("caseMap.ai.refused")
             : t("caseMap.ai.failed");
-  const detail = outcome?.kind === "failed" || outcome?.kind === "partial" ? outcome.message : null;
+  // What went wrong in her words, by kind; the provider's English text only under "Technical details" (owner's decision T11).
+  const failure = outcome?.kind === "failed" || outcome?.kind === "partial" ? outcome : null;
+  const kind = failure?.code ? aiErrorKind(failure.code) : null;
   return (
     <>
       <p role={outcome?.kind === "saved" ? undefined : "alert"} className="text-sm font-medium">
         {message}
-        {detail ? <span className="block font-normal text-fg-muted">{detail}</span> : null}
+        {kind ? ` ${t(`section.failedWhy.${kind}`)}` : null}
       </p>
+      {kind && aiErrorNeedsSettings(kind) ? (
+        <div>
+          <ButtonLink to="/settings" size="sm">
+            {t("caseMap.ai.settingsLink")}
+          </ButtonLink>
+        </div>
+      ) : null}
+      {failure?.message ? (
+        <details className="text-sm text-fg-muted">
+          <summary className="w-fit cursor-pointer rounded-sm underline underline-offset-2 hover:decoration-2">{t("section.technicalDetails")}</summary>
+          <p lang="en" data-testid="map-error-details" className="mt-1 break-words">
+            {failure.message}
+          </p>
+        </details>
+      ) : null}
       {draft.problems > 0 ? <p className="text-sm text-warning">{t("caseMap.ai.problems", { count: draft.problems })}</p> : null}
       {draft.kept.length > 0 ? <p className="text-sm text-fg-muted">{t("caseMap.ai.kept")}</p> : null}
       <div>

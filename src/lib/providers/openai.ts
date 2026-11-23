@@ -107,7 +107,7 @@ export function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined
  * read 2026-11-22). They can come back as the HTTP error of the request or, after the
  * stream has started, as a failed response.
  */
-const CHATGPT_ERRORS: Record<string, { code: string; message: string }> = {
+export const CHATGPT_ERRORS: Record<string, { code: string; message: string }> = {
   subscription_sharing_user_not_eligible: {
     code: "chatgpt_not_eligible",
     message: "This ChatGPT account cannot use its plan in ABA Workbench (its plan, workspace or a policy does not allow it).",

@@ -37,7 +37,7 @@ async function openSources(launch: (options?: { language?: "en" | "es" }) => Pro
   const app = await launch({ language });
   const page = await firstScreen(app);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
-  await expect(heading(page)).toHaveText(language === "en" ? "Sources" : "Fuentes");
+  await expect(heading(page)).toHaveText(language === "en" ? "Documents" : "Documentos");
   return { app, page, casesFolder, caseFolder: path.join(casesFolder, SAMPLE_CASE.label) };
 }
 
@@ -69,7 +69,7 @@ async function dropFiles(page: Page, files: Array<{ name: string; bytes: Buffer 
 
 /** A row of the case's sources (the rail lists their names too). */
 function sourceRow(page: Page, text: string) {
-  return page.getByRole("list", { name: "Sources in this case" }).or(page.getByRole("list", { name: "Fuentes de este caso" })).getByRole("listitem").filter({ hasText: text });
+  return page.getByRole("list", { name: "Documents in this case" }).or(page.getByRole("list", { name: "Documentos de este caso" })).getByRole("listitem").filter({ hasText: text });
 }
 
 function tempFolder(): string {
@@ -80,7 +80,7 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
   const first = await openSources(launch, home);
   const { casesFolder } = first;
   let { app, page } = first;
-  await expect(page.getByRole("heading", { name: "Add this client's sources" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add this client's documents" })).toBeVisible();
   await screenshot(page, "sources-empty-en");
 
   await page.getByRole("button", { name: "Paste text" }).click();
@@ -91,6 +91,8 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
   await expect(text).toBeFocused();
   await page.getByRole("textbox", { name: "Title (optional)" }).fill("CDE, psychologist's report");
   await page.getByLabel("Date (optional)").fill("2026-10-02");
+  // The system's date field follows the computer's region, so its hint says the order (owner's decision T20).
+  await expect(page.getByText(/Type it as (month\/day\/year|day\/month\/year|year\/month\/day), the order your computer uses for dates\./)).toBeVisible();
   await text.fill("Invented CDE notes.\nThe child is 4 years old and speaks about 20 single words.");
   await expect(page.getByText("All changes saved").first()).toBeVisible();
   await expect(heading(page)).toHaveText("CDE, psychologist's report");
@@ -114,8 +116,8 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
   // Typing more saves again, and going back keeps it.
   await text.press("End");
   await text.pressSequentially(" More notes.");
-  await page.getByRole("link", { name: "Back to sources" }).click();
-  await expect(heading(page)).toHaveText("Sources");
+  await page.getByRole("link", { name: "Back to documents" }).click();
+  await expect(heading(page)).toHaveText("Documents");
   const row = sourceRow(page, "CDE, psychologist's report");
   await expect(row).toContainText("Pasted text · 90 characters · Oct 2, 2026");
   await expect(row).toContainText("Invented CDE notes. The child is 4 years old");
@@ -158,7 +160,7 @@ test("a very long paste stays quick and is saved whole", async ({ launch, home }
   expect(Date.now() - started).toBeLessThan(5_000);
   await expect.poll(() => caseData(casesFolder).sources[0].text).toBe(`${long}More.`);
   await expect(page.getByText(`${(long.length + 5).toLocaleString("en")} of 1,000,000 characters`)).toBeVisible();
-  await page.getByRole("link", { name: "Back to sources" }).click();
+  await page.getByRole("link", { name: "Back to documents" }).click();
   await expect(sourceRow(page, "Parent interview")).toContainText(`${(long.length + 5).toLocaleString("en")} characters`);
 });
 
@@ -191,7 +193,7 @@ test("PDFs from the dialog and dropped onto the window are copied as they are; t
       { name: "notes.docx", bytes: Buffer.from("not a pdf") },
     ]);
     await expect(page.getByText("2 PDFs added.")).toBeVisible();
-    await expect(page.getByText("copy of vineland.pdf is already one of this case's sources.")).toBeVisible();
+    await expect(page.getByText("copy of vineland.pdf is already one of this case's documents.")).toBeVisible();
     await expect(page.getByText("notes.docx is not a PDF, so it was not added.")).toBeVisible();
     expect(readdirSync(caseFolder).sort()).toEqual(["Vineland-3 report.pdf", "aba-case.json", "ablls-r.pdf", "basc-3-prq.pdf", "outside.pdf"]);
     expect(readdirSync(casesFolder)).toEqual([SAMPLE_CASE.label]);
@@ -259,14 +261,14 @@ test("removing asks first, keeps the text and the file, and Undo or Restore brin
   expect(readdirSync(caseFolder)).toContain("vineland-3.pdf");
   expect(caseData(casesFolder).sources[0].removedAt).toEqual(expect.any(String));
   await page.keyboard.press("Enter");
-  await expect(page.getByText("“vineland-3.pdf” is a source again.")).toBeVisible();
+  await expect(page.getByText("“vineland-3.pdf” is back in the case.")).toBeVisible();
   await expect(row).toBeVisible();
   expect(caseData(casesFolder).sources[0].removedAt).toBeUndefined();
 
   // Removed again: it waits under Removed sources, and Restore brings it back.
   await row.getByRole("button", { name: "Remove" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
-  await page.getByText("Removed sources (1)").click();
+  await page.getByText("Removed documents (1)").click();
   await page.getByRole("button", { name: "Restore" }).click();
   await expect(sourceRow(page, "vineland-3.pdf").getByRole("button", { name: "Remove" })).toBeVisible();
   expect(readdirSync(caseFolder).sort()).toEqual(["aba-case.json", "vineland-3.pdf"]);
@@ -279,7 +281,7 @@ test("details: rename, retype and date a source from the keyboard; PDFs put in t
   await goTo(page, "/");
   await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
   await expect(page.getByRole("heading", { name: "Also in this case's folder" })).toBeVisible();
-  await page.getByRole("button", { name: "Add as a source" }).click();
+  await page.getByRole("button", { name: "Add to the case" }).click();
   const row = sourceRow(page, "iep 2026.pdf");
   await expect(row).toContainText("IEP");
   await expect(page.getByRole("heading", { name: "Also in this case's folder" })).toBeHidden();
@@ -308,16 +310,17 @@ test("details: rename, retype and date a source from the keyboard; PDFs put in t
 test("in Spanish and at a narrow window: the step fits, and the clinical terms stay English", async ({ launch, home }) => {
   const { app, page, casesFolder } = await openSources(launch, home, "es");
   await resize(app, 520, 760);
-  await expect(page.getByRole("heading", { name: "Agrega las fuentes de este cliente" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agrega los documentos de este cliente" })).toBeVisible();
   await screenshot(page, "sources-empty-es-narrow");
   await page.getByRole("button", { name: "Pegar texto" }).click();
   await expect(page.getByRole("menuitem", { name: "Parent interview" })).toHaveAttribute("lang", "en");
   await page.getByRole("menuitem", { name: "Direct observation" }).click();
   await expect(heading(page)).toHaveText("Nuevo texto pegado");
+  await expect(page.getByText(/Escríbela como (mes\/día\/año|día\/mes\/año|año\/mes\/día), el orden de fechas de tu computadora\./)).toBeVisible();
   await page.getByRole("textbox", { name: "Texto" }).fill("Notas inventadas de una observación directa.");
   await expect(page.getByText("Todos los cambios guardados").first()).toBeVisible();
-  await page.getByRole("link", { name: "Volver a las fuentes" }).click();
-  await expect(heading(page)).toHaveText("Fuentes");
+  await page.getByRole("link", { name: "Volver a Documentos" }).click();
+  await expect(heading(page)).toHaveText("Documentos");
   await dropFiles(page, [{ name: "basc-3.pdf", bytes: inventedPdf("BASC-3") }]);
   await expect(page.getByText("Se agregó 1 PDF.")).toBeVisible();
   await expect(sourceRow(page, "Direct observation")).toContainText("Texto pegado · 44 caracteres");
@@ -470,7 +473,7 @@ test("a change that cannot be saved is said before the window closes, and on Hom
     const messages = await stubMessageBox(app, 0);
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
     await expect.poll(messages).toEqual(["A change could not be saved"]);
-    await expect(heading(page)).toHaveText("Sources");
+    await expect(heading(page)).toHaveText("Documents");
 
     // The folder is writable again: Try again saves it, and the window closes without asking.
     chmodSync(caseFolder, 0o755);
@@ -622,7 +625,7 @@ test("the header's buttons stay put as the save state changes, so a click lands 
   await area.click();
   await expect(heading(page)).toHaveText("CDE, psychologist's report from the developmental clinic");
   await expect(page.getByText("All changes saved")).toBeVisible();
-  const back = page.getByRole("link", { name: "Back to sources" });
+  const back = page.getByRole("link", { name: "Back to documents" });
   const saved = await back.boundingBox();
   // A save that fails clears "All changes saved": the button must not move for it.
   chmodSync(caseFolder, 0o555);
@@ -638,5 +641,5 @@ test("the header's buttons stay put as the save state changes, so a click lands 
   await expect(page.getByText("All changes saved")).toBeVisible();
   expect(await back.boundingBox()).toEqual(saved);
   await back.click();
-  await expect(heading(page)).toHaveText("Sources");
+  await expect(heading(page)).toHaveText("Documents");
 });
