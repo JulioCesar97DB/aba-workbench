@@ -48,6 +48,7 @@ const breakpoint = { mode: "explicit" as const };
  */
 function buildInput(options: GenerateOptions, includeTask: boolean): OpenAI.Responses.ResponseInput {
   const { prompt } = options;
+  const mark = options.credential.kind === "chatgpt" ? {} : { prompt_cache_breakpoint: breakpoint };
   const sourceParts: OpenAI.Responses.ResponseInputContent[] = [];
   for (const source of prompt.sources) {
     if (source.kind === "pdf") {
@@ -62,10 +63,10 @@ function buildInput(options: GenerateOptions, includeTask: boolean): OpenAI.Resp
     }
   }
   // Breakpoint on a closing text block rather than on a file part.
-  sourceParts.push({ type: "input_text", text: "</sources>", prompt_cache_breakpoint: breakpoint });
+  sourceParts.push({ type: "input_text", text: "</sources>", ...mark });
 
   const input: OpenAI.Responses.ResponseInput = [
-    { role: "developer", content: [{ type: "input_text", text: prompt.system, prompt_cache_breakpoint: breakpoint }] },
+    { role: "developer", content: [{ type: "input_text", text: prompt.system, ...mark }] },
     { role: "user", content: [{ type: "input_text", text: "<sources>" }, ...sourceParts] },
   ];
   if (includeTask) input.push({ role: "user", content: [{ type: "input_text", text: prompt.task }] });
@@ -218,7 +219,7 @@ export function responsesRequest(options: GenerateOptions): OpenAI.Responses.Res
     store: false, // nothing about the case is kept on OpenAI's side for later retrieval
     reasoning: { effort: options.effort },
   };
-  if (options.credential.kind === "chatgpt") return { ...base, prompt_cache_options: { mode: "explicit" } };
+  if (options.credential.kind === "chatgpt") return base;
   return { ...base, max_output_tokens: options.maxOutputTokens, prompt_cache_options: { mode: "explicit", ttl: "30m" } };
 }
 

@@ -127,7 +127,12 @@ test("ChatGPT sign-in: the token is the bearer; stream and store false; no field
   for (const field of ["background", "conversation", "max_output_tokens", "max_tool_calls", "metadata", "moderation", "multi_agent", "prompt", "prompt_cache_retention", "safety_identifier", "temperature", "top_logprobs", "top_p", "truncation", "user", "previous_response_id", "instructions"]) {
     assert.equal(field in body, false, field);
   }
-  assert.deepEqual(body.prompt_cache_options, { mode: "explicit" }, "no ttl: it replaces prompt_cache_retention");
+  // The plan route refuses both (real runs, 2026-11-23: "400 prompt_cache_options is not supported on this model",
+  // then the same for prompt_cache_breakpoint): never sent, so OpenAI's implicit caching applies.
+  assert.equal("prompt_cache_options" in body, false, "prompt_cache_options is refused on this route");
+  const parts = (body.input as Array<{ content: Array<Record<string, unknown>> }>).flatMap((m) => m.content);
+  assert.equal(parts.some((part) => "prompt_cache_breakpoint" in part), false, "prompt_cache_breakpoint is refused on this route");
+  assert.deepEqual(body.reasoning, { effort: options("gpt-6.2-sol").effort }, "the effort is sent");
   const roles = (body.input as Array<{ role: string }>).map((m) => m.role);
   assert.equal(roles.includes("system"), false, "system messages are rejected in this flow");
   assert.equal(events.at(-1)?.type, "done");
