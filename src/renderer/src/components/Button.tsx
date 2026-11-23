@@ -2,7 +2,7 @@ import { Button as BaseButton } from "@base-ui/react/button";
 import type { ComponentProps } from "react";
 import { cn } from "./cn.ts";
 
-export type ButtonVariant = "primary" | "secondary" | "nav";
+export type ButtonVariant = "primary" | "secondary" | "ai" | "nav";
 export type ButtonSize = "md" | "sm";
 
 const base =
@@ -12,6 +12,8 @@ const variants: Record<ButtonVariant, string> = {
   // The one main action of a screen.
   primary: "bg-accent font-semibold text-fg-on-accent hover:bg-accent-hover data-disabled:hover:bg-accent",
   secondary: "border border-border-control bg-surface font-medium text-fg hover:bg-surface-muted",
+  // What asks the AI to do something (owner's decision P9): the AI's amber tint, edged in the accent.
+  ai: "border border-accent bg-ai-subtle font-semibold text-fg-on-accent-subtle hover:bg-accent-subtle data-disabled:hover:bg-ai-subtle",
   // On the dark sidebar.
   nav: "font-medium text-fg-on-nav hover:bg-nav-hover",
 };

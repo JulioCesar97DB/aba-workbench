@@ -47,6 +47,9 @@ const TEXT_PAIRS: Array<[text: string, background: string]> = [
   ["nav", "dot-draft"], // a step in progress: its number
   ["fg", "nav-current"], // the current step, not started: its number
   ["fg-muted", "nav-current"], // the current step's count, "Soon" and subtitle
+  ["success", "surface"], // a section's copied line
+  ["success", "surface-muted"], // the rail's checks: "None", "Complete"
+  ["warning", "surface-muted"], // the rail's checks: "1 to look at"
 ];
 
 const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
@@ -61,6 +64,10 @@ const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
   ["focus", "ai-subtle"],
   ["focus", "warning-subtle"], // "What this means" in the trial bar
   ["fg-muted", "nav-current"], // the current step's hollow circle
+  ["accent", "ai-subtle"], // the AI's cards, buttons and chips: their edge
+  ["fg-on-accent-subtle", "surface"], // the sparkle in the request box
+  ["success", "surface-muted"], // a check passed, in the rail
+  ["warning", "surface-muted"], // a point to look at, in the rail
 ];
 
 function luminance(hex: string): number {

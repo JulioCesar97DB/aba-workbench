@@ -45,7 +45,7 @@ React Router keeps the address in the URL's hash (`#/settings`). The app's page 
 | `#/cases/<id>/case-map` | The case map ([case-map.md](case-map.md)), shown as "Case map" / "Mapa del caso". |
 | `#/cases/<id>/interventions`, `/review` | The case workspace's other steps, "Plan" and "Review and copy" (paths unchanged, T13), for the case with that id. The sidebar shows its label and age, its steps with their states, the report's sections while she is in the report or its review, and a button that opens today's notes; the rail lists its documents and the PDFs in its folder. These steps are still placeholders that say what they will hold. An id that is not a case, or a case that cannot be opened, says so. |
 | `#/cases/<id>/report` | The report's sections, each with its state (not started, yours, draft version N, approved). |
-| `#/cases/<id>/report/<section-id>` | One section of the report (ids in `src/shared/report-sections.ts`), `screens/Section.tsx`: start it (paste what she wrote, or draft it with the AI), read it, mark a paragraph to change, ask for changes, edit, the versions, approve, copy for ABA Matrix; the rail holds her instructions for the section, the documents used and the checks ([sections.md](sections.md)). |
+| `#/cases/<id>/report/<section-id>` | One section of the report (ids in `src/shared/report-sections.ts`), `screens/Section.tsx`: start it the two ways ("A mano": paste or type what she wrote; "Con la IA": draft it), watch it written, read it in numbered paragraphs, mark one to change only it, ask for changes in the request box docked at the foot, edit by hand, pick a version in the version menu, approve, then copy for ABA Matrix; the rail holds "Siguiente paso", the checks before approving, her instructions for the section and what the version used ([sections.md](sections.md), "The screen"). |
 | `#/settings` | In the order she needs them (owner's decision U12): the AI connection first, with one sentence on what the AI does and when anything is sent, one card for ChatGPT (Continue with ChatGPT, signing in, signed in as, check, manage usage, sign out, needs attention) and one for Claude (paste, check and save, check, remove), each with its state in words (`screens/Connections.tsx`), then the model as one line ("Model: the most capable (recommended)", with "Change" opening the choice for each provider); the screen language; the cases folder (its path, "Choose another folder…", "Show in Finder", and a message when the folder cannot be shown or checked); About. |
 | `#/dev-check` | The development check (mock generation). Linked from the sidebar only when the app runs from the repository (`getAppInfo().developmentBuild`); the packaged app has no link to it, and the window tests open it by address. It is a developer screen, in English only. |
 
@@ -64,7 +64,7 @@ All of them are in `src/renderer/src/styles/tokens.css`, inside Tailwind's `@the
 
 Each component in `src/renderer/src/components/` wraps a Base UI part (`@base-ui/react`) where Base UI has one, which brings the keyboard behavior and the ARIA wiring, and styles it with Tailwind classes that use the tokens. Built only for what the screens use today:
 
-- `Button` (`primary`, `secondary`, `nav`; `md` 44 px or `sm` 32 px), and `ButtonLink` for a link that looks like one.
+- `Button` (`primary`, `secondary`, `ai`, `nav`; `md` 44 px or `sm` 32 px), and `ButtonLink` for a link that looks like one. `ai` is what asks the AI to do something: the AI's amber tint (`--color-ai-subtle`) edged in the accent (owner's decision P9). One `primary` per screen.
 - `TextLink`: an underlined link inside text. Every link goes to a screen of the app.
 - `Select`: a labelled list with an optional description, announced with the control.
 - `Dialog`: modal; focus moves in and returns to the trigger; Escape and the backdrop close it. `variant="sheet"` is the navigation panel on a narrow window. `variant="panel"` is a light panel from the right edge that is not modal: the screen beside it stays usable, and a press outside closes it (today's notes). Without a `trigger` the screen opens it itself (`open`), as for the one-time "You're using your ChatGPT plan".
@@ -76,10 +76,59 @@ Each component in `src/renderer/src/components/` wraps a Base UI part (`@base-ui
 - `MenuButton`: a button that opens a short list of actions (Base UI Menu): "Paste text" lists the types.
 - `ConfirmDialog`: a question before something happens (Base UI AlertDialog), opened by the caller; focus starts on Cancel, Escape cancels.
 - `Term`, `TransWithTerms`: English terms inside the interface (below).
+- The shared pieces of every step, `Icon`, `TwoWays`, `StateChip`, `StepHeader` and `NextStepCard`: below.
 
 Not built yet, on purpose: anything no screen uses.
 
 Base UI's own inline `<style>` tags are turned off (`CSPProvider disableStyleElements` in `App.tsx`): the content security policy would block them, and no component used needs them.
+
+## Shared pieces (UX-3)
+
+Built for every step (the report's sections first; the case map, Documentos and the summary adopt them in their own pull requests). Their props are kept small on purpose.
+
+**`Icon`** (`components/Icon.tsx`, owner's decision T5): the app's own inline SVGs, no icon library. `<Icon name="pencil" />`; `name` is one of `pencil`, `sparkle`, `check`, `arrow`, `chevron`, `copy`, `upload`, `stop`, `panel`; `size` in px (default: 1em, the size of the text around it); `className`. Drawn on a 16x16 grid in `currentColor`, hidden from screen readers: the words beside an icon carry the meaning. A new icon is one more path in `PATHS`.
+
+**`TwoWays`** (`components/TwoWays.tsx`, proposal §3.1): the two ways of doing a step, "A mano" on the left (white, pencil) and "Con la IA" on the right (`--color-ai-subtle`, sparkle), the same on every step.
+
+```tsx
+<TwoWays
+  layout="cards"            // "cards" while the step is empty; "bar" once it has content
+  hand={{ title, body, actions }}   // title: cards only; body: one sentence; actions: its button(s)
+  ai={{ title, body, actions }}     // AI buttons use variant="ai"; no actions when the AI has no role in the step
+  aiConnected={providerConnected}   // default true
+  active="hand"             // bar only: the way she is using now ("hand" | "ai"), marked on its edge and to a screen reader
+/>
+```
+
+With `aiConnected={false}` the AI side keeps its color and its sentence; its `actions` become "Conectar la IA" (a link to Settings, `data-testid="connect-ai"`) and the sentence gains "Conecta ChatGPT en Ajustes para usar este camino." (owner's decision P7). It is never greyed. An AI side without `actions` (an informative card, as on Documentos) is left as it is. The two sides sit side by side from `--container-split` up and stack below it.
+
+**`StateChip`** (`components/StateChip.tsx`, layout rule 12): `<StateChip state="ai-draft" detail="editando" />`. `state`: `not-started` (Sin empezar), `hers` (Tuya), `ai-draft` (Borrador de la IA), `corrected` (Corregida por ti), `approved` (Aprobada), `copied` (Copiada), `writing` (La IA está escribiendo). `detail` follows after a middle dot. Hers in the success tint with a pencil, the AI's in the AI tint with a sparkle; the color and icon only repeat the words. One chip per header.
+
+**`StepHeader`** (`shell/PageHeader.tsx`, proposal §3.2): a `PageHeader` with the step's parts named.
+
+```tsx
+<StepHeader
+  eyebrow="Informe · sección 2 de 9"   // small capitals above the title ("Paso 2 de 5")
+  title="Medical Necessity Criteria" titleLang="en"
+  chip={<StateChip state="ai-draft" />}  // one chip
+  afterChip={<VersionMenu … />}          // a menu, never a row of buttons (version details, history)
+  status={<SaveState … />}               // "Todo guardado" / "Guardando…", in a space of fixed width
+  secondary={<Button>Copiar</Button>}     // at most two actions,
+  primary={<Button variant="primary">Aprobar</Button>}  // the primary last
+/>
+```
+
+One row of `--spacing-header` (64 px) from `--container-split` up: nothing in it changes its height (the eyebrow and the title shorten with an ellipsis; the chip, the menu and the actions keep their width). The case's name is not repeated (it is in the sidebar).
+
+**`NextStepCard`** (`components/NextStepCard.tsx`, proposal §3.3): "Siguiente paso", in the rail.
+
+```tsx
+<NextStepCard name="Strengths and Weaknesses" nameLang="en" body="…one sentence…" to={path} action="Abrir la sección" primary={done} />
+```
+
+`primary` once the current step has its minimum (a soft rule, never a gate: P5): the button becomes the screen's one primary and the card moves to the top of the rail; before that the button is secondary and the card closes the rail. Without `to` it shows no button (everything done).
+
+**`WorkArea`'s `footer`**: docked at the foot of the content pane, outside its scroll (layout rule 3), beside the rail; a section's request box. Below `--container-split` it sticks to the foot of the one scroll area.
 
 ## Layout
 
@@ -88,7 +137,7 @@ Base UI's own inline `<style>` tags are turned off (`CSPProvider disableStyleEle
 - **The sidebar**: the case on top and the footer (today's notes, the AI connection, the language) always in view; between them the steps, and the report's nine sections under "Report" only while she is in the report or its review and copy (T18). It fits a 1366x768 window with the sections listed; on a shorter window the list between scrolls. Settings is a link under the case's name.
 - **Today's notes** open from the sidebar's footer in a panel from the right edge (T4). The panel stays mounted while closed, so its box lives as long as the case is open: saved as she types, in order, with its status. The button says "Not saved" on every screen of the case while a notes save that failed is kept, and the panel shows it with Try again. The box grows with what she writes, so the panel is the only thing that scrolls.
 - **A screen** is a `WorkArea`: one `<main>` with the header, which never scrolls, and below it the content and the right rail. When the working area is at least `--container-split` (50rem) wide the rail sits beside the content and each scrolls on its own, so reading a long section moves only its text; below that the rail follows the content and the two scroll together. It is a container query, so it follows the working area's own width whether the sidebar shows or not.
-- **The header** (`PageHeader`) is one row of `--spacing-header` (64 px) from `--container-split` up: the title and the detail line shorten with an ellipsis (the whole title is its tooltip, only once it is cut), what follows the title (a section's versions) scrolls sideways in its place, and the actions keep theirs, so no button moves when a title is long, a section has many versions or the screen is in Spanish. On a narrower working area it may wrap.
+- **The header** (`PageHeader`) is one row of `--spacing-header` (64 px) from `--container-split` up: the title and the detail line shorten with an ellipsis (the whole title is its tooltip, only once it is cut), what follows the title (a chip, a version menu) keeps its width, and the actions keep theirs, so no button moves when a title is long, a section has many versions or the screen is in Spanish. On a narrower working area it may wrap.
 
 Below `--breakpoint-sidebar` (48rem) the sidebar leaves the screen: a dark bar with a Menu button takes its place and opens it as a side panel, which closes when a link is followed or the window widens again. Steps and section names wrap rather than cut off, which matters in Spanish, whose strings run longer.
 
