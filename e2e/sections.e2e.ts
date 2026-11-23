@@ -634,13 +634,24 @@ async function checkingAgain(launch: Parameters<typeof openSection>[0], home: st
 
 /**
  * Her new version 4 is on disk, then the check ends and saves after it. Her answer is held,
- * so only the check's news can bring version 4 into the version bar.
+ * so only the check's news can bring version 4 to the screen: the version menu says "of 4".
+ * While she edits by hand the header has no version menu (UX-3, §3.2), so there the rail's
+ * live checks show it: they read the version her editing pass wrote, and version 1 (one
+ * paragraph) has a paragraph-count issue her three-paragraph version 4 has not.
  */
-async function checkSavedAfterHer(page: Page, caseFile: string, finishCheck: () => Promise<void>) {
+async function checkSavedAfterHer(page: Page, caseFile: string, finishCheck: () => Promise<void>, editing = false) {
   await expect.poll(() => sectionData(caseFile, "environmental-changes").versions.length).toBe(4);
   expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ currentVersion: 4 });
+  const onePara = "1 paragraphs; the rules ask for 2 to 3.";
+  if (editing) await expect(page.getByTestId("section-checks")).toContainText(onePara);
   await finishCheck();
-  await expectVersionCount(page, 4, { timeout: 20_000 });
+  if (!editing) {
+    await expectVersionCount(page, 4, { timeout: 20_000 });
+    return;
+  }
+  await expect(page.getByTestId("section-checks")).not.toContainText(onePara, { timeout: 20_000 });
+  // The check's news leaves her where she is: still editing, her text as she typed it.
+  await expect(page.getByTestId("section-text")).toHaveValue("Para one.\n\nPara two, edited by her.\n\nPara three.");
 }
 
 test("check overtakes: during a check, version 1 then each line a paragraph; the new version is shown", async ({ launch, home }) => {
@@ -662,7 +673,7 @@ test("check overtakes: during a check, she edits version 1's text; after Done he
   await page.getByRole("button", { name: "Edit by hand" }).click();
   const release = await holdAnswers(app, "sections:save-text");
   await page.getByTestId("section-text").fill("Para one.\n\nPara two, edited by her.\n\nPara three.");
-  await checkSavedAfterHer(page, caseFile, finishCheck);
+  await checkSavedAfterHer(page, caseFile, finishCheck, true);
   expect(sectionData(caseFile, "environmental-changes").versions[3].text).toBe("Para one.\n\nPara two, edited by her.\n\nPara three.");
 
   await release();
