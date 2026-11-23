@@ -9,8 +9,13 @@ import { useConnections } from "./connections.tsx";
 
 export const PROVIDER_NAMES: Record<DraftingProvider, string> = { anthropic: "Claude", openai: "ChatGPT" };
 
-export function useProviders(): { available: DraftingProvider[]; provider: DraftingProvider | null; choose: (provider: DraftingProvider) => void } {
-  const { connections } = useConnections();
+/**
+ * `loading`: the main process has not said yet which AI is connected. Until then no AI is
+ * "not connected" either, so a screen keeps its AI button disabled rather than showing
+ * "Connect the AI" for a moment (UX-3 review round 1, M3).
+ */
+export function useProviders(): { available: DraftingProvider[]; provider: DraftingProvider | null; loading: boolean; choose: (provider: DraftingProvider) => void } {
+  const { connections, failed } = useConnections();
   const [chosen, setChosen] = useState<DraftingProvider | null>(null);
   const [last, setLast] = useState<DraftingProvider | null>(null);
   useEffect(() => {
@@ -31,5 +36,5 @@ export function useProviders(): { available: DraftingProvider[]; provider: Draft
     if (connections.chatgpt.state === "connected") available.push("openai");
   }
   const pick = [chosen, last].find((candidate): candidate is DraftingProvider => candidate !== null && available.includes(candidate));
-  return { available, provider: pick ?? available[0] ?? null, choose: setChosen };
+  return { available, provider: pick ?? available[0] ?? null, loading: connections === null && !failed, choose: setChosen };
 }

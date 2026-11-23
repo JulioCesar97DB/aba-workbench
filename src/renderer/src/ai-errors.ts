@@ -39,7 +39,7 @@ export const AI_ERROR_CODES: Record<string, AiErrorKind> = {
   // An API key not allowed to use the model: another model or the other AI.
   forbidden: "notAllowed",
   model_not_found: "notAllowed",
-  // The provider refused this request as it is: sending it again fails again.
+  // The provider refused this request. Another try can pass; if it happens again, the other AI.
   bad_request: "refused",
   // The case's documents could not be read before sending (a section, or the case map's draft).
   prepare_failed: "caseFiles",
@@ -65,4 +65,15 @@ export function aiErrorKind(code: string): AiErrorKind {
 /** The kinds whose way out is in Settings, so the message links there. */
 export function aiErrorNeedsSettings(kind: AiErrorKind): boolean {
   return kind === "signIn" || kind === "plan" || kind === "notAllowed";
+}
+
+/**
+ * Whether sending the same request again can work, so "Try again" is offered (UX-2 follow-up,
+ * in UX-3): not when the way out is in Settings (a key or plan refused, a model not allowed),
+ * the documents are too large together, or the app's own rules are missing. A request the
+ * provider refused is offered again: one refusal is often not repeated, and its sentence says
+ * what to do if it is (UX-3 review round 1, B1).
+ */
+export function aiErrorCanRetry(kind: AiErrorKind): boolean {
+  return kind === "connection" || kind === "busy" || kind === "limit" || kind === "refused" || kind === "caseFiles" || kind === "other";
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { AI_ERROR_CODES, AI_ERROR_KINDS, aiErrorKind, aiErrorNeedsSettings } from "../src/renderer/src/ai-errors.ts";
+import { AI_ERROR_CODES, AI_ERROR_KINDS, aiErrorCanRetry, aiErrorKind, aiErrorNeedsSettings } from "../src/renderer/src/ai-errors.ts";
 import { en } from "../src/renderer/src/i18n/en.ts";
 import { es } from "../src/renderer/src/i18n/es.ts";
 import { CHATGPT_ERRORS } from "../src/lib/providers/openai.ts";
@@ -79,4 +79,11 @@ test("AI errors: each kind has a sentence in both languages, and those with a wa
   // The proposal's sentence (§7), with no room for the provider's text.
   assert.equal(es.section.failed, "La IA no pudo terminar y no se guardó nada; tus versiones siguen igual.");
   assert.doesNotMatch(en.section.failed, /\{\{/);
+});
+
+test("Try again is offered only where sending the same request again can work (UX-2 follow-up)", () => {
+  const retry = AI_ERROR_KINDS.filter((kind) => aiErrorCanRetry(kind));
+  assert.deepEqual(retry.sort(), ["busy", "caseFiles", "connection", "limit", "other", "refused"]);
+  // A way out in Settings is never also a retry: one button, the one that can work.
+  for (const kind of AI_ERROR_KINDS) assert.ok(!(aiErrorCanRetry(kind) && aiErrorNeedsSettings(kind)), kind);
 });
