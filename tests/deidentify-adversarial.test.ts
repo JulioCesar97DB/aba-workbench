@@ -23,6 +23,10 @@ import {
   R6_HOUSE_KEEP,
   R6_PROBES,
   R7_CLINICAL,
+  R8_CLINICAL,
+  R8_PROBES,
+  R8_RESTORE,
+  ENGLISH_SHEET,
   R7_PROBES,
   R7_RESTORE,
   SHORT_SHEET,
@@ -126,12 +130,12 @@ test("compound names, particles and birthdays restore exactly (review round 3)",
   }
 });
 
-test("a bare label followed by a number or more label words is reported, never restored as another placeholder", () => {
+test("a bare label, with a number or more label words or not, is reported, never restored", () => {
   const engine = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY });
   engine.deidentify("Ficticio Gómez");
   const back = reidentify("CLIENT LAST NAME 2 and CLIENT LAST NAME and [CLIENT LAST NAME 3]", engine.map);
-  assert.equal(back.text, "CLIENT LAST NAME 2 and Ficticio Gómez and [CLIENT LAST NAME 3]");
-  assert.deepEqual(back.unrestored.map((u) => u.text), ["CLIENT LAST NAME 2", "[CLIENT LAST NAME 3]"]);
+  assert.equal(back.text, "CLIENT LAST NAME 2 and CLIENT LAST NAME and [CLIENT LAST NAME 3]");
+  assert.deepEqual(back.unrestored.map((u) => u.text), ["CLIENT LAST NAME 2", "CLIENT LAST NAME", "[CLIENT LAST NAME 3]"]);
 });
 
 test("review round 4: separators, the ZIP alone, OCR digits, page breaks, Spanish streets and school initials never survive", (t) => {
@@ -304,4 +308,45 @@ test("review round 7: one-digit date forms, ratios after a birthday word and bir
     const sheet = text.includes("2019") ? { ...REVIEW_SHEET, client: { ...REVIEW_SHEET.client, dateOfBirth: "2019-01-02" } } : REVIEW_SHEET;
     assert.notEqual(new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(text).text, text, text);
   }
+});
+
+test("review round 8: apostrophe surnames, kerned short names, long forms, a misplaced possessive, unit numbers and compound initials never survive", (t) => {
+  const leaks: string[] = [];
+  let strings = 0;
+  for (const probe of R8_PROBES) {
+    const engine = new Deidentifier(probe.sheet, { today: REVIEW_TODAY });
+    const result = engine.deidentify(probe.text);
+    for (const value of probe.hide) {
+      strings++;
+      if (survives(result.text, value)) leaks.push(`${probe.group}: ${JSON.stringify(probe.text)} -> ${JSON.stringify(result.text)} (${value})`);
+    }
+    assert.equal(reidentify(result.text, engine.map).text, probe.text);
+  }
+  t.diagnostic(`${R8_PROBES.length} probes, ${strings} identifying strings, ${leaks.length} slipped through`);
+  assert.deepEqual(leaks, []);
+  // Two everyday words alone ("A na" is also "n/a", "E va" is Spanish): listed for review, never passed silently.
+  for (const text of ["Item A na, then.", "E va bien."]) {
+    const result = new Deidentifier(SHORT_SHEET, { today: REVIEW_TODAY }).deidentify(text);
+    assert.equal(result.text, text);
+    assert.ok(result.possible.some((p) => p.reason === "split-name"), text);
+  }
+});
+
+test("review round 8: ordinary words hyphenated at a line end and ordinary word pairs stay as written", () => {
+  for (const line of R8_CLINICAL) {
+    for (const sheet of [SHORT_SHEET, ENGLISH_SHEET, REVIEW_SHEET]) assert.equal(new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(line).text, line, line);
+  }
+  // A compound with a word after the hyphen is the name.
+  assert.equal(new Deidentifier(SHORT_SHEET, { today: REVIEW_TODAY }).deidentify("Ana-led session; Paz-Ruiz.").text, "[CLIENT]-led session; [CLIENT LAST NAME 1]-Ruiz.");
+});
+
+test("review round 8: only placeholders in brackets are restored; a label in parentheses or without brackets stays as written", () => {
+  const engine = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY });
+  engine.deidentify("Mateo Ficticio Gómez, DOB 03/14/2020, Lucía Ficticio.");
+  for (const [written, expected] of R8_RESTORE) assert.equal(reidentify(written, engine.map).text, expected, written);
+  // Bracketed text in a source that reads as a placeholder is sent under a placeholder of its own and comes back as written.
+  const form = "Name: [CLIENT]  DOB: [DOB]  Caregiver: [Caregiver 1]  {Date}  [sic]";
+  const hidden = engine.deidentify(form);
+  assert.equal(hidden.text, "Name: [OTHER 1]  DOB: [OTHER 2]  Caregiver: [OTHER 3]  [OTHER 4]  [sic]");
+  assert.equal(reidentify(hidden.text, engine.map).text, form);
 });

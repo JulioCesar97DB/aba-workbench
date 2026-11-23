@@ -77,6 +77,7 @@ tenia tuvo hace hizo hacer va van fue ir dice dijo decir puede pueden podia quie
 come comio comer juega jugo jugar llora lloro llorar corre corrio correr sale salio salir pone puso poner toma tomo tomar mira miro
 mirar pide pidio pedir dame bien mal mejor peor grande pequeno nuevo viejo alto bajo poco rato luego antes despues ahora entonces
 mar sol luz paz fe mal ma da va ve vi vio fin ser sea son tan tal ves vas mas mes pez voz sal res red pan sin ten sur
+na
 `;
 const EVERYDAY_WORDS: ReadonlySet<string> = new Set(EVERYDAY.split(/\s+/).filter(Boolean));
 

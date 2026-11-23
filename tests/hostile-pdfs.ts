@@ -116,6 +116,24 @@ export function hyphenatedParagraph(): Uint8Array {
   return onePage(lines.map((line, i) => `BT /F1 11 Tf 72 ${700 - i * 13} Td (${line}) Tj ET`).join("\n"));
 }
 
+/**
+ * Headings kerned the way report templates track them: a negative kern inside a name makes PDF.js
+ * put a space there ("Client: T eo Ficticio", "Mother: A na Paz"). Then a paragraph hyphenated at
+ * line ends inside ordinary words that start with a short given name ("Ana-", "eva-").
+ */
+export function kernedHeadings(): Uint8Array {
+  const body = [
+    "BT /F1 18 Tf 72 720 Td [(Client: T) -180 (eo Ficticio)] TJ ET",
+    "BT /F1 18 Tf 72 690 Td [(Mother: A) -180 (na Paz)] TJ ET",
+    "BT /F1 18 Tf 72 660 Td [(Client: T) -350 (eo Ficticio)] TJ ET",
+    "BT /F1 18 Tf 72 630 Td [(AV) -180 (A) -180 (T) -180 (eo)] TJ ET",
+    "BT /F1 11 Tf 72 590 Td (Services: Applied Behavior Ana-) Tj ET",
+    "BT /F1 11 Tf 72 577 Td (lysis. The annual re-eva-) Tj ET",
+    "BT /F1 11 Tf 72 564 Td (luation is due in May.) Tj ET",
+  ];
+  return onePage(body.join("\n"));
+}
+
 /** An intake form with one box per character, 18 points apart, as insurance and intake forms draw them. */
 export function boxedForm(): Uint8Array {
   const rows: Array<[string, string]> = [["Date of birth", "03142020"], ["Phone", "3055550142"], ["Medicaid ID", "FL123456789"], ["ZIP", "33135"]];

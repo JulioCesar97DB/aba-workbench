@@ -5,8 +5,8 @@ import { test } from "node:test";
 import { Deidentifier, type ClientSheet } from "../src/main/deidentify/index.ts";
 import { DEFAULT_LIMITS, extractPdfText } from "../src/main/pdf-text/extract.ts";
 import { pdfjsReader } from "../src/main/pdf-text/pdfjs-reader.ts";
-import { REVIEW_SHEET, REVIEW_TODAY } from "./deidentify-adversarial.ts";
-import { boxedForm, deepNesting, hyphenatedParagraph, manyPages, pagesLoop, selfDrawingForm, spacedNames, textBomb, whitespaceBomb } from "./hostile-pdfs.ts";
+import { REVIEW_SHEET, REVIEW_TODAY, SHORT_SHEET } from "./deidentify-adversarial.ts";
+import { boxedForm, deepNesting, hyphenatedParagraph, kernedHeadings, manyPages, pagesLoop, selfDrawingForm, spacedNames, textBomb, whitespaceBomb } from "./hostile-pdfs.ts";
 
 /*
  * The real reader (PDF.js) on the invented fixture PDFs: the score reports rendered from
@@ -160,6 +160,20 @@ test("hyphenated PDF paragraph: names, the school, the city and the date of birt
   const plain = hidden.replace(/\[[A-Z0-9 ]+\]/gu, " ").toLowerCase().replace(/[-\s]/gu, "");
   for (const value of ["lucia", "ficticio", "gomez", "valeria", "marti", "miami", "march14"]) assert.ok(!plain.includes(value), `${value} in ${hidden}`);
   assert.ok(hidden.includes("six years old"), hidden);
+});
+
+test("kerned PDF headings: a short name split by a kern never survives; ordinary words hyphenated at a line end stay", async () => {
+  const result = await extractPdfText(kernedHeadings(), pdfjsReader);
+  assert.equal(result.status, "text");
+  if (result.status !== "text") return;
+  // What PDF.js gives: the kern read as a space inside the name.
+  assert.ok(result.text.includes("T eo Ficticio") && result.text.includes("A na Paz"), result.text);
+  const main = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY }).deidentify(result.text);
+  assert.doesNotMatch(main.text, /T eo|Ficticio/u, main.text);
+  const short = new Deidentifier(SHORT_SHEET, { today: REVIEW_TODAY }).deidentify(result.text);
+  assert.doesNotMatch(short.text, /A na|Paz/u, short.text);
+  // "Ana-⏎lysis" and "re-eva-⏎luation" are words, not the client or her mother.
+  assert.ok(short.text.includes("Applied Behavior Ana-") && short.text.includes("re-eva-"), short.text);
 });
 
 test("boxed PDF form: a date of birth, a phone, a Medicaid ID and a ZIP drawn one character per box never survive", async () => {

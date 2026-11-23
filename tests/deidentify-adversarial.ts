@@ -275,14 +275,19 @@ export const REIDENTIFY_CASES: Array<[string, string, boolean]> = [
   ["[CLIENT]'s and [CLIENT’S] and [CLIENT'S]", "Mateo's and Mateo’s and Mateo's", false],
   ["[CAREGIVER_1] [CAREGIVER-1] [CAREGIVER1] [caregiver 1]", "Lucía Lucía Lucía Lucía", false],
   ["{CLIENT} <CLIENT> [[CLIENT]] \\[CLIENT\\]", "Mateo Mateo Mateo Mateo", false],
-  ["(CLIENT) and (client)", "Mateo and (client)", false],
+  // Round 8: only a placeholder in brackets is restored. Parentheses, a missing bracket or none: reported, left as written.
+  ["(CLIENT) and (client)", "(CLIENT) and (client)", true],
   ["[CLIENT and CAREGIVER 1]", "[CLIENT and CAREGIVER 1]", true],
-  ["[CLIENT went home", "Mateo went home", false],
-  ["went home CLIENT]", "went home Mateo", false],
+  ["[CLIENT went home", "[CLIENT went home", true],
+  ["went home CLIENT]", "went home CLIENT]", true],
   ["**[CLIENT]** and *[CAREGIVER 1]*", "**Mateo** and *Lucía*", false],
-  ["CAREGIVER 1 FULL NAME signed", "Lucía Ficticio signed", false],
+  ["CAREGIVER 1 FULL NAME signed", "CAREGIVER 1 FULL NAME signed", true],
   ["[CLIENT INITIALS].", "M.F.", false],
   ["[DOB]", "03/14/2020", false],
+  // Round 8 H1: the abbreviations in ordinary text stay as written.
+  ["Date of birth (DOB): [DOB].", "Date of birth (DOB): 03/14/2020.", false],
+  ["(DOB) unknown for sibling", "(DOB) unknown for sibling", false],
+  ["Name of client (CLIENT): [CLIENT]", "Name of client (CLIENT): Mateo", true],
   ["See [the notes](notes.md) [sic]", "See [the notes](notes.md) [sic]", false],
 ];
 
@@ -429,4 +434,54 @@ export const R7_CLINICAL: Array<[string, string]> = [
   ["2012-08-10", "On his birthday he scored 8/10 on mands and 3/14 on tacts."],
   ["2014-06-18", "Born premature; Apgar 7/9; birth weight 6 lb 14 oz"],
   ["2020-03-14", "Born premature, 3/14 Apgar"],
+];
+
+// ---------------------------------------------------------------- review round 8
+
+/** Round 8's English sheet: an apostrophe surname, a hyphenated given name, a short first name, a unit number. */
+export const ENGLISH_SHEET: ClientSheet = {
+  client: { firstName: "Liam", lastName: "O'Neill-Prueba", dateOfBirth: "2017-12-01" },
+  caregivers: [
+    { firstName: "Mary-Kate", lastName: "Smithers", relation: "mother" },
+    { firstName: "Joe", lastName: "Ray", relation: "father" },
+  ],
+  schools: ["Coral Reef Montessori"],
+  addresses: ["2200 Brickell Ave, Unit 1405, Miami, FL 33131"],
+};
+
+/** Round 8's sheet of apostrophe surnames. */
+export const APOSTROPHE_SHEET: ClientSheet = {
+  client: { firstName: "Liam", lastName: "O'Neill", dateOfBirth: "2017-12-01" },
+  caregivers: [{ firstName: "Rosa", lastName: "D'Angelo" }, { firstName: "Ty", lastName: "McCoy" }],
+};
+
+/** B1, B2, M1 to M4: the review's inputs, each on its sheet. */
+export const R8_PROBES: Array<Probe & { sheet: ClientSheet }> = [
+  { sheet: APOSTROPHE_SHEET, group: "B1 apostrophe", text: "ONEILL, LIAM. Liam ONeill; Oneill; O Neill; O-Neill.", hide: ["ONEILL", "ONeill", "Oneill", "O Neill", "O-Neill", "Liam"] },
+  { sheet: APOSTROPHE_SHEET, group: "B1 apostrophe", text: "DANGELO, D Angelo, Dangelo, DAngelo, D-Angelo.", hide: ["DANGELO", "D Angelo", "Dangelo", "DAngelo", "D-Angelo"] },
+  { sheet: ENGLISH_SHEET, group: "B1 apostrophe", text: "LIAM ONEILL PRUEBA was seen.", hide: ["LIAM", "ONEILL", "PRUEBA"] },
+  { sheet: REVIEW_SHEET, group: "B2 kerned", text: "Client: T eo Ficticio", hide: ["T eo", "Ficticio"] },
+  { sheet: SHORT_SHEET, group: "B2 kerned", text: "Mother: A na Paz. T eo, L uz, Pa z, A-ni. E va Gil came.", hide: ["A na", "L uz", "Pa z", "A-ni", "E va", "Paz", "Gil"] },
+  { sheet: ENGLISH_SHEET, group: "M1 long forms", text: "Joseph Ray and Joey.", hide: ["Joseph", "Joey", "Ray"] },
+  { sheet: ENGLISH_SHEET, group: "M2 possessive", text: "Smither's car.", hide: ["Smither"] },
+  { sheet: ENGLISH_SHEET, group: "M3 unit", text: "Unit 1405, #1405, apartment 1405, Apt. 1405.", hide: ["1405"] },
+  { sheet: ENGLISH_SHEET, group: "M4 initials", text: "MK, M.K. and M. K. signed.", hide: ["MK", "M.K.", "M. K."] },
+];
+
+/** H2 and what must stay: ordinary words hyphenated at a line end that start with a short sheet name, and ordinary pairs of words. */
+export const R8_CLINICAL: string[] = [
+  "Applied Behavior Ana-\nlysis services.",
+  "Re-eva-\nluation due.",
+  "The eva-\nluation and ana-\nlysis follow.",
+  "Ana-lysis and Eva-luation in one line.",
+  "It is a test. No a todos. Is a dog. An apple.",
+  "Clinic suite 2200 on another floor.",
+];
+
+/** H1: what the model may write around the placeholders, on the main sheet. */
+export const R8_RESTORE: Array<[string, string]> = [
+  ["Date of birth (DOB): [DOB].", "Date of birth (DOB): 03/14/2020."],
+  ["(DOB) unknown for sibling.", "(DOB) unknown for sibling."],
+  ["Name of client (CLIENT): [CLIENT].", "Name of client (CLIENT): Mateo."],
+  ["The (CLIENT) form; CAREGIVER 1 heading.", "The (CLIENT) form; CAREGIVER 1 heading."],
 ];

@@ -55,3 +55,42 @@ export function nicknamePlaceholder(group: PersonGroup, index: number, nickname:
 
 /** Every word a placeholder can start with: reidentify reports an unknown placeholder that starts with one. */
 export const PLACEHOLDER_WORDS: readonly string[] = [...Object.values(GROUP_LABELS), ...Object.values(KIND_LABELS), "DOB"];
+
+/** "Caregiver_1", "caregiver-1" and "CAREGIVER1" all read "CAREGIVER 1". */
+export function labelKey(label: string): string {
+  return label
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toUpperCase()
+    .replace(/(\p{L})(\p{N})/gu, "$1 $2")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+const OPEN = "(?:\\\\?\\[){1,2}|\\{{1,2}|<|\u{3010}|\u{00AB}";
+const CLOSE = "(?:\\\\?\\]){1,2}|\\}{1,2}|>|\u{3011}|\u{00BB}";
+/** Any bracketed stretch of up to 60 characters on one line, with no other bracket inside: what reidentify reads as a placeholder. */
+export const BRACKETED = new RegExp(`(?:${OPEN})([^\\[\\]{}<>\\n\\u{3010}\\u{3011}\\u{00AB}\\u{00BB}]{1,60}?)(?:${CLOSE})`, "gu");
+
+/**
+ * Whether bracketed text in a source would be read back as a placeholder ("[DOB]", "[Client]",
+ * "{Date}", "[CAREGIVER 1]"): its first word is a placeholder word. The de-identifier sends such
+ * text under a placeholder of its own ([OTHER n]), so the only placeholders in what the model
+ * sees, and so in what it writes, are the ones issued.
+ */
+export function looksLikePlaceholder(inner: string): boolean {
+  const key = labelKey(inner.replace(/[ \t]*['\u{2019}][sS]$/u, ""));
+  return key !== "" && PLACEHOLDER_WORDS.includes(key.split(" ")[0]);
+}
+
+/**
+ * What the model is told about placeholders, in the request's instructions. It matches what
+ * reidentify restores: a placeholder in square brackets (another case, separator or bracket
+ * style is still read), never one in parentheses or without brackets.
+ */
+export const PLACEHOLDER_INSTRUCTIONS = [
+  "The sources are de-identified: each identifying detail is replaced by a placeholder, a label in capitals inside square brackets, such as [CLIENT], [CLIENT FULL NAME], [CAREGIVER 1], [DOB] or [SCHOOL 1].",
+  "Wherever you mention one of these details, write its placeholder exactly as it appears in the sources, square brackets included: do not change its words, number or case, and do not invent new ones.",
+  "Never write a placeholder in parentheses or without its square brackets: only a placeholder in square brackets is replaced by the real detail; anything else is shown as written.",
+  "[OTHER n] stands for bracketed text in the sources; keep it as it is.",
+].join(" ");

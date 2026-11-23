@@ -85,9 +85,19 @@ export function peopleOf(sheet: ClientSheet): Person[] {
       for (const word of given) if (!PARTICLES.has(word)) addRole(roles, word, "given");
       // English and Spanish short forms of a given name ("Lucy" for Lucía, "Andy" for Andrés, "Pepe" for José), and "Mª" or "Ma." for María.
       for (const word of given) for (const short of HYPOCORISTICS[word] ?? []) if (!roles.has(short)) addRole(roles, short, "given");
+      // The other way: a sheet short form also hides its long forms and their other short forms ("Joe": "Joseph", "José", "Joey").
+      for (const word of given) {
+        for (const long of LONG_FORMS.get(word) ?? []) {
+          if (!roles.has(long)) addRole(roles, long, "given");
+          for (const short of HYPOCORISTICS[long] ?? []) if (!roles.has(short) && !isCommonWordName(short)) addRole(roles, short, "given");
+        }
+      }
       // Spanish diminutives of each given name and nickname: "Mateíto", "Teíto", "Carmencita", "Valerita".
       for (const word of given) for (const d of diminutives(word)) if (!roles.has(d) && !isCommonWordName(d)) addRole(roles, d, "given");
       for (const word of surnames) addRole(roles, word, PARTICLES.has(word) ? "particle" : "surname");
+      // A name word with an apostrophe, as forms and EMR exports write it without one: "O'Neill" as "ONEILL", "Oneill"; "D'Angelo" as "DANGELO".
+      // (Spaced or hyphenated, "O Neill", "D-Angelo", it is found as a broken name word.)
+      for (const [word, set] of [...roles]) if (word.includes("'")) for (const role of set) addRole(roles, word.replace(/'/gu, ""), role);
       // A surname written joined to its particles: "Delrío", "Delafuente".
       surnames.forEach((word, k) => {
         if (PARTICLES.has(word)) return;
@@ -135,7 +145,21 @@ const HYPOCORISTICS: Record<string, string[]> = {
   victoria: ["vicky", "tori"], catalina: ["cata", "cathy", "kate"], camila: ["cami", "milly"], valentina: ["vale", "valen", "tina"],
   ximena: ["xime"], jimena: ["jime"], lucas: ["luke"], diego: ["dieguito"], josefina: ["pepa", "fina", "josie"], margarita: ["maggie", "marga", "rita"],
   ana: ["anita", "annie"], carmen: ["carmencita", "mencha"], beatriz: ["bea", "betty"], cristina: ["cris", "tina"], ricardo: ["ricky", "rick"],
+  // English long forms, so a sheet short form finds them too ("Joe" for "Joseph").
+  joseph: ["joe", "joey"], josephine: ["josie", "jo"], michael: ["mike", "mikey", "mick"], william: ["will", "bill", "billy", "liam", "willy"],
+  robert: ["rob", "bob", "bobby", "robbie"], richard: ["rick", "ricky"], james: ["jim", "jimmy", "jamie"], john: ["johnny", "jack"],
+  thomas: ["tom", "tommy"], christopher: ["chris"], matthew: ["matt", "matty"], nicholas: ["nick", "nicky"], anthony: ["tony"],
+  elizabeth: ["liz", "lizzie", "beth", "betty", "eliza"], katherine: ["kate", "katie", "kathy", "kat"], catherine: ["cathy", "kate", "katie"],
+  margaret: ["maggie", "meg", "peggy"], jennifer: ["jen", "jenny"], rebecca: ["becky", "becca"], samantha: ["sam", "sammy"], alexander: ["alex", "xander"],
+  edward: ["ed", "eddie", "ted", "teddy"], timothy: ["tim", "timmy"],
 };
+
+/** Each short form's long forms: "joe" → "jose", "joseph". */
+const LONG_FORMS: ReadonlyMap<string, string[]> = (() => {
+  const out = new Map<string, string[]>();
+  for (const [long, shorts] of Object.entries(HYPOCORISTICS)) for (const short of shorts) out.set(short, [...(out.get(short) ?? []), long]);
+  return out;
+})();
 
 /** -ito/-ita, -cito/-cita, -illo/-illa forms of a given name, folded. */
 function diminutives(word: string): string[] {
@@ -189,6 +213,9 @@ function pieceAt(text: string, words: Word[], i: number, person: Person): Piece 
   let base = word.text;
   let end = word.end;
   if (base.endsWith("'s") && !person.roles.has(base)) {
+    // "Smither's" for "Smithers": the possessive written over the name's own last s. The whole word is the name.
+    const own = bestRole(person.roles.get(`${base.slice(0, -2)}s`));
+    if (own && own !== "particle" && base.length > 5) return { last: i, start: word.start, end, role: own, word: `${base.slice(0, -2)}s` };
     base = base.slice(0, -2);
     end -= 2;
   }
@@ -317,7 +344,8 @@ export function findNames(folded: Folded, people: Person[]): NameMatch[] {
 /** Which of the person's surnames `words` uses, 1-based ("2" for "de la Fuente" of "Ejemplar de la Fuente"), or "" for all. */
 function surnamePart(person: Person, words: string): string {
   const used = words.split(" ").filter((w) => !PARTICLES.has(w));
-  const indices = used.map((w) => person.surnames.indexOf(w) + 1).filter((n) => n > 0);
+  const plain = person.surnames.map((w) => w.replace(/'/gu, ""));
+  const indices = used.map((w) => plain.indexOf(w.replace(/'/gu, "")) + 1).filter((n) => n > 0);
   if (indices.length === 0 || indices.length === person.surnames.length) return "";
   return [...new Set(indices)].sort((a, b) => a - b).join(" ");
 }
@@ -457,7 +485,76 @@ export function findBrokenNames(folded: Folded, original: string, people: Person
       }
     }
   }
+  out.push(...findSplitShortNames(folded, original, people), ...findCompoundInitials(folded, original, people));
   out.push(...findElongatedNames(folded, people), ...findConcatenatedNames(folded, people), ...findSpelledConcatenations(folded, people));
+  return out;
+}
+
+/** A label right before a value on its line: "Client: ", "Mother: ", "Examinee name: ". */
+const LABEL_BEFORE = /(?:^|\n)[ \t]*\p{L}[\p{L} .'-]{0,30}:[ \t]*$/u;
+
+/**
+ * A three-letter name word split once inside by a space or a hyphen, as a kerned PDF heading
+ * gives it ("Client: T eo Ficticio", "Mother: A na Paz") or typing does ("Pa z", "A-ni"). Hidden
+ * when a piece is not an everyday word, next to another name word of the same person, or after
+ * a label; two everyday words ("E va", "An a") are listed for review when the first is a lone
+ * capital letter, and otherwise left as ordinary text ("is a", "no a").
+ */
+function findSplitShortNames(folded: Folded, original: string, people: Person[]): PartMatch[] {
+  const out: PartMatch[] = [];
+  const text = folded.text;
+  const seen = new Set<string>();
+  for (const person of people) {
+    for (const { word, role } of person.longWords) {
+      if (word.length !== 3 || seen.has(`${person.priority}:${word}`)) continue;
+      seen.add(`${person.priority}:${word}`);
+      const letters = [...word];
+      if (letters.length !== 3 || !letters.every((ch) => /\p{L}/u.test(ch))) continue;
+      for (const k of [1, 2]) {
+        const left = letters.slice(0, k).join("");
+        const right = letters.slice(k).join("");
+        const regex = new RegExp(`(?<![\\p{L}\\p{N}'])${left}(?:[ \\t]|[ \\t]?-[ \\t]?)${right}(?![\\p{L}\\p{N}])`, "gu");
+        for (const m of text.matchAll(regex)) {
+          const start = m.index;
+          const end = start + m[0].length;
+          const capital = /\p{Lu}/u.test(original[folded.from[start]] ?? "");
+          if (isCommonWordName(word) && !capital) continue;
+          // The last piece starts a hyphenated word ("A na-⏎tural", "T eo-⏎retical"): ordinary text.
+          if (/^-[ \t]*(?:\r?\n[ \t]*)?\p{L}/u.test(text.slice(end, end + 6))) continue;
+          const next = /^[ \t]*,?[ \t]*(\p{L}+(?:'\p{L}+)*)/u.exec(text.slice(end, end + 40))?.[1];
+          const prev = /(\p{L}+(?:'\p{L}+)*)[ \t]*,?[ \t]*$/u.exec(text.slice(Math.max(0, start - 40), start))?.[1];
+          const beside = [next, prev].some((w) => w !== undefined && w !== word && person.roles.has(w) && !person.roles.get(w)!.has("particle"));
+          const labelled = LABEL_BEFORE.test(text.slice(Math.max(0, start - 40), start));
+          const everyday = isEverydayWord(left) && isEverydayWord(right);
+          const part = { person, role, surnamePart: role === "surname" ? surnamePart(person, word) : "", word, start, end, joined: true, spaced: true };
+          // Lowercase ("a ni", "t eo"): a name is capitalized; listed for review unless both pieces are everyday words.
+          if (beside || labelled || (!everyday && capital)) out.push(part);
+          else if ((left.length === 1 && capital) || !everyday) out.push({ ...part, uncertain: true });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The initials of a given name of two words, in capitals, with or without dots ("MK", "M.K.",
+ * "M. K." for "Mary-Kate", "MJ" for "María José"): hidden, restored as written.
+ */
+function findCompoundInitials(folded: Folded, original: string, people: Person[]): PartMatch[] {
+  const out: PartMatch[] = [];
+  for (const person of people) {
+    const given = parts(person.sheet.firstName).filter((w) => !PARTICLES.has(w));
+    if (given.length !== 2) continue;
+    const [a, b] = given.map((w) => w[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const regex = new RegExp(`(?<![\\p{L}\\p{N}.])${a}(?:\\.[ \\t]?)?${b}\\.?(?![\\p{L}\\p{N}])`, "gu");
+    for (const m of folded.text.matchAll(regex)) {
+      const written = original.slice(folded.from[m.index], folded.to[m.index + m[0].length - 1]);
+      if (written.replace(/[^\p{L}]/gu, "") !== written.replace(/[^\p{L}]/gu, "").toUpperCase()) continue;
+      // "M.K" with no last dot before a letter-dot ("M.K.S.") is part of longer initials: left.
+      out.push({ person, role: "given", surnamePart: "", word: given.join(" "), start: m.index, end: m.index + m[0].length, joined: true, spaced: false });
+    }
+  }
   return out;
 }
 

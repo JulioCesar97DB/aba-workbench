@@ -5,18 +5,21 @@
  *   [CLIENT'S], [CLIENT]'s      a possessive inside or after the brackets (people only)
  *   [CAREGIVER_1], [CAREGIVER1] another separator, or none
  *   [[CLIENT]], {CLIENT}, <CLIENT>, \[CLIENT\]  doubled, other or escaped brackets
- *   (CLIENT)                    parentheses, in capitals only (so "(client)" in prose is left alone)
- *   [CLIENT, CLIENT]            one bracket missing, when no more label text follows before a bracket
- *   CAREGIVER 1                 no brackets, in capitals, when the label has a number or several words
+ * Only a placeholder in brackets is restored. Ordinary text can hold a label in parentheses or
+ * without brackets ("Date of birth (DOB)", "Name of client (CLIENT)", a form's "CAREGIVER 1"
+ * heading), so "(CLIENT)", "CAREGIVER 1" and a placeholder with one bracket missing ("[CLIENT went
+ * home") are reported, never turned into a value. Bracketed text in a source that reads as a
+ * placeholder ("[DOB]" in a blank form) is sent as [OTHER n] by the de-identifier, so every
+ * placeholder in brackets the model can echo is one that was issued.
  * It never restores part of a bracket: "[CLIENT NAME]", "[CLIENT 1]" or "[DOB MONTH AND
  * YEAR]" when only [CLIENT] and [DOB] were sent stay as they are and are reported.
  * Whatever looks like a placeholder and cannot be restored is reported, never dropped:
- * an unknown one ([CAREGIVER 3] when there are two, [INSERT DATE], [Client's name]) and
- * a lone capitalized label with no brackets (CLIENT), which could be a heading. "DOB"
- * alone is left as it is: it is how forms label a date of birth.
+ * an unknown one ([CAREGIVER 3] when there are two, [INSERT DATE], [Client's name]), a
+ * capitalized label with no brackets or in parentheses (CLIENT, (CAREGIVER 1)), and one with a
+ * bracket missing. "DOB" and "(DOB)" alone are left as they are: it is how forms label a date of birth.
  */
 import type { RestoreMap } from "./deidentify.ts";
-import { PLACEHOLDER_WORDS } from "./placeholders.ts";
+import { BRACKETED, labelKey, PLACEHOLDER_WORDS } from "./placeholders.ts";
 import { Spans } from "./spans.ts";
 
 export interface Restored {
@@ -30,7 +33,8 @@ export interface Unrestored {
   text: string;
   start: number;
   end: number;
-  reason: "unknown-placeholder" | "no-brackets";
+  /** unknown-placeholder: in brackets, but not one that was sent; no-brackets: a label sent, written in parentheses or bare; missing-bracket: one bracket of it left out. */
+  reason: "unknown-placeholder" | "no-brackets" | "missing-bracket";
 }
 
 export interface ReidentifyResult {
@@ -39,26 +43,11 @@ export interface ReidentifyResult {
   unrestored: Unrestored[];
 }
 
-/** "Caregiver_1", "caregiver-1" and "CAREGIVER1" all read "CAREGIVER 1". */
-function labelKey(label: string): string {
-  return label
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toUpperCase()
-    .replace(/(\p{L})(\p{N})/gu, "$1 $2")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-}
-
 function escape(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 const PERSON_KINDS = new Set(["client", "caregiver", "family", "professional", "unlisted-name"]);
-const OPEN = "(?:\\\\?\\[){1,2}|\\{{1,2}|<|\u{3010}|\u{00AB}";
-const CLOSE = "(?:\\\\?\\]){1,2}|\\}{1,2}|>|\u{3011}|\u{00BB}";
-/** Any bracketed stretch of up to 60 characters on one line, with no other bracket inside. */
-const BRACKETED = new RegExp(`(?:${OPEN})([^\\[\\]{}<>\\n\\u{3010}\\u{3011}\\u{00AB}\\u{00BB}]{1,60}?)(?:${CLOSE})`, "gu");
 const POSSESSIVE = /[ \t]*['\u{2019}][sS]$/u;
 /** More label text, then a closing bracket: what follows "[CLIENT" in "[CLIENT NAME]". */
 const MORE_LABEL_THEN_CLOSE = "(?![\\p{L}\\p{N} '\\u{2019}_\\-#.]*\\\\?[\\]}>\\u{3011}\\u{00BB}])";
@@ -115,17 +104,14 @@ export function reidentify(input: string, map: RestoreMap): ReidentifyResult {
     const known = entries.map(flexible).join("|");
     // A known label followed by a number or more label words ("CLIENT LAST NAME 2" when only [CLIENT LAST NAME] was sent) is another placeholder: never restored.
     const NOT_MORE = "(?![ \\t_\\-#]*\\d)(?![ \\t_\\-]+(?:name|last|full|first|initials|nickname|month|day|year)\\b)";
-    const add = (start: number, end: number, label: string) => {
-      const entry = byKey.get(labelKey(label));
-      if (entry && free(start, end)) restore(start, end, entry.value, entry.placeholder, false);
+    // 2. One bracket missing ("[CLIENT went home", "went home CLIENT]"): reported, never restored. Only a placeholder in its brackets is restored.
+    const reportFree = (start: number, end: number, reason: Unrestored["reason"]) => {
+      if (free(start, end)) report(start, end, reason);
     };
-    // 2. One bracket missing: "[CLIENT" or "CLIENT]", never when more label text runs to a bracket ("[CLIENT NAME]").
-    for (const m of input.matchAll(new RegExp(`\\\\?\\[[ \\t]*(${known})(?![\\p{L}\\p{N}])${NOT_MORE}${MORE_LABEL_THEN_CLOSE}`, "giu"))) add(m.index, m.index + m[0].length, m[1]);
+    for (const m of input.matchAll(new RegExp(`\\\\?\\[[ \\t]*(${known})(?![\\p{L}\\p{N}])${NOT_MORE}${MORE_LABEL_THEN_CLOSE}`, "giu"))) reportFree(m.index, m.index + m[0].length, "missing-bracket");
     for (const m of input.matchAll(new RegExp(`(?<!\\[[\\p{L}\\p{N} '\\u{2019}_\\-#.]*)(?<![\\p{L}\\p{N}])(${known})[ \\t]*\\\\?\\]`, "giu"))) {
-      add(m.index, m.index + m[0].length, m[1]);
+      reportFree(m.index, m.index + m[0].length, "missing-bracket");
     }
-    // 3. Parentheses, capitals only.
-    for (const m of input.matchAll(new RegExp(`\\((${known})\\)`, "gu"))) add(m.index, m.index + m[0].length, m[1]);
     // A bare label followed by a number or more label words: reported.
     for (const m of input.matchAll(new RegExp(`(?<![\\p{L}\\p{N}\\[])(?:${known})(?:[ \\t_\\-#]*\\d+|[ \\t_\\-]+(?:NAME|LAST|FULL|FIRST|INITIALS|NICKNAME|MONTH|DAY|YEAR)\\b)(?![\\p{L}\\p{N}\\]])`, "gu"))) {
       const start = m.index;
@@ -134,15 +120,13 @@ export function reidentify(input: string, map: RestoreMap): ReidentifyResult {
       // "CLIENT LAST" of "CLIENT LAST NAME" is not another placeholder: only one that no known label begins with.
       if (free(start, end) && !byKey.has(key) && !entries.some((k) => k.startsWith(`${key} `))) report(start, end, "unknown-placeholder");
     }
-    // 4. No brackets, capitals only: restored when unmistakable (a number or several words), reported otherwise.
+    // 3. No brackets, or parentheses, capitals only: reported, never restored ("CAREGIVER 1", "(CLIENT)"). Ordinary text can hold
+    // these ("Date of birth (DOB)", a form's "CAREGIVER 1" heading). "DOB" alone is how forms label a date of birth: left as it is.
     for (const m of input.matchAll(new RegExp(`(?<![\\p{L}\\p{N}\\[])(${known})(?![\\p{L}\\p{N}\\]])${NOT_MORE}`, "gu"))) {
       const start = m.index;
       const end = start + m[0].length;
-      if (!free(start, end)) continue;
-      const key = labelKey(m[1]);
-      if (/\s|\d/u.test(key)) add(start, end, m[1]);
-      // "DOB" alone is how forms label a date of birth, not a lost placeholder.
-      else if (key !== "DOB") report(start, end, "no-brackets");
+      if (!free(start, end) || labelKey(m[1]) === "DOB") continue;
+      report(start, end, "no-brackets");
     }
   }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { foldString } from "../src/main/deidentify/fold.ts";
 import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { Deidentifier, reidentify } from "../src/main/deidentify/index.ts";
 import { REVIEW_SHEET, REVIEW_TODAY } from "./deidentify-adversarial.ts";
 
@@ -402,6 +403,10 @@ const SCORE_LINES: string[] = (() => {
     "3 of 14 targets (2020 curriculum); Item 3.14 (2020 manual)",
     "Probe dates: 3 14, 4 2, 5 6 (all 2026)",
     "Hours: 3, 14 and 20 per week in 2020, 2021 and 2022",
+    // Round 8: ordinary words hyphenated at a line end, abbreviations, a unit word.
+    "Applied Behavior Ana-\nlysis services; the annual re-eva-\nluation is due.",
+    "Date of birth (DOB) and client (CLIENT) as the form abbreviates them.",
+    "Clinic suite 2200; unit 4 of the curriculum.",
   );
   // Trial data and rates: ratios, never a birthday.
   lines.push("Rates: 3 per hour, 1.5 per minute, 12 of 20 opportunities, 8/10, 9/10, 7/10, 6/10");
@@ -667,5 +672,114 @@ test("generated: a name or a value broken by a line break at every position rest
     }
   }
   t.diagnostic(`${count} line-broken names and values, ${failures.length} not restored exactly`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+// ---------------------------------------------------------------- review round 8: apostrophes, kerned short names, hyphenated words, restore
+
+test("generated: surnames with an apostrophe written without it, spaced, hyphenated or in capitals never survive", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  for (const surname of ["O'Neill", "D'Angelo", "O'Brien", "D'Souza", "Dell'Acqua", "N'Diaye", "O’Connor"]) {
+    const sheet = { client: { firstName: "Liam", lastName: surname, dateOfBirth: "2017-12-01" } };
+    const [head, tail] = surname.split(/['’]/u);
+    const forms = [head + tail, (head + tail).toUpperCase(), head + tail.toLowerCase(), `${head} ${tail}`, `${head}-${tail}`, `${head.toUpperCase()} ${tail.toUpperCase()}`, `${head}’${tail}`, `${head}'${tail}`];
+    for (const form of forms) {
+      for (const template of ["Seen with {X} today.", "{X}, LIAM", "LIAM {X}", "Mr. {X} called.", "{X}'s mother called."]) {
+        const text = template.replace("{X}", form);
+        const engine = new Deidentifier(sheet, { today: REVIEW_TODAY });
+        const result = engine.deidentify(text);
+        count++;
+        if (residue(result.text).includes(foldString(tail)) || reidentify(result.text, engine.map).text !== text) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
+      }
+    }
+  }
+  t.diagnostic(`${count} apostrophe-surname forms, ${failures.length} survived or did not restore exactly`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+/** Ordinary lines: none may change because a short given name is on the sheet. */
+const ORDINARY: string[] = [
+  "It is a test. No a todos. Is a dog. An apple. To a degree. So a plan. Do a probe.",
+  "Le o la. Y a ni uno. Va a la casa. E va bien? Mar y sol. Item A na 3 | B 4.",
+  "A na-\ntural reinforcer; a na-\ntural setting; T eo-\nretical basis.",
+  "Applied Behavior Ana-\nlysis (ABA); ana-\nlytic methods; the eva-\nluation; re-eva-\nluation; maxi-\nmum; sam-\nple; ben-\nefit; ani-\nmal; mar-\ntes; sol-\nution.",
+  "Ana-lysis and Eva-luation in one line.",
+];
+const SHORT_NAMES = ["Ana", "Eva", "Teo", "Luz", "Paz", "Gil", "Rey", "Sol", "Mar", "Ian", "Isa", "Noa", "Leo", "Ava", "Eli", "Max", "Sam", "Ben", "Amy", "Ida", "Ani"];
+
+test("generated: a three-letter name split once by a kern or a hyphen is hidden in a heading, by its surname or after a label", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  for (const name of SHORT_NAMES) {
+    const sheet = { client: { firstName: name, lastName: "Zzyzx", dateOfBirth: "2019-06-07" } };
+    for (const k of [1, 2]) {
+      for (const mark of [" ", "-"]) {
+        for (const cased of [name, name.toUpperCase()]) {
+          const split = cased.slice(0, k) + mark + cased.slice(k);
+          for (const template of ["Client: {X}", "Client name: {X}", "{X} Zzyzx was seen.", "Report for ZZYZX, {X}"]) {
+            const text = template.replace("{X}", split);
+            const engine = new Deidentifier(sheet, { today: REVIEW_TODAY });
+            const result = engine.deidentify(text);
+            count++;
+            if (result.text.includes(split) || reidentify(result.text, engine.map).text !== text) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
+          }
+        }
+      }
+    }
+  }
+  t.diagnostic(`${count} split three-letter names, ${failures.length} survived`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test("generated: ordinary text and words hyphenated at a line end stay as written whatever short name is on the sheet", (t) => {
+  const changed: string[] = [];
+  let count = 0;
+  const fixtures = path.join(import.meta.dirname, "..", "fixtures", "pdf-text", "expected");
+  const reports = readdirSync(fixtures).flatMap((f) => readFileSync(path.join(fixtures, f), "utf8").split("\n")).filter((l) => l.trim());
+  for (const name of SHORT_NAMES) {
+    const sheet = { client: { firstName: name, lastName: "Zzyzx", dateOfBirth: "2019-06-07" } };
+    const control = { client: { firstName: "Qqqx", lastName: "Zzyzx", dateOfBirth: "2019-06-07" } };
+    for (const line of [...ORDINARY, ...reports]) {
+      count++;
+      const a = new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(line);
+      const b = new Deidentifier(control, { today: REVIEW_TODAY }).deidentify(line);
+      if (a.text === b.text) continue;
+      // A real mention of the name, or of a long form of it ("Mateo" for "Teo"), is not over-hiding.
+      const words = new Set(foldString(line).match(/\p{L}+/gu) ?? []);
+      const longForms: Record<string, string[]> = { teo: ["mateo"], sam: ["samuel", "samantha"], ben: ["benjamin"], max: ["maximiliano"], ani: [], eli: [] };
+      if (words.has(foldString(name)) || (longForms[foldString(name)] ?? []).some((w) => words.has(w))) continue;
+      changed.push(`${name}: ${JSON.stringify(line)} -> ${JSON.stringify(a.text)}`);
+    }
+  }
+  t.diagnostic(`${SHORT_NAMES.length} short names x ${ORDINARY.length + reports.length} ordinary and report lines (${count}), ${changed.length} changed by the name`);
+  assert.deepEqual(changed.slice(0, 20), []);
+});
+
+test("generated: only placeholders in brackets are restored; parentheses, a missing bracket and no brackets never become a value", (t) => {
+  const engine = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY });
+  const sent = engine.deidentify("Mateo Ficticio Gómez (Teo), DOB 03/14/2020, mother Lucía Ficticio, father Andrés, school José Martí Elementary, phone (305) 555-0142.");
+  const placeholders = [...new Set(sent.text.match(PLACEHOLDER) ?? [])];
+  const failures: string[] = [];
+  let count = 0;
+  for (const placeholder of placeholders) {
+    const label = placeholder.slice(1, -1);
+    const value = engine.map.entries.find((e) => e.placeholder === placeholder)!.value;
+    for (const written of [`(${label})`, label, `[${label}`, `${label}]`, `Date of birth (${label}):`]) {
+      count++;
+      const back = reidentify(`See ${written} here.`, engine.map);
+      if (back.text !== `See ${written} here.`) failures.push(`${written} -> ${back.text}`);
+    }
+    for (const written of [placeholder, `[${label.toLowerCase()}]`, `{${label}}`, `[[${label}]]`, `[${label.replace(/ /gu, "_")}]`]) {
+      count++;
+      if (reidentify(`See ${written} here.`, engine.map).text !== `See ${value} here.`) failures.push(`${written} not restored`);
+    }
+    // The same text in a source (a blank form): sent under a placeholder of its own, restored as written.
+    const form = `Field: ${placeholder}; also {${label}}.`;
+    const hidden = engine.deidentify(form);
+    count++;
+    if (hidden.text.includes(placeholder) || reidentify(hidden.text, engine.map).text !== form) failures.push(`source ${form} -> ${hidden.text}`);
+  }
+  t.diagnostic(`${placeholders.length} placeholders, ${count} written forms, ${failures.length} wrong`);
   assert.deepEqual(failures.slice(0, 20), []);
 });

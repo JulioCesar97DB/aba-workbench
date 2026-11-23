@@ -242,9 +242,18 @@ test("reidentify: puts back what models do to placeholders and reports what it c
   assert.equal(
     restored.text,
     "Mateo Ficticio Gómez. Mateo's mother Lucía and Lucía; Lucía said Mateo's name. Ficticio 08/03/2022 " +
-      "Lucía Ficticio Ficticio Ficticio and Lucía Lucía Ficticio. The client (client) [sic].",
+      "Lucía Ficticio (CLIENT LAST NAME 1) [CLIENT LAST NAME 1 and [CAREGIVER 1 CAREGIVER 1 FULL NAME. The client (client) [sic].",
   );
-  assert.deepEqual(restored.unrestored, []);
+  // Only placeholders in brackets are restored: parentheses, a missing bracket and no brackets are reported, left as written.
+  assert.deepEqual(
+    restored.unrestored.map((u) => [u.text, u.reason]),
+    [
+      ["CLIENT LAST NAME 1", "no-brackets"],
+      ["[CLIENT LAST NAME 1", "missing-bracket"],
+      ["[CAREGIVER 1", "missing-bracket"],
+      ["CAREGIVER 1 FULL NAME", "no-brackets"],
+    ],
+  );
   const reported = reidentify("CLIENT INFORMATION: [CLIENT] met [CAREGIVER 2] on [DATE 1]; [INSERT SCHOOL]. [Name]. See [the notes](notes.md).", map);
   assert.equal(reported.text, "CLIENT INFORMATION: Mateo met [CAREGIVER 2] on [DATE 1]; [INSERT SCHOOL]. [Name]. See [the notes](notes.md).");
   assert.deepEqual(

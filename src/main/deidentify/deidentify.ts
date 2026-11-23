@@ -14,12 +14,12 @@
  * The days part of an age ("6;8;8") is dropped, not replaced: with a test date it would
  * give the date of birth (owner's decision, 2026-11-22). It is listed in `dropped`.
  */
-import { isCommonWordName } from "./common-words.ts";
+import { isCommonWordName, isEverydayWord } from "./common-words.ts";
 import { findDates, parseIsoDate, ymdKey, type YMD } from "./dates.ts";
 import { fold, foldString, originalRange, type Folded } from "./fold.ts";
 import { findBrokenNames, findJoinedNames, findNames, findOcrNames, peopleOf, type NameForm, type Person } from "./names.ts";
 import { ADDRESS_WORDS, findAgeDays, findPatterns, phoneKey, type PatternMatch } from "./patterns.ts";
-import { birthDatePlaceholder, nicknamePlaceholder, numberedPlaceholder, personPlaceholder, type BirthDateForm, type NumberedKind } from "./placeholders.ts";
+import { birthDatePlaceholder, BRACKETED, looksLikePlaceholder, nicknamePlaceholder, numberedPlaceholder, personPlaceholder, type BirthDateForm, type NumberedKind } from "./placeholders.ts";
 import type { ClientSheet, FoundKind } from "./sheet.ts";
 import { findSequences, type SequenceValue } from "./sequences.ts";
 import { Spans } from "./spans.ts";
@@ -368,12 +368,31 @@ const COUNT_AFTER = /^[ \t]*(?:%|x\b|trials?|responses?|correct|incorrect|ensayo
 const STREET_AFTER = /^[ \t]+(?:(?:N|S|E|W|NE|NW|SE|SW|North|South|East|West)\.?(?=[ \t,]|$)|\S+[ \t]+(?:street|st|avenue|ave|av|terrace|terr|ter|road|rd|drive|dr|lane|ln|court|ct|boulevard|blvd|way|place|pl|circle|cir|highway|hwy|parkway|pkwy)\b\.?)/iu;
 
 /** Whether a house number written on its own is the house number: right after a house word or right before its street, never a count or part of a code. */
-function houseInContext(text: string, start: number, end: number): boolean {
+function houseInContext(text: string, start: number, end: number, unit = false): boolean {
   if (/[\p{L}\p{N}]/u.test(text[start - 1] ?? "") || /[\p{L}\p{N}]/u.test(text[end] ?? "")) return false;
   const after = text.slice(end, end + 40);
   if (COUNT_AFTER.test(after)) return false;
-  return HOUSE_BEFORE.test(text.slice(Math.max(0, start - 40), start)) || STREET_AFTER.test(after);
+  return HOUSE_BEFORE.test(text.slice(Math.max(0, start - 40), start)) || (unit && UNIT_BEFORE.test(text.slice(Math.max(0, start - 40), start))) || STREET_AFTER.test(after);
 }
+
+/** A hyphen, maybe a line break, and a word in lowercase after a name word: "Ana-⏎lysis". */
+const HYPHEN_TAIL = /^-[ \t]*(?:\r?\n[ \t]*)?(\p{Ll}\p{L}*)/u;
+/** Words that make a compound after a name and a hyphen: "Ana-led", "Eva-related goals". */
+const COMPOUND_TAILS = new Set(
+  `related led like based focused specific centered centred directed initiated preferred approved friendly style type shaped sized owned made chosen
+  selected driven only free oriented appropriate level aged years year time times day days prompted mediated implemented delivered`.split(/\s+/u),
+);
+/** Ordinary words of these texts that start with a short given name, hyphenated at a line end: kept without a report ("Ana-⏎lysis"). */
+const KNOWN_HYPHENATED = new Set(
+  `analysis analyses analyst analysts analytic analytical analytics analyze analyzed analyzes analyzing analisis analista analistas analizar
+  evaluation evaluations evaluate evaluated evaluates evaluating evaluator evaluators evaluative evaluacion evaluaciones evaluar evaluado evaluada
+  anatomy anatomical anaphylaxis anamnesis analog analogous analogue animal animals animated anniversary annual maximum minimum sample samples
+  benefit benefits benefited danger dangerous teoria teorico teorica teorias martes market margin marginal marking solution solutions solucion
+  soluciones solicitud solid tomorrow evident everything evening leopard leotard`.split(/\s+/u),
+);
+
+/** A unit word right before a number, or a "#" standing alone before it: "Unit 1405", "Apt. 1405", "suite #1405", "#1405". For the sheet's unit number only ("clinic suite 102" is not the house number 102). */
+const UNIT_BEFORE = /(?:(?<![\p{L}])(?:apt|apartment|apto|apartamento|unit|suite|ste)\.?[ \t]*(?:#|no\.?|n[º°]\.?)?|(?:^|[\s(,;])#)[ \t]*$/iu;
 
 /** A counting word right before a number: "Room 33135" is a room. */
 const COUNT_BEFORE = /(?<![\p{L}])(?:room|page|pages|total|code|item|items|score|scores|raw|trials?|session|cpt|claim|invoice|units?\s+of|count|n)[ \t]*[:=#]?[ \t]*$/iu;
@@ -453,6 +472,8 @@ export class Deidentifier {
   readonly #birthCounts = new Map<BirthDateForm, number>();
   /** The client's name words, folded: context for a short date of birth ("Mateo, 3 14 20"). */
   #clientNames: RegExp | null = null;
+  /** The sheet addresses' unit numbers ("1405" of "Unit 1405"): hidden after a unit word too. */
+  #unitNumbers = new Set<string>();
 
   constructor(sheet: ClientSheet, options: DeidentifyOptions = {}) {
     this.#sheet = sheet;
@@ -523,6 +544,7 @@ export class Deidentifier {
       sequence(line, "address", 3);
       // The ZIP code: whole anywhere ("33135", "FL,33135", "33135-0000"); with separators, in context only.
       const zips: string[] = address.match(/\b\d{5}\b/gu) ?? [];
+      for (const m of address.matchAll(/(?<![\p{L}])(?:apt|apartment|apto|apartamento|unit|suite|ste)\.?[ \t]*#?[ \t]*(\d{3,})|#[ \t]*(\d{3,})/giu)) this.#unitNumbers.add(m[1] ?? m[2]);
       for (const zip of zips) sequence(zip, "zip", 0, false, { short: true });
       // The house number: with separators and in context only ("4 4 7 1 SW…").
       for (const n of address.match(/\b\d{3,}\b/gu) ?? []) {
@@ -790,6 +812,17 @@ export class Deidentifier {
         candidates.push({ start, end, key, kind: "unlisted-name", source: "sheet", rank: 0, create: () => this.#numberedSlot(key, "unlisted-name", original), sharedWith: match.shared });
         continue;
       }
+      // A name word that is the first piece of an ordinary hyphenated word ("Applied Behavior Ana-⏎lysis", "eva-⏎luation"): not the name.
+      // A compound with a word after the hyphen ("Ana-led", "Eva-related") is the name.
+      const tail = match.words.length === 1 ? HYPHEN_TAIL.exec(text.slice(end, end + 40)) : null;
+      if (tail) {
+        const head = foldString(text.slice(start, end));
+        const rest = foldString(tail[1]);
+        if (!isEverydayWord(rest) && !COMPOUND_TAILS.has(rest) && !person.roles.has(rest) && !person.roles.has(head + rest)) {
+          if (!KNOWN_HYPHENATED.has(head + rest)) possible.push({ text: text.slice(start, end + tail[0].length), start, end: end + tail[0].length, reason: "split-name", placeholder: personPlaceholder(person.group, person.index, form), kind: person.group, hidden: false });
+          continue;
+        }
+      }
       candidates.push(this.#nameCandidate(person, form, start, end, text.slice(start, end), match.words, inLink(start, end)));
     }
     for (const part of [...findJoinedNames(folded, text, this.#people), ...findBrokenNames(folded, text, this.#people), ...findOcrNames(folded, this.#people)]) {
@@ -841,7 +874,7 @@ export class Deidentifier {
       const counted = (match.tag === "zip" || match.tag === "house") && match.whole && !plus4 && COUNT_BEFORE.test(text.slice(Math.max(0, start - 20), start));
       const house = match.tag === "house" || (match.tag === "address" && match.short);
       const listed = match.tag === "dob" && !match.dateLike && numbersListContext(text, start, end, original, this.#dob);
-      const inContext = house ? houseInContext(text, start, end) : shortInContext(text, start, end, { dateLike: match.tag === "dob" && match.dateLike }, this.#clientNames);
+      const inContext = house ? houseInContext(text, start, end, this.#unitNumbers.has(original.replace(/\D/gu, ""))) : shortInContext(text, start, end, { dateLike: match.tag === "dob" && match.dateLike }, this.#clientNames);
       if (counted || ((needsContext(match) || listed) && !inContext)) {
         if (reportedValue.subarray(start, end).some((v) => v === 1)) continue;
         reportedValue.fill(1, start, end);
@@ -862,6 +895,14 @@ export class Deidentifier {
       candidates.push({ start, end, key: "", kind: "date", source: "pattern", rank: -1, create: () => {}, drop: true });
     }
 
+    // Bracketed text that reads as a placeholder ("[DOB]" in a blank form, "[Client]"): sent as [OTHER n], restored as written,
+    // so the model never sees, and never echoes, a placeholder that was not issued.
+    for (const m of text.matchAll(BRACKETED)) {
+      if (!looksLikePlaceholder(m[1])) continue;
+      const original = m[0];
+      const key = `bracket:${original}`;
+      candidates.push({ start: m.index, end: m.index + original.length, key, kind: "other", source: "pattern", rank: -2, create: () => this.#numberedSlot(key, "other", original) });
+    }
     this.#schoolShortForms(text, folded, candidates);
     this.#adjacentBirthdays(text, candidates);
     const accepted = resolve(text, pickDates(candidates));
