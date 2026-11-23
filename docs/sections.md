@@ -128,7 +128,7 @@ Each request, in this order (`buildSectionPrompt` in `src/lib/rules.ts`):
 
 | Part | What | Cached |
 | --- | --- | --- |
-| System | `rules/assessment.md`, `rules/payers/florida-medicaid-molina.md`, `rules/instruments.md`, `rules/requests.md` | Yes: the same for every case and every request. |
+| System | `rules/assessment.md`, `rules/guide.md`, `rules/style.md`, `rules/payers/florida-medicaid-molina.md`, `rules/instruments.md`, `rules/requests.md` (about 8,600 tokens since step 0 of the AI knowledge plan, 2026-11-23; about 3,000 before) | Yes: the same for every case and every request. |
 | Sources | Every source of the case not removed, whole (never a prepared summary), each in a `<source>` tag named by its type, title and date | Yes: the same for every request of the case. |
 | Task | The section's rules (`rules/sections/<id>.md`); `<her-sections>`: her other sections that are hers or approved, each labeled, final (unapproved AI drafts are never context); `<standing-instructions>`; `<session-notes>`; then the request: a draft; a change (`<current-text>` and `<her-request>`); a paragraph change (`<current-text>` with `<marked-paragraph>`, and `<her-request>`); an improvement (`<current-text>`, her facts kept exactly); a consistency check (`<current-text>`, and `<her-own-text>`: her own text of this section, when there is one) | No: it changes from one request to the next. |
 
@@ -155,6 +155,8 @@ Claude keys its cache on the request's settings as well as its text (a change of
 | A paragraph change (the cache read; more thinking at effort high) | about $0.20 | about $0.10 |
 | A consistency check (the cache read) | about $0.14 | about $0.07 |
 | A whole assessment (9 sections, about 3 corrections each, about 30 checks, one cache write per working hour) | about $18 | about $9 |
+
+Since step 0 of the AI knowledge plan (2026-11-23) the rules are about 9,000 tokens instead of about 4,000 (the guide and the style guide joined the cached prefix): on Claude Fable 5.2 that adds about $0.09 to each hour's cache write and a fraction of a cent to every request that reads the cache; the estimate above has not been redone.
 
 What changed with one effort for everything: the extra cache write per hour for medium-effort requests is gone (about $0.54 on Fable 5.2, $0.27 on Opus 5.5 each hour, $1.5 to $2.5 over an assessment on Fable), while each paragraph change and check now thinks at effort high and costs a little more (about +$0.05 and +$0.04 on Fable). Over a whole assessment the two roughly cancel: the estimate stays about $18 on Fable 5.2 and $9 on Opus 5.5. The first real runs should confirm it with `cache_read_input_tokens` on the checks and paragraph changes.
 

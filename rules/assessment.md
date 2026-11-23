@@ -18,13 +18,11 @@ The parents also sign the assessment, and the RBTs who carry out the plan read i
 
 ## How the assessment should read
 
-- Fluent, connected prose with a logical thread. Sections relate to each other: the behaviors and deficits argued in one section are the same ones, with the same names and numbers, that later sections define, measure and treat. Keep names, numbers and terms consistent with the sources so the thread holds.
+- Fluent, connected prose with a logical thread. Sections relate to each other: the behaviors and deficits argued in one section are the same ones, with the same names and numbers, that later sections define, measure and treat. Keep names, numbers and terms consistent with the sources so the thread holds. The assessment guide gives the reasoning chain, what each of the 22 sections owns, and what must match across them.
 - Explain data; never just list it. Each score or count you cite is followed by what it means for this child, in concrete terms of what the child can and cannot do, and where.
 - Attribute every claim inside the sentence: "According to the Comprehensive Diagnostic Evaluation completed by Dr. ... on ...", "His mother reported that ...", "During the home observation on ..., the BCBA observed ...". Reviewers weigh standardized scores and direct observation more than report alone, so make the kind of evidence visible.
 - Be specific: settings, people, times of day, counts, durations, intensity, concrete incidents. One real incident from the sources does more than three adjectives.
-- Use the child's first name and the pronouns the sources use. Use the terms the sources use for diagnoses, instruments, scales and behaviors.
-- Professional, plain clinical English in the third person. Past tense for what happened during the assessment; present tense for the child's current functioning. No filler ("it is important to note"), no hedging stacks, no superlatives.
-- State strengths, then qualify them where they do not hold consistently ("Although [name] can ..., [he/she] does not yet ... without ...").
+- Write the way she writes: voice, person, tense, attribution, her patterns and the sentences she would not write are in the style guide.
 
 ## Nothing invented
 

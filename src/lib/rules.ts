@@ -16,8 +16,12 @@ export type { SectionShape } from "../shared/section-text.ts";
  */
 export const DEFAULT_RULES_DIR = path.join(process.cwd(), "rules");
 
-/** Same for every section and every case: this is the cached system prefix. */
-const SYSTEM_FILES = ["assessment.md", "payers/florida-medicaid-molina.md", "instruments.md"];
+/**
+ * Same for every section and every case: this is the cached system prefix. The guide (the
+ * reasoning chain and the map of all 22 sections) and the style guide go in it whole, with
+ * every request (owner's decision, 2026-11-23).
+ */
+const SYSTEM_FILES = ["assessment.md", "guide.md", "style.md", "payers/florida-medicaid-molina.md", "instruments.md"];
 
 /** The app's section requests add how each kind of request works (her sections, instructions, notes, corrections). */
 const SECTION_REQUEST_SYSTEM_FILES = [...SYSTEM_FILES, "requests.md"];
