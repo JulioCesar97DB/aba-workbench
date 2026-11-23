@@ -277,6 +277,14 @@ export function itemTitle(part: MapPartId | "groups", item: Record<string, unkno
   return line === "" ? null : line.length > 80 ? `${line.slice(0, 79)}…` : line;
 }
 
+/** The texts of the [CHECK]s an item holds, anywhere in it, in field order. */
+export function checksOf(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(checksOf);
+  if (!isRecord(value)) return [];
+  const own = typeof value.check === "string" && value.check.trim() !== "" ? [value.check] : [];
+  return [...own, ...Object.entries(value).flatMap(([key, entry]) => (key === "check" ? [] : checksOf(entry)))];
+}
+
 /** How many [CHECK]s an item holds, anywhere in it. */
 export function countChecks(value: unknown): number {
   if (Array.isArray(value)) return value.reduce((sum: number, entry) => sum + countChecks(entry), 0);

@@ -1,10 +1,11 @@
 import type { TFunction } from "i18next";
 import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { FUNCTION_NAMES, TEMPLATE_SECTIONS, type Claim, type ClaimInput, type MapPartId, type MapRef } from "../../../shared/case-map.ts";
+import { baselineMean, FUNCTION_NAMES, MAX_MAP_LIST, TEMPLATE_SECTIONS, type Claim, type ClaimInput, type MapPartId, type MapRef } from "../../../shared/case-map.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { Button } from "../components/Button.tsx";
 import { Tooltip } from "../components/Tooltip.tsx";
+import { useLanguage } from "../language.tsx";
 import { MAP_TERMS } from "../i18n/terms.ts";
 import { EVIDENCE_TOOL_OPTIONS, savedClaim, savedInList, type ColumnSpec, type FieldSpec, type TermList, type WordList } from "./specs.ts";
 
@@ -21,6 +22,11 @@ export interface MapFormContext {
   settings: ReadonlyArray<{ id: string; title: string }>;
   /** A source's name on screen, by id; null when the case has no such source. */
   sourceLabel: (id: string) => string | null;
+  /**
+   * For a group's form: the other group a behavior is in, by its name, or null. Ticking it
+   * moves it into this group (review round 1, S1), so the form says so before she ticks.
+   */
+  otherGroupOf?: (behaviorId: string) => string | null;
 }
 
 type Values = Record<string, unknown>;
@@ -228,11 +234,7 @@ function ClaimList({ label, spec, value, saved, onChange, context }: { label: st
           {line.check ? <CheckLine text={line.check} onResolve={() => set(index, { ...line, check: null })} /> : null}
         </div>
       ))}
-      <div>
-        <Button size="sm" onClick={() => onChange([...lines, { value: "", check: null }])}>
-          {t("caseMap.addLine")}
-        </Button>
-      </div>
+      <AddButton count={lines.length} label={t("caseMap.addLine")} onAdd={() => onChange([...lines, { value: "", check: null }])} />
     </FieldRow>
   );
 }
@@ -276,12 +278,22 @@ function Records({ label, columns, value, saved, onChange, context }: { label: s
           </div>
         </div>
       ))}
-      <div>
-        <Button size="sm" onClick={() => onChange([...rows, Object.fromEntries(columns.map((column) => [column.key, null]))])}>
-          {t("caseMap.addRow")}
-        </Button>
-      </div>
+      <AddButton count={rows.length} label={t("caseMap.addRow")} onAdd={() => onChange([...rows, Object.fromEntries(columns.map((column) => [column.key, null]))])} />
     </FieldRow>
+  );
+}
+
+/** "Add a line" and its kin: off at the most a list may hold, saying so, so no line past the limit is ever typed and refused (review round 1, minor 1). */
+function AddButton({ count, label, onAdd }: { count: number; label: string; onAdd: () => void }) {
+  const { t } = useTranslation();
+  const full = count >= MAX_MAP_LIST;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button size="sm" disabled={full} onClick={onAdd}>
+        {label}
+      </Button>
+      {full ? <span className="text-xs text-fg-muted">{t("caseMap.atMost", { count: MAX_MAP_LIST })}</span> : null}
+    </div>
   );
 }
 
@@ -332,11 +344,15 @@ function Ids({ label, spec, value, onChange, context }: { label: string; spec: E
     <FieldRow label={label} legend>
       {choices.length === 0 && missing.length === 0 ? <p className="text-sm text-fg-muted">{t(spec.from === "behaviors" ? "caseMap.noBehaviors" : "caseMap.noSettings")}</p> : null}
       <div className="flex flex-wrap gap-x-4">
-        {choices.map((choice) => (
-          <Checkbox key={choice.id} checked={ids.includes(choice.id)} lang="en" onChange={(on) => onChange(on ? [...ids, choice.id] : ids.filter((id) => id !== choice.id))}>
-            {choice.title}
-          </Checkbox>
-        ))}
+        {choices.map((choice) => {
+          const elsewhere = spec.from === "behaviors" && !ids.includes(choice.id) ? (context.otherGroupOf?.(choice.id) ?? null) : null;
+          return (
+            <Checkbox key={choice.id} checked={ids.includes(choice.id)} onChange={(on) => onChange(on ? [...ids, choice.id] : ids.filter((id) => id !== choice.id))}>
+              <span lang="en">{choice.title}</span>
+              {elsewhere ? <span className="text-xs text-fg-muted"> {t("caseMap.inOtherGroup", { group: elsewhere })}</span> : null}
+            </Checkbox>
+          );
+        })}
         {missing.map((id) => (
           <Checkbox key={id} checked onChange={() => onChange(ids.filter((entry) => entry !== id))}>
             {t("caseMap.missingItem", { id })}
@@ -453,11 +469,7 @@ function FunctionField({ label, value, saved, onChange, context }: { label: stri
           </div>
         </div>
       ))}
-      <div>
-        <Button size="sm" onClick={() => onChange({ ...fn, evidence: [...fn.evidence, { tool: "observation", respondent: null, result: null, supports: [] }] })}>
-          {t("caseMap.function.addEvidence")}
-        </Button>
-      </div>
+      <AddButton count={fn.evidence.length} label={t("caseMap.function.addEvidence")} onAdd={() => onChange({ ...fn, evidence: [...fn.evidence, { tool: "observation", respondent: null, result: null, supports: [] }] })} />
     </FieldRow>
   );
 }
@@ -496,6 +508,28 @@ function PlainChoice({ label, spec, value, onChange }: { label: string; spec: Ex
         <NativeSelect id={id} value={typeof value === "string" ? value : ""} options={spec.options} words={spec.words} optional={spec.optional} onChange={(next) => onChange(next === "" ? null : next)} />
       </div>
     </FieldRow>
+  );
+}
+
+/** The section 8 baseline: the mean of the observations' counts, computed by the app from what the form holds (D20; review round 1, S2). */
+function BaselineMean({ value }: { value: unknown }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+  const observations = (typeof value === "object" && value !== null && Array.isArray((value as Values).observations) ? (value as Values).observations : []) as Array<{ value: ClaimInput | null }>;
+  if (observations.length === 0) return null;
+  const mean = baselineMean(observations.map((observation) => ({ value: observation.value ? { value: observation.value.value, refs: [], origin: "her", check: null } : null })));
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="font-semibold text-fg-muted">{t("caseMap.mean")}</span>
+      {mean === null ? (
+        <span className="text-fg-muted">{t("caseMap.meanNone")}</span>
+      ) : (
+        <>
+          <span className="font-mono">{new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(mean)}</span>
+          <Provenance claim={{ refs: [{ kind: "app" }], origin: "extracted" }} context={{ part: "behaviors", behaviors: [], settings: [], sourceLabel: () => null }} />
+        </>
+      )}
+    </p>
   );
 }
 
@@ -542,6 +576,7 @@ export function MapFields({ fields, labelPart, value, saved, onChange, context }
                   onChange={set}
                   context={context}
                 />
+                {spec.key === "baseline" ? <BaselineMean value={current} /> : null}
               </fieldset>
             );
         }

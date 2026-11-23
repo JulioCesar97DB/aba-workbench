@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router";
 import type { MapSaveResult } from "../../../shared/api.ts";
@@ -8,11 +8,11 @@ import type { FailedSave } from "../../../shared/sources.ts";
 import { useAutosave, useKeptText } from "../autosave.tsx";
 import { onRetried, retry, useMapFailures } from "../case-saves.tsx";
 import { MapFields, type MapFormContext } from "../case-map/CaseMapFields.tsx";
-import { countChecks, fieldsOf, itemInput, itemTitle } from "../case-map/specs.ts";
+import { checksOf, countChecks, fieldsOf, itemInput, itemTitle } from "../case-map/specs.ts";
+import { MAP_TERMS } from "../i18n/terms.ts";
 import { Button } from "../components/Button.tsx";
 import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
 import { StatusBadge, type StatusTone } from "../components/StatusBadge.tsx";
-import { TransWithTerms } from "../components/Trans.tsx";
 import { cn } from "../components/cn.ts";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase, usePatchOpenedCase, useSetCaseSources } from "../open-case.tsx";
@@ -69,13 +69,19 @@ export function CaseMapScreen() {
     void load(); // eslint-disable-line react-hooks/set-state-in-effect -- the first read of the map
   }, [load]);
 
-  /** Every answer is a whole snapshot: an older one (an answer that came back late) never replaces a newer one. */
+  /**
+   * Every answer is a whole snapshot: an older one (an answer that came back late) never
+   * replaces a newer one. Only her own changes (an item saved, added or removed) set the
+   * part's editing pass: an approval or a version shown never does, so an edit after
+   * taking an approval back starts a new version and the approved content stays recorded
+   * (review round 1, minor 3).
+   */
   const accept = useCallback(
-    (result: MapSaveResult | null, changedPart: MapPartId): boolean => {
+    (result: MapSaveResult | null, changedPart: MapPartId, ownChange: boolean): boolean => {
       if (result?.outcome !== "saved") return false;
       setState((previous) => (previous.status === "ready" && isOlderRevision(result.map.revision, previous.map.revision) ? previous : { status: "ready", map: result.map }));
       patch(caseId, { caseMap: result.summary });
-      if (result.version !== null) editing.current[changedPart] = result.version;
+      if (ownChange && result.version !== null) editing.current[changedPart] = result.version;
       return true;
     },
     [caseId, patch],
@@ -91,20 +97,26 @@ export function CaseMapScreen() {
   );
 
   const act = useCallback(
-    async (changedPart: MapPartId, work: () => Promise<MapSaveResult>): Promise<MapSaveResult | null> => {
+    async (changedPart: MapPartId, work: () => Promise<MapSaveResult>, ownChange = false): Promise<MapSaveResult | null> => {
       setActionFailed(false);
       const result = await work().catch(() => null);
-      if (!accept(result, changedPart)) setActionFailed(true);
+      if (!accept(result, changedPart, ownChange)) setActionFailed(true);
       return result;
     },
     [accept],
   );
+  // The item just added, whose first field takes the focus; after a removal, the list's Add button does (review round 1, minor 7).
+  const [focusItem, setFocusItem] = useState<string | null>(null);
+  const addButton = useRef<HTMLButtonElement | null>(null);
 
   const select = (nextPart: MapPartId, item: string | null) => setParams(item ? { part: nextPart, item } : { part: nextPart });
 
   async function add(collection: MapCollection) {
-    const result = await act(part, () => window.aba.addMapItem(caseId, part, collection, "{}", editing.current[part] ?? null));
-    if (result?.outcome === "saved" && result.itemId) select(part, result.itemId);
+    const result = await act(part, () => window.aba.addMapItem(caseId, part, collection, "{}", editing.current[part] ?? null), true);
+    if (result?.outcome === "saved" && result.itemId) {
+      setFocusItem(result.itemId);
+      select(part, result.itemId);
+    }
   }
 
   async function show(version: number) {
@@ -115,8 +127,11 @@ export function CaseMapScreen() {
   async function remove() {
     if (!removing) return;
     const target = removing;
-    const result = await act(target.part, () => window.aba.removeMapItem(caseId, target.part, target.collection, target.id, editing.current[target.part] ?? null));
-    if (result?.outcome === "saved") select(target.part, null);
+    const result = await act(target.part, () => window.aba.removeMapItem(caseId, target.part, target.collection, target.id, editing.current[target.part] ?? null), true);
+    if (result?.outcome === "saved") {
+      select(target.part, null);
+      requestAnimationFrame(() => addButton.current?.focus());
+    }
   }
 
   const view = state.status === "ready" ? state.map.parts[part] : null;
@@ -166,6 +181,14 @@ export function CaseMapScreen() {
       return source ? sourceName(t, source) : null;
     },
   };
+  /** For a group's form: the other group each behavior is in, by its name. */
+  const groupContext = (groupId: string): MapFormContext => ({
+    ...context,
+    otherGroupOf: (behaviorId) => {
+      const other = map.parts.behaviors.groups.find((group) => group.id !== groupId && group.behaviorIds.includes(behaviorId));
+      return other ? (itemTitle("groups", other as unknown as Record<string, unknown>) ?? other.id) : null;
+    },
+  });
   const selectedCollection = selectedId ? collectionOf(selectedId) : "items";
   const selected = selectedId ? (selectedCollection === "groups" ? view.groups : view.items).find((item) => item.id === selectedId) : undefined;
   const clientItem = part === "client" ? view.items[0] : undefined;
@@ -178,9 +201,10 @@ export function CaseMapScreen() {
       part={part}
       collection={editorCollection}
       item={editorItem as unknown as Record<string, unknown>}
-      context={context}
+      context={editorCollection === "groups" ? groupContext(editorItem.id) : context}
+      autoFocus={focusItem === editorItem.id}
       editingFor={() => editing.current[part] ?? null}
-      onSaved={(result) => accept(result, part)}
+      onSaved={(result) => accept(result, part, true)}
       onRemove={
         part === "client"
           ? null
@@ -196,7 +220,7 @@ export function CaseMapScreen() {
   ) : null;
 
   return (
-    <WorkArea header={header} rail={<PartRail view={view} onShow={(version) => void show(version)} />}>
+    <WorkArea header={header} rail={<PartRail view={view} part={part} onShow={(version) => void show(version)} onSelect={(id) => select(part, id)} />}>
       <div className="flex flex-col gap-4">
         <PartBar map={map} part={part} />
         {failures.map((item) => (
@@ -224,7 +248,7 @@ export function CaseMapScreen() {
           )
         ) : (
           <div className="grid items-start gap-5 @3xl:grid-cols-[15rem_1fr]">
-            <ItemList view={view} part={part} selectedId={selectedId} onAdd={(collection) => void add(collection)} onSelect={(id) => select(part, id)} />
+            <ItemList view={view} part={part} selectedId={selectedId} addRef={addButton} onAdd={(collection) => void add(collection)} onSelect={(id) => select(part, id)} />
             <div className="min-w-0">{editor ?? <p className="text-md text-fg-muted">{view.items.length === 0 ? t("caseMap.emptyPart") : t("caseMap.chooseItem")}</p>}</div>
           </div>
         )}
@@ -274,11 +298,8 @@ function Dot({ status }: { status: MapPartView["status"] }) {
 }
 
 function PartName({ part }: { part: MapPartId }) {
-  return (
-    <span>
-      <TransWithTerms i18nKey={`caseMap.parts.${part}`} />
-    </span>
-  );
+  const { t } = useTranslation();
+  return <span>{t(`caseMap.parts.${part}`)}</span>;
 }
 
 /** The parts, each with its status and how many items it holds; the one shown is the current page. */
@@ -289,7 +310,7 @@ function PartBar({ map, part }: { map: CaseMapView; part: MapPartId }) {
       <ul className="flex flex-wrap gap-1 rounded-md bg-surface-muted p-1.5">
         {MAP_PARTS.map((id) => {
           const view = map.parts[id];
-          const count = view.items.length + (id === "behaviors" && view.groups.length > 0 ? 0 : 0);
+          const count = view.items.length;
           return (
             <li key={id}>
               <Link
@@ -311,8 +332,28 @@ function PartBar({ map, part }: { map: CaseMapView; part: MapPartId }) {
 }
 
 /** The items of a part (and its groups, for behaviors), to choose one; and the buttons that add one. */
-function ItemList({ view, part, selectedId, onAdd, onSelect }: { view: MapPartView; part: MapPartId; selectedId: string | null; onAdd: (collection: MapCollection) => void; onSelect: (id: string) => void }) {
+function ItemList({
+  view,
+  part,
+  selectedId,
+  addRef,
+  onAdd,
+  onSelect,
+}: {
+  view: MapPartView;
+  part: MapPartId;
+  selectedId: string | null;
+  addRef: RefObject<HTMLButtonElement | null>;
+  onAdd: (collection: MapCollection) => void;
+  onSelect: (id: string) => void;
+}) {
   const { t } = useTranslation();
+  /** A behavior's functions, primary first, as clinical terms ("Escape · Attention"). */
+  const functionsOf = (item: Record<string, unknown>): string | null => {
+    const fn = item.function as { primary?: string[]; secondary?: string[] } | undefined;
+    const names = [...(fn?.primary ?? []), ...(fn?.secondary ?? [])].map((name) => (MAP_TERMS.functions as Record<string, string>)[name] ?? name);
+    return names.length > 0 ? names.join(" · ") : null;
+  };
   const row = (item: Record<string, unknown> & { id: string; editedAt: string | null }, collection: MapCollection) => {
     const checks = countChecks(item);
     return (
@@ -328,6 +369,7 @@ function ItemList({ view, part, selectedId, onAdd, onSelect }: { view: MapPartVi
           </span>
           <span className="flex flex-wrap items-center gap-1.5 text-xs text-fg-muted">
             {item.editedAt ? <StatusBadge tone="accent">{t("caseMap.editedByYou")}</StatusBadge> : <StatusBadge>{t("caseMap.status.draft")}</StatusBadge>}
+            {part === "behaviors" && collection === "items" && functionsOf(item) ? <span lang="en">{functionsOf(item)}</span> : null}
             {checks > 0 ? <span>{t("caseMap.checks", { count: checks })}</span> : null}
           </span>
         </button>
@@ -338,7 +380,7 @@ function ItemList({ view, part, selectedId, onAdd, onSelect }: { view: MapPartVi
     <div className="flex flex-col gap-3">
       {part !== "report" ? (
         <div>
-          <Button size="sm" onClick={() => onAdd("items")}>
+          <Button ref={addRef} size="sm" onClick={() => onAdd("items")}>
             {t(`caseMap.add.${part as Exclude<MapPartId, "report">}`)}
           </Button>
         </div>
@@ -371,6 +413,7 @@ function ItemEditor({
   collection,
   item,
   context,
+  autoFocus,
   editingFor,
   onSaved,
   onRemove,
@@ -380,6 +423,7 @@ function ItemEditor({
   collection: MapCollection;
   item: Record<string, unknown>;
   context: MapFormContext;
+  autoFocus: boolean;
   editingFor: () => number | null;
   onSaved: (result: MapSaveResult | null) => boolean;
   onRemove: (() => void) | null;
@@ -409,8 +453,13 @@ function ItemEditor({
     }
   }, [box.value, initial]);
   const labelPart = collection === "groups" ? "groups" : part;
+  const sectionRef = useRef<HTMLElement | null>(null);
+  // A new item: its first field takes the focus, so she types at once (review round 1, minor 7).
+  useEffect(() => {
+    if (autoFocus) sectionRef.current?.querySelector<HTMLElement>("input, textarea, select")?.focus();
+  }, [autoFocus]);
   return (
-    <section aria-label={itemTitle(labelPart, item) ?? t("caseMap.untitled")} className="@container flex flex-col gap-4 rounded-lg border border-border p-4">
+    <section ref={sectionRef} aria-label={itemTitle(labelPart, item) ?? t("caseMap.untitled")} className="@container flex flex-col gap-4 rounded-lg border border-border p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h2 lang="en" className="text-md font-semibold break-words">
           {itemTitle(labelPart, item) ?? t("caseMap.untitled")}
@@ -420,7 +469,8 @@ function ItemEditor({
           {box.status === "saving" ? t("sources.saving") : box.status === "saved" ? t("caseMap.saved") : ""}
         </span>
         {onRemove ? (
-          <Button size="sm" onClick={onRemove}>
+          // What she typed is saved before she is asked: never sent after the item is gone.
+          <Button size="sm" onClick={() => void box.flush().then(onRemove)}>
             {t("caseMap.remove")}
           </Button>
         ) : null}
@@ -457,17 +507,39 @@ function ReportText({ item }: { item: Record<string, unknown> }) {
   );
 }
 
-/** The rail: what approving means, and the part's versions, newest first, to show another one. */
-function PartRail({ view, onShow }: { view: MapPartView; onShow: (version: number) => void }) {
+/** The rail: what approving means, what is still to check in this part, and its versions, newest first, to show another one. */
+function PartRail({ view, part, onShow, onSelect }: { view: MapPartView; part: MapPartId; onShow: (version: number) => void; onSelect: (id: string) => void }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const when = (iso: string) => new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short" }).format(new Date(iso));
+  const toCheck = [...view.items.map((item) => ({ item: item as unknown as Record<string, unknown> & { id: string }, list: part })), ...view.groups.map((group) => ({ item: group as unknown as Record<string, unknown> & { id: string }, list: "groups" as const }))].flatMap(({ item, list }) =>
+    checksOf(item).map((text, index) => ({ key: `${item.id}-${index}`, id: item.id, title: itemTitle(list, item) ?? t("caseMap.untitled"), text })),
+  );
   return (
     <>
       <section className="flex flex-col gap-2">
         <Eyebrow className="text-fg-muted">{t("caseMap.aboutHeading")}</Eyebrow>
         <p className="text-sm">{t("caseMap.approvalNote")}</p>
         <p className="text-sm text-fg-muted">{t("caseMap.chipsNote")}</p>
+      </section>
+      <section className="flex flex-col gap-2">
+        <Eyebrow className="text-fg-muted">{t("caseMap.toCheckHeading", { count: toCheck.length })}</Eyebrow>
+        {toCheck.length === 0 ? (
+          <p className="text-sm text-fg-muted">{t("caseMap.toCheckEmpty")}</p>
+        ) : (
+          <ul className="flex flex-col gap-1.5">
+            {toCheck.map((entry) => (
+              <li key={entry.key} className="text-sm">
+                <button type="button" onClick={() => onSelect(entry.id)} className="text-left underline-offset-2 hover:underline">
+                  <span lang="en" className="font-semibold">
+                    {entry.title}
+                  </span>
+                  : <span lang="en">{entry.text}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       <section className="flex flex-col gap-2">
         <Eyebrow className="text-fg-muted">{t("caseMap.history")}</Eyebrow>

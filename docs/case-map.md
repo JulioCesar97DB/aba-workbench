@@ -47,7 +47,7 @@ Every fact-bearing value is a claim: `{ "value": "…", "refs": [ … ], "origin
 - `origin` is the kind of content (the four kinds of `rules/assessment.md`): `her`, `extracted`, `ai-drafted`, `hypothesis` (functions and groups) or `proposed` (a clinical choice that is hers, such as a barrier tag).
 - `check` is the text of a `[CHECK: …]` on the value.
 
-The interface sends values and `[CHECK]`s only; the main process records provenance. A value she keeps keeps its refs and origin; a value she changes or adds becomes hers (`origin: "her"`, a `her` ref first, the earlier refs kept after it). A list of claims is matched by value, so a line she did not touch keeps its source. A function or a group becomes hers when anything in it changes. In this pull request she cites no source by hand; the AI's quotes come with the extraction.
+The interface sends values and `[CHECK]`s only; the main process records provenance. A value she keeps keeps its refs and origin; a value she changes or adds becomes hers (`origin: "her"`, a `her` ref first, every earlier ref kept after it, never cut: a claim holds up to 10 refs plus hers). A list of claims is matched by value first, so a line she did not touch keeps its source; a line she edited then takes the unmatched stored line at the same place, so its earlier refs follow it after hers. A line she added and left empty is not stored. A function or a group becomes hers when anything in it changes. In this pull request she cites no source by hand; the AI's quotes come with the extraction.
 
 ### Limits (D6)
 
@@ -55,7 +55,8 @@ Read and written with these limits (`src/shared/case-map.ts`): 30 behaviors and 
 
 ### Other rules kept in code
 
-- A behavior is in one group at most, and a group names only behaviors of the same version; removing a behavior takes it out of its group.
+- A behavior is in one group at most. Nothing about groups is ever refused (a refused save would lose what she typed): a behavior she ticks into a group leaves the group it was in (marked changed by her), an id the version has no behavior for or one named twice is dropped, and removing a behavior takes it out of its group. The group form says, beside a behavior that is in another group, that ticking it moves it.
+- An edit of an item the version shown does not hold (she showed an older version, or "Try again" of an edit kept from before) brings the item back, from the newest version that had it, with her edit, into a new version. Only an id no version ever had is "not found".
 - The section 8 baseline mean is the app's (D20): the mean of the dated counts, two decimals, or none when a count is missing or not a plain number (`baselineMean`).
 - Intensity is hers only (D19); barrier tags come from her fixed list of nine (D18); the functions are her five, in her order (D17).
 
@@ -64,7 +65,10 @@ Read and written with these limits (`src/shared/case-map.ts`): 30 behaviors and 
 - The part bar shows each part with its status dot and count; the sidebar's step shows parts approved out of parts with something in them.
 - She adds an item (or a group, in the behaviors part), types it, and it is saved as she types, with no Save button: `window.aba.saveMapItem` goes through the failed saves (`"map-item"`), so an edit the disk refuses is kept by the main process, offered with Try again, and put back in its form after a reload, like a section's text.
 - Each value shows chips for where it came from and its `[CHECK]`, with Resolved to clear it.
-- She approves the part shown, or takes the approval back; the rail lists the part's versions, newest first, to show another one.
+- She approves the part shown (in the header), or takes the approval back. For now approving only marks the part as checked by her; the sections start using approved parts in a later pull request, and the screen says so. An approval or a version shown never becomes her editing pass, so an edit after taking an approval back starts a new version and the content she approved stays recorded.
+- The rail lists what is still marked [CHECK] in the part (each opens its item) and the part's versions, newest first, to show another one. Behavior rows show their functions; the baseline shows its mean, computed by the app (D20), or a dash when a count is not a plain number.
+- Lists, rows and evidence stop at 30, and the button says so.
+- After adding an item, its first field takes the focus; after removing one, the Add button does. What she typed in an item is saved before the removal is confirmed.
 - The report on her sections is shown empty until the AI reads her sections (a later pull request); she will only mark its items.
 
 ## Where the code is
