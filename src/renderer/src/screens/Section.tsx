@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router";
-import type { DraftingProvider } from "../../../shared/api.ts";
 import { modelLabel } from "../../../shared/models.ts";
 import { findReportSection, REPORT_SECTIONS, type ReportSection } from "../../../shared/report-sections.ts";
 import { checkStructure, findMarkers, hasLinesInParagraphs, linesAsParagraphs, MAX_REQUEST_LENGTH, splitParagraphs, type StructureIssue } from "../../../shared/section-text.ts";
@@ -15,7 +14,7 @@ import { cn } from "../components/cn.ts";
 import { ButtonLink } from "../components/Link.tsx";
 import { Select } from "../components/Select.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
-import { useConnections } from "../connections.tsx";
+import { PROVIDER_NAMES, useProviders } from "../drafting-provider.tsx";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase, usePatchOpenedCase, useSetCaseSources } from "../open-case.tsx";
 import {
@@ -91,32 +90,6 @@ function SectionLoader({ caseId, section }: { caseId: string; section: ReportSec
 }
 
 /** The connected providers, and the one to write with: the last she used when it is still connected. */
-function useProviders(): { available: DraftingProvider[]; provider: DraftingProvider | null; choose: (provider: DraftingProvider) => void } {
-  const { connections } = useConnections();
-  const [chosen, setChosen] = useState<DraftingProvider | null>(null);
-  const [last, setLast] = useState<DraftingProvider | null>(null);
-  useEffect(() => {
-    let live = true;
-    window.aba.getAiPreferences().then(
-      (preferences) => {
-        if (live) setLast(preferences.lastProvider);
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, []);
-  const available: DraftingProvider[] = [];
-  if (connections && !connections.problem) {
-    if (connections.claude.state === "connected") available.push("anthropic");
-    if (connections.chatgpt.state === "connected") available.push("openai");
-  }
-  const pick = [chosen, last].find((candidate): candidate is DraftingProvider => candidate !== null && available.includes(candidate));
-  return { available, provider: pick ?? available[0] ?? null, choose: setChosen };
-}
-
-const PROVIDER_NAMES: Record<DraftingProvider, string> = { anthropic: "Claude", openai: "ChatGPT" };
 
 function SectionWorkspace({ caseId, section, initial }: { caseId: string; section: ReportSection; initial: SectionDetail }) {
   const { t } = useTranslation();

@@ -2,7 +2,7 @@
 
 Step 1 of the AI knowledge plan (owner's decisions D1 to D35, 2026-11-23; the proposal is in the coordinator's notes, `step1-proposal.md`). The case map is one structured record of the case: its client, caregivers, settings, deficit areas, strengths, behaviors and their groups, risks, facts, open items, and the report on her own sections. The AI will draft it, she corrects and approves it part by part, and every section will be written from it, with the whole sources still sent.
 
-This first pull request has **no AI**: the map's storage, its history and status, and the **Case map** step (step 2 of a case, `/case-map`, "Mapa del caso" in Spanish) where she types, corrects and approves it by hand. The next pull requests add the rules and the extraction requests, the evaluation of the map, the code-rendered tables for ABA Matrix, "Read what I have", session notes as facts, and the map in every section request.
+Pull request 1 built the map's storage, its history and status, and the **Case map** step (step 2 of a case, `/case-map`, "Mapa del caso" in Spanish) where she types, corrects and approves it by hand. Pull request 2 adds the AI's draft ("The AI's draft", below). The next ones add the evaluation of the map, the code-rendered tables for ABA Matrix, "Read what I have" fully, session notes as facts, and the map in every section request.
 
 ## Storage: `aba-case.json`, schema version 4
 
@@ -71,6 +71,51 @@ Read and written with these limits (`src/shared/case-map.ts`): 30 behaviors and 
 - After adding an item, its first field takes the focus once; after removing one, the Add button does. What she typed in an item is saved before the removal is asked; when it cannot be saved, the failure shows with Try again and the removal is not asked.
 - The report on her sections is shown empty until the AI reads her sections (a later pull request); she will only mark its items.
 
+## The AI's draft (pull request 2)
+
+"Draft the map with the AI" ("Armar el mapa con la IA"), or "Update the map with the AI" once the map has content, runs two requests, one after the other (D12):
+
+1. **`map-facts`**: the client, caregivers, settings, deficit areas with scores, strengths, facts with their home sections, open items, and, when she has sections of her own, the report on them;
+2. **`map-behaviors`**: the behaviors with topographies, definitions, baselines, antecedents and consequences, functions with their evidence and barriers; the groups; the risks (they name behaviors, so they come here); more open items.
+
+**The prompt.** Each request is prepared in `src/main/outgoing.ts` (`prepareMapRequest`) like every request about a case. The system prefix (the whole-assessment rules, guide, style, examples, payer, instruments and requests) and the sources are exactly the section requests', so the cache is shared. The task holds, in order:
+
+1. `rules/case-map.md` (and `rules/behaviors.md` for the behaviors), sent with map requests only (D15);
+2. `<her-sections>`: every section that is hers or approved, first (D13): her text wins, and a source that disagrees becomes a [CHECK];
+3. `<her-map>` on an update: the parts she approved, whole, and the items she changed by hand in the others, with their ids;
+4. `<standing-instructions>` (behaviors only): her definition thresholds, once she has confirmed them (D16);
+5. `<session-notes>`;
+6. `<map-facts>` (behaviors only): the settings saved by the first request, with their ids;
+7. the request.
+
+**Structured output (D14).** The answer must follow one JSON schema per request (`src/lib/case-map-extraction.ts`):
+- strict on both providers: every property required, objects closed, null as `anyOf`, enums for every list, no length limits;
+- Claude enforces it through `output_config.format`, OpenAI (key and ChatGPT sign-in) through `text.format`;
+- a route that refuses the schema (a 400 or "unsupported") is asked the same request as plain JSON, and remembered for the rest of the app's run.
+
+**The checks (D4).** The answer is read with Zod (the map's limits), then checked by code:
+- every ref names a source, a section of hers or her notes that was sent;
+- its quote is found word for word (quote marks, dashes, spaces and case aside) in that text;
+- every count, minute, score and percentile is written in one of its quotes;
+- every setting, group and risk link is known; keys are unique; no behavior is in two groups.
+
+A PDF's text cannot be read yet, so its quotes are marked "not checked" (D32), and its numbers are not checked either. Any problem gets **one** repair request that quotes the answer and lists the problems. What still fails is saved and flagged: the ref is `checked: "not-found"` and the value gets a [CHECK] saying the quote was not found. Nothing is dropped, and the problems are kept in the request's record.
+
+**Saving (D1, D2, D5).** Each request's parts are saved as soon as they pass, as new versions: `"ai"` for a part that had none before the run, `"update"` otherwise.
+- Ids are made by code. An item whose key is an id the part has had keeps it; any other key gets a new id, never one used before. Groups and risks get their behaviors' ids.
+- An item she changed by hand is kept as hers in place of the AI's, and kept when the AI leaves it out.
+- A part whose version shown she approved is never changed.
+- Intensity is never filled (D19). Barrier tags come in as proposals (D18). Functions and groups are hypotheses.
+- Each request is recorded in `caseMap.extractions`: run, provider, models, rules versions, sources and sections used, tokens, cost, format, whether it was repaired, and the problems left.
+
+**Her thresholds (D16).** The rail offers the thresholds her assessments show (`src/shared/case-map-thresholds.ts`, in our words). She reviews, changes and confirms them once; from then on they are the map's standing instructions (`"case-map"` in `instructions.json`), sent with every behaviors request. Until then the rules have the AI write `[MISSING: your threshold for …]` in each definition.
+
+**On screen.**
+- The AI action sits in the header, kept in its own component (`src/renderer/src/case-map/MapDraft.tsx`) so it moves as it is into the "Con la IA" side of the two-ways bar when the UX redesign's UX-3 lands.
+- An empty map shows the two ways side by side ("A mano" / "Con la IA").
+- While the AI works, a panel shows the two steps, what is arriving, "It usually takes 2 to 6 minutes", and Stop. When a request's parts are saved, the screen shows them at once.
+- Each chip says how its quote was checked ("not checked" for a PDF, "not found" in the warning color).
+
 ## Where the code is
 
 | File | What |
@@ -80,5 +125,11 @@ Read and written with these limits (`src/shared/case-map.ts`): 30 behaviors and 
 | `src/main/case-map-service.ts` | What the interface may call; every argument checked |
 | `src/main/failed-saves.ts` | The `"map-item"` kind |
 | `src/renderer/src/screens/CaseMap.tsx`, `src/renderer/src/case-map/` | The step, the part bar, the item list, the form and the rail |
+| `rules/case-map.md`, `rules/behaviors.md` | The map's rules, sent in the task of map requests only |
+| `src/lib/case-map-extraction.ts` | The answer schemas, their Zod check and the code checks |
+| `src/lib/rules.ts` (`buildCaseMapPrompt`), `src/main/outgoing.ts` (`prepareMapRequest`) | The map requests' prompt |
+| `src/main/case-map-draft.ts` | The draft's two requests, the plain-JSON resend, the repair, and the answers in the map's shape |
+| `src/renderer/src/case-map/draft.ts`, `MapDraft.tsx` | The draft's store, the AI action, its progress, the two ways and her thresholds |
 | `tests/case-map.test.ts` | Migration round trip, unknown keys, history, status, provenance, groups, limits, the service and a kept edit |
+| `tests/case-map-extraction.test.ts` | The draft with a fake provider: prompts, schema, checks, repair, plain JSON, an update, her thresholds |
 | `e2e/case-map.e2e.ts` | The step in the app window (run by CI) |

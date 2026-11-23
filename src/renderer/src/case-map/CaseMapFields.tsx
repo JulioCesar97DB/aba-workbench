@@ -89,8 +89,18 @@ export function Provenance({ claim, context }: { claim: Pick<Claim<unknown>, "re
     );
   }
   claim.refs.forEach((ref, index) => {
-    const label = refLabel(t, ref, context);
-    const tone = ref.kind === "her" ? "bg-success-subtle text-success" : ref.kind === "note" ? "bg-accent-subtle text-fg-on-accent-subtle" : "bg-neutral-subtle text-neutral";
+    // How the app checked the quote (D4): a PDF's is "not checked" yet (D32), one it could not find is flagged.
+    const checked = ref.checked;
+    const suffix = checked === "not-checked" ? ` · ${t("caseMap.quote.notChecked")}` : checked === "not-found" ? ` · ${t("caseMap.quote.notFound")}` : "";
+    const label = refLabel(t, ref, context) + suffix;
+    const tone =
+      checked === "not-found"
+        ? "bg-warning-subtle text-warning"
+        : ref.kind === "her"
+          ? "bg-success-subtle text-success"
+          : ref.kind === "note"
+            ? "bg-accent-subtle text-fg-on-accent-subtle"
+            : "bg-neutral-subtle text-neutral";
     const chip = (
       <span key={index} tabIndex={ref.quote ? 0 : undefined} aria-label={ref.quote ? `${label}: ${ref.quote}` : undefined} className={`${chipBase} ${tone}`}>
         {label}

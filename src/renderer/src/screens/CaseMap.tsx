@@ -8,6 +8,8 @@ import type { FailedSave } from "../../../shared/sources.ts";
 import { useAutosave, useKeptText } from "../autosave.tsx";
 import { onRetried, retry, useMapFailures } from "../case-saves.tsx";
 import { MapFields, type MapFormContext } from "../case-map/CaseMapFields.tsx";
+import { MapAiButton, MapDraftPanel, MapWays, ThresholdsBlock } from "../case-map/MapDraft.tsx";
+import { isDrafting, useMapDraft, useOnMapSaved } from "../case-map/draft.ts";
 import { checksOf, countChecks, fieldsOf, itemInput, itemTitle } from "../case-map/specs.ts";
 import { MAP_TERMS } from "../i18n/terms.ts";
 import { Button } from "../components/Button.tsx";
@@ -33,7 +35,7 @@ import { useStepMeta } from "./Case.tsx";
  * and put back in its form after a reload.
  */
 
-type MapState = { status: "loading" } | { status: "failed" } | { status: "ready"; map: CaseMapView };
+type MapState = { status: "loading" } | { status: "failed" } | { status: "ready"; map: CaseMapView; instructions: string };
 
 /** The part whose items are behaviors also holds groups; an id says which list it is in. */
 function collectionOf(itemId: string): MapCollection {
@@ -57,12 +59,16 @@ export function CaseMapScreen() {
   // Grows when another version is shown, so the forms start again from what it holds.
   const [epoch, setEpoch] = useState(0);
   const failures = useMapFailures(caseId);
+  // The item just added, whose first field takes the focus; after a removal, the list's Add button does (review round 1, minor 7).
+  const [focusItem, setFocusItem] = useState<string | null>(null);
+  const clearFocus = useCallback(() => setFocusItem(null), [setFocusItem]);
+  const addButton = useRef<HTMLButtonElement | null>(null);
   const setSources = useSetCaseSources();
 
   const load = useCallback(async () => {
     const result = await window.aba.getCaseMap(caseId).catch(() => null);
-    setState(result?.outcome === "read" ? { status: "ready", map: result.map } : { status: "failed" });
-  }, [caseId]);
+    setState(result?.outcome === "read" ? { status: "ready", map: result.map, instructions: result.instructions } : { status: "failed" });
+  }, [caseId, setState]);
 
   useEffect(() => {
     // Read once when the screen opens; every change answers with the whole map.
@@ -79,14 +85,32 @@ export function CaseMapScreen() {
   const accept = useCallback(
     (result: MapSaveResult | null, changedPart: MapPartId, ownChange: boolean): boolean => {
       if (result?.outcome !== "saved") return false;
-      setState((previous) => (previous.status === "ready" && isOlderRevision(result.map.revision, previous.map.revision) ? previous : { status: "ready", map: result.map }));
+      setState((previous) =>
+        previous.status !== "ready" ? { status: "ready", map: result.map, instructions: "" } : isOlderRevision(result.map.revision, previous.map.revision) ? previous : { ...previous, map: result.map },
+      );
       patch(caseId, { caseMap: result.summary });
       // An approval, a take-back or a version shown ends her editing pass: her next change starts a new version (review round 2, R2-1).
       if (!ownChange) delete editing.current[changedPart];
       else if (result.version !== null) editing.current[changedPart] = result.version;
       return true;
     },
-    [caseId, patch],
+    [caseId, patch, setState],
+  );
+
+  // A draft of the AI saved its parts: new versions, so every editing pass ends and the open form shows what is saved now.
+  const draft = useMapDraft(caseId);
+  const drafting = isDrafting(draft);
+  useOnMapSaved(
+    useCallback(
+      (savedCase: string, result: Extract<MapSaveResult, { outcome: "saved" }>) => {
+        if (savedCase !== caseId) return;
+        setState((previous) => (previous.status === "ready" ? { ...previous, map: result.map } : { status: "ready", map: result.map, instructions: "" }));
+        patch(caseId, { caseMap: result.summary });
+        editing.current = {};
+        setEpoch((value) => value + 1);
+      },
+      [caseId, patch, setState, setEpoch],
+    ),
   );
 
   // "Try again" saved what she typed in an item: read the map again.
@@ -107,10 +131,6 @@ export function CaseMapScreen() {
     },
     [accept],
   );
-  // The item just added, whose first field takes the focus; after a removal, the list's Add button does (review round 1, minor 7).
-  const [focusItem, setFocusItem] = useState<string | null>(null);
-  const clearFocus = useCallback(() => setFocusItem(null), []);
-  const addButton = useRef<HTMLButtonElement | null>(null);
 
   const select = (nextPart: MapPartId, item: string | null) => setParams(item ? { part: nextPart, item } : { part: nextPart });
 
@@ -144,14 +164,22 @@ export function CaseMapScreen() {
       meta={meta}
       afterTitle={view ? <PartStatus view={view} /> : null}
       actions={
-        view && view.currentVersion !== null ? (
-          view.status === "approved" ? (
-            <Button onClick={() => void act(part, () => window.aba.approveMapPart(caseId, part, null))}>{t("caseMap.unapprove")}</Button>
-          ) : (
-            <Button variant="primary" onClick={() => void act(part, () => window.aba.approveMapPart(caseId, part, view.currentVersion))}>
-              {t("caseMap.approve")}
-            </Button>
-          )
+        state.status === "ready" ? (
+          <>
+            {view && view.currentVersion !== null ? (
+              view.status === "approved" ? (
+                <Button disabled={drafting} onClick={() => void act(part, () => window.aba.approveMapPart(caseId, part, null))}>
+                  {t("caseMap.unapprove")}
+                </Button>
+              ) : (
+                <Button disabled={drafting} onClick={() => void act(part, () => window.aba.approveMapPart(caseId, part, view.currentVersion))}>
+                  {t("caseMap.approve")}
+                </Button>
+              )
+            ) : null}
+            {/* The AI's way: moves into the "Con la IA" side of the two-ways bar when the UX redesign's UX-3 lands. */}
+            <MapAiButton caseId={caseId} hasMap={opened.caseMap.withContent > 0} />
+          </>
         ) : null
       }
     />
@@ -197,6 +225,8 @@ export function CaseMapScreen() {
   const clientItem = part === "client" ? view.items[0] : undefined;
   const editorItem = part === "client" ? clientItem : selected;
   const editorCollection = part === "client" ? "items" : selectedCollection;
+  // An empty map offers its two ways; the behaviors' own list and Add button wait until it has content.
+  const showWays = opened.caseMap.withContent === 0 && !drafting;
   const editor = editorItem ? (
     <ItemEditor
       key={`${part}/${editorItem.id}/${epoch}`}
@@ -224,9 +254,32 @@ export function CaseMapScreen() {
   ) : null;
 
   return (
-    <WorkArea header={header} rail={<PartRail view={view} part={part} onShow={(version) => void show(version)} onSelect={(id) => select(part, id)} />}>
+    <WorkArea
+      header={header}
+      rail={
+        <>
+          <PartRail view={view} part={part} onShow={(version) => void show(version)} onSelect={(id) => select(part, id)} />
+          <ThresholdsBlock caseId={caseId} instructions={state.instructions} onSaved={(text) => setState((previous) => (previous.status === "ready" ? { ...previous, instructions: text } : previous))} />
+        </>
+      }
+    >
       <div className="flex flex-col gap-4">
         <PartBar map={map} part={part} />
+        <MapDraftPanel caseId={caseId} />
+        {showWays ? (
+          <MapWays
+            caseId={caseId}
+            onByHand={() => {
+              if (part !== "behaviors") select("behaviors", null);
+              void act("behaviors", () => window.aba.addMapItem(caseId, "behaviors", "items", "{}", editing.current.behaviors ?? null), true).then((result) => {
+                if (result?.outcome === "saved" && result.itemId) {
+                  setFocusItem(result.itemId);
+                  select("behaviors", result.itemId);
+                }
+              });
+            }}
+          />
+        ) : null}
         {failures.map((item) => (
           <div key={item.id} role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-danger px-3.5 py-2 text-md font-medium text-danger">
             <span>{t("caseMap.failedSave")}</span>
@@ -250,7 +303,7 @@ export function CaseMapScreen() {
               <Button onClick={() => void add("items")}>{t("caseMap.add.client")}</Button>
             </div>
           )
-        ) : (
+        ) : showWays && part === "behaviors" ? null : (
           <div className="grid items-start gap-5 @3xl:grid-cols-[15rem_1fr]">
             <ItemList view={view} part={part} selectedId={selectedId} addRef={addButton} onAdd={(collection) => void add(collection)} onSelect={(id) => select(part, id)} />
             <div className="min-w-0">{editor ?? <p className="text-md text-fg-muted">{view.items.length === 0 ? t("caseMap.emptyPart") : t("caseMap.chooseItem")}</p>}</div>

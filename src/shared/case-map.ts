@@ -147,6 +147,8 @@ export interface MapRef {
   version?: number;
   session?: string;
   quote?: string;
+  /** How the app checked the quote: "found", "not-found", or "not-checked" for a PDF (D4, D32). */
+  checked?: string;
 }
 
 export interface Claim<T = string> {
