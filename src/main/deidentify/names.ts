@@ -50,6 +50,8 @@ export interface NameMatch {
   surnameWords: string;
   /** For a surname alone: which of the sheet's surnames it is ("1", "2", "1 2"), or "" for all of them. */
   surnamePart: string;
+  /** The words of the name as found, folded, initials with their period: what a full-name placeholder stands for. */
+  words: string[];
   /** Two or more people on the sheet fit this mention equally (a father who shares the client's first name). */
   shared?: Person[];
 }
@@ -265,7 +267,12 @@ export function findNames(folded: Folded, people: Person[]): NameMatch[] {
     const form = formOf(kept);
     // A surname alone shared by several people is the same family name: it restores the same. A given name is not.
     const shared = tied.length > 1 && form !== "last" ? tied : undefined;
-    matches.push({ person: best.person, form, start: kept[0].start, end: kept.at(-1)!.end, ambiguous, surnameWords, surnamePart: form === "last" ? surnamePart(best.person, surnameWords) : "", shared });
+    // "Ficticio, Mateo": the comma stays with the word before it, so the name restores in the order and form written.
+    const nameWords = kept.map((p, k) => {
+      const word = p.role === "given-initial" || p.role === "surname-initial" ? `${p.word}.` : p.word;
+      return k + 1 < kept.length && text.slice(p.end, kept[k + 1].start).includes(",") ? `${word},` : word;
+    });
+    matches.push({ person: best.person, form, start: kept[0].start, end: kept.at(-1)!.end, ambiguous, surnameWords, surnamePart: form === "last" ? surnamePart(best.person, surnameWords) : "", words: nameWords, shared });
     i = best.next;
   }
   // Dotted initials: "M.F.", "M. F."
@@ -274,7 +281,7 @@ export function findNames(folded: Folded, people: Person[]): NameMatch[] {
     const person = people.find((p) => p.initials === initials);
     const start = m.index;
     const end = m.index + m[0].length;
-    if (person && !matches.some((n) => n.start < end && start < n.end)) matches.push({ person, form: "initials", start, end, ambiguous: false, surnameWords: "", surnamePart: "" });
+    if (person && !matches.some((n) => n.start < end && start < n.end)) matches.push({ person, form: "initials", start, end, ambiguous: false, surnameWords: "", surnamePart: "", words: [] });
   }
   return matches.sort((a, b) => a.start - b.start);
 }
@@ -299,6 +306,8 @@ export interface PartMatch {
   joined: boolean;
   /** Found letter-spaced ("L u c i a", "Ma | teo"). */
   spaced: boolean;
+  /** Split only by spaces with an everyday short word as one piece ("mate o", "and res"): hidden, but restored as written and shown for review. */
+  uncertain?: boolean;
 }
 
 const FILE_EXTENSION = /^\.(?:pdf|docx?|xlsx?|csv|txt|rtf|jpe?g|png|heic|gif|mp4|mov|m4a|zip)\b/u;
@@ -341,23 +350,64 @@ export function findJoinedNames(folded: Folded, original: string, people: Person
 }
 
 /**
- * Name words of the sheet (4 letters or more) written letter by letter, as some PDFs
- * draw them: "L u c i a", "M a t | e o", "Ma | teo". Only matches with at least two
- * gaps, or a cell break, count.
+ * Name words of the sheet (4 letters or more) broken inside: hyphenated ("Fic-ticio",
+ * "Fic- ticio", "Fic-⏎ticio", as PDF paragraph hyphenation and typing give it), split by
+ * a space or a line break ("M ateo", "Fi cticio"), or written letter by letter
+ * ("L u c i a", "M a t | e o", "Ma | teo"). A name that is also a common word only
+ * when capitalized.
  */
-export function findSpacedNames(folded: Folded, original: string, people: Person[]): PartMatch[] {
+export function findBrokenNames(folded: Folded, original: string, people: Person[]): PartMatch[] {
   const out: PartMatch[] = [];
-  const gap = "(?:[ \\t]{1,3}|[ \\t]*\\|[ \\t]*)?";
+  const gap = "(?:[ \\t]*-[ \\t]*(?:\\r?\\n[ \\t]*)?|[ \\t]{1,6}|[ \\t]*\\|[ \\t]*|[ \\t]*\\r?\\n[ \\t]*)?";
+  const seen = new Set<string>();
   for (const person of people) {
     for (const { word, role } of person.longWords.filter((w) => w.word.length >= 4)) {
-      const regex = new RegExp(`(?<![\\p{L}\\p{N}])${[...word].map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(gap)}(?![\\p{L}\\p{N}])`, "gu");
+      if (seen.has(`${person.priority}:${word}`)) continue;
+      seen.add(`${person.priority}:${word}`);
+      // A plural or possessive s may follow ("Mu-estras", "Ficti-cio's").
+      const regex = new RegExp(`(?<![\\p{L}\\p{N}])${[...word].map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(gap)}(?='?s(?![\\p{L}\\p{N}])|(?![\\p{L}\\p{N}]))`, "gu");
       for (const m of folded.text.matchAll(regex)) {
-        const gaps = (m[0].match(/[ \t|]+/g) ?? []).length;
-        if (gaps < 2 && !m[0].includes("|")) continue;
+        if (m[0].length === word.length) continue;
         if (isCommonWordName(word) && !/\p{Lu}/u.test(original[folded.from[m.index]] ?? "")) continue;
-        out.push({ person, role, surnamePart: role === "surname" ? surnamePart(person, word) : "", word, start: m.index, end: m.index + m[0].length, joined: true, spaced: true });
+        // Split by spaces only, with an everyday short word as one piece ("mate o", "and res"): maybe two words, maybe the name.
+        const pieces = m[0].split(/[ \t]+/u);
+        const uncertain = !/[-|\n]/u.test(m[0]) && pieces.length === 2 && (SHORT_WORDS.has(pieces[0]) || SHORT_WORDS.has(pieces[1]));
+        out.push({ person, role, surnamePart: role === "surname" ? surnamePart(person, word) : "", word, start: m.index, end: m.index + m[0].length, joined: true, spaced: true, uncertain });
       }
     }
+  }
+  return out;
+}
+
+/** Everyday short words, English and Spanish: a space after one is a word gap, not a split name. */
+const SHORT_WORDS = new Set(
+  `a an and the of to in on at by for or as is it be he she we my his her our you no so do if up de del la las los el y e o u en un una con por se es al lo le me mi su tu sin ya`.split(/\s+/u),
+);
+
+/** A word as OCR may misread it: 0 and o, 1, l, i and |, rn and m, vv and w, c and e, 5 and s read the same. */
+function ocrSkeleton(word: string): string {
+  return word.replace(/rn/gu, "m").replace(/vv/gu, "w").replace(/0/gu, "o").replace(/[1il|!]/gu, "l").replace(/e/gu, "c").replace(/5/gu, "s");
+}
+
+/**
+ * Name words of the sheet (5 letters or more, not common words) misread by OCR in a
+ * scanned report's text layer: "Mate0", "Luc1a", "FlCTlClO", "Matco".
+ */
+export function findOcrNames(folded: Folded, people: Person[]): PartMatch[] {
+  const skeletons = new Map<string, { person: Person; word: string; role: "given" | "surname" }>();
+  for (const person of people) {
+    for (const { word, role } of person.longWords) {
+      if (word.length < 5 || isCommonWordName(word)) continue;
+      const key = ocrSkeleton(word);
+      if (!skeletons.has(key)) skeletons.set(key, { person, word, role });
+    }
+  }
+  const out: PartMatch[] = [];
+  if (skeletons.size === 0) return out;
+  for (const m of folded.text.matchAll(/(?<![\p{L}\p{N}|!])[\p{L}\p{N}|!]{5,}(?![\p{L}\p{N}|!])/gu)) {
+    const hit = skeletons.get(ocrSkeleton(m[0]));
+    if (!hit || hit.person.roles.has(m[0])) continue;
+    out.push({ person: hit.person, role: hit.role, surnamePart: hit.role === "surname" ? surnamePart(hit.person, hit.word) : "", word: hit.word, start: m.index, end: m.index + m[0].length, joined: true, spaced: false });
   }
   return out;
 }

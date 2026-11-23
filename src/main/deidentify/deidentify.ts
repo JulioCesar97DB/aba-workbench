@@ -17,7 +17,7 @@
 import { isCommonWordName } from "./common-words.ts";
 import { findDates, parseIsoDate, ymdKey, type YMD } from "./dates.ts";
 import { fold, foldString, originalRange, type Folded } from "./fold.ts";
-import { findJoinedNames, findNames, findSpacedNames, peopleOf, type NameForm, type Person } from "./names.ts";
+import { findBrokenNames, findJoinedNames, findNames, findOcrNames, peopleOf, type NameForm, type Person } from "./names.ts";
 import { ADDRESS_WORDS, addressKey, findAgeDays, findPatterns, phoneKey, type PatternMatch } from "./patterns.ts";
 import { birthDatePlaceholder, numberedPlaceholder, personPlaceholder, type BirthDateForm, type NumberedKind } from "./placeholders.ts";
 import type { ClientSheet, FoundKind } from "./sheet.ts";
@@ -69,13 +69,14 @@ export interface Finding {
  *   a distinctive word of the school alone ("school-word", "Martí"); a word that could be
  *   a shortened sheet name ("possible-nickname", "Vale" for Valeria);
  * - hidden, but she should check who it is: a name two people on the sheet share
- *   ("shared-name"), sent as [NAME n] and restored as written.
+ *   ("shared-name"), or a sheet name split by a space next to a short word that may be two
+ *   ordinary words ("split-name", "mate o"), sent as [NAME n] and restored as written.
  */
 export interface Possible {
   text: string;
   start: number;
   end: number;
-  reason: "common-word-name" | "name-inside-word" | "school-word" | "possible-nickname" | "shared-name";
+  reason: "common-word-name" | "name-inside-word" | "school-word" | "possible-nickname" | "shared-name" | "split-name";
   /** The placeholder it has (hidden) or would get if she chooses to hide it. */
   placeholder: string;
   kind: FoundKind;
@@ -119,6 +120,8 @@ interface Candidate {
   drop?: boolean;
   /** A name that several people on the sheet share. */
   sharedWith?: Person[];
+  /** A sheet name split by a space next to a short word: maybe two words. */
+  split?: boolean;
 }
 
 interface Slot {
@@ -164,18 +167,46 @@ function tokensOf(value: string): string[] {
   return foldString(value).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 }
 
-/** Matches the words of a value with any punctuation, spacing or line break between them. */
-function phraseRegex(tokens: string[][]): RegExp | null {
+/** A word of 4 letters or more, also hyphenated or broken across a line ("Mar-tí", "Mia-⏎mi"). */
+function brokenWord(word: string): string {
+  if (word.length < 4 || !/^\p{L}+$/u.test(word)) return escape(word);
+  return [...word].map(escape).join("(?:-[ \\t]*(?:\\r?\\n[ \\t]*)?|[ \\t]*\\r?\\n[ \\t]*)?");
+}
+
+/** Matches the words of a value with any punctuation, spacing or line break between them; `broken` also takes each word hyphenated. */
+function phraseRegex(tokens: string[][], broken = false): RegExp | null {
   if (tokens.length === 0) return null;
-  const body = tokens.map((alternatives) => `(?:${alternatives.map(escape).join("|")})`).join(SEPARATOR);
+  const body = tokens.map((alternatives) => `(?:${alternatives.map(broken ? brokenWord : escape).join("|")})`).join(SEPARATOR);
   return new RegExp(`${B}${body}${E}`, "gu");
+}
+
+/**
+ * The key of a value found in a text: two findings with the same key are the same value
+ * (the same digits, the same words however abbreviated) and share a placeholder, which
+ * restores as the first one was written. A shorter or different value gets its own.
+ */
+function valueKey(kind: FoundKind, original: string): string {
+  switch (kind) {
+    case "address":
+      return `address:${addressKey(original)}`;
+    case "phone":
+      return `phone:${phoneKey(original)}`;
+    case "id":
+    case "email":
+      return `${kind}:${foldString(original).replace(/[^\p{L}\p{N}@.]/gu, "")}`;
+    default:
+      return `${kind}:${tokensOf(original).join(" ")}`;
+  }
 }
 
 /** Matches a number or a code with or without spaces, dashes, dots, slashes or brackets: "305 555 0142", "FL 123 - 456 - 789". */
 function compactRegex(value: string): RegExp | null {
   const chars = foldString(value).replace(/[^\p{L}\p{N}]/gu, "");
   if (chars.length < 4) return null;
-  return new RegExp(`${B}${[...chars].map(escape).join("[\\s\\-.()/]{0,4}")}${E}`, "gu");
+  // Digits at an end may touch letters ("fl9876543210", "ID9876543210x"), never other digits.
+  const start = /^\p{N}/u.test(chars) ? "(?<![\\p{N}])" : B;
+  const end = /\p{N}$/u.test(chars) ? "(?![\\p{N}])" : E;
+  return new RegExp(`${start}${[...chars].map(escape).join("[\\s\\-.()/]{0,4}")}${end}`, "gu");
 }
 
 function canonicalAddressWord(word: string): string {
@@ -196,8 +227,6 @@ function streetWord(canonical: string): string {
 }
 
 interface SheetAddress {
-  /** Number and street-name words, canonical: what a pattern-found address must contain to be this one. */
-  core: string[];
   regexes: RegExp[];
   places: string[];
 }
@@ -254,20 +283,11 @@ function parseAddress(address: string): SheetAddress {
       if (type) regexes.push(new RegExp(`${B}${dirPart}${nameBody}${typePart}${tail}${E}`, "gu"));
     }
   }
-  return { core: [number, ...name].filter(Boolean), regexes, places };
+  return { regexes, places };
 }
 
-/** Whether the canonical words of an address contain `core` in order (a direction may sit between the number and the name). */
-function containsCore(words: string[], core: string[]): boolean {
-  if (core.length === 0) return false;
-  for (let i = 0; i < words.length; i++) {
-    if (words[i] !== core[0]) continue;
-    let j = i + 1;
-    if (DIRECTIONS.has(words[j]) && !DIRECTIONS.has(core[1])) j++;
-    if (core.slice(1).every((w, k) => words[j + k] === w)) return true;
-  }
-  return false;
-}
+/** An age label right before a number: "Age", "CA =", "Chronological age |", "Edad:". */
+const AGE_BEFORE = /(?:\bages?|\baged|\bchronological\s+age|\bc\.?a\.?|\bedad(?:\s+cronol[oó]gica)?)\s*(?:at\s+testing|al\s+evaluar)?\s*(?:\([^)\n]{0,15}\))?\s*[:=|]?\s*$/iu;
 
 const NAME_FORMS: NameForm[] = ["first", "full", "last", "initials"];
 
@@ -275,8 +295,21 @@ function isPerson(kind: FoundKind): boolean {
   return kind === "client" || kind === "caregiver" || kind === "family" || kind === "professional";
 }
 
-function personKey(person: Person, form: NameForm, surnamePart = ""): string {
-  return `person:${person.priority}:${form}${form === "last" ? `:${surnamePart}` : ""}`;
+function personKey(person: Person, form: NameForm, part = ""): string {
+  return `person:${person.priority}:${form}${form === "last" || form === "full" ? `:${part}` : ""}`;
+}
+
+/** Each name word of a person, folded, with its spelling on the sheet. */
+function sheetSpellings(person: Person): Map<string, string> {
+  const map = new Map<string, string>();
+  const { firstName, lastName, nicknames, preferredName } = person.sheet;
+  for (const name of [firstName, lastName, preferredName, ...(nicknames ?? [])]) {
+    for (const word of (name ?? "").normalize("NFC").split(/[\s-]+/u).filter(Boolean)) {
+      const key = foldString(word).replace(/[^\p{L}']/gu, "");
+      if (key && !map.has(key)) map.set(key, word);
+    }
+  }
+  return map;
 }
 
 function canonicalDate({ year, month, day }: YMD): string {
@@ -286,8 +319,7 @@ function canonicalDate({ year, month, day }: YMD): string {
 
 interface Literal {
   regex: RegExp;
-  key: string;
-  kind: FoundKind;
+  kind: NumberedKind;
   capitalizedOnly: boolean;
   /** Matched on the original text, case-sensitive (school acronyms). */
   original?: boolean;
@@ -308,8 +340,6 @@ export class Deidentifier {
   /** Keys of the values that come from the sheet. */
   readonly #sheetKeys = new Set<string>();
   readonly #literals: Literal[] = [];
-  /** The sheet's addresses, to give a pattern-found address the sheet's number. */
-  readonly #sheetAddresses: Array<{ core: string[]; slot: string }> = [];
   /** For each surname-alone placeholder, how often each written form of it was used. */
   readonly #surnamesSeen = new Map<string, Map<string, number>>();
 
@@ -325,83 +355,63 @@ export class Deidentifier {
 
   #prepareSheetValues(): void {
     const sheet = this.#sheet;
-    const reserve = (kind: NumberedKind, key: string, value: string) => {
-      if (this.#slots.has(key)) return;
-      const n = (this.#counters.get(kind) ?? 0) + 1;
-      this.#counters.set(kind, n);
-      this.#slots.set(key, { placeholder: numberedPlaceholder(kind, n), value, kind });
-      this.#sheetKeys.add(key);
+    // Each match gets a placeholder for its own written value (restored exactly as written); the same value written
+    // the same way, or in another format of the same value, shares it. No value of the sheet is reserved in advance.
+    const literal = (regex: RegExp | null, kind: NumberedKind, capitalizedOnly = false) => {
+      if (regex) this.#literals.push({ regex, kind, capitalizedOnly });
     };
-    const literal = (regex: RegExp | null, key: string, kind: FoundKind, capitalizedOnly = false) => {
-      if (regex) this.#literals.push({ regex, key, kind, capitalizedOnly });
-    };
-    const genericWords = [...SCHOOL_GENERIC].filter((w) => !ARTICLES.has(w)).map(escape).join("|");
-    (sheet.schools ?? []).forEach((school, i) => {
-      const key = `school:sheet:${i}`;
-      reserve("school", key, school.trim());
+    const genericWords = [...SCHOOL_GENERIC].filter((w) => !ARTICLES.has(w)).map(brokenWord).join("|");
+    (sheet.schools ?? []).forEach((school) => {
       const tokens = tokensOf(school);
-      literal(phraseRegex(tokens.map((t) => [t])), key, "school");
+      literal(phraseRegex(tokens.map((t) => [t]), true), "school");
       const core = tokens.filter((t) => !SCHOOL_GENERIC.has(t));
       if (core.length && core.length < tokens.length) {
         // The distinctive words alone ("José Martí"), with any generic words after them ("José Martí Elementary").
-        literal(new RegExp(`${B}${core.map(escape).join(SEPARATOR)}(?:${SEPARATOR}(?:${genericWords}))*${E}`, "gu"), key, "school", true);
+        literal(new RegExp(`${B}${core.map(brokenWord).join(SEPARATOR)}(?:${SEPARATOR}(?:${genericWords}))*${E}`, "gu"), "school", true);
         for (const word of core.filter((w) => w.length >= 4)) {
           // One distinctive word with a generic word after it ("Martí Elementary"): hidden. Alone ("Martí."): possible.
-          literal(new RegExp(`${B}${escape(word)}(?:${SEPARATOR}(?:${genericWords}))+${E}`, "gu"), key, "school", true);
-          this.#literals.push({ regex: new RegExp(`${B}${escape(word)}${E}`, "gu"), key, kind: "school", capitalizedOnly: true, possible: "school-word" });
+          literal(new RegExp(`${B}${brokenWord(word)}(?:${SEPARATOR}(?:${genericWords}))+${E}`, "gu"), "school", true);
+          this.#literals.push({ regex: new RegExp(`${B}${brokenWord(word)}${E}`, "gu"), kind: "school", capitalizedOnly: true, possible: "school-word" });
         }
       }
       // Its initials, in capitals: "JMES", "JME".
       const initials = tokens.filter((t) => !ARTICLES.has(t)).map((t) => t[0].toUpperCase());
       const acronyms = new Set([initials.join(""), initials.slice(0, -1).join(""), core.length ? core.map((t) => t[0].toUpperCase()).join("") + (tokens.find((t) => SCHOOL_GENERIC.has(t) && !ARTICLES.has(t))?.[0].toUpperCase() ?? "") : ""]);
       for (const acronym of [...acronyms].filter((a) => a.length >= 3)) {
-        this.#literals.push({ regex: new RegExp(`(?<![\\p{L}\\p{N}])${acronym}(?![\\p{L}\\p{N}])`, "gu"), key, kind: "school", capitalizedOnly: false, original: true });
+        this.#literals.push({ regex: new RegExp(`(?<![\\p{L}\\p{N}])${acronym}(?![\\p{L}\\p{N}])`, "gu"), kind: "school", capitalizedOnly: false, original: true });
       }
     });
     const places = new Map<string, string>();
-    (sheet.addresses ?? []).forEach((address, i) => {
-      const key = `address:sheet:${i}`;
-      reserve("address", key, address.trim());
+    (sheet.addresses ?? []).forEach((address) => {
       const parsed = parseAddress(address);
-      for (const regex of parsed.regexes) literal(regex, key, "address");
-      literal(phraseRegex(tokensOf(address).map((t) => [...(ADDRESS_SPELLINGS.get(canonicalAddressWord(t)) ?? [t]), t])), key, "address");
-      this.#sheetAddresses.push({ core: parsed.core, slot: key });
+      for (const regex of parsed.regexes) literal(regex, "address");
+      literal(phraseRegex(tokensOf(address).map((t) => [...(ADDRESS_SPELLINGS.get(canonicalAddressWord(t)) ?? [t]), t])), "address");
       for (const place of parsed.places) if (!places.has(foldString(place))) places.set(foldString(place), place);
     });
     // The city or neighborhood of each sheet address, also alone ("lives in Hialeah"): HIPAA Safe Harbor counts it (owner's decision, 2026-11-22).
-    for (const [folded, place] of places) {
-      const key = `city:sheet:${folded}`;
-      reserve("city", key, place);
+    for (const place of places.values()) {
       const tokens = tokensOf(place);
       const common = tokens.every((t) => isCommonWordName(t) || COMMON_PLACE_WORDS.has(t));
-      literal(phraseRegex(tokens.map((t) => [t])), key, "city", common);
+      literal(phraseRegex(tokens.map((t) => [t]), true), "city", common);
     }
     (sheet.phones ?? []).forEach((phone) => {
       const digits = phoneKey(phone);
-      const key = `phone:${digits}`;
-      reserve("phone", key, phone.trim());
-      literal(compactRegex(digits), key, "phone");
+      literal(compactRegex(digits), "phone");
       // The number without its area code: "555-0142".
-      if (digits.length === 10) literal(compactRegex(digits.slice(3)), key, "phone");
+      if (digits.length === 10) literal(compactRegex(digits.slice(3)), "phone");
     });
     (sheet.emails ?? []).forEach((email) => {
-      const key = `email:${email.trim().toLowerCase()}`;
-      reserve("email", key, email.trim());
-      literal(new RegExp(`${B}${escape(foldString(email.trim()))}${E}`, "gu"), key, "email");
+      literal(new RegExp(`${B}${escape(foldString(email.trim()))}${E}`, "gu"), "email");
     });
     (sheet.ids ?? []).forEach((id) => {
       const compact = id.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-      const key = `id:${compact}`;
-      reserve("id", key, id.trim());
-      literal(compactRegex(id), key, "id");
+      literal(compactRegex(id), "id");
       // The digits without a letter prefix: "123456789" for "FL123456789".
       const digitsPart = compact.replace(/^\p{L}+/u, "");
-      if (digitsPart !== compact && digitsPart.length >= 6) literal(compactRegex(digitsPart), key, "id");
+      if (digitsPart !== compact && digitsPart.length >= 6) literal(compactRegex(digitsPart), "id");
     });
-    (sheet.other ?? []).forEach((other, i) => {
-      const key = `other:sheet:${i}`;
-      reserve("other", key, other.trim());
-      literal(phraseRegex(tokensOf(other).map((t) => [t])), key, "other");
+    (sheet.other ?? []).forEach((other) => {
+      literal(phraseRegex(tokensOf(other).map((t) => [t]), true), "other");
     });
   }
 
@@ -411,16 +421,11 @@ export class Deidentifier {
     const entries: MapEntry[] = [];
     for (const [key, slot] of this.#slots) {
       if (seen.has(slot.placeholder)) continue;
-      // A value reserved from the sheet but never met in the text is not sent, so not in the map.
-      if (this.#sheetKeys.has(key) && !this.#used.has(key)) continue;
       seen.add(slot.placeholder);
       entries.push({ placeholder: slot.placeholder, value: this.#surnameAsWritten(key) ?? slot.value, kind: slot.kind });
     }
     return { entries };
   }
-
-  /** Sheet keys met in a text so far. */
-  readonly #used = new Set<string>();
 
   /** A surname placeholder restores as the text wrote it most often, in the sheet's own spelling ("de la Fuente" or "Fuente"). */
   #surnameAsWritten(key: string): string | undefined {
@@ -439,9 +444,22 @@ export class Deidentifier {
     return undefined;
   }
 
-  #personSlot(person: Person, form: NameForm, surnamePart = ""): void {
+  #personSlot(person: Person, form: NameForm, surnamePart = "", words: string[] = []): void {
     const key = personKey(person, form, surnamePart);
     if (this.#slots.has(key)) return;
+    if (form === "full" && surnamePart && words.length) {
+      // The words the text used, in the sheet's spelling ("Valeria Ficticio"; an initial as written: "Mateo F.").
+      const spellings = sheetSpellings(person);
+      const value = words
+        .map((w) => {
+          const comma = w.endsWith(",") ? "," : "";
+          const word = comma ? w.slice(0, -1) : w;
+          return (word.endsWith(".") ? word.toUpperCase() : (spellings.get(word) ?? word)) + comma;
+        })
+        .join(" ");
+      this.#slots.set(key, { placeholder: personPlaceholder(person.group, person.index, form, surnamePart), value, kind: person.group });
+      return;
+    }
     const { firstName, lastName, nicknames, preferredName } = person.sheet;
     const first = (preferredName ?? firstName ?? nicknames?.[0] ?? lastName ?? "").trim();
     const full = [firstName ?? preferredName, lastName].filter(Boolean).join(" ").trim();
@@ -468,17 +486,38 @@ export class Deidentifier {
     }
   }
 
-  #nameCandidate(person: Person, form: NameForm, start: number, end: number, surnamePart: string, surnameWords: string): Candidate {
+  #nameCandidate(person: Person, form: NameForm, start: number, end: number, surnamePart: string, surnameWords: string, words: string[] = []): Candidate {
+    // A full name: one placeholder per set of words used, so "Valeria Ficticio" never restores as "Valeria Ficticio Gómez".
+    const part = form === "full" ? this.#fullNamePart(person, words) : surnamePart;
     return {
       start,
       end,
-      key: personKey(person, form, surnamePart),
+      key: personKey(person, form, part),
       kind: person.group,
       source: "sheet",
       rank: 0,
       surnameWords,
-      create: () => this.#personSlot(person, form, surnamePart),
+      create: () => this.#personSlot(person, form, part, words),
     };
+  }
+
+  /** Numbers of the partial full names of each person, by the words they use. */
+  readonly #fullNameParts = new Map<string, string>();
+
+  /** "" for the sheet's whole name; "1", "2"... for each other set of words, in the order met. */
+  #fullNamePart(person: Person, words: string[]): string {
+    const complete = [...(person.sheet.firstName ?? person.sheet.preferredName ?? "").split(/[\s-]+/u), ...(person.sheet.lastName ?? "").split(/[\s-]+/u)]
+      .filter(Boolean)
+      .map((w) => foldString(w).replace(/[^\p{L}']/gu, ""))
+      .join(" ");
+    const used = words.join(" ");
+    if (used === "" || used === complete) return "";
+    const key = `${person.priority}:${used}`;
+    if (!this.#fullNameParts.has(key)) {
+      const n = [...this.#fullNameParts.keys()].filter((k) => k.startsWith(`${person.priority}:`)).length + 1;
+      this.#fullNameParts.set(key, String(n));
+    }
+    return this.#fullNameParts.get(key)!;
   }
 
   deidentify(input: string): DeidentifyResult {
@@ -504,11 +543,18 @@ export class Deidentifier {
         candidates.push({ start, end, key, kind: "unlisted-name", source: "sheet", rank: 0, create: () => this.#numberedSlot(key, "unlisted-name", original), sharedWith: match.shared });
         continue;
       }
-      candidates.push(this.#nameCandidate(person, form, start, end, match.surnamePart, match.surnameWords));
+      candidates.push(this.#nameCandidate(person, form, start, end, match.surnamePart, match.surnameWords, match.words));
     }
-    for (const part of [...findJoinedNames(folded, text, this.#people), ...findSpacedNames(folded, text, this.#people)]) {
+    for (const part of [...findJoinedNames(folded, text, this.#people), ...findBrokenNames(folded, text, this.#people), ...findOcrNames(folded, this.#people)]) {
       const [start, end] = range(part.start, part.end);
       const form: NameForm = part.role === "given" ? "first" : "last";
+      if (part.uncertain) {
+        // "mate o", "and res": hidden as a neutral [NAME n], restored exactly as written, and shown for review.
+        const original = text.slice(start, end);
+        const key = `shared:${foldString(original)}`;
+        candidates.push({ start, end, key, kind: "unlisted-name", source: "sheet", rank: 0, create: () => this.#numberedSlot(key, "unlisted-name", original), split: true });
+        continue;
+      }
       if (!part.joined) {
         possible.push({ text: text.slice(start, end), start, end, reason: "name-inside-word", placeholder: personPlaceholder(part.person.group, part.person.index, form, part.surnamePart), kind: part.person.group, hidden: false });
         continue;
@@ -522,10 +568,12 @@ export class Deidentifier {
         const [start, end] = literal.original ? [m.index, m.index + m[0].length] : range(m.index, m.index + m[0].length);
         if (literal.capitalizedOnly && !capitalized(start)) continue;
         if (literal.possible) {
-          possible.push({ text: text.slice(start, end), start, end, reason: literal.possible, placeholder: this.#slots.get(literal.key)!.placeholder, kind: literal.kind, hidden: false });
+          possible.push({ text: text.slice(start, end), start, end, reason: literal.possible, placeholder: numberedPlaceholder(literal.kind, (this.#counters.get(literal.kind) ?? 0) + 1), kind: literal.kind, hidden: false });
           continue;
         }
-        candidates.push({ start, end, key: literal.key, kind: literal.kind, source: "sheet", rank: 1, create: () => {} });
+        const original = text.slice(start, end);
+        const key = valueKey(literal.kind, original);
+        candidates.push({ start, end, key, kind: literal.kind, source: "sheet", rank: 1, create: () => this.#numberedSlot(key, literal.kind, original) });
       }
     }
     this.#dateCandidates(text, folded, candidates);
@@ -555,7 +603,7 @@ export class Deidentifier {
         this.#numberedSlot(span.key, kind, original);
       } else {
         span.create();
-        if (this.#sheetKeys.has(span.key)) this.#used.add(span.key);
+        if (span.source === "sheet") this.#sheetKeys.add(span.key);
         // Once a person is mentioned, the model may use any form of their name: all of them restore.
         const person = this.#people.find((p) => span.key.startsWith(`person:${p.priority}:`));
         if (person) {
@@ -575,6 +623,7 @@ export class Deidentifier {
       if (!finding.originals.includes(original)) finding.originals.push(original);
       found.set(slot.placeholder, finding);
       if (span.sharedWith) possible.push({ text: original, start: span.start, end: span.end, reason: "shared-name", placeholder: slot.placeholder, kind: "unlisted-name", hidden: true });
+      if (span.split) possible.push({ text: original, start: span.start, end: span.end, reason: "split-name", placeholder: slot.placeholder, kind: "unlisted-name", hidden: true });
     }
     out += text.slice(at);
     const reported = possible.filter((p) => p.hidden || accepted.overlapping(p.start, p.end).length === 0);
@@ -618,6 +667,10 @@ export class Deidentifier {
               ? r.year === dob.year && r.month === dob.month
               : r.month === dob.month && r.day === dob.day,
         );
+      // Six or eight bare digits, or "3/14": only when they are the date of birth.
+      if ((date.compact || date.pair) && !isBirthDate) continue;
+      // "CA = 6-08-08" after an age label is an age (its days are dropped), not a date, unless it is the date of birth.
+      if (!isBirthDate && AGE_BEFORE.test(text.slice(Math.max(0, start - 40), start))) continue;
       if (isBirthDate) {
         const key = `dob:${date.precision}`;
         candidates.push({ start, end, key, kind: "dob", source: "sheet", rank: 0, create: () => this.#birthSlot(key, date.precision, original) });
@@ -635,12 +688,7 @@ export class Deidentifier {
 
   #patternCandidate(text: string, match: PatternMatch): Candidate {
     const original = text.slice(match.start, match.end);
-    let key = match.key;
-    if (match.kind === "address") {
-      const words = addressKey(original).split(" ");
-      const sheet = this.#sheetAddresses.find((a) => containsCore(words, a.core));
-      if (sheet) key = sheet.slot;
-    }
+    const key = match.kind === "unlisted-name" ? match.key : valueKey(match.kind, original);
     return {
       start: match.start,
       end: match.end,
@@ -686,7 +734,10 @@ function resolve(text: string, candidates: Candidate[]): Spans<Candidate> {
       const piece = text.slice(a, b);
       const lead = piece.length - piece.replace(/^[^\p{L}\p{N}]+/u, "").length;
       const trail = piece.length - piece.replace(/[^\p{L}\p{N}]+$/u, "").length;
-      if (a + lead < b - trail) accepted.add({ ...candidate, start: a + lead, end: b - trail, piece: true });
+      // A leftover that is only a particle ("de" of "Lucía Ficticio de Gómez") is not a name.
+      if (a + lead < b - trail && !/^(?:de|del|la|las|los|y|e|da|di|do|du|van|von|le)$/iu.test(text.slice(a + lead, b - trail))) {
+        accepted.add({ ...candidate, start: a + lead, end: b - trail, piece: true });
+      }
     }
   }
   return accepted;

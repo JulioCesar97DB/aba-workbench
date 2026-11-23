@@ -110,10 +110,11 @@ test("names: every form of the client and a caregiver", () => {
     ["Mateo's tablet", "[CLIENT]'s tablet"],
     ["Mateo\u{2019}s tablet", "[CLIENT]\u{2019}s tablet"],
     ["Teo cried", "[CLIENT] cried"],
-    ["Mateo\nFicticio left", "[CLIENT FULL NAME] left"],
-    ["Mateo Fic-\nticio left", "[CLIENT FULL NAME] left"],
-    ["Ficticio, Mateo", "[CLIENT FULL NAME]"],
-    ["Mateo F. and M. Ficticio and M.F.", "[CLIENT FULL NAME] and [CLIENT FULL NAME] and [CLIENT INITIALS]"],
+    // A full name with fewer words than the sheet's ("Mateo Ficticio" for "Mateo Ficticio Gómez") has a numbered placeholder of its own.
+    ["Mateo\nFicticio left", "[CLIENT FULL NAME 1] left"],
+    ["Mateo Fic-\nticio left", "[CLIENT FULL NAME 1] left"],
+    ["Ficticio, Mateo", "[CLIENT FULL NAME 1]"],
+    ["Mateo F. and M. Ficticio and M.F.", "[CLIENT FULL NAME 1] and [CLIENT FULL NAME 2] and [CLIENT INITIALS]"],
     ["Mateo Ficticio-Gómez", "[CLIENT FULL NAME]"],
     ["Lucia Ficticio and Lucía", "[CAREGIVER 1 FULL NAME] and [CAREGIVER 1]"],
     // One of the client's two surnames: its own placeholder, so it restores exactly.
@@ -189,7 +190,10 @@ test("sheet values: a school by its distinctive words, an address however it is 
     other: ["Little Steps Therapy Center"],
   };
   const text = "José Martí Elementary School, Jose Marti Elementary, José Martí, the school; José Martí's poems; 4471 Southwest 12 Ter; little steps therapy center.";
-  assert.equal(hide(text, sheet).text, "[SCHOOL 1], [SCHOOL 1], [SCHOOL 1], the school; [SCHOOL 1]'s poems; [ADDRESS 1]; [OTHER 1].");
+  // Each different written form has its own placeholder and comes back exactly as written; the same words (accents aside) share one.
+  const hidden = hide(text, sheet);
+  assert.equal(hidden.text, "[SCHOOL 1], [SCHOOL 2], [SCHOOL 3], the school; [SCHOOL 3]'s poems; [ADDRESS 1]; [OTHER 1].");
+  assert.equal(reidentify(hidden.text, hidden.map).text, "José Martí Elementary School, Jose Marti Elementary, José Martí, the school; José Martí's poems; 4471 Southwest 12 Ter; little steps therapy center.");
 });
 
 test("one Deidentifier keeps the same placeholders across texts, in reading order", () => {

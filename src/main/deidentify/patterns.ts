@@ -60,7 +60,8 @@ const TYPE_FIRST = "(?:Calle|Avenida|Av\\.|Ave\\.|Camino|Carrera|Cra\\.|Paseo|Ca
 const DIRECTION = "(?:N|S|E|W|NE|NW|SE|SW|North|South|East|West|Northeast|Northwest|Southeast|Southwest)\\.?";
 const STATES =
   "(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|PR|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|Florida|Georgia|Texas|New\\s+York|California|Puerto\\s+Rico)";
-const PLACE_WORD = "\\p{Lu}[\\p{L}'.\\-]*";
+/** A capitalized place word; a period only in an abbreviation such as "St." or "Ft.", never a sentence end ("Miami. Mother said"). */
+const PLACE_WORD = "(?:(?:St|Ft|Mt|Pt|Pto|Sta|Sto)\\.[ \\t]*)?\\p{Lu}[\\p{L}'\\-]*";
 /** A unit written before the street: "Apartment 3B at 22 Calle Ocho". */
 const UNIT_FIRST = "(?:(?:Apt|Apartment|Unit|Suite|Ste|Apto|Apartamento)\\.?\\s*#?\\s*[\\p{L}\\p{N}\\-]+,?\\s+(?:at\\s+|en\\s+|in\\s+)?)?";
 /** A city after the street with no state: "22 Calle Ocho, Miami". */
@@ -107,10 +108,19 @@ const NOT_NAMES = new Set([
   "abuelo", "ninguno", "desconocido", "maestra", "maestro", "both", "parents",
 ]);
 
-/** Titles, and relation words used as one before a name: never a name themselves. */
-const TITLE_WORDS =
-  "Dr|Dra|Mr|Mrs|Ms|Miss|Mx|Sr|Sra|Srta|Prof|Lic|Lcda|Lcdo|Abuela|Abuelo|Abuelita|Abuelito|Tia|T\u{ED}a|Tio|T\u{ED}o|Primo|Prima|Grandma|Grandpa|Granny|Nana|Aunt|Auntie|Uncle|Cousin|Coach|Madrina|Padrino|Profe|Teacher|Maestra|Maestro";
+/** Titles that are abbreviations (they may take a period), and relation words used as a title before a name (they may not). */
+const TITLE_ABBREVIATIONS = "Dr|Dra|Mr|Mrs|Ms|Mx|Sr|Sra|Srta|Prof|Lic|Lcda|Lcdo";
+const RELATION_TITLES =
+  "Miss|Abuela|Abuelo|Abuelita|Abuelito|Tia|T\u{ED}a|Tio|T\u{ED}o|Primo|Prima|Grandma|Grandpa|Granny|Nana|Aunt|Auntie|Uncle|Cousin|Coach|Madrina|Padrino|Profe|Teacher|Maestra|Maestro";
+const TITLE_WORDS = `${TITLE_ABBREVIATIONS}|${RELATION_TITLES}`;
 const TITLE_SET = new Set(TITLE_WORDS.toLowerCase().split("|"));
+/** Words of test, form and program names: after a relation word they are not a name ("Teacher Rating Scales", "Coach Training"). */
+const FORM_WORDS = new Set(
+  `rating ratings report reports form forms scale scales interview interviews questionnaire questionnaires training program programs
+  trials trial plus checklist version survey edition inventory record records notes note observation observations data sheet sheets
+  input feedback meeting meetings conference session sessions consult consultation booklet response responses summary profile
+  app apps materials guide manual protocol goals goal`.split(/\s+/u),
+);
 
 /** A name before a credential: "Ana María Prado-Ilustre, BCBA", "Elena Placeholder, Psy.D.". */
 const CREDENTIALS =
@@ -127,7 +137,7 @@ const FIELD_WORDS = new Set(["dob", "date", "age", "sex", "gender", "grade", "ph
 
 /** A name after a title: "Dr. Tomás Ilustre", "Ms. Whitfield", "Sra. Prado". */
 const TITLED_NAME = new RegExp(
-  `(?<=(?<![\\p{L}])(?:${anyCase(TITLE_WORDS)})\\.?[ \\t]+)\\p{Lu}[\\p{L}'\\-]+(?:[ ](?:\\p{Lu}\\.|\\p{Lu}[\\p{L}'\\-]+|de|del|la|y)){0,3}`,
+  `(?<=(?<![\\p{L}])(?:(?:${TITLE_ABBREVIATIONS})\\.?|(?:${RELATION_TITLES})|(?:${RELATION_TITLES.toLowerCase()}))[ \\t]+)\\p{Lu}[\\p{L}'\\-]+(?:[ ](?:\\p{Lu}\\.|\\p{Lu}[\\p{L}'\\-]+|de|del|la|y)){0,3}`,
   "gu",
 );
 
@@ -155,14 +165,21 @@ export const ADDRESS_WORDS: Record<string, string> = {
   eighteenth: "18", nineteenth: "19", twentieth: "20", thirtieth: "30", fortieth: "40", fiftieth: "50",
 };
 export function addressKey(text: string): string {
-  return text
+  const words = text
     .toLowerCase()
-    .normalize("NFD")
+    .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean)
-    .map((w) => ADDRESS_WORDS[w] ?? w.replace(/^(\d+)(?:st|nd|rd|th)$/, "$1"))
-    .join(" ");
+    .map((w) => ADDRESS_WORDS[w] ?? w.replace(/^(\d+)(?:st|nd|rd|th)$/, "$1"));
+  // "S.W." reads "s w": the same as "sw".
+  const joined: string[] = [];
+  for (const w of words) {
+    const last = joined.at(-1);
+    if (last && /^[ns]$/u.test(last) && /^[ew]$/u.test(w)) joined[joined.length - 1] = last + w;
+    else joined.push(w);
+  }
+  return joined.join(" ");
 }
 
 function add(out: PatternMatch[], kind: PatternKind, regex: RegExp, text: string, key: (value: string) => string): void {
@@ -196,12 +213,12 @@ export function findPatterns(text: string): PatternMatch[] {
       all = all.slice(1);
     }
     if (all.length === 0) continue;
-    // Stop at a word that starts the next field ("DOB", "Age", an acronym), and drop trailing particles.
-    let n = all.findIndex((w, i) => i > 0 && (FIELD_WORDS.has(w.toLowerCase()) || /^\p{Lu}{2,5}$/u.test(w)));
+    // Stop at a word that starts the next field ("DOB", "Age", an acronym) or a test or form name, and drop trailing particles.
+    let n = all.findIndex((w, i) => (i > 0 && (FIELD_WORDS.has(w.toLowerCase()) || /^\p{Lu}{2,5}$/u.test(w))) || FORM_WORDS.has(w.toLowerCase().replace(/[^\p{L}]/gu, "")));
     if (n === -1) n = all.length;
     const words = all.slice(0, n);
     while (words.length > 1 && /^(?:de|del|la|y)$/iu.test(words.at(-1)!)) words.pop();
-    if (NOT_NAMES.has(words[0].toLowerCase())) continue;
+    if (words.length === 0 || NOT_NAMES.has(words[0].toLowerCase()) || /^(?:de|del|la|y)$/iu.test(words[0])) continue;
     const value = words.join(" ").replace(/['\u{2019}]s$/u, "");
     out.push({ kind: "unlisted-name", start, end: start + value.length, key: `unlisted-name:${alnum(value)}` });
   }
@@ -209,16 +226,30 @@ export function findPatterns(text: string): PatternMatch[] {
 }
 
 /** The days part of an age, to drop: ", 8 days" in "6 years, 8 months, 8 days"; ";8" in "6;8;8" (and "6-8-8", "6:8:8" after "age" or "CA"). */
-const AGE_WORDS_DAYS =
-  /\b\d{1,2}\s*(?:years?|yrs?\.?|y\.?|a[nñ]os?)\s*,?\s*(?:and\s+|y\s+)?\d{1,2}\s*(?:months?|mos?\.?|m\.?|meses?)(\s*,?\s*(?:and\s+|y\s+)?\d{1,2}\s*(?:days?|d\.?|d[ií]as?))(?![\p{L}])/giu;
+const AND = "(?:and\\s+|y\\s+|&\\s*|\\+\\s*)?";
+const DAYS_UNIT = "(?:days?|d(?![\\p{L}])|d[ií]as?)";
+/** "6 years, 8 months, 8 days", "6y8m8d", "6 años 8 meses y 8 días", "23 months 8 days", "6 years, 248 days". */
+const AGE_WORDS_DAYS = new RegExp(
+  `(?<![\\p{N}])\\d{1,3}\\s*(?:(?:years?|yrs?\\.?|y\\.?|a[nñ]os?)\\s*,?\\s*${AND}(?:\\d{1,2}\\s*(?:months?|mos?\\.?|m\\.?|meses?))?|(?:months?|mos?\\.?|meses?))(\\s*,?\\s*${AND}\\d{1,3}\\s*${DAYS_UNIT})(?![\\p{L}])`,
+  "giu",
+);
 const AGE_SEMICOLON_DAYS = /(?<![\p{N};])\d{1,2};(?:0?\d|1[01])(;\d{1,2})(?![\p{N}]|;\d)/gu;
-const AGE_NUMBERS_DAYS =
-  /(?<=\b(?:age|ages|chronological\s+age|c\.?a\.?|edad|edad\s+cronol[oó]gica)\s*(?:at\s+testing|al\s+evaluar)?\s*[:=]?\s*)\d{1,2}([:.-])(?:0?\d|1[01])(\1\d{1,2})(?![\p{N}]|[:.-]\d)/giu;
+/** After an age label, with a table bar, a colon, an equals sign or "(Y:M:D)" between: "Chronological age | 6:8:8", "Age (Y:M:D) 6:08:08", "CA = 6-08-08". */
+const AGE_LABEL = "\\b(?:age|ages|aged|chronological\\s+age|c\\.?a\\.?|edad|edad\\s+cronol[oó]gica)\\s*(?:at\\s+testing|al\\s+evaluar)?\\s*(?:\\([^)\\n]{0,15}\\))?\\s*[:=|]?\\s*";
+const AGE_NUMBERS_DAYS = new RegExp(`(?<=${AGE_LABEL})\\d{1,2}([:.;-])(?:0?\\d|1[01])(\\1\\d{1,2})(?![\\p{N}]|[:.;-]\\d)`, "giu");
+/** A table row: "Chronological Age | 6 | 8 | 8": the third number is the days. */
+const AGE_CELLS_DAYS = new RegExp(`(?<=${AGE_LABEL})\\d{1,2}\\s*\\|\\s*(?:0?\\d|1[01])(\\s*\\|\\s*\\d{1,2})(?![\\p{N}]|\\s*\\|\\s*\\d)`, "giu");
 
 export function findAgeDays(text: string): Array<{ start: number; end: number }> {
   const out: Array<{ start: number; end: number }> = [];
-  for (const m of text.matchAll(AGE_WORDS_DAYS)) out.push({ start: m.index + m[0].length - m[1].length, end: m.index + m[0].length });
+  for (const m of text.matchAll(AGE_WORDS_DAYS)) {
+    // The days and what joins them: ", 248 days", " & 8 days".
+    const days = m[1].replace(/^[\s,]*/u, "");
+    const lead = m[0].slice(0, m[0].length - days.length).match(/(?:[\s,]*(?:and|y|&|\+)?\s*)$/iu)?.[0].length ?? 0;
+    out.push({ start: m.index + m[0].length - days.length - lead, end: m.index + m[0].length });
+  }
   for (const m of text.matchAll(AGE_SEMICOLON_DAYS)) out.push({ start: m.index + m[0].length - m[1].length, end: m.index + m[0].length });
   for (const m of text.matchAll(AGE_NUMBERS_DAYS)) out.push({ start: m.index + m[0].length - m[2].length, end: m.index + m[0].length });
+  for (const m of text.matchAll(AGE_CELLS_DAYS)) out.push({ start: m.index + m[0].length - m[1].length, end: m.index + m[0].length });
   return out;
 }

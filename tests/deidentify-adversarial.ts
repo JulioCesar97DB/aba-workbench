@@ -147,6 +147,57 @@ export const PROBES: Probe[] = [
   { group: "M4 ages", text: "Age 6 years, 8 months, 8 days", hide: ["8 days"], keep: ["6 years, 8 months"] },
   { group: "M4 ages", text: "Edad: 6 años, 8 meses y 8 días", hide: ["8 días"], keep: ["6 años, 8 meses"] },
   { group: "M4 ages", text: "Age at testing 4:2 stays.", hide: [], keep: ["4:2"] },
+
+  // Review round 2 (2026-11-22): its inputs, by class.
+  { group: "R2 N1 hyphenated", text: "his mother, Lucia Fic-ticio, who works nights. His sister, Valeria Ficticio Go-mez, attends", hide: ["Fic-ticio", "Go-mez"] },
+  { group: "R2 N1 hyphenated", text: "Ficti-cio Gó-mez family; Va-leria laughed; Fic- ticio; Ma-teo", hide: ["Ficti-cio", "Gó-mez", "Va-leria", "Fic- ticio", "Ma-teo", "Ma-"] },
+  { group: "R2 N1 split", text: "M ateo, Fi cticio, Mat eo Fic ticio", hide: ["M ateo", "Fi cticio", "Mat eo", "Fic ticio"] },
+  { group: "R2 N1 split", text: "Mar-tí Elementary and Mia-\nmi and Mar-\nch 14, 2020", hide: ["Mar-tí", "Mia-\nmi", "Mar-\nch 14"] },
+  { group: "R2 N2 date of birth", text: "March the 14th, 2020", hide: ["14th", "2020"] },
+  { group: "R2 N2 date of birth", text: "03 / 14 / 2020 and 03/14/ 2020 and 3/14/'20", hide: ["03 / 14 / 2020", "03/14/ 2020", "3/14/'20"] },
+  { group: "R2 N2 date of birth", text: "DOB 031420; DOB 03142020; DOB 14032020", hide: ["031420", "03142020", "14032020"] },
+  { group: "R2 N2 date of birth", text: "14-III-2020", hide: ["14-III-2020"] },
+  { group: "R2 N2 birthday", text: "turns 7 on 3/14. His birthday is coming up on 3/14. Celebrates on 14/3 every year.", hide: ["3/14", "14/3"] },
+  { group: "R2 N2 birthday", text: "el catorce de marzo; the fourteenth of March; March fourteenth", hide: ["catorce de marzo", "fourteenth of March", "March fourteenth"] },
+  { group: "R2 N3 compatibility", text: "Ｍａｔｅｏ and ＦＩＣＴＩＣＩＯ and Ｌｕｃíａ", hide: ["Ｍａｔｅｏ", "ＦＩＣＴＩＣＩＯ", "Ｌｕｃíａ"] },
+  { group: "R2 N3 compatibility", text: "Daniela Muestra signed; Dani\u{FB01}cticio; Mu\u{FB06}stra", hide: ["Daniela", "Muestra"] },
+  { group: "R2 L5 entities", text: "Luc&iacute;a and Luc&#237;a and Ficticio&#x20;G&oacute;mez", hide: ["Luc&iacute;a", "Luc&#237;a", "G&oacute;mez"] },
+  { group: "R2 M4 old dates", text: "Seen 5 Jan 24 and Jan 5 '24.", hide: ["5 Jan 24", "Jan 5 '24"] },
+  { group: "R2 M5 OCR", text: "Mate0, Luc1a, FlCTlClO, Matco", hide: ["Mate0", "Luc1a", "FlCTlClO", "Matco"] },
+  { group: "R2 H5 ages", text: "Chronological age | 6:8:8; Age (Y:M:D) 6:08:08; 6 years 8 months & 8 days", hide: ["6:8:8", "6:08:08", "8 days"], keep: ["6:8", "6:08", "6 years 8 months"] },
+  { group: "R2 H5 ages", text: "23 months 8 days; 80 months 8 days old; aged 6 years, 248 days; Chronological Age | 6 | 8 | 8", hide: ["8 days", "248 days", "| 8 | 8"], keep: ["23 months", "80 months old", "aged 6 years"] },
+  { group: "R2 L1 ages", text: "6y8m8d. 6 y; CA = 6-08-08", hide: ["8d", "6-08-08"], keep: ["6y8m.", "6 y", "CA = 6-08"] },
+  { group: "R2 L3 particles", text: "Sra. Lucía Ficticio de Gómez", hide: ["Lucía", "Ficticio", "Gómez"], keep: ["de"] },
+];
+
+/** Clinical text with title words, labels and places that must come through as written (review round 2, H1 and H2). */
+export const CLINICAL_ROUND2 = [
+  "BASC-3 Teacher Rating Scales (TRS)",
+  "CBCL Teacher Report Form",
+  "Vineland-3 Teacher Rating Form",
+  "Teacher Interview, Teacher Questionnaire, Coach Training Program, Nana Plus app",
+  "Miss Trials: 3",
+  "Rater: Teacher. Respondent: Mother.",
+  "Grace period; Mark the data; Will they?; Florida Medicaid; Parent Training Goals; Code 97153; Room 33135; Page 33101; Total 33012",
+];
+
+/**
+ * Texts that must come back as written after de-identification (review round 2: H2 lost a word, H3 restored another
+ * school), and, for names, what comes back: the same words in the sheet's spelling (a broken, OCR-misread or
+ * fullwidth name word comes back clean; a first name or a nickname as the preferred name, the owner's rule).
+ */
+export const RESTORE_NAMES: Array<[string, string]> = [
+  ["Lucia Fic-ticio and Valeria Ficticio Go-mez; Ｍａｔｅｏ; Luc1a; Mar-tí Elementary.", "Lucía Ficticio and Valeria Ficticio Gómez; Mateo; Lucía; Mar-tí Elementary."],
+  ["Valeria Ficticio and Valeria Ficticio Gómez; Ficticio, Mateo; Mateo F.", "Valeria Ficticio and Valeria Ficticio Gómez; Ficticio, Mateo; Mateo F."],
+];
+
+export const RESTORE_EXACT = [
+  "Visited 4471 SW 12th Terrace, Miami. Mother said he sleeps well.",
+  "We met at 4471 SW 12th Terrace, Miami. Lives Here.",
+  "He attends José Martí Elementary School and will go to José Martí Middle School.",
+  "Lives on SW 12th Terrace near the park; 4471 SW 12th Terr., Unit 3, Miami FL 33135; 4471 S.W. 12 Terrace #3.",
+  "Call 555-0142 or (305) 555-0142; ID FL 123 - 456 - 789 or 123456789.",
+  "La abuela, Sra. Gómez, cuida a Mateo. The Ficticio family; Ficticio said.",
 ];
 
 /** What must survive whatever the sheet: clinical terms, codes, scores. */
