@@ -32,7 +32,8 @@ const byKey = new Map<string, SectionGeneration>();
 const listeners = new Set<() => void>();
 let snapshot = 0;
 /** Told each saved section, so the screen and the sidebar show it. */
-const savedListeners = new Set<(caseId: string, result: Extract<SectionSaveResult, { outcome: "saved" }>) => void>();
+type SavedListener = (caseId: string, result: Extract<SectionSaveResult, { outcome: "saved" }>, kind: "version" | "check") => void;
+const savedListeners = new Set<SavedListener>();
 
 const keyOf = (caseId: string, sectionId: string) => `${caseId}/${sectionId}`;
 
@@ -71,7 +72,7 @@ function apply(update: GenerationUpdate) {
     case "saved":
       if (event.result.outcome === "saved") {
         const saved = event.result;
-        for (const listener of savedListeners) listener(current.caseId, saved);
+        for (const listener of savedListeners) listener(current.caseId, saved, "version");
         set({ ...current, phase: "checking", outcome: { kind: "saved" } });
       } else {
         set({ ...current, outcome: { kind: "not-saved" } });
@@ -80,7 +81,7 @@ function apply(update: GenerationUpdate) {
     case "checked":
       if (event.result.outcome === "saved") {
         const saved = event.result;
-        for (const listener of savedListeners) listener(current.caseId, saved);
+        for (const listener of savedListeners) listener(current.caseId, saved, "check");
       }
       return;
     case "finished":
@@ -147,7 +148,7 @@ export function useSectionGeneration(caseId: string, sectionId: string): Section
 }
 
 /** Called with every section saved by a request (the new version, then its check). */
-export function useOnSectionSaved(listener: (caseId: string, result: Extract<SectionSaveResult, { outcome: "saved" }>) => void): void {
+export function useOnSectionSaved(listener: SavedListener): void {
   useEffect(() => {
     savedListeners.add(listener);
     return () => {

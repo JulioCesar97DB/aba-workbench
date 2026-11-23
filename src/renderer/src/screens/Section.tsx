@@ -142,9 +142,11 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
 
   useOnSectionSaved(
     useCallback(
-      (savedCase: string, result) => {
+      (savedCase: string, result, kind) => {
         if (savedCase !== caseId || result.section.id !== section.id) return;
         setDetail(result.section);
+        // A check only adds its result: she stays on the version and the mode she is in.
+        if (kind === "check") return;
         setViewed(result.section.currentVersion);
         setMode("view");
       },
