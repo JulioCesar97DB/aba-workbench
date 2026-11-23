@@ -1,6 +1,6 @@
 ---
 id: section-crisis-plan
-version: 4
+version: 5
 updated: 2026-11-23
 sources: The ABA Matrix template as exported by her agency (section 20, read 2026-11-21), the payer facts (Florida Medicaid policy 5.2), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the owner's decision that clinical proposals live only in the case formulation (2026-11-23).
 confirmed: no, pending review by the BCBA
@@ -26,7 +26,7 @@ Never propose seclusion or manual, mechanical or chemical restraint: they are no
 
 ## The monitoring part
 
-How the plan is monitored is her standard practice (see the four kinds of content). When her standing instructions for this section describe it, write it as her practice, in her order. When they do not, write only that each crisis incident is recorded and reviewed by the BCBA and that the plan is revised after one, and mark the rest [MISSING: how the plan is monitored: data, review, fidelity checks].
+How the plan is monitored is her standard practice (see the four kinds of content). When her standing instructions for this section describe it, write it as her practice, in her order. When they do not, write no monitoring of your own: mark the whole part [MISSING: how the plan is monitored: incident recording, data review, fidelity checks].
 
 ## Not yet settled with the BCBA
 

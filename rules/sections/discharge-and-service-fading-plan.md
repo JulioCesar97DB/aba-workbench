@@ -1,6 +1,6 @@
 ---
 id: section-discharge-and-service-fading-plan
-version: 4
+version: 5
 updated: 2026-11-23
 paragraphs: 2-3
 sources: The ABA Matrix template as exported by her agency (section 18, read 2026-11-21), the payer facts on transition and discharge (Molina guide section 8), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the quality runs on an invented case (2026-11-23: sentences commenting on the evidence instead of stating criteria).
@@ -19,7 +19,7 @@ The narrative only, in 2 or 3 paragraphs. In ABA Matrix this section also has a 
 
 Her assessments build the narrative in this order:
 
-1. The grounds for discharge. State the payer's (the child no longer meets medical necessity; the behaviors no longer stand in the way of major life activities; the impairment no longer justifies services; the parent or guardian withdraws consent) and any others her standing instructions give. This sentence names the grounds only: it is always followed by the measurable criteria described under "Criteria, not commentary".
+1. The grounds for discharge. State the payer's (see the payer facts, Molina section 8: the child no longer meets medical necessity; no longer engages in maladaptive behaviors; the behaviors no longer stand in the way of major life activities; the impairment no longer justifies services; the parent or guardian withdraws consent) and any others her standing instructions give. This sentence names the grounds only: it is always followed by the measurable criteria described under "Criteria, not commentary".
 2. When fading begins, and what happens if skills decline while it is under way.
 3. When services end after fading.
 

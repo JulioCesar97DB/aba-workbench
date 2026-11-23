@@ -1,6 +1,6 @@
 ---
 id: guide
-version: 2
+version: 3
 updated: 2026-11-23
 sources: The ABA Matrix template as exported by her agency (22 sections, read 2026-11-21), the BCBA's answers of 2026-11-21, the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), the payer facts (Florida Medicaid policy 4.2.1 and 6.2.2; Molina guide sections 2 to 5 and 8), and the quality runs on an invented case (2026-11-23).
 confirmed: no, pending review by the BCBA
@@ -49,7 +49,7 @@ Each fact has one home: the section that owns it states it in full. Other sectio
 | 13 | Assessments Conducted | The tools used; the observations (date, observer, setting, duration, what each tool was for); the questionnaire and score reports, shown but not interpreted (4 and 6 interpret them); the function matrix; the preference assessment | – | Observation dates and settings cited anywhere; the functions in 14 |
 | 14 | Hypothesis Based Interventions | For each function: its behaviors, preventive strategies, replacement skills and management strategies (positive, and one entry per behavior or group), with the safety response for dangerous behaviors | The Crisis Plan by name | Functions in 13; behaviors in 8; skills in 9; procedures in 15 |
 | 15 | Interventions | Each procedure's definition and its implementation with this child, with parameters | – | Every procedure named in 11, 12, 14 and 16 |
-| 16 | Family/Caregiver Involvement | Who takes part, their availability, languages and capacity; the caregivers' everyday responses that training will change (giving the item back, doing the step for the child), described without blame; what training covers and why; limited participation, its impact and the mitigation (the caregiver goals are their own blocks in ABA Matrix) | The family's priorities (3); procedures by name (15 describes them); behaviors and skills by name | Caregivers with 1 and 3; procedures with 14 and 15 |
+| 16 | Family/Caregiver Involvement | Who takes part, their availability, languages and capacity; the caregivers' everyday responses that training will change (giving the item back, doing the step for the child), described without blame; what training covers and why; limited participation, its impact and the mitigation (the caregiver goals are their own blocks in ABA Matrix) | The family's priorities (3); procedures by name, only as her plan, sections, instructions, notes or a source name them (15 describes them); behaviors and skills by name | Caregivers with 1 and 3; procedures with 14 and 15 |
 | 17 | Generalization and Maintenance | How the plan's skills generalize across this child's people, settings, materials and routines, and how they are maintained; coordination with the child's other providers for generalization | The child's goals and skills by name | Skills in 9, 11, 12; settings and people in 3 and 16 |
 | 18 | Discharge and Service Fading Plan | Discharge criteria for each behavior, skill and caregiver; how services step down; the transition | Behaviors and baselines by name and number; other providers | 8, 10, 16 |
 | 19 | Risk Assessment | The risks the assessment found: to the plan's success (inconsistent cues, prompt dependence) and from each behavior, most dangerous first, with its evidence | The safety response in 14 and the Crisis Plan by name | Behavior names and incidents with 4 and 8 |

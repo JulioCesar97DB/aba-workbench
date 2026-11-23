@@ -1,9 +1,9 @@
 ---
 id: section-generalization-and-maintenance
-version: 3
+version: 4
 updated: 2026-11-23
 paragraphs: 2-2
-words: 200-320
+words: 150-320
 sources: The BCBA's own description of this section (2026-11-21), her corrected example (read 2026-11-21), and the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words).
 confirmed: no, pending review by the BCBA
 ---
@@ -18,7 +18,7 @@ It tells the reviewer and the team how the skills taught in sessions will carry 
 
 Exactly two paragraphs.
 
-It is written for the whole plan, not goal by goal, in about 200 to 300 words.
+It is written for the whole plan, not goal by goal, in about 150 to 300 words.
 
 1. Generalization. Skills and replacement behaviors are taught with the same SD (discriminative stimulus) and then practiced across settings and people: name this child's settings (home, school, community, as the assessment names them) and people (the caregivers, siblings, teachers, RBTs the sources name). The prompt hierarchy is adjusted as the child's proficiency grows. One or two brief examples taken from this child's own goals and replacement behaviors, as named elsewhere in the assessment, make it this child's.
 
