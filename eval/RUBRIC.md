@@ -57,7 +57,7 @@ The verdict is one of:
 - **REGRESSION** (hard; exit code 2): a code item went down, a check that found nothing in the baseline finds something now, or an item scored in the baseline could not be scored now (a failed draft, or no valid judge answer). A change with a hard regression does not go to her.
 - **Judge items are reported apart from the verdict:** up and down, for the sections both runs had the same judge. A single judge sample has a noise not measured yet. Whether one sample or the median of three decides is the owner's call, pending.
 - **NOT COMPARED** (exit code 3): the runs used another rubric version, another provider or another drafting mode.
-- **INVALID** (exit code 1): a window, the Dock icon or the focus showed during the run. Such a run is never compared or accepted.
+- **INVALID** (exit code 1): a window, the Dock icon or the focus showed during the run, or the app asked for a dialog. Such a run is never compared or accepted.
 
 ## Items scored today (stage: report body, the nine narrative sections)
 

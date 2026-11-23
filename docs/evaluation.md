@@ -8,7 +8,7 @@ The core of the project is the AI's knowledge: how well it writes an ABA initial
    - **Profile and home:** the app runs on the eval profile (`--user-data-dir`) and a temporary home folder (`--home-folder`), both outside `~/ABA Workbench` and Documents.
    - **Window checks:** visible windows, the Dock icon and focused windows are checked at launch, every 5 seconds while the app runs, and before it closes.
    - **Fail-closed:** anything shown or focused kills the app and stops the run. A window at the end marks the run invalid: it is never compared or accepted.
-   - **No dialog:** in hidden mode the app never shows its "unsaved changes" dialog; it closes and logs instead.
+   - **No dialog:** the harness replaces the app's message boxes right after launch, as the window tests do. The app itself is unchanged: `--hidden` never changes how it closes or asks. A box the app asks for (the "unsaved changes" question, say) is recorded, answered with its second button ("Close anyway"), and makes the run invalid. The window is closed before the app quits, so a question asked on close is recorded too.
    - **Old checkouts refused:** `--draft-app` refuses a checkout that has no hidden mode.
 2. **It drafts each case.** It takes every case in `fixtures/cases/` that has a `key.json`, or the ones named with `--cases`. For each case:
    - it creates the case and adds its sources (PDFs as dropped bytes), her session notes and her standing instructions for **every** section (the key's text, or cleared, since the eval profile is kept between runs), through `window.aba` as she would;
@@ -43,7 +43,7 @@ The harness never talks to a provider and never reads the app's credentials file
   The rules change does not go to her.
 - **No hard regression** (exit code 0). Judge items that went up or down are listed **apart from the verdict**, for the sections both runs had the same judge. A single judge sample's noise is not measured yet; whether one sample or the median of three decides is the owner's call (pending).
 - **NOT COMPARED** (exit code 3): another rubric version, another provider (a rehearsal against a real run) or another drafting mode.
-- **INVALID** (exit code 1): a window, the Dock icon or the focus showed.
+- **INVALID** (exit code 1): a window, the Dock icon or the focus showed, or the app asked for a dialog.
 
 **The same judge.** A judge record carries a fingerprint: the judge's prompt version and code, its inputs for the section (rubric, expectations, payer facts, key facts and notes, her notes and instructions), the model and the number of samples. The drafts it judges are not part of it.
 - Judge items are compared only between records with the same fingerprint.

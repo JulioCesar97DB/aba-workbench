@@ -10,3 +10,10 @@ Each folder here is one accepted run of `pnpm eval` (owner's decision, 2026-11-2
   - They are judged again when the baseline's judge differs from this one.
 
   The baseline's files are never changed by a comparison.
+
+## Known gaps
+
+- **`dev-2026-11-23`:** every section's `generation` is `null`. That is the model that served each draft, its tokens and the rules versions it was drafted with.
+  - **Why:** the drafts were made on 2026-11-23 before the harness read them from the case file, so these were never recorded. This is not a harness bug, and they cannot come back without drafting again.
+  - **What is known:** the drafts were written with `dev`'s rules at 363e3d7 (the run's `drafting.rulesVersions` lists them) on GPT-6.2 Astra through the ChatGPT sign-in.
+  - **What is recorded:** the drafts themselves, their checks and their judge records. Runs from fa44083 onward record `generation` for every draft.

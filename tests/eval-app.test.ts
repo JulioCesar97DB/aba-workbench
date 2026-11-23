@@ -9,7 +9,6 @@ import { responsesRequest } from "../src/lib/providers/openai.ts";
 import type { GenerateEvent, GenerateOptions, Provider } from "../src/lib/providers/types.ts";
 import { CASE_FILE_NAME } from "../src/main/case-file.ts";
 import { caseCacheKey } from "../src/main/cache-key.ts";
-import { askUnlessHidden } from "../src/main/close-guard.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
 import { INSTRUCTIONS_FILE_NAME, InstructionsStore } from "../src/main/instructions.ts";
 import { resolveJudgeEnabled } from "../src/main/paths.ts";
@@ -129,20 +128,6 @@ test("judge: her session notes and her standing instructions for the section rea
   assert.match(task, /<session-notes>\nThe YMCA program accepted her on 11\/20\.\n<\/session-notes>/);
   assert.match(task, /<standing-instructions>\nGive her standard supports\.\n<\/standing-instructions>/);
   assert.match(task, /<payer-facts>\n- Discharge grounds as the payer lists them\.\n<\/payer-facts>/);
-});
-
-test("hidden mode never shows the unsaved-changes dialog: it closes and logs (review S9)", async () => {
-  const logged: string[] = [];
-  let asked = 0;
-  const ask = async () => {
-    asked++;
-    return "stay" as const;
-  };
-  assert.equal(await askUnlessHidden(true, ask, (line) => logged.push(line))("failed"), "close");
-  assert.equal(asked, 0);
-  assert.match(logged[0], /Hidden mode: closed without asking about unsaved changes \(failed\)/);
-  assert.equal(await askUnlessHidden(false, ask, (line) => logged.push(line))("timeout"), "stay");
-  assert.equal(asked, 1);
 });
 
 test("judge: refuses input that is not a judge request, and a section with no text", async () => {

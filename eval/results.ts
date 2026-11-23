@@ -98,6 +98,8 @@ export interface LaunchCheck {
   visibleWindows: number;
   dockVisible: boolean | null;
   focusedWindows: number;
+  /** Message boxes the app asked for (the harness stubs them): any one makes the run invalid. */
+  dialogs?: string[];
   at: "launch" | "end" | "during";
 }
 
@@ -422,7 +424,7 @@ export function summaryMarkdown(run: RunResult, comparison: Comparison | null, b
     ...(run.fromRun ? [`- ${run.rejudged ? "Every section judged again" : "Judged again only where there was no answer"} from run ${run.fromRun}'s drafts, checked again with the current checks. The request counts below are both runs together.`] : []),
     `- Requests: ${run.requests.total} (${run.requests.drafts} drafts, ${run.requests.checks} consistency checks, ${run.requests.judges} judge, ${run.requests.repairs} repairs, ${run.requests.baselineJudges} judging the baseline's drafts again). ${run.startedAt} to ${run.finishedAt}.`,
     `- Judge input: ${judgeInput} tokens, ${judgeUsage?.cacheReadTokens ?? 0} read from the cache.`,
-    `- Windows: ${run.launches.filter((launch) => launch.at !== "during").map((launch) => `${launch.role} ${launch.at}: ${launch.visibleWindows} visible, Dock ${launch.dockVisible === null ? "n/a" : launch.dockVisible ? "VISIBLE" : "hidden"}, ${launch.focusedWindows} focused`).join("; ")}; ${run.windowChecksDuring} checks during the run${run.valid ? ", all clear" : ", NOT clear"}.`,
+    `- Windows: ${run.launches.filter((launch) => launch.at !== "during").map((launch) => `${launch.role} ${launch.at}: ${launch.visibleWindows} visible, Dock ${launch.dockVisible === null ? "n/a" : launch.dockVisible ? "VISIBLE" : "hidden"}, ${launch.focusedWindows} focused${launch.dialogs && launch.dialogs.length > 0 ? `, ${launch.dialogs.length} dialog(s) asked for` : ""}`).join("; ")}; ${run.windowChecksDuring} checks during the run${run.valid ? ", all clear" : ", NOT clear"}.`,
     `- Scores: code items ${t.code[0]} of ${t.code[1]}, judge items ${t.judge[0]} of ${t.judge[1]}${baseline ? `; the baseline as the current checks score it: code ${totals(baseline).code[0]} of ${totals(baseline).code[1]}, judge ${totals(baseline).judge[0]} of ${totals(baseline).judge[1]}` : ""}.`,
     "",
   );

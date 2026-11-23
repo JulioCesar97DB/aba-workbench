@@ -243,17 +243,48 @@ let windowChecksDuring = 0;
 let invalidReason: string | null = null;
 const running = new Set<ElectronApplication>();
 
-/** Visible windows, the Dock icon and focused windows, as the app's main process sees them. */
+/**
+ * The app's message boxes never show during a run (review round 2, N1): the harness, not
+ * the app, replaces them right after launch, the way the window tests stub them. A box the
+ * app asks for is recorded and answered with its second button ("Close anyway" for the
+ * unsaved-changes question), and the run is then invalid: something needed a person.
+ */
+async function stubDialogs(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ dialog }) => {
+    const g = globalThis as unknown as { evalDialogs: string[] };
+    g.evalDialogs = [];
+    const record = (args: unknown[]) => {
+      const options = args.find((arg): arg is { message?: unknown; title?: unknown } => typeof arg === "object" && arg !== null && "message" in arg);
+      g.evalDialogs.push(String(options?.message ?? options?.title ?? "a message box").slice(0, 200));
+    };
+    dialog.showMessageBox = (async (...args: unknown[]) => {
+      record(args);
+      return { response: 1, checkboxChecked: false };
+    }) as typeof dialog.showMessageBox;
+    dialog.showMessageBoxSync = ((...args: unknown[]) => {
+      record(args);
+      return 1;
+    }) as typeof dialog.showMessageBoxSync;
+    dialog.showErrorBox = ((title: string) => {
+      g.evalDialogs.push(String(title).slice(0, 200));
+    }) as typeof dialog.showErrorBox;
+  });
+}
+
+/** Visible windows, the Dock icon, focused windows and message boxes asked for, as the app's main process sees them. */
 async function windowState(app: ElectronApplication, role: LaunchCheck["role"], at: LaunchCheck["at"]): Promise<LaunchCheck> {
   const state = await app.evaluate(({ app: electronApp, BrowserWindow }) => ({
     visibleWindows: BrowserWindow.getAllWindows().filter((window) => window.isVisible()).length,
     focusedWindows: BrowserWindow.getAllWindows().filter((window) => window.isFocused()).length,
     dockVisible: electronApp.dock ? electronApp.dock.isVisible() : null,
+    dialogs: [...((globalThis as unknown as { evalDialogs?: string[] }).evalDialogs ?? [])],
   }));
   return { role, at, ...state };
 }
 
-const showsSomething = (state: LaunchCheck) => state.visibleWindows > 0 || state.focusedWindows > 0 || state.dockVisible === true;
+const showsSomething = (state: LaunchCheck) => state.visibleWindows > 0 || state.focusedWindows > 0 || state.dockVisible === true || (state.dialogs?.length ?? 0) > 0;
+const describe = (state: LaunchCheck) =>
+  `${state.visibleWindows} visible, ${state.focusedWindows} focused, Dock ${state.dockVisible}${state.dialogs && state.dialogs.length > 0 ? `, a dialog was asked for: ${state.dialogs.join(" / ")}` : ""}`;
 
 /**
  * Checks the windows every few seconds while the app runs (review S9). Anything shown or
@@ -266,7 +297,7 @@ function watchWindows(app: ElectronApplication, role: LaunchCheck["role"]): () =
         windowChecksDuring++;
         if (!showsSomething(state)) return;
         launches.push(state);
-        invalidReason = `the ${role} app showed a window, its Dock icon or took the focus during the run (${state.visibleWindows} visible, ${state.focusedWindows} focused, Dock ${state.dockVisible})`;
+        invalidReason = `the ${role} app showed a window, its Dock icon, took the focus or asked for a dialog during the run (${describe(state)})`;
         console.error(`STOPPED: ${invalidReason}.`);
         app.process().kill("SIGKILL");
       })
@@ -280,6 +311,7 @@ async function launch(checkout: string, role: LaunchCheck["role"], profile: stri
   const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) => name !== "ELECTRON_RENDERER_URL" && value !== undefined)) as Record<string, string>;
   const app = await electron.launch({ args: [checkout, `--user-data-dir=${profile}`, `--home-folder=${home}`, "--hidden"], cwd: checkout, env });
   running.add(app);
+  await stubDialogs(app);
   // The computer's real pointer never reaches the window, as in the window tests.
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((window) => window.setIgnoreMouseEvents(true)));
   const page = await app.firstWindow();
@@ -298,10 +330,20 @@ async function launch(checkout: string, role: LaunchCheck["role"], profile: stri
 async function closeApp(app: ElectronApplication, role: LaunchCheck["role"], stopWatching: () => void): Promise<void> {
   stopWatching();
   const state = await windowState(app, role, "end").catch(() => null);
+  // The window is closed first, while the dialogs are still stubbed: its close guard may ask
+  // about unsaved changes, and that question must be recorded before the app quits.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((window) => window.close())).catch(() => undefined);
+  for (let waited = 0; waited < 10_000; waited += 200) {
+    const open = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length).catch(() => 0);
+    if (open === 0) break;
+    await pause(200);
+  }
+  const dialogs = await app.evaluate(() => [...((globalThis as unknown as { evalDialogs?: string[] }).evalDialogs ?? [])]).catch(() => [] as string[]);
   if (state) {
-    launches.push(state);
-    // Review S9: a window at the end fails the run; it is never compared or accepted.
-    if (showsSomething(state)) invalidReason ??= `at the end the ${role} app had ${state.visibleWindows} visible windows, ${state.focusedWindows} focused, Dock ${state.dockVisible}`;
+    const end = { ...state, dialogs };
+    launches.push(end);
+    // Review S9: a window, the focus or a dialog at the end fails the run; it is never compared or accepted.
+    if (showsSomething(end)) invalidReason ??= `at the end the ${role} app had ${describe(end)}`;
   }
   await app.close().catch(() => undefined);
   running.delete(app);

@@ -345,8 +345,9 @@ export const BANNED_PATTERNS: Array<{
   {
     id: "restraint",
     pattern: /\b(?:restrain\w*|restraint|seclusion|secluded|physical hold\w*|prone hold|basket hold)\b/iu,
-    // The negation must govern the restraint itself, not any verb in the sentence (review S5).
-    unless: /\b(?:no|not|never|without|prohibit\w*|avoid\w*)\b[^.;,]{0,25}\b(?:restrain\w*|restraint|seclusion|secluded|physical hold\w*|prone hold|basket hold|holds?)\b/iu,
+    // The negation must govern the restraint itself (review S5), within a few words; "not hesitate
+    // to", "without hesitation" or "never delay" negate the hesitation, not the hold (review round 2, m2).
+    unless: /\b(?:no|not|never|without|prohibit\w*|avoid\w*)\b(?!\s+(?:\w+\s+)?(?:hesitat\w*|delay\w*|wait\w*|fail\w*))(?:(?!\b(?:hesitat\w*|delay\w*)\b)[^.;,]){0,25}\b(?:restrain\w*|restraint|seclusion|secluded|physical hold\w*|prone hold|basket hold|holds?)\b/iu,
     what: "restraint or seclusion proposed (Florida Medicaid policy 5.2)",
   },
 ];

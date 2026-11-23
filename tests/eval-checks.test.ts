@@ -153,6 +153,11 @@ test("banned patterns: meta sentences, filler, first person, hours, promises and
   assert.deepEqual(found("Staff will use a physical hold if needed."), ["restraint"]);
   assert.deepEqual(found("If Sofía does not stop hitting, staff will use a basket hold until she is calm."), ["restraint"], "a negation elsewhere in the sentence does not excuse it (review S5)");
   assert.deepEqual(found("No restraint or seclusion is used."), []);
+  assert.deepEqual(found("The RBT will not hesitate to use a basket hold if she runs."), ["restraint"], "the negation governs another verb (review round 2, m2)");
+  assert.deepEqual(found("Without hesitation, staff will use a basket hold."), ["restraint"]);
+  assert.deepEqual(found("Staff will not use a basket hold or any restraint."), [], "a real prohibition");
+  assert.deepEqual(found("No physical restraint or restrictive procedure is authorized."), []);
+  assert.deepEqual(found("She is never restrained or secluded."), []);
   assert.deepEqual(found("ABA services of 25 hours per week will be delivered at home and school."), ["hours"], "review S5");
   assert.deepEqual(found("The CDE recommended 25 to 30 hours per week of ABA."), []);
   assert.deepEqual(found("ABA will eliminate her aggression."), ["promise"]);
