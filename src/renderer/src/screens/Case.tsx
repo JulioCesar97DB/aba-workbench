@@ -68,12 +68,11 @@ export function useStepMeta(step: CaseStep): string {
 }
 
 const STEP_BODIES = {
-  behaviors: "workspace.behaviorsBody",
   interventions: "workspace.interventionsBody",
   review: "workspace.reviewBody",
 } as const;
 
-/** Behaviors, Interventions, Review and copy: placeholders for now. */
+/** Interventions, Review and copy: placeholders for now. */
 export function StepScreen({ step }: { step: keyof typeof STEP_BODIES }) {
   const { t } = useTranslation();
   const meta = useStepMeta(step);

@@ -4,7 +4,7 @@ import { Term } from "./components/Term.tsx";
 import { TERMS } from "./i18n/terms.ts";
 
 /** The five steps of a case, in order. Their path is also their id. */
-export const CASE_STEPS = ["sources", "behaviors", "interventions", "report", "review"] as const;
+export const CASE_STEPS = ["sources", "case-map", "interventions", "report", "review"] as const;
 export type CaseStep = (typeof CASE_STEPS)[number];
 
 export function casePath(caseId: string, step: CaseStep = "sources", sectionId?: string): string {
@@ -21,15 +21,15 @@ export function newTextPath(caseId: string, type: string): string {
   return `/cases/${caseId}/sources/new/${type}`;
 }
 
-/** Behaviors and Interventions are clinical terms: English in both languages. */
+/** Interventions is a clinical term: English in both languages. The case map is named in the screen's language ("Mapa del caso"). */
 const ENGLISH_STEPS: Partial<Record<CaseStep, string>> = {
-  behaviors: TERMS.behaviors,
   interventions: TERMS.interventions,
 };
 
 export function stepTitle(t: TFunction, step: CaseStep): string {
   const english = ENGLISH_STEPS[step];
   if (english) return english;
+  if (step === "case-map") return t("steps.caseMap");
   return t(`steps.${step as "sources" | "report" | "review"}`);
 }
 

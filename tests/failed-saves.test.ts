@@ -33,7 +33,7 @@ test("failed saves: a change that could not be saved is kept with what it wrote,
   const { failed, ran } = store([{ outcome: "not-saved" }, saved]);
   const op: SaveOp = { kind: "change", sourceId: SOURCE, change: { text: "Typed before reload." } };
   assert.deepEqual(await failed.save(CASE, op), { outcome: "not-saved" });
-  assert.deepEqual(failed.list(), [{ id: "id-1", caseId: CASE, label: "M.F. sample case", failure: "not-saved", about: "source", sectionId: null, text: null, editing: null }]);
+  assert.deepEqual(failed.list(), [{ id: "id-1", caseId: CASE, label: "M.F. sample case", failure: "not-saved", about: "source", sectionId: null, text: null, editing: null, mapItem: null }]);
   assert.equal(failed.size, 1);
   assert.deepEqual(await failed.retry("id-1"), saved);
   assert.deepEqual(ran, [op, op]);
@@ -71,7 +71,7 @@ test("failed saves: an unexpected error is kept; a refused input is not", async 
   const { failed } = store([new Error("disk exploded"), new Error("Refused: not a source id.")]);
   await assert.rejects(failed.save(CASE, { kind: "removed", sourceId: SOURCE, removed: true }), /exploded/);
   await assert.rejects(failed.save(CASE, { kind: "removed", sourceId: "x", removed: true }), /Refused/);
-  assert.deepEqual(failed.list(), [{ id: "id-1", caseId: CASE, label: "M.F. sample case", failure: "error", about: "source", sectionId: null, text: null, editing: null }]);
+  assert.deepEqual(failed.list(), [{ id: "id-1", caseId: CASE, label: "M.F. sample case", failure: "error", about: "source", sectionId: null, text: null, editing: null, mapItem: null }]);
 });
 
 /* The packaged app's menu */

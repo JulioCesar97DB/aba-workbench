@@ -120,7 +120,7 @@ The app never creates a folder in a place the user did not expect. The default f
 
 | Key | What it holds |
 | --- | --- |
-| `schemaVersion` | `1` (now `3`: see below). |
+| `schemaVersion` | `1` (now `4`: see below). |
 | `id` | A version 4 UUID, lowercase, made when the case is created. The interface uses it in the case's address (`#/cases/<id>/sources`). |
 | `label` | What the user typed: Unicode NFC, no spaces at either end, 1 to 100 characters, no control or text-direction characters (`checkCaseLabel` in `src/shared/api.ts`). |
 | `clientAge` | `{ "years": 0-120, "months": 0-11 }`, `months` optional; left out when the user gave no age. |
@@ -143,7 +143,7 @@ Schema version 2 (`CASE_SCHEMA_VERSION`) adds `sources`. Each entry:
 
 Pasted texts are kept in the data file, not in files of their own (owner's decision, 2026-11-22), so one durable write saves a change whole and the reading rules below cover them. A case holds at most 500 sources, and its data file at most 50 MB (`MAX_CASE_FILE_BYTES`): a change that would make it larger is refused whole (`case-full`), never cut.
 
-Schema version 3 adds the report's sections (`sections`: every version of each, hers and the AI's, with what made each AI version) and her session notes (`sessionNotes`, `sessionNotesArchive`): [sections.md](sections.md#storage). `MIGRATIONS[2]` gives a version 2 file an empty `sections`. Later phases add their own top-level keys (behaviors) and raise `schemaVersion`.
+Schema version 3 adds the report's sections (`sections`: every version of each, hers and the AI's, with what made each AI version) and her session notes (`sessionNotes`, `sessionNotesArchive`): [sections.md](sections.md#storage). `MIGRATIONS[2]` gives a version 2 file an empty `sections`. Schema version 4 adds the case map (`caseMap`, optional: a case has none until she makes one): [case-map.md](case-map.md). `MIGRATIONS[3]` adds nothing. Later phases add their own top-level keys and raise `schemaVersion`.
 
 **Reading.** The data file is read as bytes and decoded as UTF-8 with no replacement: a file that is not valid UTF-8 (one saved as Latin-1 by an older Windows Notepad, say) is damaged. So is a file that `JSON.parse` would read with less than it holds: an object with a repeated key (the last would win), a key named `__proto__` (rebuilding the object turns it into the prototype, and a save drops it), or a number that does not read back as itself (one too large for any number, a whole number past 2^53, a decimal with more digits than a number holds, a tiny number read as 0, or -0, written back as 0). Numbers the app writes always pass: `JSON.stringify` writes each so it reads back exactly. A damaged file is never written to, so the app never saves a case with less than its file held (`readCaseFile` and `parsesWithoutLoss` in `src/main/case-file.ts`).
 

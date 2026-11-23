@@ -14,6 +14,7 @@ import { anthropicProvider } from "../lib/providers/anthropic.ts";
 import { openaiProvider } from "../lib/providers/openai.ts";
 import { INSTRUCTIONS_FILE_NAME, InstructionsStore } from "./instructions.ts";
 import { SectionService } from "./sections.ts";
+import { CaseMapService } from "./case-map-service.ts";
 import { IPC_CHANNELS } from "../shared/api.ts";
 import { defaultCasesFolder, installFolder, isInsideOnDisk } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
@@ -104,7 +105,7 @@ const cases = new CaseLibrary({
 
 // Changes to sources that could not be saved, kept while the app runs (a reload does not forget them).
 // Section text, instructions and notes go through it too (made below; used only once a save runs).
-const failedSaves = new FailedSaves({ run: runSaves(cases, () => sections), labelOf: (caseId) => cases.labelOf(caseId) });
+const failedSaves = new FailedSaves({ run: runSaves(cases, () => sections, () => caseMap), labelOf: (caseId) => cases.labelOf(caseId) });
 
 // The AI connections: the Claude key and the ChatGPT sign-in, in credentials.json in the
 // app's own data folder, owner-only (src/main/credentials.ts). The interface is told each
@@ -145,6 +146,9 @@ const sections = new SectionService({
   writeClipboard: (content) => clipboard.write([new ClipboardItem({ "text/plain": content.text, "text/html": content.html })]),
 });
 
+// The case map (step 1 of the AI knowledge plan): inside each case's data file.
+const caseMap = new CaseMapService({ cases });
+
 registerIpc({
   rulesDir,
   settings,
@@ -152,6 +156,7 @@ registerIpc({
   failedSaves,
   connections,
   sections,
+  caseMap,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
   insideApp,
   // The evaluation's judge (pnpm eval) only where scripts drive the app: development, hidden.
