@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -147,7 +147,8 @@ test("install folder: a junction, an 8.3 short name, a trailing dot and \\\\loca
   // The name with a trailing dot that Win32 drops.
   assert.equal(await isInsideOnDisk(`${app}.\\resources`, app), true, "trailing dot");
   // The 8.3 short name, when the volume makes them.
-  const short = execFileSync("cmd.exe", ["/d", "/c", `for %I in ("${app}") do @echo %~sI`], { encoding: "utf8" }).trim();
+  // Verbatim: Node would otherwise escape the quotes cmd needs around the path.
+  const short = spawnSync("cmd.exe", ["/d", "/c", `for %I in ("${app}") do @echo %~sI`], { encoding: "utf8", windowsVerbatimArguments: true }).stdout.trim();
   if (short.toLowerCase() !== app.toLowerCase() && existsSync(short)) {
     assert.notEqual(path.basename(short).toLowerCase(), "aba-workbench", short);
     assert.equal(await isInsideOnDisk(path.join(short, "Casos"), app), true, `8.3 name ${short}`);
@@ -162,12 +163,14 @@ test("install folder: a junction, an 8.3 short name, a trailing dot and \\\\loca
 });
 
 test("install folder: a name its real path does not unify (subst, a network path) is caught by volume and file number; a number 0 is never trusted", async () => {
+  // Paths as this system resolves them ("/X" is "D:\X" on Windows), since the walk uses its path module.
+  const at = (folder: string) => path.resolve(folder);
   const folders: Record<string, { dev: bigint; ino: bigint }> = {
-    "/Programs/aba-workbench": { dev: 7n, ino: 42n },
-    "/X": { dev: 7n, ino: 42n },
-    "/X/Casos": { dev: 7n, ino: 43n },
-    "/Y": { dev: 7n, ino: 44n },
-    "/": { dev: 7n, ino: 1n },
+    [at("/Programs/aba-workbench")]: { dev: 7n, ino: 42n },
+    [at("/X")]: { dev: 7n, ino: 42n },
+    [at("/X/Casos")]: { dev: 7n, ino: 43n },
+    [at("/Y")]: { dev: 7n, ino: 44n },
+    [at("/")]: { dev: 7n, ino: 1n },
   };
   const lookup = (ids = folders): FolderLookup => ({
     realpath: async (folder) => {
@@ -180,14 +183,15 @@ test("install folder: a name its real path does not unify (subst, a network path
       return id;
     },
   });
-  assert.equal(await isInsideOnDisk("/X/Casos", "/Programs/aba-workbench", "linux", lookup()), true);
-  assert.equal(await isInsideOnDisk("/X/Casos/not made yet", "/Programs/aba-workbench", "linux", lookup()), true);
-  assert.equal(await isInsideOnDisk("/Y", "/Programs/aba-workbench", "linux", lookup()), false);
+  const app = at("/Programs/aba-workbench");
+  assert.equal(await isInsideOnDisk(at("/X/Casos"), app, process.platform, lookup()), true);
+  assert.equal(await isInsideOnDisk(at("/X/Casos/not made yet"), app, process.platform, lookup()), true);
+  assert.equal(await isInsideOnDisk(at("/Y"), app, process.platform, lookup()), false);
   const noNumbers = Object.fromEntries(Object.entries(folders).map(([key, id]) => [key, { dev: id.dev, ino: 0n }]));
-  assert.equal(await isInsideOnDisk("/X/Casos", "/Programs/aba-workbench", "linux", lookup(noNumbers)), false);
+  assert.equal(await isInsideOnDisk(at("/X/Casos"), app, process.platform, lookup(noNumbers)), false);
   // An install folder that cannot be read leaves only the text comparison.
-  assert.equal(await isInsideOnDisk("/X/Casos", "/Gone", "linux", lookup()), false);
-  assert.equal(await isInsideOnDisk("/Gone/Casos", "/Gone", "linux", lookup()), true);
+  assert.equal(await isInsideOnDisk(at("/X/Casos"), at("/Gone"), process.platform, lookup()), false);
+  assert.equal(await isInsideOnDisk(at("/Gone/Casos"), at("/Gone"), process.platform, lookup()), true);
 });
 
 test("install folder: a cases folder already saved in the settings inside it is reported, never listed, read or written", async (t) => {
