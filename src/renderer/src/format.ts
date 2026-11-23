@@ -41,3 +41,22 @@ export function dateFieldOrder(locale: string): DatePart[] {
   const parts = new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(Date.UTC(2026, 10, 23, 12)));
   return parts.map((part) => part.type).filter((type): type is DatePart => type === "day" || type === "month" || type === "year");
 }
+
+/** Whether a moment was today or yesterday on this computer's calendar, or neither (null). */
+export function relativeDay(iso: string, now: Date = new Date()): "today" | "yesterday" | null {
+  const day = new Date(iso);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDay = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  const days = Math.round((startOfToday.getTime() - startOfDay.getTime()) / 86_400_000);
+  return days === 0 ? "today" : days === 1 ? "yesterday" : null;
+}
+
+/** "11:20", "11:20 AM": the time of day in the screen language. */
+export function formatTime(language: Language, iso: string): string {
+  return new Intl.DateTimeFormat(language, { timeStyle: "short" }).format(new Date(iso));
+}
+
+/** "22 nov", "Nov 22": a day without its year, in the screen language. */
+export function formatShortDate(language: Language, iso: string): string {
+  return new Intl.DateTimeFormat(language, { day: "numeric", month: "short" }).format(new Date(iso));
+}

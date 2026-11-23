@@ -66,3 +66,12 @@ export function aiErrorKind(code: string): AiErrorKind {
 export function aiErrorNeedsSettings(kind: AiErrorKind): boolean {
   return kind === "signIn" || kind === "plan" || kind === "notAllowed";
 }
+
+/**
+ * Whether sending the same request again can work, so "Try again" is offered: not when the
+ * way out is in Settings, the provider refused the request as it is, the documents are too
+ * large together, or the app's own rules are missing (UX-2 follow-up, in UX-3).
+ */
+export function aiErrorCanRetry(kind: AiErrorKind): boolean {
+  return kind === "connection" || kind === "busy" || kind === "limit" || kind === "caseFiles" || kind === "other";
+}
