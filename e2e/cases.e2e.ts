@@ -148,13 +148,15 @@ test("a PDF put into the case's folder shows when the case is opened again, and 
   const app = await launch();
   const page = await openApp(app);
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  const rail = page.getByRole("complementary", { name: "Documents and checks" });
-  await expect(rail).toContainText("None yet. PDFs you put in the case's folder show here.");
+  await expect(heading(page)).toHaveText("Documents");
+  const folderPdfs = page.getByRole("region", { name: /in the case's folder you have not added/ });
+  await expect(folderPdfs).toHaveCount(0);
 
   writeFileSync(path.join(caseFolder, "vineland-3.pdf"), "%PDF-1.4 invented test file");
   await page.getByRole("link", { name: "All cases" }).click();
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  await expect(rail.getByRole("listitem")).toHaveText(["vineland-3.pdf"]);
+  await expect(folderPdfs).toHaveAccessibleName("There is 1 PDF in the case's folder you have not added");
+  await expect(folderPdfs.getByRole("listitem")).toHaveText([/^vineland-3\.pdf · /]);
   const data = JSON.parse(readFileSync(path.join(caseFolder, "aba-case.json"), "utf8"));
   expect(data.files).toEqual([{ name: "vineland-3.pdf", bytes: 27, modifiedAt: statSync(path.join(caseFolder, "vineland-3.pdf")).mtime.toISOString() }]);
   expect(data.updatedAt > SAMPLE_CASE.updatedAt).toBe(true);

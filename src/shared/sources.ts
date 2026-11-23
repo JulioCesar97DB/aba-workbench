@@ -203,7 +203,7 @@ export type AddPdfsResult =
   | { outcome: "cancelled" }
   /**
    * PDFs were copied into the case's folder but the data file could not be saved: they are
-   * not sources, and stay in the folder (nothing is deleted), under "Also in this case's folder".
+   * not sources, and stay in the folder (nothing is deleted), in the Documents step's card for the PDFs in the folder not added.
    */
   | { outcome: "copied-not-added"; files: string[]; sources: CaseSources }
   | SourceSaveFailure;

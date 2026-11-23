@@ -5,14 +5,14 @@ import { isSourceType, MAX_SOURCE_TEXT_LENGTH, type SourceType } from "../../../
 import { registerFlusher, sourceAnswer, useCaseSaves } from "../case-saves.tsx";
 import { casePath, sourceTextPath } from "../case-steps.tsx";
 import { ButtonLink } from "../components/Link.tsx";
+import { stepTitle } from "../case-steps.tsx";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase } from "../open-case.tsx";
-import { PageHeader } from "../shell/PageHeader.tsx";
+import { StepHeader } from "../shell/PageHeader.tsx";
 import { WorkArea } from "../shell/WorkArea.tsx";
 import { SourceDetailFields, TYPING_PAUSE_MS, useSourceDetails } from "../source-details.tsx";
 import { formatCount, sourceName, sourceNameLang } from "../source-labels.tsx";
-import { CaseRail, useStepMeta } from "./Case.tsx";
-import { SaveFailure, SaveStatus } from "./Sources.tsx";
+import { SaveFailure, SaveStatus, useDocumentsEyebrow } from "./Sources.tsx";
 
 /*
  * A pasted text, to read and edit: #/cases/<id>/sources/text/<source id>, or a new one
@@ -22,7 +22,14 @@ import { SaveFailure, SaveStatus } from "./Sources.tsx";
  * Its type, title and date are one set of fields before and after that (source-details.tsx).
  * The text area is not controlled by React, so a very long paste stays quick: only its
  * length is kept in state.
+ *
+ * Its type, title and date are one row above the text; the text box fills the pane down to
+ * its foot and grows with the text, so the pane is its only scroll, with no resize handle
+ * (owner's decision T16). The character count shows only from 80% of what a text holds.
  */
+
+/** From this many characters the count shows under the text: 80% of the most a text holds. */
+export const COUNTER_FROM = MAX_SOURCE_TEXT_LENGTH * 0.8;
 
 /** Over this many characters with no line break, typing in the text area gets slow (Chromium lays it out as one paragraph). */
 export const LONG_PARAGRAPH_NOTICE_AT = 100_000;
@@ -43,7 +50,7 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
   const { t } = useTranslation();
   const opened = useOpenedCase();
   const caseId = opened.id;
-  const meta = useStepMeta("sources");
+  const eyebrow = useDocumentsEyebrow();
   const { run } = useCaseSaves();
   const [createdId, setCreatedId] = useState<string | null>(null);
   const id = existingId ?? createdId;
@@ -149,17 +156,15 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
 
   const title = source ? sourceName(t, source) : existingId ? t("sources.textLabel") : t("sources.newText");
   const header = (
-    <PageHeader
+    <StepHeader
+      eyebrow={`${eyebrow} · ${stepTitle(t, "sources")}`}
       title={title}
       titleLang={source ? sourceNameLang(source) : undefined}
-      meta={meta}
-      actions={
-        <>
-          <SaveStatus />
-          <ButtonLink to={casePath(caseId, "sources")} onClick={() => void save()}>
-            {t("sources.backToSources")}
-          </ButtonLink>
-        </>
+      status={<SaveStatus />}
+      secondary={
+        <ButtonLink to={casePath(caseId, "sources")} onClick={() => void save()}>
+          {t("sources.backToSources")}
+        </ButtonLink>
       }
     />
   );
@@ -167,7 +172,7 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
   if (loaded.status !== "loaded") {
     const message = loaded.status === "loading" ? t("sources.loadingText") : loaded.status === "not-found" ? t("sources.textNotFound") : t("sources.textLoadFailed");
     return (
-      <WorkArea header={header} rail={<CaseRail />}>
+      <WorkArea header={header}>
         <p role={loaded.status === "loading" ? "status" : "alert"} className="text-md">
           {message}
         </p>
@@ -176,13 +181,14 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
   }
 
   const full = length >= MAX_SOURCE_TEXT_LENGTH;
+  const counted = length >= COUNTER_FROM;
   return (
-    <WorkArea header={header} rail={<CaseRail />}>
-      <div className="flex max-w-4xl flex-col gap-4">
-        <div className="flex flex-col gap-4 @split:flex-row @split:flex-wrap @split:items-start">
+    <WorkArea header={header} contentClassName="flex min-h-full max-w-list flex-col">
+      <div className="flex flex-1 flex-col gap-4">
+        <div data-testid="text-details" className="flex flex-col gap-4 @split:flex-row @split:items-start [&>*:nth-child(2)]:flex-1">
           <SourceDetailFields details={details} />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-1 flex-col gap-1.5">
           <label htmlFor={textId} className="font-medium">
             {t("sources.textLabel")}
           </label>
@@ -194,7 +200,7 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
             id={textId}
             defaultValue={loaded.text}
             maxLength={MAX_SOURCE_TEXT_LENGTH}
-            aria-describedby={`${textId}-description ${counterId}`}
+            aria-describedby={counted || oneLongParagraph ? `${textId}-description ${counterId}` : `${textId}-description`}
             spellCheck
             autoFocus={!existingId}
             onInput={(event) => {
@@ -206,9 +212,10 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
               timer.current = window.setTimeout(() => void save(), TYPING_PAUSE_MS);
             }}
             onBlur={() => void save()}
-            className="min-h-[24rem] w-full resize-y rounded-md border border-border-control bg-surface px-3 py-2 text-md text-fg"
+            data-testid="source-text"
+            className="min-h-48 w-full flex-1 resize-none overflow-hidden rounded-md border border-border-control bg-surface px-3 py-2 text-md text-fg field-sizing-content"
           />
-          <TextCounter id={counterId} length={length} full={full} oneLongParagraph={oneLongParagraph} />
+          {counted || oneLongParagraph ? <TextCounter id={counterId} length={length} counted={counted} full={full} oneLongParagraph={oneLongParagraph} /> : null}
         </div>
         <SaveFailure />
       </div>
@@ -216,13 +223,13 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
   );
 }
 
-function TextCounter({ id, length, full, oneLongParagraph }: { id: string; length: number; full: boolean; oneLongParagraph: boolean }) {
+function TextCounter({ id, length, counted, full, oneLongParagraph }: { id: string; length: number; counted: boolean; full: boolean; oneLongParagraph: boolean }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const max = formatCount(language, MAX_SOURCE_TEXT_LENGTH);
   return (
     <div id={id} className="flex flex-col gap-1">
-      <p className="text-xs text-fg-muted tabular-nums">{t("sources.textCounter", { count: formatCount(language, length), max })}</p>
+      {counted ? <p className="text-xs text-fg-muted tabular-nums">{t("sources.textCounter", { count: formatCount(language, length), max })}</p> : null}
       {full ? (
         <p role="alert" className="max-w-measure text-sm font-medium text-danger">
           {t("sources.textTooLong", { max })}

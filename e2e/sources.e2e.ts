@@ -67,9 +67,25 @@ async function dropFiles(page: Page, files: Array<{ name: string; bytes: Buffer 
   );
 }
 
-/** A row of the case's sources (the rail lists their names too). */
+/** A row of the case's documents. */
 function sourceRow(page: Page, text: string) {
-  return page.getByRole("list", { name: "Documents in this case" }).or(page.getByRole("list", { name: "Documentos de este caso" })).getByRole("listitem").filter({ hasText: text });
+  return page.getByTestId("document-row").filter({ hasText: text });
+}
+
+/** A checklist row: a type with no document yet, with its own "Paste text" and "Add PDF" (owner's decision T14). */
+function checklistRow(page: Page, name: string) {
+  return page.getByTestId("checklist-row").filter({ has: page.getByText(name, { exact: true }) });
+}
+
+/** "Add PDF" of the step: on the "By hand" card while it is empty, in the header once it has documents (each checklist row has its own too). */
+function addPdf(page: Page) {
+  return page.getByRole("region", { name: "By hand" }).getByRole("button", { name: "Add PDF" }).or(page.getByRole("main").locator("header").getByRole("button", { name: "Add PDF" }));
+}
+
+/** The "⋯" menu of a document's row, and one of its items. */
+async function rowAction(page: Page, row: string, item: string) {
+  await sourceRow(page, row).getByRole("button", { name: /^(More actions|Más acciones):/ }).click();
+  await page.getByRole("menuitem", { name: item }).click();
 }
 
 function tempFolder(): string {
@@ -80,12 +96,22 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
   const first = await openSources(launch, home);
   const { casesFolder } = first;
   let { app, page } = first;
-  await expect(page.getByRole("heading", { name: "Add this client's documents" })).toBeVisible();
+  // Empty: the two ways as cards, and the checklist of what an initial assessment usually has.
+  await expect(page.getByTestId("two-ways")).toHaveAttribute("data-layout", "cards");
+  await expect(page.getByRole("region", { name: "With the AI" })).toContainText("The AI does not add documents");
+  await expect(page.getByRole("heading", { name: "What an initial assessment usually has" })).toBeVisible();
+  await expect(page.getByTestId("checklist-row")).toHaveCount(9);
+  await expect(checklistRow(page, "Parent interview")).toContainText("Interview with the parents or caregivers · Your notes");
+  await expect(checklistRow(page, "Parent interview").getByText("Parent interview", { exact: true })).toHaveAttribute("lang", "en");
+  // "Next step" waits for the first document.
+  const rail = page.getByRole("complementary", { name: "Documents and checks" });
+  await expect(rail.getByRole("button", { name: "Go to the case map" })).toBeDisabled();
   await screenshot(page, "sources-empty-en");
 
-  await page.getByRole("button", { name: "Paste text" }).click();
-  await page.getByRole("menuitem", { name: "CDE" }).click();
+  // Adding from the CDE row sets the type: no type is picked from a menu.
+  await checklistRow(page, "CDE").getByRole("link", { name: "Paste text" }).click();
   await expect(heading(page)).toHaveText("New pasted text");
+  await expect(page.getByRole("combobox", { name: "Type" })).toHaveText(/CDE/);
   // The text area has the focus: paste straight away.
   const text = page.getByRole("textbox", { name: "Text" });
   await expect(text).toBeFocused();
@@ -96,6 +122,10 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
   await text.fill("Invented CDE notes.\nThe child is 4 years old and speaks about 20 single words.");
   await expect(page.getByText("All changes saved").first()).toBeVisible();
   await expect(heading(page)).toHaveText("CDE, psychologist's report");
+  // The box fills the pane and grows with the text: no scroll and no resize handle of its own (T16); no count far from the limit.
+  await expect(text).toHaveCSS("resize", "none");
+  expect(await text.evaluate((field) => field.scrollHeight <= field.clientHeight + 1)).toBe(true);
+  await expect(page.getByText(/of 1,000,000 characters/)).toHaveCount(0);
 
   // On disk: version 2, one source, the text exactly as typed.
   let data = caseData(casesFolder);
@@ -119,11 +149,17 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
   await page.getByRole("link", { name: "Back to documents" }).click();
   await expect(heading(page)).toHaveText("Documents");
   const row = sourceRow(page, "CDE, psychologist's report");
-  await expect(row).toContainText("Pasted text · 90 characters · Oct 2, 2026");
-  await expect(row).toContainText("Invented CDE notes. The child is 4 years old");
+  await expect(row.getByTestId("document-meta")).toHaveText("Pasted text · Oct 2, 2026 · 90 characters · Invented CDE notes. The child is 4 years old and speaks about 20 single words. More notes.");
   await expect.poll(() => caseData(casesFolder).sources[0].text).toContain("More notes.");
-  // The rail lists the case's sources.
-  await expect(page.getByRole("complementary").getByText("CDE, psychologist's report")).toBeVisible();
+  // With a document: the two ways as a bar, the expected types not added as dashed rows, and
+  // "Next step" to the case map as the screen's primary (P5).
+  await expect(page.getByTestId("two-ways")).toHaveAttribute("data-layout", "bar");
+  await expect(page.getByTestId("document-list").getByRole("listitem")).toHaveCount(7);
+  await expect(page.getByTestId("checklist-row")).toHaveText([/^Parent interview/, /^Direct observation/, /^FBA questionnaire/, /^Vineland-3/, /^BASC-3/, /^IEP/]);
+  const next = page.getByRole("complementary", { name: "Documents and checks" }).getByTestId("next-step");
+  await expect(next).toHaveAttribute("data-primary", "true");
+  await expect(next.getByRole("link", { name: "Go to the case map" })).toHaveAttribute("href", `#/cases/${SAMPLE_CASE.id}/case-map`);
+  await expect(page.getByRole("complementary").getByText("With the CDE, the parent interview and your observations you can go on.")).toBeVisible();
 
   await app.close();
   app = await launch();
@@ -137,10 +173,9 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
 
 test("a very long paste stays quick and is saved whole", async ({ launch, home }) => {
   const { page, casesFolder } = await openSources(launch, home);
-  await page.getByRole("button", { name: "Paste text" }).click();
-  await page.getByRole("menuitem", { name: "Parent interview" }).click();
-  // About 600,000 characters, in paragraphs as a report has them.
-  const long = "Invented parent interview notes, one paragraph of a long report that goes on for a while.\n".repeat(6_500);
+  await checklistRow(page, "Parent interview").getByRole("link", { name: "Paste text" }).click();
+  // About 820,000 characters, in paragraphs as a report has them: over 80% of the limit, so the count shows.
+  const long = "Invented parent interview notes, one paragraph of a long report that goes on for a while.\n".repeat(9_000);
   const box = page.getByRole("textbox", { name: "Text" });
   let started = Date.now();
   // As a paste leaves it: the whole text in the field at once, then an input event. (Playwright's
@@ -160,6 +195,8 @@ test("a very long paste stays quick and is saved whole", async ({ launch, home }
   expect(Date.now() - started).toBeLessThan(5_000);
   await expect.poll(() => caseData(casesFolder).sources[0].text).toBe(`${long}More.`);
   await expect(page.getByText(`${(long.length + 5).toLocaleString("en")} of 1,000,000 characters`)).toBeVisible();
+  // The box still has no scroll of its own: the pane scrolls.
+  expect(await box.evaluate((field) => field.scrollHeight <= field.clientHeight + 1)).toBe(true);
   await page.getByRole("link", { name: "Back to documents" }).click();
   await expect(sourceRow(page, "Parent interview")).toContainText(`${(long.length + 5).toLocaleString("en")} characters`);
 });
@@ -175,7 +212,7 @@ test("PDFs from the dialog and dropped onto the window are copied as they are; t
     const before = [vineland, basc].map((file) => ({ bytes: readFileSync(file).toString("base64"), mtime: statSync(file).mtimeMs }));
 
     await stubFileDialog(app, [vineland, basc]);
-    await page.getByRole("button", { name: "Add PDF…" }).click();
+    await addPdf(page).click();
     await expect(page.getByText("2 PDFs added.")).toBeVisible();
     await expect(sourceRow(page, "Vineland-3 report.pdf")).toContainText("Vineland-3");
     await expect(sourceRow(page, "basc-3-prq.pdf")).toContainText("BASC-3");
@@ -206,7 +243,7 @@ test("PDFs from the dialog and dropped onto the window are copied as they are; t
     ]);
     expect(data.files.map((file: { name: string }) => file.name)).toEqual(["Vineland-3 report.pdf", "ablls-r.pdf", "basc-3-prq.pdf", "outside.pdf"]);
 
-    // Open PDF hands the case's copy to the system's viewer (replaced here).
+    // Open hands the case's copy to the system's viewer (replaced here).
     const opened = await app.evaluate(({ shell }) => {
       const seen: string[] = [];
       (globalThis as unknown as { opened: string[] }).opened = seen;
@@ -217,7 +254,7 @@ test("PDFs from the dialog and dropped onto the window are copied as they are; t
       return true;
     });
     expect(opened).toBe(true);
-    await sourceRow(page, "ablls-r.pdf").getByRole("button", { name: "Open PDF" }).click();
+    await sourceRow(page, "ablls-r.pdf").getByRole("button", { name: "Open" }).click();
     await expect.poll(() => app.evaluate(() => (globalThis as unknown as { opened: string[] }).opened)).toEqual([path.join(caseFolder, "ablls-r.pdf")]);
     await screenshot(page, "sources-list-en");
   } finally {
@@ -232,7 +269,7 @@ test("a PDF over the providers' limits is flagged as soon as it is added", async
     const large = path.join(originals, "large scan.pdf");
     writeFileSync(large, inventedPdf("large", 40_000_000));
     await stubFileDialog(app, [large]);
-    await page.getByRole("button", { name: "Add PDF…" }).click();
+    await addPdf(page).click();
     await expect(page.getByText("40 MB: too large for ChatGPT to read (it takes PDFs up to about 37.5 MB). Claude can read it. To use ChatGPT, paste the report's text instead.")).toBeVisible();
   } finally {
     rmSync(originals, { recursive: true, force: true });
@@ -245,7 +282,10 @@ test("removing asks first, keeps the text and the file, and Undo or Restore brin
   const row = sourceRow(page, "vineland-3.pdf");
   await expect(row).toBeVisible();
 
-  await row.getByRole("button", { name: "Remove" }).click();
+  // Remove is in the row's "⋯" menu, with Name and date.
+  await row.getByRole("button", { name: "More actions: “vineland-3.pdf”" }).click();
+  await expect(page.getByRole("menuitem")).toHaveText(["Name and date", "Remove"]);
+  await page.getByRole("menuitem", { name: "Remove" }).click();
   const confirm = page.getByRole("alertdialog", { name: "Remove “vineland-3.pdf” from this case?" });
   await expect(confirm).toContainText("The PDF stays in the case's folder.");
   // Escape cancels: nothing changes.
@@ -253,7 +293,7 @@ test("removing asks first, keeps the text and the file, and Undo or Restore brin
   await expect(confirm).toBeHidden();
   await expect(row).toBeVisible();
 
-  await row.getByRole("button", { name: "Remove" }).click();
+  await rowAction(page, "vineland-3.pdf", "Remove");
   await confirm.getByRole("button", { name: "Remove" }).click();
   await expect(page.getByText("“vineland-3.pdf” was removed from the case.")).toBeVisible();
   const undo = page.getByRole("button", { name: "Undo" });
@@ -266,11 +306,14 @@ test("removing asks first, keeps the text and the file, and Undo or Restore brin
   expect(caseData(casesFolder).sources[0].removedAt).toBeUndefined();
 
   // Removed again: it waits under Removed sources, and Restore brings it back.
-  await row.getByRole("button", { name: "Remove" }).click();
+  await rowAction(page, "vineland-3.pdf", "Remove");
   await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
+  await expect(row).toHaveCount(0);
+  // It was the only document: the step is empty again, with its checklist.
+  await expect(page.getByRole("heading", { name: "What an initial assessment usually has" })).toBeVisible();
   await page.getByText("Removed documents (1)").click();
   await page.getByRole("button", { name: "Restore" }).click();
-  await expect(sourceRow(page, "vineland-3.pdf").getByRole("button", { name: "Remove" })).toBeVisible();
+  await expect(sourceRow(page, "vineland-3.pdf").getByRole("button", { name: "Open" })).toBeVisible();
   expect(readdirSync(caseFolder).sort()).toEqual(["aba-case.json", "vineland-3.pdf"]);
 });
 
@@ -280,15 +323,20 @@ test("details: rename, retype and date a source from the keyboard; PDFs put in t
   // Opening the case again finds the PDF put in its folder.
   await goTo(page, "/");
   await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
-  await expect(page.getByRole("heading", { name: "Also in this case's folder" })).toBeVisible();
-  await page.getByRole("button", { name: "Add to the case" }).click();
+  const folderPdfs = page.getByRole("heading", { name: "There is 1 PDF in the case's folder you have not added" });
+  await expect(folderPdfs).toBeVisible();
+  await expect(page.getByText("The AI does not use it until you add it.")).toBeVisible();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   const row = sourceRow(page, "iep 2026.pdf");
   await expect(row).toContainText("IEP");
-  await expect(page.getByRole("heading", { name: "Also in this case's folder" })).toBeHidden();
+  await expect(folderPdfs).toBeHidden();
 
-  await row.getByRole("button", { name: "Name, type and date" }).focus();
+  // From the keyboard: the row's "⋯" opens its menu, "Name and date" the dialog.
+  await row.getByRole("button", { name: "More actions: “iep 2026.pdf”" }).focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("dialog", { name: "Name, type and date: “iep 2026.pdf”" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Name and date" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Name and date: “iep 2026.pdf”" })).toBeVisible();
   // Its name follows the title as it is saved.
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("textbox", { name: "Title (optional)" }).fill("School IEP");
@@ -307,15 +355,77 @@ test("details: rename, retype and date a source from the keyboard; PDFs put in t
   await app.close();
 });
 
+test("Add PDF from a checklist row gives the PDF that row's type; the header's keeps the guess from its name", async ({ launch, home }) => {
+  const { app, page, casesFolder } = await openSources(launch, home);
+  const originals = tempFolder();
+  try {
+    const scan = path.join(originals, "scan 0042.pdf");
+    writeFileSync(scan, inventedPdf("Vineland-3 scanned"));
+    await stubFileDialog(app, [scan]);
+    await checklistRow(page, "Vineland-3").getByRole("button", { name: "Add PDF" }).click();
+    await expect(page.getByText("1 PDF added.")).toBeVisible();
+    await expect.poll(() => caseData(casesFolder).sources.map((source: { type: string }) => source.type)).toEqual(["vineland-3"]);
+    await expect(sourceRow(page, "scan 0042.pdf")).toContainText("Vineland-3");
+    await expect(checklistRow(page, "Vineland-3")).toHaveCount(0);
+
+    const other = path.join(originals, "school notes.pdf");
+    writeFileSync(other, inventedPdf("school notes"));
+    await stubFileDialog(app, [other]);
+    await addPdf(page).click();
+    await expect(sourceRow(page, "school notes.pdf")).toBeVisible();
+    await expect.poll(() => caseData(casesFolder).sources.map((source: { type: string }) => source.type)).toEqual(["vineland-3", "other"]);
+  } finally {
+    rmSync(originals, { recursive: true, force: true });
+  }
+});
+
+test("Ignore hides a PDF of the folder for this run of the app only: nothing is stored, and it shows again on the next start", async ({ launch, home }) => {
+  const first = await openSources(launch, home);
+  const { caseFolder, casesFolder } = first;
+  let { app, page } = first;
+  writeFileSync(path.join(caseFolder, "school report.pdf"), inventedPdf("school report"));
+  writeFileSync(path.join(caseFolder, "ot notes.pdf"), inventedPdf("OT notes"));
+  await goTo(page, "/");
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
+  const card = page.getByRole("region", { name: "There are 2 PDFs in the case's folder you have not added" });
+  await expect(card).toBeVisible();
+  const before = readFileSync(path.join(casesFolder, SAMPLE_CASE.label, "aba-case.json"), "utf8");
+
+  await card.getByRole("listitem").filter({ hasText: "ot notes.pdf" }).getByRole("button", { name: "Ignore" }).click();
+  const one = page.getByRole("region", { name: "There is 1 PDF in the case's folder you have not added" });
+  await expect(one.getByRole("listitem")).toHaveText([/^school report\.pdf/]);
+  await expect(page.getByText("Ignored PDFs (1) · until you open the app again ·")).toBeVisible();
+  // Still ignored after going elsewhere in the case and coming back.
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/report`);
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
+  await expect(one).toBeVisible();
+  // Nothing was written: the case's file is as it was.
+  expect(readFileSync(path.join(casesFolder, SAMPLE_CASE.label, "aba-case.json"), "utf8")).toBe(before);
+  // "Show" brings it back.
+  await page.getByRole("button", { name: "Show" }).click();
+  await expect(card).toBeVisible();
+  await card.getByRole("listitem").filter({ hasText: "ot notes.pdf" }).getByRole("button", { name: "Ignore" }).click();
+  await expect(one).toBeVisible();
+
+  await app.close();
+  app = await launch();
+  page = await firstScreen(app);
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
+  await expect(card).toBeVisible();
+  await expect(page.getByText(/Ignored PDFs/)).toHaveCount(0);
+});
+
 test("in Spanish and at a narrow window: the step fits, and the clinical terms stay English", async ({ launch, home }) => {
   const { app, page, casesFolder } = await openSources(launch, home, "es");
   await resize(app, 520, 760);
-  await expect(page.getByRole("heading", { name: "Agrega los documentos de este cliente" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Lo que suele tener una evaluación inicial" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Con la IA" })).toContainText("La IA no agrega documentos");
+  await expect(checklistRow(page, "Otro documento")).toContainText("Informes de terapias, notas de la escuela… · Texto o PDF");
   await screenshot(page, "sources-empty-es-narrow");
-  await page.getByRole("button", { name: "Pegar texto" }).click();
-  await expect(page.getByRole("menuitem", { name: "Parent interview" })).toHaveAttribute("lang", "en");
-  await page.getByRole("menuitem", { name: "Direct observation" }).click();
+  await expect(checklistRow(page, "Parent interview").getByText("Parent interview", { exact: true })).toHaveAttribute("lang", "en");
+  await checklistRow(page, "Direct observation").getByRole("link", { name: "Pegar texto" }).click();
   await expect(heading(page)).toHaveText("Nuevo texto pegado");
+  await expect(page.getByRole("combobox", { name: "Tipo" })).toHaveText(/Direct observation/);
   await expect(page.getByText(/Escríbela como (mes\/día\/año|día\/mes\/año|año\/mes\/día), el orden de fechas de tu computadora\./)).toBeVisible();
   await page.getByRole("textbox", { name: "Texto" }).fill("Notas inventadas de una observación directa.");
   await expect(page.getByText("Todos los cambios guardados").first()).toBeVisible();
@@ -377,8 +487,7 @@ test("the sources functions refuse hostile input with messages that hold no path
 
 /** Pastes a new text of a type and waits until it is saved; returns the text area. */
 async function newText(page: Page, type: string, text: string) {
-  await page.getByRole("button", { name: "Paste text" }).click();
-  await page.getByRole("menuitem", { name: type }).click();
+  await checklistRow(page, type).getByRole("link", { name: "Paste text" }).click();
   const area = page.getByRole("textbox", { name: "Text" });
   await area.fill(text);
   await expect(page.getByText("All changes saved").first()).toBeVisible();
@@ -401,8 +510,7 @@ async function stubMessageBox(app: ElectronApplication, response: number) {
 
 test("pasting first, then giving the title, type and date: nothing is lost and the focus stays (review B1)", async ({ launch, home }) => {
   const { page, casesFolder } = await openSources(launch, home);
-  await page.getByRole("button", { name: "Paste text" }).click();
-  await page.getByRole("menuitem", { name: "Parent interview" }).click();
+  await checklistRow(page, "Parent interview").getByRole("link", { name: "Paste text" }).click();
   await page.getByRole("textbox", { name: "Text" }).fill("Invented interview notes.");
   // Straight to the title, while the new text is being created.
   const title = page.getByRole("textbox", { name: "Title (optional)" });
@@ -435,7 +543,7 @@ test("quitting right after typing keeps what was typed, in a text and in a title
   app = await launch();
   page = await firstScreen(app);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
-  await sourceRow(page, "CDE").getByRole("button", { name: "Name, type and date" }).click();
+  await rowAction(page, "CDE", "Name and date");
   await page.getByRole("dialog").getByRole("textbox", { name: "Title (optional)" }).fill("Psychologist's CDE");
   const closedAgain = app.waitForEvent("close");
   await app.evaluate(({ app: electronApp }) => electronApp.quit());
