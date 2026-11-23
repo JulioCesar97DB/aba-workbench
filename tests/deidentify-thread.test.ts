@@ -4,6 +4,10 @@
  * one set of placeholders across texts. The worker runs from its TypeScript source here.
  */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { DeidentifyThread, deidentify, reidentify, type DeidentifyState } from "../src/main/deidentify/index.ts";
 import { REVIEW_SHEET, REVIEW_TODAY } from "./deidentify-adversarial.ts";
@@ -46,5 +50,37 @@ test("thread: a text over the limit is refused with the same error, and the thre
     assert.equal((await thread.deidentify("Mateo")).text, "[CLIENT]");
   } finally {
     await thread.close();
+  }
+});
+
+test("thread: a call over its time limit ends the thread and rejects every pending call", async () => {
+  const thread = new DeidentifyThread(REVIEW_SHEET, { today: REVIEW_TODAY }, { script: new URL("./deidentify-slow-thread.ts", import.meta.url), timeoutMs: 300 });
+  const first = thread.deidentify("Mateo");
+  const second = thread.deidentify("Teo");
+  await assert.rejects(first, /longer than 300 ms/u);
+  await assert.rejects(second, /longer than 300 ms/u);
+  assert.equal(thread.state, "closed");
+  await assert.rejects(thread.deidentify("x"), /closed/u);
+});
+
+test("thread: an idle thread that was never closed does not keep the process alive", () => {
+  const script = `
+    import { DeidentifyThread } from ${JSON.stringify(new URL("../src/main/deidentify/index.ts", import.meta.url).href)};
+    const thread = new DeidentifyThread({ client: { firstName: "Mateo", lastName: "Ficticio" } }, {}, new URL(${JSON.stringify(SCRIPT.href)}));
+    const result = await thread.deidentify("Mateo Ficticio");
+    console.log(result.text);
+  `;
+  const dir = mkdtempSync(path.join(tmpdir(), "aba-deidentify-thread-"));
+  try {
+    const file = path.join(dir, "unclosed.mjs");
+    writeFileSync(file, script);
+    const started = Date.now();
+    // It must end by itself: the time limit only stops a process that hangs.
+    const run = spawnSync(process.execPath, [file], { encoding: "utf8", timeout: 20_000, env: { PATH: process.env.PATH ?? "" } });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout.trim(), "[CLIENT FULL NAME]");
+    assert.ok(Date.now() - started < 15_000);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
