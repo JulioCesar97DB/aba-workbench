@@ -168,6 +168,36 @@ export const PROBES: Probe[] = [
   { group: "R2 H5 ages", text: "23 months 8 days; 80 months 8 days old; aged 6 years, 248 days; Chronological Age | 6 | 8 | 8", hide: ["8 days", "248 days", "| 8 | 8"], keep: ["23 months", "80 months old", "aged 6 years"] },
   { group: "R2 L1 ages", text: "6y8m8d. 6 y; CA = 6-08-08", hide: ["8d", "6-08-08"], keep: ["6y8m.", "6 y", "CA = 6-08"] },
   { group: "R2 L3 particles", text: "Sra. Lucía Ficticio de Gómez", hide: ["Lucía", "Ficticio", "Gómez"], keep: ["de"] },
+
+  // Review round 3 (2026-11-22): its inputs, by class.
+  { group: "R3 B1 spaced date", text: "DOB 03 14 2020; Born: 3 14 2020; 03 14 20", hide: ["03 14 2020", "3 14 2020", "03 14 20"] },
+  { group: "R3 B1 table date", text: "Date of birth | 03 14 2020\nDate of birth | 03 | 14 | 2020", hide: ["03 14 2020", "03 | 14 | 2020"] },
+  { group: "R3 B1 fields", text: "Month: 03 Day: 14 Year: 2020. Born | March | 14 | 2020. Birth month: March; birth day: 14; birth year: 2020", hide: ["Day: 14", "| 14 |", "birth day: 14"] },
+  { group: "R3 B2 boxes", text: "Date of birth | 0 | 3 | 1 | 4 | 2 | 0 | 2 | 0\nPhone | 3 | 0 | 5 | 5 | 5 | 5 | 0 | 1 | 4 | 2\nMedicaid ID | F | L | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9", hide: ["0 | 3 | 1 | 4", "5 | 5 | 5 | 0 | 1 | 4 | 2", "1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9"] },
+  { group: "R3 B2 text", text: "0 3 / 1 4 / 2 0 2 0; 0 3 1 4 2 0 2 0; Phone | 305 | 555 | 0142; 4 4 7 1  S W  1 2 t h  T e r r a c e; M i a m i", hide: ["0 3 / 1 4", "0 3 1 4 2 0 2 0", "555 | 0142", "4 4 7 1", "M i a m i"] },
+  { group: "R3 B3 words", text: "three oh five, five five five, oh one four two; tres cero cinco cinco cinco cinco cero uno cuatro dos; 305-five five five-0142", hide: ["oh one four two", "cero uno cuatro dos", "five five five-0142"] },
+  { group: "R3 B3 day of year", text: "born on the 74th day of 2020; DOB: 2020-074; catorce/03/2020", hide: ["74th", "2020-074", "catorce/03/2020"] },
+  { group: "R3 B3 domains", text: "www.mateoficticio.com and https://ficticio.family.com", hide: ["mateoficticio", "ficticio.family"] },
+  { group: "R3 B3 homoglyph", text: "Valeri\u{0430} and \u{041C}ateo and Fict\u{0456}cio", hide: ["Valeri\u{0430}", "\u{041C}ateo", "Fict\u{0456}cio"] },
+  { group: "R3 B3 percent", text: "https://ex.com/Mat%C3%A9o and MATEO%20FICTICIO", hide: ["Mat%C3%A9o", "MATEO%20FICTICIO"] },
+  { group: "R3 L5 nicknames", text: "Lucy and Andy came; Mom Lucy said so; Matty laughed", hide: ["Lucy", "Andy", "Matty"] },
+];
+
+/** Another invented sheet: names that, split, are ordinary words ("a dam", "no el"): those texts must come through as written. */
+export const SPLIT_SHEET: ClientSheet = {
+  client: { firstName: "Adam", lastName: "Noel" },
+  caregivers: [{ firstName: "Inés", lastName: "Tomas" }, { firstName: "Elena", lastName: "Mora" }],
+  professionals: [{ firstName: "Alma", lastName: "Sales" }],
+};
+export const SPLIT_CLINICAL = ["They built a dam in the park.", "No el niño no quiere.", "He said in es ok.", "To mas allá.", "A dam was drawn."];
+
+/** Another invented sheet with a compound given name and a surname with particles (review round 3: H2, H3, H4). */
+export const COMPOUND_SHEET: ClientSheet = { client: { firstName: "María José", lastName: "del Río de la Fuente", dateOfBirth: "2019-07-02" } };
+export const RESTORE_COMPOUND: Array<[string, string, string]> = [
+  // [the text, what the model writes, what must come back]
+  ["Mª José y Ma. José; José dijo hola; Señora María (otra persona).", "", "Mª José y Ma. José; José dijo hola; Señora María (otra persona)."],
+  ["la Fuente y De La Fuente; Delrío; del Río, María José; la familia del Río-de la Fuente.", "", "la Fuente y De La Fuente; Delrío; del Río, María José; la familia del Río-de la Fuente."],
+  ["cumple el 2/7. born July 2nd.", "Her birthday is [DOB MONTH AND DAY].", "Her birthday is July 2."],
 ];
 
 /** Clinical text with title words, labels and places that must come through as written (review round 2, H1 and H2). */
@@ -187,7 +217,8 @@ export const CLINICAL_ROUND2 = [
  * fullwidth name word comes back clean; a first name or a nickname as the preferred name, the owner's rule).
  */
 export const RESTORE_NAMES: Array<[string, string]> = [
-  ["Lucia Fic-ticio and Valeria Ficticio Go-mez; Ｍａｔｅｏ; Luc1a; Mar-tí Elementary.", "Lucía Ficticio and Valeria Ficticio Gómez; Mateo; Lucía; Mar-tí Elementary."],
+  // A first name restores as the preferred name (the owner's rule); a broken or misread word as written.
+  ["Lucia Fic-ticio and Valeria Ficticio Go-mez; Ｍａｔｅｏ; Luc1a; Mar-tí Elementary.", "Lucía Fic-ticio and Valeria Ficticio Go-mez; Mateo; Luc1a; Mar-tí Elementary."],
   ["Valeria Ficticio and Valeria Ficticio Gómez; Ficticio, Mateo; Mateo F.", "Valeria Ficticio and Valeria Ficticio Gómez; Ficticio, Mateo; Mateo F."],
 ];
 

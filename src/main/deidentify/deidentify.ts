@@ -18,9 +18,10 @@ import { isCommonWordName } from "./common-words.ts";
 import { findDates, parseIsoDate, ymdKey, type YMD } from "./dates.ts";
 import { fold, foldString, originalRange, type Folded } from "./fold.ts";
 import { findBrokenNames, findJoinedNames, findNames, findOcrNames, peopleOf, type NameForm, type Person } from "./names.ts";
-import { ADDRESS_WORDS, addressKey, findAgeDays, findPatterns, phoneKey, type PatternMatch } from "./patterns.ts";
+import { ADDRESS_WORDS, findAgeDays, findPatterns, phoneKey, type PatternMatch } from "./patterns.ts";
 import { birthDatePlaceholder, numberedPlaceholder, personPlaceholder, type BirthDateForm, type NumberedKind } from "./placeholders.ts";
 import type { ClientSheet, FoundKind } from "./sheet.ts";
+import { findSequences, type SequenceValue } from "./sequences.ts";
 import { Spans } from "./spans.ts";
 
 export interface DeidentifyOptions {
@@ -99,8 +100,8 @@ export interface DeidentifyResult {
   map: RestoreMap;
 }
 
-/** The longest text one call accepts: far beyond any case's sources (a PDF is cut at 2M characters). */
-export const MAX_TEXT_LENGTH = 5_000_000;
+/** The longest text one call accepts: what a PDF can give (2M characters); a typed source is far shorter. */
+export const MAX_TEXT_LENGTH = 2_000_000;
 
 interface Candidate {
   start: number;
@@ -180,23 +181,10 @@ function phraseRegex(tokens: string[][], broken = false): RegExp | null {
   return new RegExp(`${B}${body}${E}`, "gu");
 }
 
-/**
- * The key of a value found in a text: two findings with the same key are the same value
- * (the same digits, the same words however abbreviated) and share a placeholder, which
- * restores as the first one was written. A shorter or different value gets its own.
- */
+/** The key of a value found in a text: the same written form shares a placeholder; any other form has its own. */
 function valueKey(kind: FoundKind, original: string): string {
-  switch (kind) {
-    case "address":
-      return `address:${addressKey(original)}`;
-    case "phone":
-      return `phone:${phoneKey(original)}`;
-    case "id":
-    case "email":
-      return `${kind}:${foldString(original).replace(/[^\p{L}\p{N}@.]/gu, "")}`;
-    default:
-      return `${kind}:${tokensOf(original).join(" ")}`;
-  }
+  // Each written form has its own placeholder and restores exactly as written: "(305) 555-0142" and "305.555.0142" are two.
+  return `${kind}:${original.replace(/\s+/gu, " ")}`;
 }
 
 /** Matches a number or a code with or without spaces, dashes, dots, slashes or brackets: "305 555 0142", "FL 123 - 456 - 789". */
@@ -275,7 +263,9 @@ function parseAddress(address: string): SheetAddress {
     ].join("");
     if (typeFirst) {
       const body = `${streetWord(typeFirst)}${ADDRESS_SEPARATOR}${nameBody}`;
-      regexes.push(new RegExp(`${B}${number ? `(?:${escape(number)}${ADDRESS_SEPARATOR})?` : ""}${body}${tail}${E}`, "gu"));
+      // "15 Calle del Mar", "C/ del Mar", and the number after the street: "c. del Mar #15", "Calle del Mar no. 15".
+      const numberAfter = number ? `(?:${ADDRESS_SEPARATOR}(?:#|no\\.?|num\\.?|numero)?${ADDRESS_SEPARATOR}${escape(number)})?` : "";
+      regexes.push(new RegExp(`${B}${number ? `(?:${escape(number)}${ADDRESS_SEPARATOR})?` : ""}${body}${numberAfter}${tail}${E}`, "gu"));
     } else {
       const typePart = type ? `(?:${ADDRESS_SEPARATOR}${streetWord(type)})` : "";
       // With its number, the type may be left out ("4471 SW 12th"); without it, the type must be there ("SW 12th Terrace").
@@ -286,6 +276,9 @@ function parseAddress(address: string): SheetAddress {
   return { regexes, places };
 }
 
+/** A URL, a query string, an email address or a file name. */
+const LINKS = /(?:https?:\/\/|www\.)[^\s<>"'()[\]]+|mailto:[^\s<>"']+|[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|[^\s/\\<>"'|]+\.(?:pdf|docx?|xlsx?|csv|txt|rtf|jpe?g|png|heic|gif|mp4|mov|m4a|zip)\b|\?[^\s?]*=[^\s]*|[^\s]*%[0-9A-Fa-f]{2}[^\s]*/gu;
+
 /** An age label right before a number: "Age", "CA =", "Chronological age |", "Edad:". */
 const AGE_BEFORE = /(?:\bages?|\baged|\bchronological\s+age|\bc\.?a\.?|\bedad(?:\s+cronol[oó]gica)?)\s*(?:at\s+testing|al\s+evaluar)?\s*(?:\([^)\n]{0,15}\))?\s*[:=|]?\s*$/iu;
 
@@ -295,13 +288,25 @@ function isPerson(kind: FoundKind): boolean {
   return kind === "client" || kind === "caregiver" || kind === "family" || kind === "professional";
 }
 
-function personKey(person: Person, form: NameForm, part = ""): string {
-  return `person:${person.priority}:${form}${form === "last" || form === "full" ? `:${part}` : ""}`;
+function personKey(person: Person, form: NameForm): string {
+  return `person:${person.priority}:${form}`;
 }
+
+/** The words of `original` in the sheet's spelling ("MATEO FICTICIO" as "Mateo Ficticio"); particles ("De La"), separators and unknown words ("Mª") as written. */
+function inSheetSpelling(person: Person, original: string): string {
+  const spellings = sheetSpellings(person);
+  return original.replace(/\p{L}+/gu, (word) => (PARTICLE_WORDS.has(foldString(word)) ? word : (spellings.get(foldString(word)) ?? word)));
+}
+const PARTICLE_WORDS = new Set(["de", "del", "la", "las", "los", "y", "e", "van", "von", "der", "den", "da", "di", "do", "dos", "das", "du", "le", "st"]);
+
+const SPELLINGS = new WeakMap<Person, Map<string, string>>();
 
 /** Each name word of a person, folded, with its spelling on the sheet. */
 function sheetSpellings(person: Person): Map<string, string> {
+  const cached = SPELLINGS.get(person);
+  if (cached) return cached;
   const map = new Map<string, string>();
+  SPELLINGS.set(person, map);
   const { firstName, lastName, nicknames, preferredName } = person.sheet;
   for (const name of [firstName, lastName, preferredName, ...(nicknames ?? [])]) {
     for (const word of (name ?? "").normalize("NFC").split(/[\s-]+/u).filter(Boolean)) {
@@ -311,6 +316,8 @@ function sheetSpellings(person: Person): Map<string, string> {
   }
   return map;
 }
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function canonicalDate({ year, month, day }: YMD): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -340,8 +347,8 @@ export class Deidentifier {
   /** Keys of the values that come from the sheet. */
   readonly #sheetKeys = new Set<string>();
   readonly #literals: Literal[] = [];
-  /** For each surname-alone placeholder, how often each written form of it was used. */
-  readonly #surnamesSeen = new Map<string, Map<string, number>>();
+  /** Sheet values read as a sequence of characters, whatever separates them. */
+  readonly #sequences: SequenceValue[] = [];
 
   constructor(sheet: ClientSheet, options: DeidentifyOptions = {}) {
     this.#sheet = sheet;
@@ -360,6 +367,34 @@ export class Deidentifier {
     const literal = (regex: RegExp | null, kind: NumberedKind, capitalizedOnly = false) => {
       if (regex) this.#literals.push({ regex, kind, capitalizedOnly });
     };
+    const sequence = (chars: string, tag: string, minGaps = 0, uniform = false) => {
+      const clean = foldString(chars).replace(/[^\p{L}\p{N}]/gu, "");
+      if (clean.length >= 3 && !this.#sequences.some((s) => s.chars === clean && s.tag === tag)) this.#sequences.push({ chars: clean, minGaps, uniform, tag });
+    };
+    const dob = this.#dob;
+    if (dob) {
+      const p = (n: number) => String(n).padStart(2, "0");
+      const [y4, y2, mm, dd, m1, d1] = [String(dob.year), String(dob.year).slice(2), p(dob.month), p(dob.day!), String(dob.month), String(dob.day)];
+      for (const s of [mm + dd + y4, m1 + d1 + y4, dd + mm + y4, d1 + m1 + y4, y4 + mm + dd, y4 + m1 + d1, mm + dd + y2, dd + mm + y2]) sequence(s, "dob");
+      for (const s of [m1 + d1 + y2, d1 + m1 + y2]) sequence(s, "dob", 2);
+    }
+    for (const phone of sheet.phones ?? []) {
+      const digits = phoneKey(phone);
+      sequence(digits, "phone");
+      if (digits.length === 10) sequence(digits.slice(3), "phone");
+    }
+    for (const id of sheet.ids ?? []) {
+      sequence(id, "id");
+      const digitsPart = foldString(id).replace(/[^\p{L}\p{N}]/gu, "").replace(/^\p{L}+/u, "");
+      if (digitsPart.length >= 6) sequence(digitsPart, "id");
+    }
+    for (const address of sheet.addresses ?? []) {
+      const line = address.split(",")[0];
+      sequence(line, "address", 3);
+      for (const n of address.match(/\b\d{3,}\b/gu) ?? []) sequence(n, "address", 2, true);
+      for (const place of address.split(",").slice(1)) for (const word of tokensOf(place).filter((w) => /^\p{L}{4,}$/u.test(w))) sequence(word, "city", 2, true);
+    }
+    for (const school of sheet.schools ?? []) for (const word of tokensOf(school).filter((w) => w.length >= 4 && !SCHOOL_GENERIC.has(w))) sequence(word, "school", 2, true);
     const genericWords = [...SCHOOL_GENERIC].filter((w) => !ARTICLES.has(w)).map(brokenWord).join("|");
     (sheet.schools ?? []).forEach((school) => {
       const tokens = tokensOf(school);
@@ -376,7 +411,13 @@ export class Deidentifier {
       }
       // Its initials, in capitals: "JMES", "JME".
       const initials = tokens.filter((t) => !ARTICLES.has(t)).map((t) => t[0].toUpperCase());
-      const acronyms = new Set([initials.join(""), initials.slice(0, -1).join(""), core.length ? core.map((t) => t[0].toUpperCase()).join("") + (tokens.find((t) => SCHOOL_GENERIC.has(t) && !ARTICLES.has(t))?.[0].toUpperCase() ?? "") : ""]);
+      const acronyms = new Set([
+        initials.join(""),
+        initials.slice(0, -1).join(""),
+        core.length ? core.map((t) => t[0].toUpperCase()).join("") + (tokens.find((t) => SCHOOL_GENERIC.has(t) && !ARTICLES.has(t))?.[0].toUpperCase() ?? "") : "",
+        // The distinctive words alone: "SJB" for Escuela San Juan Bosco.
+        core.map((t) => t[0].toUpperCase()).join(""),
+      ]);
       for (const acronym of [...acronyms].filter((a) => a.length >= 3)) {
         this.#literals.push({ regex: new RegExp(`(?<![\\p{L}\\p{N}])${acronym}(?![\\p{L}\\p{N}])`, "gu"), kind: "school", capitalizedOnly: false, original: true });
       }
@@ -419,57 +460,72 @@ export class Deidentifier {
   get map(): RestoreMap {
     const seen = new Set<string>();
     const entries: MapEntry[] = [];
-    for (const [key, slot] of this.#slots) {
+    for (const slot of this.#slots.values()) {
       if (seen.has(slot.placeholder)) continue;
       seen.add(slot.placeholder);
-      entries.push({ placeholder: slot.placeholder, value: this.#surnameAsWritten(key) ?? slot.value, kind: slot.kind });
+      entries.push({ placeholder: slot.placeholder, value: slot.value, kind: slot.kind });
     }
     return { entries };
   }
 
-  /** A surname placeholder restores as the text wrote it most often, in the sheet's own spelling ("de la Fuente" or "Fuente"). */
-  #surnameAsWritten(key: string): string | undefined {
-    const seen = this.#surnamesSeen.get(key);
-    const person = this.#people.find((p) => key.startsWith(`person:${p.priority}:last:`));
-    const lastName = person?.sheet.lastName?.normalize("NFC").trim();
-    if (!seen || !lastName) return undefined;
-    const [words] = [...seen.entries()].sort((a, b) => b[1] - a[1])[0];
-    const parts = lastName.split(/([\s-]+)/u);
-    const folded = parts.map((part, i) => (i % 2 === 0 ? foldString(part).replace(/[^\p{L}']/gu, "") : ""));
-    const wanted = words.split(" ");
-    for (let i = 0; i < parts.length; i += 2) {
-      const j = i + 2 * (wanted.length - 1);
-      if (j < parts.length && wanted.every((w, k) => folded[i + 2 * k] === w)) return parts.slice(i, j + 1).join("");
-    }
-    return undefined;
-  }
+  /** How many numbered variants each person's forms have, for their numbers. */
+  readonly #variantCounts = new Map<string, number>();
 
-  #personSlot(person: Person, form: NameForm, surnamePart = "", words: string[] = []): void {
-    const key = personKey(person, form, surnamePart);
+  /** A base form: the sheet's first name (restored as the preferred name, the owner's rule), whole name, whole surname, initials. */
+  #baseSlot(person: Person, form: NameForm): void {
+    const key = personKey(person, form);
     if (this.#slots.has(key)) return;
-    if (form === "full" && surnamePart && words.length) {
-      // The words the text used, in the sheet's spelling ("Valeria Ficticio"; an initial as written: "Mateo F.").
-      const spellings = sheetSpellings(person);
-      const value = words
-        .map((w) => {
-          const comma = w.endsWith(",") ? "," : "";
-          const word = comma ? w.slice(0, -1) : w;
-          return (word.endsWith(".") ? word.toUpperCase() : (spellings.get(word) ?? word)) + comma;
-        })
-        .join(" ");
-      this.#slots.set(key, { placeholder: personPlaceholder(person.group, person.index, form, surnamePart), value, kind: person.group });
-      return;
-    }
     const { firstName, lastName, nicknames, preferredName } = person.sheet;
     const first = (preferredName ?? firstName ?? nicknames?.[0] ?? lastName ?? "").trim();
     const full = [firstName ?? preferredName, lastName].filter(Boolean).join(" ").trim();
-    let last = (lastName ?? first).trim();
-    if (form === "last" && surnamePart) {
-      const wanted = surnamePart.split(" ").map((n) => person.surnames[Number(n) - 1]);
-      last = lastName?.split(/[\s-]+/u).filter((w) => wanted.includes(foldString(w).replace(/[^\p{L}']/gu, ""))).join(" ") || last;
+    const value = { first, full: full || first, last: (lastName ?? first).trim(), initials: person.initials?.toUpperCase() ?? first }[form];
+    this.#slots.set(key, { placeholder: personPlaceholder(person.group, person.index, form), value, kind: person.group });
+  }
+
+  /** A form written otherwise ("José" of "María José", "la Fuente", "Gómez-Ficticio", "Lucy"): its own number, restored as those words. */
+  #variantSlot(person: Person, form: NameForm, key: string, value: string): void {
+    if (this.#slots.has(key)) return;
+    const counter = `${person.priority}:${form}`;
+    const n = (this.#variantCounts.get(counter) ?? 0) + 1;
+    this.#variantCounts.set(counter, n);
+    this.#slots.set(key, { placeholder: personPlaceholder(person.group, person.index, form, String(n)), value, kind: person.group });
+  }
+
+  /** Whether the words found are the sheet's own whole form: the whole given name or a whole nickname, the whole name, the whole surname. */
+  #isBase(person: Person, form: NameForm, words: string[]): boolean {
+    if (form === "initials") return true;
+    if (words.some((w) => w.endsWith("."))) return false;
+    const fold = (s: string | undefined) => (s ? s.split(/[\s-]+/u).filter(Boolean).map((w) => foldString(w).replace(/[^\p{L}']/gu, "")).join(" ") : "");
+    const { firstName, lastName, nicknames, preferredName } = person.sheet;
+    const used = words.map((w) => w.replace(/,$/u, "")).join(" ");
+    const given = fold(firstName ?? preferredName);
+    if (form === "first") return used === given || [preferredName, ...(nicknames ?? [])].some((n) => n && used === fold(n));
+    // (The first name's separators are checked by #nameCandidate through its spelling.)
+    if (form === "last") return used === fold(lastName);
+    return used === `${given} ${fold(lastName)}` && !words.some((w) => w.endsWith(","));
+  }
+
+  #nameCandidate(person: Person, form: NameForm, start: number, end: number, original: string, words: string[], asWritten: boolean): Candidate {
+    const spelled = inSheetSpelling(person, original).replace(/\s+/gu, " ");
+    const written = this.#baseWritten(person, form);
+    if (!asWritten && this.#isBase(person, form, words) && (written === undefined || spelled === written)) {
+      return { start, end, key: personKey(person, form), kind: person.group, source: "sheet", rank: 0, create: () => this.#baseSlot(person, form) };
     }
-    const value = { first, full: full || first, last, initials: person.initials?.toUpperCase() ?? first }[form];
-    this.#slots.set(key, { placeholder: personPlaceholder(person.group, person.index, form, surnamePart), value, kind: person.group });
+    // Written otherwise: restored as those words in the sheet's spelling; inside a file name, a URL, a broken or misread word: byte for byte.
+    const value = asWritten ? original : spelled;
+    const key = asWritten ? `person:${person.priority}:${form}:w:${original}` : `person:${person.priority}:${form}:v:${spelled}`;
+    return { start, end, key, kind: person.group, source: "sheet", rank: 0, create: () => this.#variantSlot(person, form, key, value) };
+  }
+
+  /** The sheet's own spelling of a base form, as a text would write it: the first name or a nickname, the whole name, the whole surname. */
+  #baseWritten(person: Person, form: NameForm): string | undefined {
+    const { firstName, lastName, preferredName } = person.sheet;
+    const clean = (s: string | undefined) => s?.normalize("NFC").trim().replace(/\s+/gu, " ");
+    if (form === "initials") return undefined;
+    if (form === "first") return undefined;
+    if (form === "last") return clean(lastName);
+    if (form === "full") return clean([firstName ?? preferredName, lastName].filter(Boolean).join(" "));
+    return undefined;
   }
 
   #numberedSlot(key: string, kind: NumberedKind, original: string): void {
@@ -481,43 +537,12 @@ export class Deidentifier {
   }
 
   #birthSlot(key: string, form: BirthDateForm, original: string): void {
-    if (!this.#slots.has(key)) {
-      this.#slots.set(key, { placeholder: birthDatePlaceholder(form), value: form === "full" && this.#dob ? canonicalDate(this.#dob) : original, kind: "dob" });
-    }
-  }
-
-  #nameCandidate(person: Person, form: NameForm, start: number, end: number, surnamePart: string, surnameWords: string, words: string[] = []): Candidate {
-    // A full name: one placeholder per set of words used, so "Valeria Ficticio" never restores as "Valeria Ficticio Gómez".
-    const part = form === "full" ? this.#fullNamePart(person, words) : surnamePart;
-    return {
-      start,
-      end,
-      key: personKey(person, form, part),
-      kind: person.group,
-      source: "sheet",
-      rank: 0,
-      surnameWords,
-      create: () => this.#personSlot(person, form, part, words),
-    };
-  }
-
-  /** Numbers of the partial full names of each person, by the words they use. */
-  readonly #fullNameParts = new Map<string, string>();
-
-  /** "" for the sheet's whole name; "1", "2"... for each other set of words, in the order met. */
-  #fullNamePart(person: Person, words: string[]): string {
-    const complete = [...(person.sheet.firstName ?? person.sheet.preferredName ?? "").split(/[\s-]+/u), ...(person.sheet.lastName ?? "").split(/[\s-]+/u)]
-      .filter(Boolean)
-      .map((w) => foldString(w).replace(/[^\p{L}']/gu, ""))
-      .join(" ");
-    const used = words.join(" ");
-    if (used === "" || used === complete) return "";
-    const key = `${person.priority}:${used}`;
-    if (!this.#fullNameParts.has(key)) {
-      const n = [...this.#fullNameParts.keys()].filter((k) => k.startsWith(`${person.priority}:`)).length + 1;
-      this.#fullNameParts.set(key, String(n));
-    }
-    return this.#fullNameParts.get(key)!;
+    if (this.#slots.has(key)) return;
+    // One canonical English form for each, as the report is written in English: never the first form met ("el 14 de marzo").
+    const dob = this.#dob;
+    const month = dob ? MONTH_NAMES[dob.month - 1] : "";
+    const value = !dob ? original : form === "full" ? canonicalDate(dob) : form === "month-year" ? `${month} ${dob.year}` : `${month} ${dob.day}`;
+    this.#slots.set(key, { placeholder: birthDatePlaceholder(form), value, kind: "dob" });
   }
 
   deidentify(input: string): DeidentifyResult {
@@ -529,11 +554,14 @@ export class Deidentifier {
     const range = (start: number, end: number) => originalRange(folded, start, end);
     const capitalized = (start: number) => /^\p{Lu}/u.test(text.slice(start, start + 2));
 
+    // Inside a URL, an email address or a file name a name is restored byte for byte, never respelled.
+    const links = [...text.matchAll(LINKS)].map((m) => [m.index, m.index + m[0].length] as const);
+    const inLink = (start: number, end: number) => links.some(([a, b]) => a < end && start < b);
     for (const match of findNames(folded, this.#people)) {
       const [start, end] = range(match.start, match.end);
       const { person, form } = match;
       if (match.ambiguous && this.#commonWordNames === "capitalized" && !capitalized(start)) {
-        possible.push({ text: text.slice(start, end), start, end, reason: "common-word-name", placeholder: personPlaceholder(person.group, person.index, form, match.surnamePart), kind: person.group, hidden: false });
+        possible.push({ text: text.slice(start, end), start, end, reason: "common-word-name", placeholder: personPlaceholder(person.group, person.index, form), kind: person.group, hidden: false });
         continue;
       }
       if (match.shared) {
@@ -543,23 +571,21 @@ export class Deidentifier {
         candidates.push({ start, end, key, kind: "unlisted-name", source: "sheet", rank: 0, create: () => this.#numberedSlot(key, "unlisted-name", original), sharedWith: match.shared });
         continue;
       }
-      candidates.push(this.#nameCandidate(person, form, start, end, match.surnamePart, match.surnameWords, match.words));
+      candidates.push(this.#nameCandidate(person, form, start, end, text.slice(start, end), match.words, inLink(start, end)));
     }
     for (const part of [...findJoinedNames(folded, text, this.#people), ...findBrokenNames(folded, text, this.#people), ...findOcrNames(folded, this.#people)]) {
       const [start, end] = range(part.start, part.end);
       const form: NameForm = part.role === "given" ? "first" : "last";
       if (part.uncertain) {
-        // "mate o", "and res": hidden as a neutral [NAME n], restored exactly as written, and shown for review.
-        const original = text.slice(start, end);
-        const key = `shared:${foldString(original)}`;
-        candidates.push({ start, end, key, kind: "unlisted-name", source: "sheet", rank: 0, create: () => this.#numberedSlot(key, "unlisted-name", original), split: true });
+        // "a dam", "no el", "mate o": two ordinary words as likely as a split name. Left as written, shown for review.
+        possible.push({ text: text.slice(start, end), start, end, reason: "split-name", placeholder: personPlaceholder(part.person.group, part.person.index, form), kind: part.person.group, hidden: false });
         continue;
       }
       if (!part.joined) {
-        possible.push({ text: text.slice(start, end), start, end, reason: "name-inside-word", placeholder: personPlaceholder(part.person.group, part.person.index, form, part.surnamePart), kind: part.person.group, hidden: false });
+        possible.push({ text: text.slice(start, end), start, end, reason: "name-inside-word", placeholder: personPlaceholder(part.person.group, part.person.index, form), kind: part.person.group, hidden: false });
         continue;
       }
-      candidates.push(this.#nameCandidate(part.person, form, start, end, part.surnamePart, part.role === "surname" ? part.word : ""));
+      candidates.push(this.#nameCandidate(part.person, form, start, end, text.slice(start, end), [part.word], true));
     }
     this.#nicknameCandidates(text, folded, possible);
     for (const literal of this.#literals) {
@@ -571,10 +597,25 @@ export class Deidentifier {
           possible.push({ text: text.slice(start, end), start, end, reason: literal.possible, placeholder: numberedPlaceholder(literal.kind, (this.#counters.get(literal.kind) ?? 0) + 1), kind: literal.kind, hidden: false });
           continue;
         }
-        const original = text.slice(start, end);
+        let from = start;
+        if (literal.kind === "phone" && text[start - 1] === "(" && text.slice(start, end).includes(")")) from--;
+        const original = text.slice(from, end);
         const key = valueKey(literal.kind, original);
-        candidates.push({ start, end, key, kind: literal.kind, source: "sheet", rank: 1, create: () => this.#numberedSlot(key, literal.kind, original) });
+        candidates.push({ start: from, end, key, kind: literal.kind, source: "sheet", rank: 1, create: () => this.#numberedSlot(key, literal.kind, original) });
       }
+    }
+    for (const match of findSequences(folded, text, this.#sequences)) {
+      const [found, end] = range(match.start, match.end);
+      // "(305)555-0142": the opening bracket goes with the number, so the text keeps no lone "(".
+      const start = match.tag === "phone" && text[found - 1] === "(" && text.slice(found, end).includes(")") ? found - 1 : found;
+      const original = text.slice(start, end);
+      if (match.tag === "dob") {
+        candidates.push({ start, end, key: "dob:full", kind: "dob", source: "sheet", rank: 1, create: () => this.#birthSlot("dob:full", "full", original) });
+        continue;
+      }
+      const kind = match.tag as NumberedKind;
+      const key = valueKey(kind, original);
+      candidates.push({ start, end, key, kind, source: "sheet", rank: 1, create: () => this.#numberedSlot(key, kind, original) });
     }
     this.#dateCandidates(text, folded, candidates);
     for (const match of findPatterns(text)) candidates.push(this.#patternCandidate(text, match));
@@ -606,14 +647,7 @@ export class Deidentifier {
         if (span.source === "sheet") this.#sheetKeys.add(span.key);
         // Once a person is mentioned, the model may use any form of their name: all of them restore.
         const person = this.#people.find((p) => span.key.startsWith(`person:${p.priority}:`));
-        if (person) {
-          for (const form of NAME_FORMS) if (form !== "initials" || person.initials) this.#personSlot(person, form);
-          if (span.surnameWords && span.key.includes(":last:")) {
-            const seen = this.#surnamesSeen.get(span.key) ?? new Map<string, number>();
-            seen.set(span.surnameWords, (seen.get(span.surnameWords) ?? 0) + 1);
-            this.#surnamesSeen.set(span.key, seen);
-          }
-        }
+        if (person) for (const form of NAME_FORMS) if (form !== "initials" || person.initials) this.#baseSlot(person, form);
       }
       const slot = this.#slots.get(span.key)!;
       out += text.slice(at, span.start) + slot.placeholder;
@@ -623,7 +657,6 @@ export class Deidentifier {
       if (!finding.originals.includes(original)) finding.originals.push(original);
       found.set(slot.placeholder, finding);
       if (span.sharedWith) possible.push({ text: original, start: span.start, end: span.end, reason: "shared-name", placeholder: slot.placeholder, kind: "unlisted-name", hidden: true });
-      if (span.split) possible.push({ text: original, start: span.start, end: span.end, reason: "split-name", placeholder: slot.placeholder, kind: "unlisted-name", hidden: true });
     }
     out += text.slice(at);
     const reported = possible.filter((p) => p.hidden || accepted.overlapping(p.start, p.end).length === 0);
@@ -652,6 +685,20 @@ export class Deidentifier {
 
   #dateCandidates(text: string, folded: Folded, candidates: Candidate[]): void {
     const dob = this.#dob;
+    if (dob) {
+      // The date of birth as a day of the year: "the 74th day of 2020", "2020-074", "día 74 de 2020".
+      const doy = Math.round((Date.UTC(dob.year, dob.month - 1, dob.day!) - Date.UTC(dob.year, 0, 0)) / 86_400_000);
+      const day = `0{0,2}${doy}(?:st|nd|rd|th|o)?`;
+      const dayOfYear = new RegExp(
+        `(?<![\\p{L}\\p{N}])(?:${day}[ \\t]+day[ \\t]+of[ \\t]+(?:the[ \\t]+year[ \\t]+)?${dob.year}|${dob.year}[-/. ]?0{0,2}${doy}|dia[ \\t]+${day}[ \\t]+(?:del?[ \\t]+)?(?:ano[ \\t]+)?${dob.year})(?![\\p{N}])`,
+        "gu",
+      );
+      for (const m of folded.text.matchAll(dayOfYear)) {
+        const [start, end] = originalRange(folded, m.index, m.index + m[0].length);
+        const original = text.slice(start, end);
+        candidates.push({ start, end, key: "dob:full", kind: "dob", source: "sheet", rank: 0, create: () => this.#birthSlot("dob:full", "full", original) });
+      }
+    }
     const yearAgo = new Date(this.#today);
     yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
     const cutoff = ymdKey({ year: yearAgo.getUTCFullYear(), month: yearAgo.getUTCMonth() + 1, day: yearAgo.getUTCDate() });
@@ -667,8 +714,9 @@ export class Deidentifier {
               ? r.year === dob.year && r.month === dob.month
               : r.month === dob.month && r.day === dob.day,
         );
-      // Six or eight bare digits, or "3/14": only when they are the date of birth.
+      // Six or eight bare digits, or "3/14": only when they are the date of birth. Numbers apart only by spaces: also after a date label.
       if ((date.compact || date.pair) && !isBirthDate) continue;
+      if (date.loose && !isBirthDate && !date.labelled) continue;
       // "CA = 6-08-08" after an age label is an age (its days are dropped), not a date, unless it is the date of birth.
       if (!isBirthDate && AGE_BEFORE.test(text.slice(Math.max(0, start - 40), start))) continue;
       if (isBirthDate) {
@@ -681,7 +729,8 @@ export class Deidentifier {
       const anniversary = dob !== null && date.readings.some((r) => r.month === dob.month && r.day === dob.day);
       const hide = anniversary || this.#dates === "all" || date.readings.some((r) => ymdKey(r) < cutoff);
       if (!hide) continue;
-      const key = `date:${ymdKey(date.readings[0])}`;
+      // Each written form of a date has its own placeholder, restored as written ("Jan 5 '24" and "5 Jan 24" are two).
+      const key = `date:${ymdKey(date.readings[0])}:${original}`;
       candidates.push({ start, end, key, kind: "date", source: "pattern", rank: 2, create: () => this.#numberedSlot(key, "date", original) });
     }
   }
@@ -713,7 +762,7 @@ function resolve(text: string, candidates: Candidate[]): Spans<Candidate> {
   // Names found only after a label ("Examinee:") come last: the sheet's own reading of a name wins.
   const tier = (c: Candidate) => (c.kind === "unlisted-name" && !c.key.startsWith("shared:") ? 1 : 0);
   const ordered = [...candidates].sort((a, b) => tier(a) - tier(b) || b.end - b.start - (a.end - a.start) || a.rank - b.rank || a.start - b.start);
-  const accepted = new Spans<Candidate>();
+  const accepted = new Spans<Candidate>(text.length);
   for (const candidate of ordered) {
     if (candidate.end <= candidate.start) continue;
     const overlaps = accepted.overlapping(candidate.start, candidate.end);

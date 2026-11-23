@@ -8,7 +8,7 @@
  * wins; when two people share it (a surname alone shared by the client and a
  * caregiver), the one listed first wins: client, caregivers, family, professionals.
  */
-import { isCommonWordName } from "./common-words.ts";
+import { isCommonWordName, isEverydayWord } from "./common-words.ts";
 import { foldString, type Folded } from "./fold.ts";
 import type { ClientSheet, PersonGroup, SheetPerson } from "./sheet.ts";
 
@@ -83,9 +83,20 @@ export function peopleOf(sheet: ClientSheet): Person[] {
       const given = [...parts(sheetPerson.firstName), ...(sheetPerson.nicknames ?? []).flatMap(parts), ...parts(sheetPerson.preferredName)];
       const surnames = parts(sheetPerson.lastName);
       for (const word of given) if (!PARTICLES.has(word)) addRole(roles, word, "given");
+      // English and Spanish short forms of a given name ("Lucy" for Lucía, "Andy" for Andrés, "Pepe" for José), and "Mª" or "Ma." for María.
+      for (const word of given) for (const short of HYPOCORISTICS[word] ?? []) if (!roles.has(short)) addRole(roles, short, "given");
       // Spanish diminutives of each given name and nickname: "Mateíto", "Teíto", "Carmencita", "Valerita".
       for (const word of given) for (const d of diminutives(word)) if (!roles.has(d) && !isCommonWordName(d)) addRole(roles, d, "given");
       for (const word of surnames) addRole(roles, word, PARTICLES.has(word) ? "particle" : "surname");
+      // A surname written joined to its particles: "Delrío", "Delafuente".
+      surnames.forEach((word, k) => {
+        if (PARTICLES.has(word)) return;
+        let joined = word;
+        for (let p = k - 1; p >= 0 && PARTICLES.has(surnames[p]); p--) {
+          joined = surnames[p] + joined;
+          addRole(roles, joined, "surname");
+        }
+      });
       if (roles.size === 0) return;
       const firstGiven = parts(sheetPerson.firstName).find((w) => !PARTICLES.has(w));
       const firstSurname = surnames.find((w) => !PARTICLES.has(w));
@@ -108,6 +119,23 @@ export function peopleOf(sheet: ClientSheet): Person[] {
   }
   return people;
 }
+
+/** Usual short forms of Spanish given names, in English and Spanish, folded. */
+const HYPOCORISTICS: Record<string, string[]> = {
+  lucia: ["lucy", "lu", "luci"], andres: ["andy", "andre"], jose: ["joe", "joey", "pepe", "pepito", "chepe"], guillermo: ["will", "bill", "memo", "guille"],
+  maria: ["mary", "mari", "maru", "ma"], francisco: ["frank", "paco", "pancho", "cisco", "fco", "kiko"], alejandro: ["alex", "ale", "alejo"],
+  alejandra: ["alex", "ale", "aleja"], roberto: ["bob", "rob", "robbie", "beto"], eduardo: ["eddie", "ed", "lalo"], antonio: ["tony", "tono"],
+  manuel: ["manny", "manolo", "manu"], enrique: ["henry", "kike", "quique"], jesus: ["chuy", "chucho"], ignacio: ["nacho"], rafael: ["rafa", "ralph"],
+  daniela: ["dani", "danny"], daniel: ["dani", "danny", "dan"], valeria: ["vale", "val"], sofia: ["sophie", "sofi"], isabel: ["isa", "bella", "chabela"],
+  guadalupe: ["lupe", "lupita"], dolores: ["lola", "lolita"], concepcion: ["concha", "conchita"], rosario: ["charo"], teresa: ["tere", "terry"],
+  gabriela: ["gaby", "gabi"], gabriel: ["gabe", "gabi"], fernanda: ["fer"], fernando: ["fer", "nando"], mateo: ["matt", "matty", "teo", "mati"],
+  santiago: ["santi", "tiago"], sebastian: ["sebas", "seba", "bastian"], nicolas: ["nico", "nick"], samuel: ["sam", "sammy"], benjamin: ["ben", "benja"],
+  emiliano: ["emi"], juan: ["johnny", "juanito"], carlos: ["charlie", "carlitos"], luis: ["lucho", "lou"], pedro: ["pete", "perico"],
+  miguel: ["mike", "mickey"], andrea: ["andy", "andre"], patricia: ["patty", "pati", "tricia"], elena: ["ellie", "lena", "nena"],
+  victoria: ["vicky", "tori"], catalina: ["cata", "cathy", "kate"], camila: ["cami", "milly"], valentina: ["vale", "valen", "tina"],
+  ximena: ["xime"], jimena: ["jime"], lucas: ["luke"], diego: ["dieguito"], josefina: ["pepa", "fina", "josie"], margarita: ["maggie", "marga", "rita"],
+  ana: ["anita", "annie"], carmen: ["carmencita", "mencha"], beatriz: ["bea", "betty"], cristina: ["cris", "tina"], ricardo: ["ricky", "rick"],
+};
 
 /** -ito/-ita, -cito/-cita, -illo/-illa forms of a given name, folded. */
 function diminutives(word: string): string[] {
@@ -310,7 +338,8 @@ export interface PartMatch {
   uncertain?: boolean;
 }
 
-const FILE_EXTENSION = /^\.(?:pdf|docx?|xlsx?|csv|txt|rtf|jpe?g|png|heic|gif|mp4|mov|m4a|zip)\b/u;
+/** After a word: a file extension, or a web domain's ending, so the word is part of a file or site name. */
+const FILE_EXTENSION = /^\.(?:pdf|docx?|xlsx?|csv|txt|rtf|jpe?g|png|heic|gif|mp4|mov|m4a|zip|com|net|org|edu|gov|io|us|info|co|me|app|online|site|biz)\b/u;
 
 /**
  * Name words of the sheet (4 letters or more) inside a longer word: "MateoFicticio.pdf",
@@ -326,7 +355,11 @@ export function findJoinedNames(folded: Folded, original: string, people: Person
   for (const m of text.matchAll(/[\p{L}\p{N}_]+/gu)) {
     const token = m[0];
     const at = m.index;
-    const handle = text[at - 1] === "@" || text[at - 1] === "#" || FILE_EXTENSION.test(text.slice(at + token.length, at + token.length + 6));
+    const handle =
+      text[at - 1] === "@" ||
+      text[at - 1] === "#" ||
+      FILE_EXTENSION.test(text.slice(at + token.length, at + token.length + 8)) ||
+      /(?:www\.|:\/\/|\.)$/u.test(text.slice(Math.max(0, at - 6), at));
     for (const person of people) {
       for (const { word, role } of person.longWords) {
         for (let k = token.indexOf(word); k !== -1; k = token.indexOf(word, k + 1)) {
@@ -369,20 +402,16 @@ export function findBrokenNames(folded: Folded, original: string, people: Person
       for (const m of folded.text.matchAll(regex)) {
         if (m[0].length === word.length) continue;
         if (isCommonWordName(word) && !/\p{Lu}/u.test(original[folded.from[m.index]] ?? "")) continue;
-        // Split by spaces only, with an everyday short word as one piece ("mate o", "and res"): maybe two words, maybe the name.
+        // Split by spaces only into everyday words ("a dam", "no el", "to mas"): maybe ordinary text, maybe the name. Reported, not hidden.
+        // A piece that is not a word ("AN DRES", "M ateo") makes it the name: hidden.
         const pieces = m[0].split(/[ \t]+/u);
-        const uncertain = !/[-|\n]/u.test(m[0]) && pieces.length === 2 && (SHORT_WORDS.has(pieces[0]) || SHORT_WORDS.has(pieces[1]));
+        const uncertain = !/[-|\n]/u.test(m[0]) && pieces.length === 2 && pieces.every((p) => isEverydayWord(p));
         out.push({ person, role, surnamePart: role === "surname" ? surnamePart(person, word) : "", word, start: m.index, end: m.index + m[0].length, joined: true, spaced: true, uncertain });
       }
     }
   }
   return out;
 }
-
-/** Everyday short words, English and Spanish: a space after one is a word gap, not a split name. */
-const SHORT_WORDS = new Set(
-  `a an and the of to in on at by for or as is it be he she we my his her our you no so do if up de del la las los el y e o u en un una con por se es al lo le me mi su tu sin ya`.split(/\s+/u),
-);
 
 /** A word as OCR may misread it: 0 and o, 1, l, i and |, rn and m, vv and w, c and e, 5 and s read the same. */
 function ocrSkeleton(word: string): string {

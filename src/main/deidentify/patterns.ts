@@ -36,8 +36,9 @@ const PHONE_PLAIN = new RegExp(`(?<=${PHONE_LABEL}\\b[^\\n\\d]{0,15})(?<![\\p{N}
 const SSN = /(?<![\p{N}-])\d{3}-\d{2}-\d{4}(?![\p{N}-])/gu;
 const ID_LABEL =
   "(?:medicaid|medicare|member|subscriber|policy|insurance|insurer|carrier|payer|health\\s+plan|authorization|claim|kidcare|florida\\s+kidcare|aetna|sunshine(?:\\s+health)?|humana|simply(?:\\s+healthcare)?|molina|staywell|cigna|united(?:\\s*healthcare)?|wellcare|ambetter|prestige|cms|mrn|medical\\s+record|record|chart|patient|client|case|account|ssn|social\\s+security|dcf|apd|student|recipient|id|identification|n[uú]mero\\s+de\\s+(?:seguro|miembro|caso|estudiante|identificaci[oó]n))";
+/** The value after an ID label (group 1): a forward match, as a lookbehind over this many labels is slow on long texts. */
 const ID_LABELLED = new RegExp(
-  `(?<=\\b${ID_LABEL}(?:\\s*(?:id|number|no\\.?|num\\.?|#|n[uú]mero))?(?:\\s+(?:is|es))?\\s*[:#|\\-]?\\s*)(?=[A-Za-z0-9\\-]*(?:\\d[\\s\\-]?){4})[A-Za-z0-9](?:[A-Za-z0-9]|[\\-\\s](?=[A-Za-z0-9]*\\d)){3,24}(?![\\p{L}\\p{N}])`,
+  `\\b${ID_LABEL}(?:\\s*(?:id|number|no\\.?|num\\.?|#|n[uú]mero))?(?:\\s+(?:is|es))?\\s*[:#|\\-]?\\s*((?=[A-Za-z0-9\\-]*(?:\\d[\\s\\-]?){4})[A-Za-z0-9](?:[A-Za-z0-9]|[\\-\\s](?=[A-Za-z0-9]*\\d)){3,24})(?![\\p{L}\\p{N}])`,
   "giu",
 );
 /** The last digits of an ID or a phone: "Medicaid ending in 3210", "last 4 of Medicaid: 6789". */
@@ -56,7 +57,7 @@ const STREET_TYPES = either([
   "Plaza", "Plz", "Square", "Sq", "Loop", "Path", "Row", "Pike", "Alley", "Crescent", "Point", "Str", "Blv", "Crt", "Calle", "Avenida", "Camino",
 ]);
 /** Spanish-style streets name their type first: "22 Calle Ocho", "1500 Avenida Ponce de León". */
-const TYPE_FIRST = "(?:Calle|Avenida|Av\\.|Ave\\.|Camino|Carrera|Cra\\.|Paseo|Callej[oó]n|Diagonal|Transversal)";
+const TYPE_FIRST = "(?:Calle|C/|[Cc]\\.|Cl\\.|Avenida|Av\\.|Ave\\.|Camino|Carrera|Cra\\.|Paseo|Callej[oó]n|Diagonal|Transversal)";
 const DIRECTION = "(?:N|S|E|W|NE|NW|SE|SW|North|South|East|West|Northeast|Northwest|Southeast|Southwest)\\.?";
 const STATES =
   "(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|PR|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|Florida|Georgia|Texas|New\\s+York|California|Puerto\\s+Rico)";
@@ -106,6 +107,10 @@ const NOT_NAMES = new Set([
   "male", "female", "mother", "father", "parent", "teacher", "caregiver", "grandmother", "grandfather", "guardian", "self",
   "unknown", "none", "not", "n/a", "na", "spanish", "english", "other", "low", "high", "average", "madre", "padre", "abuela",
   "abuelo", "ninguno", "desconocido", "maestra", "maestro", "both", "parents",
+  // Table headers a label can stand before: "Respondent | Relationship | Score".
+  "relationship", "relation", "score", "scores", "rater", "raters", "date", "dates", "respondent", "informant", "name", "names", "age", "grade",
+  "role", "comments", "comment", "notes", "total", "result", "results", "standard", "percentile", "level", "domain", "item", "items", "rating",
+  "form", "version", "type", "status", "value", "values", "parentesco", "relacion", "puntaje", "fecha", "nombre", "edad",
 ]);
 
 /** Titles that are abbreviations (they may take a period), and relation words used as a title before a name (they may not). */
@@ -157,7 +162,7 @@ export function phoneKey(text: string): string {
 export const ADDRESS_WORDS: Record<string, string> = {
   street: "st", str: "st", avenue: "ave", av: "ave", avenida: "ave", road: "rd", boulevard: "blvd", blv: "blvd", drive: "dr",
   lane: "ln", court: "ct", crt: "ct", place: "pl", terrace: "ter", terr: "ter", trce: "ter", circle: "cir", highway: "hwy",
-  parkway: "pkwy", trail: "trl", plaza: "plz", square: "sq", calle: "cl", cl: "cl",
+  parkway: "pkwy", trail: "trl", plaza: "plz", square: "sq", calle: "cl", cl: "cl", c: "cl",
   apartment: "apt", apto: "apt", apartamento: "apt", unit: "apt", suite: "apt", ste: "apt",
   north: "n", south: "s", east: "e", west: "w", northeast: "ne", northwest: "nw", southeast: "se", southwest: "sw", florida: "fl",
   first: "1", second: "2", third: "3", fourth: "4", fifth: "5", sixth: "6", seventh: "7", eighth: "8", ninth: "9", tenth: "10",
@@ -195,7 +200,12 @@ export function findPatterns(text: string): PatternMatch[] {
   const out: PatternMatch[] = [];
   add(out, "email", EMAIL, text, (v) => v.toLowerCase());
   for (const regex of [PHONE_US, PHONE_INTERNATIONAL, PHONE_LOCAL, PHONE_PLAIN]) add(out, "phone", regex, text, phoneKey);
-  for (const regex of [SSN, ID_LABELLED, ID_LAST_DIGITS, ID_DIGITS, ID_MIXED]) add(out, "id", regex, text, alnum);
+  for (const regex of [SSN, ID_LAST_DIGITS, ID_DIGITS, ID_MIXED]) add(out, "id", regex, text, alnum);
+  for (const m of text.matchAll(ID_LABELLED)) {
+    const value = m[1].replace(/[\s,.]+$/u, "");
+    const start = m.index + m[0].length - m[1].length;
+    out.push({ kind: "id", start, end: start + value.length, key: `id:${alnum(value)}` });
+  }
   for (const regex of [STREET, STREET_TYPE_FIRST, CITY_ZIP, ZIP_LABELLED, PO_BOX]) add(out, "address", regex, text, addressKey);
   for (const m of text.matchAll(CITY_NO_STATE_ZIP)) {
     if (m[1].split(/\s+/u).some((w) => NOT_PLACES.has(w.toLowerCase()))) continue;

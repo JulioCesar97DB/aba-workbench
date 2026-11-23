@@ -35,6 +35,10 @@ export interface DateMatch {
   compact?: boolean;
   /** Two numbers ("3/14"): only a date when it is the date of birth. */
   pair?: boolean;
+  /** Three numbers apart only by spaces or table bars ("03 14 2020", "03 | 14 | 2020"): a date only when it is the date of birth or a date label stands just before it. */
+  loose?: boolean;
+  /** A date label ("DOB", "date of birth", "fecha", "born") stands just before it. */
+  labelled?: boolean;
 }
 
 const MONTHS: Record<string, number> = {
@@ -44,6 +48,8 @@ const MONTHS: Record<string, number> = {
   ene: 1, abr: 4, ago: 8, dic: 12, set: 9,
 };
 const ROMAN: Record<string, number> = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12 };
+/** Words that announce a date: three numbers apart only by spaces after one of these are read as a date. */
+const DATE_LABELS = new Set(["dob", "date", "born", "birth", "birthdate", "birthday", "fecha", "nacimiento", "nacio", "fdn", "evaluated", "diagnosed", "seen", "on", "el"]);
 const ORDINAL_SUFFIXES = new Set(["st", "nd", "rd", "th", "o", "a", "ro", "er", "do", "to", "vo", "no"]);
 
 /** Day numbers written as words, English and Spanish, cardinal and ordinal, folded. */
@@ -67,6 +73,8 @@ const DAY_WORDS = new Map<string, number>();
   const es = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "dieciseis", "diecisiete", "dieciocho", "diecinueve", "veinte"];
   es.forEach((w, n) => n > 0 && DAY_WORDS.set(w, n));
   DAY_WORDS.set("primero", 1).set("primer", 1).set("un", 1).set("treinta", 30).set("treinta y uno", 31).set("treintaiuno", 31);
+  ["segundo", "tercero", "cuarto", "quinto", "sexto", "septimo", "octavo", "noveno", "decimo"].forEach((w, i) => DAY_WORDS.set(w, 2 + i));
+  DAY_WORDS.set("tercer", 3);
   ["veintiuno", "veintidos", "veintitres", "veinticuatro", "veinticinco", "veintiseis", "veintisiete", "veintiocho", "veintinueve"].forEach((w, i) => DAY_WORDS.set(w, 21 + i));
   ["uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"].forEach((w, i) => DAY_WORDS.set(`veinte y ${w}`, 21 + i));
 }
@@ -87,7 +95,7 @@ const JOINABLE = new Set([...Object.keys(MONTHS).filter((m) => m.length > 4), ..
 function tokenize(text: string): Token[] {
   const tokens: Token[] = [];
   let gap = false;
-  for (const m of text.matchAll(/(\d+)|(\p{L}+)|(')|([/\-.,])|(\s+)|([^])/gu)) {
+  for (const m of text.matchAll(/(\d+)|(\p{L}+)|(')|([/\-.,|])|(\s+)|([^])/gu)) {
     if (m[5]) {
       gap = true;
       continue;
@@ -191,8 +199,31 @@ export function findDates(folded: Folded, today: Date): DateMatch[] {
   const freeBefore = (i: number) => !(is(i - 1, "sep") && !t[i].gap && is(i - 2, "num") && !t[i - 1].gap);
   const freeAfter = (i: number) => !(is(i + 1, "sep") && !t[i + 1].gap && (is(i + 2, "num") || is(i + 2, "apos")) && !t[i + 2].gap);
 
+  /** A date label among the three tokens before token i ("DOB:", "Date of birth |"). */
+  const labelledAt = (i: number) => {
+    for (let k = i - 1; k >= Math.max(0, i - 4); k--) if (t[k].kind === "word" && DATE_LABELS.has(t[k].text)) return true;
+    return false;
+  };
   for (let i = 0; i < n; i++) {
     const tok = t[i];
+    // Three numbers apart only by spaces or table bars: "03 14 2020", "Date of birth | 03 | 14 | 2020".
+    if (tok.kind === "num" && tok.text.length <= 2 && freeBefore(i)) {
+      // After token j: a table bar then the next token, or the next token after a space. -1 when neither.
+      const after = (j: number) => (is(j + 1, "sep", "|") ? j + 2 : j + 1 < n && t[j + 1].gap && t[j + 1].kind !== "sep" ? j + 1 : -1);
+      const b = after(i);
+      const c = b === -1 ? -1 : after(b);
+      if (b !== -1 && c !== -1 && is(b, "num") && t[b].text.length <= 2 && (is(c, "num") || is(c, "apos"))) {
+        const year = yearAt(c, true);
+        if (year && freeAfter(year.last) && !(is(year.last + 1, "num") && t[year.last + 1].gap)) {
+          push(i, year.last, [{ year: year.year, month: +tok.text, day: +t[b].text }, { year: year.year, month: +t[b].text, day: +tok.text }], "full", { loose: true, labelled: labelledAt(i) });
+        }
+      }
+    }
+    // A day in words first: "catorce/03/2020".
+    if (tok.kind === "word" && DAY_WORDS.has(tok.text) && (sepChar(i + 1) === "/" || sepChar(i + 1) === "-") && is(i + 2, "num") && sepChar(i + 3) === sepChar(i + 1)) {
+      const year = yearAt(i + 4, true);
+      if (year) push(i, year.last, [{ year: year.year, month: +t[i + 2].text, day: DAY_WORDS.get(tok.text)! }], "full");
+    }
     // Numbers: a, sep, b, sep, c (the same separator, spaces allowed around it), or a, sep, b.
     if (tok.kind === "num" && freeBefore(i)) {
       if (tok.text.length === 6 || tok.text.length === 8) {
@@ -244,6 +275,8 @@ export function findDates(folded: Folded, today: Date): DateMatch[] {
     let k = i - 1;
     while (k >= 0 && t[k].kind === "sep" && t[k].text !== ".") k--;
     if (k >= 0 && t[k].kind === "word" && (t[k].text === "of" || t[k].text === "de")) k--;
+    // "the 14th day of March", "segundo día de julio"
+    if (k >= 0 && t[k].kind === "word" && (t[k].text === "day" || t[k].text === "dia")) k--;
     const before = k >= 0 ? dayEndingAt(k) : null;
     const yearAfter = (last: number, short: boolean) => {
       const y = skip(last + 1, ["of", "de", "del", "ano", "in", "en"]);
@@ -259,7 +292,6 @@ export function findDates(folded: Folded, today: Date): DateMatch[] {
     } else if (before && i - before.first <= 6) {
       day = before.day;
       start = before.first;
-      if (start > 0 && is(start - 1, "word") && (t[start - 1].text === "the" || t[start - 1].text === "el")) start--;
       // "5 Jan 24", "14-mar-20", "14MAR20": a two-digit year after a day and a month.
       shortYear = true;
     }
@@ -272,10 +304,19 @@ export function findDates(folded: Folded, today: Date): DateMatch[] {
     }
   }
 
+  // Labelled fields on one line: "Month: 03 Day: 14 Year: 2020", "Birth month: March; birth day: 14; birth year: 2020".
+  const fields = /\b(?:month|mes)\b[ \t]*[:=|-]?[ \t]*(\d{1,2}|\p{L}+)\b[^\n]{0,40}?\b(?:day|dia)\b[ \t]*[:=|-]?[ \t]*(\d{1,2})\b[^\n]{0,40}?\b(?:year|ano)\b[ \t]*[:=|-]?[ \t]*(\d{4}|\d{2})\b/gu;
+  for (const m of folded.text.matchAll(fields)) {
+    const month = /^\d+$/u.test(m[1]) ? Number(m[1]) : MONTHS[m[1]];
+    if (!month) continue;
+    const reading = { year: fullYear(m[3], thisYear), month, day: Number(m[2]) };
+    if (valid(reading)) found.push({ start: m.index, end: m.index + m[0].length, readings: [reading], precision: "full", labelled: true });
+  }
+
   // The longest reading of any stretch wins; equal ones prefer full dates.
   const rank = { full: 0, "month-year": 1, "month-day": 2 };
   found.sort((a, b) => b.end - b.start - (a.end - a.start) || rank[a.precision] - rank[b.precision] || a.start - b.start);
-  const kept = new Spans<DateMatch>();
+  const kept = new Spans<DateMatch>(folded.text.length);
   for (const date of found) if (kept.overlapping(date.start, date.end).length === 0) kept.add(date);
   return kept.items;
 }

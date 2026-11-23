@@ -115,7 +115,8 @@ test("names: every form of the client and a caregiver", () => {
     ["Mateo Fic-\nticio left", "[CLIENT FULL NAME 1] left"],
     ["Ficticio, Mateo", "[CLIENT FULL NAME 1]"],
     ["Mateo F. and M. Ficticio and M.F.", "[CLIENT FULL NAME 1] and [CLIENT FULL NAME 2] and [CLIENT INITIALS]"],
-    ["Mateo Ficticio-Gómez", "[CLIENT FULL NAME]"],
+    // Written otherwise than the sheet ("Ficticio-Gómez" for "Ficticio Gómez"): its own number, restored as written.
+    ["Mateo Ficticio-Gómez", "[CLIENT FULL NAME 1]"],
     ["Lucia Ficticio and Lucía", "[CAREGIVER 1 FULL NAME] and [CAREGIVER 1]"],
     // One of the client's two surnames: its own placeholder, so it restores exactly.
     ["Mrs. Ficticio said", "Mrs. [CLIENT LAST NAME 1] said"],
@@ -147,11 +148,11 @@ test("dates: the date of birth in every format, other dates by the date rule", (
   const result = hide(text);
   assert.equal(
     result.text,
-    "DOB [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB]; born in [DOB MONTH AND YEAR], birthday [DOB MONTH AND DAY]. Seen 10/02/2026; CDE [DATE 1] and [DATE 1]; next visit 01/15/2027.",
+    "DOB [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB]; born in [DOB MONTH AND YEAR], birthday [DOB MONTH AND DAY]. Seen 10/02/2026; CDE [DATE 1] and [DATE 2]; next visit 01/15/2027.",
   );
   assert.equal(
     hide(text, MATEO, { dates: "all" }).text,
-    "DOB [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB]; born in [DOB MONTH AND YEAR], birthday [DOB MONTH AND DAY]. Seen [DATE 1]; CDE [DATE 2] and [DATE 2]; next visit [DATE 3].",
+    "DOB [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB]; born in [DOB MONTH AND YEAR], birthday [DOB MONTH AND DAY]. Seen [DATE 1]; CDE [DATE 2] and [DATE 3]; next visit [DATE 4].",
   );
   // The other order of day and month, and what is not a date.
   assert.equal(hide("03/08/2022 (day first)").text, "[DOB] (day first)");
@@ -161,7 +162,8 @@ test("dates: the date of birth in every format, other dates by the date rule", (
 test("patterns: phones, emails, IDs, addresses, with or without the sheet", () => {
   const empty: ClientSheet = { client: {} };
   const cases: Array<[string, string]> = [
-    ["Call (305) 555-0142, 305-555-0142, 305.555.0142, +1 305 555 0142 or 1-305-555-0142 ext. 12.", "Call [PHONE 1], [PHONE 1], [PHONE 1], [PHONE 1] or [PHONE 1]."],
+    // Each written form of a value has its own placeholder, restored exactly as written.
+    ["Call (305) 555-0142, 305-555-0142, 305.555.0142, +1 305 555 0142 or 1-305-555-0142 ext. 12.", "Call [PHONE 1], [PHONE 2], [PHONE 3], [PHONE 4] or [PHONE 5]."],
     ["Cell: 555-0199. Tel 3055550123.", "Cell: [PHONE 1]. Tel [PHONE 2]."],
     ["Write to Lucia.F+aba@example.co.uk today.", "Write to [EMAIL 1] today."],
     ["Medicaid ID: 9876543210; Member # ABC12345; MRN 00456789; SSN 123-45-6789; record 1234 5678.", "Medicaid ID: [ID 1]; Member # [ID 2]; MRN [ID 3]; SSN [ID 4]; record [ID 5]."],
@@ -259,11 +261,12 @@ test("each part of a surname has its own placeholder and restores as the text wr
   const hidden = hide("Ms. de la fuente and MS. DE LA FUENTE, then Ejemplar once; Mrs. Rodriguez; Mrs. Rodríguez; Ejemplar de la Fuente.", sheet);
   assert.equal(
     hidden.text,
-    "Ms. [CLIENT LAST NAME 2] and MS. [CLIENT LAST NAME 2], then [CLIENT LAST NAME 1] once; Mrs. [CAREGIVER 1 LAST NAME 1]; Mrs. [CAREGIVER 1 LAST NAME 1]; [CLIENT LAST NAME].",
+    "Ms. [CLIENT LAST NAME 1] and MS. [CLIENT LAST NAME 2], then [CLIENT LAST NAME 3] once; Mrs. [CAREGIVER 1 LAST NAME 1]; Mrs. [CAREGIVER 1 LAST NAME 1]; [CLIENT LAST NAME].",
   );
+  // Each written form comes back as written, in the sheet's spelling for the name words, particles as written.
   assert.equal(
-    reidentify("Ms. [CLIENT LAST NAME 2], [CLIENT LAST NAME 1], [CLIENT LAST NAME] and Mrs. [CAREGIVER 1 LAST NAME 1].", hidden.map).text,
-    "Ms. de la Fuente, Ejemplar, Ejemplar de la Fuente and Mrs. Rodríguez.",
+    reidentify("Ms. [CLIENT LAST NAME 1], MS. [CLIENT LAST NAME 2], [CLIENT LAST NAME 3], [CLIENT LAST NAME] and Mrs. [CAREGIVER 1 LAST NAME 1].", hidden.map).text,
+    "Ms. de la Fuente, MS. DE LA Fuente, Ejemplar, Ejemplar de la Fuente and Mrs. Rodríguez.",
   );
 });
 

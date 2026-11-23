@@ -74,7 +74,7 @@ interface Replacement {
 export function reidentify(input: string, map: RestoreMap): ReidentifyResult {
   const byKey = new Map(map.entries.map((e) => [labelKey(e.placeholder.slice(1, -1)), e]));
   /** Everything already decided: restored, or reported. Later passes never touch it. */
-  const taken = new Spans<{ start: number; end: number }>();
+  const taken = new Spans<{ start: number; end: number }>(input.length);
   const replacements: Replacement[] = [];
   const unrestored: Unrestored[] = [];
   const restore = (start: number, end: number, value: string, placeholder: string, exact: boolean) => {
@@ -111,19 +111,29 @@ export function reidentify(input: string, map: RestoreMap): ReidentifyResult {
     const entries = [...byKey.keys()].sort((a, b) => b.length - a.length);
     const flexible = (key: string) => key.split(" ").map(escape).join("[ \\t_\\-#]*");
     const known = entries.map(flexible).join("|");
+    // A known label followed by a number or more label words ("CLIENT LAST NAME 2" when only [CLIENT LAST NAME] was sent) is another placeholder: never restored.
+    const NOT_MORE = "(?![ \\t_\\-#]*\\d)(?![ \\t_\\-]+(?:name|last|full|first|initials|month|day|year)\\b)";
     const add = (start: number, end: number, label: string) => {
       const entry = byKey.get(labelKey(label));
       if (entry && free(start, end)) restore(start, end, entry.value, entry.placeholder, false);
     };
     // 2. One bracket missing: "[CLIENT" or "CLIENT]", never when more label text runs to a bracket ("[CLIENT NAME]").
-    for (const m of input.matchAll(new RegExp(`\\\\?\\[[ \\t]*(${known})(?![\\p{L}\\p{N}])${MORE_LABEL_THEN_CLOSE}`, "giu"))) add(m.index, m.index + m[0].length, m[1]);
+    for (const m of input.matchAll(new RegExp(`\\\\?\\[[ \\t]*(${known})(?![\\p{L}\\p{N}])${NOT_MORE}${MORE_LABEL_THEN_CLOSE}`, "giu"))) add(m.index, m.index + m[0].length, m[1]);
     for (const m of input.matchAll(new RegExp(`(?<!\\[[\\p{L}\\p{N} '\\u{2019}_\\-#.]*)(?<![\\p{L}\\p{N}])(${known})[ \\t]*\\\\?\\]`, "giu"))) {
       add(m.index, m.index + m[0].length, m[1]);
     }
     // 3. Parentheses, capitals only.
     for (const m of input.matchAll(new RegExp(`\\((${known})\\)`, "gu"))) add(m.index, m.index + m[0].length, m[1]);
+    // A bare label followed by a number or more label words: reported.
+    for (const m of input.matchAll(new RegExp(`(?<![\\p{L}\\p{N}\\[])(?:${known})(?:[ \\t_\\-#]*\\d+|[ \\t_\\-]+(?:NAME|LAST|FULL|FIRST|INITIALS|MONTH|DAY|YEAR)\\b)(?![\\p{L}\\p{N}\\]])`, "gu"))) {
+      const start = m.index;
+      const end = start + m[0].length;
+      const key = labelKey(m[0]);
+      // "CLIENT LAST" of "CLIENT LAST NAME" is not another placeholder: only one that no known label begins with.
+      if (free(start, end) && !byKey.has(key) && !entries.some((k) => k.startsWith(`${key} `))) report(start, end, "unknown-placeholder");
+    }
     // 4. No brackets, capitals only: restored when unmistakable (a number or several words), reported otherwise.
-    for (const m of input.matchAll(new RegExp(`(?<![\\p{L}\\p{N}\\[])(${known})(?![\\p{L}\\p{N}\\]])`, "gu"))) {
+    for (const m of input.matchAll(new RegExp(`(?<![\\p{L}\\p{N}\\[])(${known})(?![\\p{L}\\p{N}\\]])${NOT_MORE}`, "gu"))) {
       const start = m.index;
       const end = start + m[0].length;
       if (!free(start, end)) continue;

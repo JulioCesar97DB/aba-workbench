@@ -5,7 +5,9 @@
  * (with the "ﬁ" ligature) fold to plain lowercase letters; typographic apostrophes and
  * dashes fold to "'" and "-"; invisible format characters (a soft hyphen, a zero-width
  * joiner, a word joiner) and stray combining marks fold to nothing; an HTML character
- * reference pasted with a text ("Luc&iacute;a", "&#237;") folds to its letter.
+ * reference pasted with a text ("Luc&iacute;a", "&#237;") and a percent-encoded URL
+ * character ("Mat%C3%A9o") fold to their letter; a Cyrillic or Greek letter that looks
+ * Latin ("Valeriа" with a Cyrillic а) folds to the Latin one.
  */
 
 export interface Folded {
@@ -31,9 +33,37 @@ const ENTITIES: Record<string, string> = {
   agrave: "à", egrave: "è", ccedil: "ç", ordf: "ª", ordm: "º", rsquo: "'", lsquo: "'", ndash: "-", mdash: "-", shy: "",
 };
 const ENTITY = /^&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z]{2,8}));/u;
+/** One or more percent-encoded bytes: "%C3%A9". */
+const PERCENT = /^(?:%[0-9A-Fa-f]{2})+/u;
+const UTF8 = new TextDecoder("utf-8", { fatal: true });
+
+/** Cyrillic and Greek letters drawn like Latin ones, folded to the Latin letter (lowercase). */
+const HOMOGLYPHS: Record<string, string> = {
+  "\u{0430}": "a", "\u{0435}": "e", "\u{043E}": "o", "\u{0440}": "p", "\u{0441}": "c", "\u{0443}": "y", "\u{0445}": "x",
+  "\u{0456}": "i", "\u{0458}": "j", "\u{0455}": "s", "\u{04CF}": "l", "\u{0501}": "d", "\u{051B}": "q", "\u{051D}": "w",
+  // Lowercase forms of Cyrillic capitals drawn like Latin ones: М, Н, Т, К, В.
+  "\u{043C}": "m", "\u{043D}": "h", "\u{0442}": "t", "\u{043A}": "k", "\u{0432}": "b",
+  // Greek, by the Latin letter the capital looks like: Ο, Α, Ε, Ι, Κ, Ν, Ρ, Τ, Υ, Χ, Β, Ζ, Η, Μ.
+  "\u{03BF}": "o", "\u{03B1}": "a", "\u{03B5}": "e", "\u{03B9}": "i", "\u{03BA}": "k", "\u{03BD}": "n", "\u{03C1}": "p", "\u{03C4}": "t", "\u{03C5}": "y", "\u{03C7}": "x",
+  "\u{03B2}": "b", "\u{03B6}": "z", "\u{03B7}": "h", "\u{03BC}": "m",
+};
+
+/** Folded forms of the characters met so far: most texts use a few hundred distinct ones. */
+const FOLDED = new Map<string, string>();
 
 /** One character folded: compatibility form, lowercase, accents removed. */
 export function foldChar(ch: string): string {
+  const code = ch.charCodeAt(0);
+  // Plain ASCII: only capitals change (and the backtick, an apostrophe).
+  if (ch.length === 1 && code < 128) return code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : code === 96 ? "'" : ch;
+  const known = FOLDED.get(ch);
+  if (known !== undefined) return known;
+  const folded = foldUncached(ch);
+  if (FOLDED.size < 50_000) FOLDED.set(ch, folded);
+  return folded;
+}
+
+function foldUncached(ch: string): string {
   if (APOSTROPHES.test(ch)) return "'";
   if (DASHES.test(ch)) return "-";
   if (SPACES.test(ch)) return " ";
@@ -44,9 +74,25 @@ export function foldChar(ch: string): string {
     if (APOSTROPHES.test(c)) out += "'";
     else if (DASHES.test(c)) out += "-";
     else if (SPACES.test(c)) out += " ";
-    else out += c.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/\u{00DF}/gu, "ss");
+    else {
+      const lower = c.toLowerCase();
+      out += HOMOGLYPHS[lower] ?? lower.normalize("NFD").replace(/\p{M}/gu, "").replace(/\u{00DF}/gu, "ss");
+    }
   }
   return out;
+}
+
+/** The text a run of percent-encoded bytes at `text[i]` stands for (valid UTF-8 only), and its length. */
+function percentAt(text: string, i: number): { value: string; length: number } | null {
+  const m = PERCENT.exec(text.slice(i, i + 48));
+  if (!m) return null;
+  const bytes = new Uint8Array(m[0].length / 3);
+  for (let k = 0; k < bytes.length; k++) bytes[k] = parseInt(m[0].slice(k * 3 + 1, k * 3 + 3), 16);
+  try {
+    return { value: UTF8.decode(bytes), length: m[0].length };
+  } catch {
+    return null;
+  }
 }
 
 /** The character an HTML reference at `text[i]` stands for, and its length. */
@@ -73,7 +119,7 @@ export function fold(original: string): Folded {
   while (i < original.length) {
     let length: number;
     let folded: string;
-    const entity = original[i] === "&" ? entityAt(original, i) : null;
+    const entity = original[i] === "&" ? entityAt(original, i) : original[i] === "%" ? percentAt(original, i) : null;
     if (entity) {
       length = entity.length;
       folded = [...entity.value].map(foldChar).join("");

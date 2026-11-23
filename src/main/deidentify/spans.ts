@@ -1,25 +1,39 @@
-/* Spans of text that never overlap, kept in order: overlap queries in logarithmic time, so de-identifying and restoring stay linear. */
-
-/** Non-overlapping spans kept sorted by start. */
+/*
+ * Spans of text that never overlap. Each position of the text records which span covers it,
+ * so finding what overlaps a new span costs its own length, and adding one costs its length
+ * too: no array is shifted, whatever the number of spans (linear in the text overall).
+ */
 export class Spans<T extends { start: number; end: number }> {
-  readonly items: T[] = [];
-  /** Index of the first span that ends after `start`. */
-  #first(start: number): number {
-    let lo = 0;
-    let hi = this.items.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (this.items[mid].end <= start) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
+  readonly #all: T[] = [];
+  #covered: Int32Array;
+
+  /** `length`: the length of the text the spans are in. */
+  constructor(length: number) {
+    this.#covered = new Int32Array(Math.max(1, length)).fill(-1);
   }
+
+  /** The spans that share a character with [start, end), in order. */
   overlapping(start: number, end: number): T[] {
     const out: T[] = [];
-    for (let i = this.#first(start); i < this.items.length && this.items[i].start < end; i++) out.push(this.items[i]);
+    let last = -1;
+    for (let i = Math.max(0, start); i < end && i < this.#covered.length; i++) {
+      const id = this.#covered[i];
+      if (id !== -1 && id !== last) {
+        out.push(this.#all[id]);
+        last = id;
+      }
+    }
     return out;
   }
+
   add(span: T): void {
-    this.items.splice(this.#first(span.start), 0, span);
+    const id = this.#all.length;
+    this.#all.push(span);
+    this.#covered.fill(id, Math.max(0, span.start), Math.min(this.#covered.length, span.end));
+  }
+
+  /** Every span, sorted by start. */
+  get items(): T[] {
+    return [...this.#all].sort((a, b) => a.start - b.start);
   }
 }

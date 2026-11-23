@@ -10,15 +10,15 @@ const GROUP_LABELS: Record<PersonGroup, string> = { client: "CLIENT", caregiver:
 const FORM_SUFFIXES: Record<NameForm, string> = { first: "", full: " FULL NAME", last: " LAST NAME", initials: " INITIALS" };
 
 /**
- * [CLIENT], [CAREGIVER 1 FULL NAME]; a surname alone is [CLIENT LAST NAME] for the whole
- * surname and [CLIENT LAST NAME 1], [CLIENT LAST NAME 2] for each of its parts; a full name
- * written with fewer words than the sheet's ("Valeria Ficticio" for "Valeria Ficticio
- * Gómez") is [FAMILY 1 FULL NAME 1], [FAMILY 1 FULL NAME 2]...: each restores exactly the
- * words it stood for, in the sheet's spelling.
+ * [CLIENT], [CLIENT FULL NAME], [CLIENT LAST NAME] for the sheet's own whole forms; any other
+ * written form has its own number, in the order met: [CLIENT FIRST NAME 1] ("José" of "María
+ * José", "Lucy"), [FAMILY 1 FULL NAME 1] ("Valeria Ficticio"), [CLIENT LAST NAME 1] ("Gómez",
+ * "la Fuente", "Gómez-Ficticio"): each restores exactly the words it stood for.
  */
 export function personPlaceholder(group: PersonGroup, index: number, form: NameForm, part = ""): string {
   const base = group === "client" ? GROUP_LABELS.client : `${GROUP_LABELS[group]} ${index + 1}`;
-  return `[${base}${FORM_SUFFIXES[form]}${(form === "last" || form === "full") && part ? ` ${part}` : ""}]`;
+  if (!part) return `[${base}${FORM_SUFFIXES[form]}]`;
+  return `[${base}${form === "first" ? " FIRST NAME" : FORM_SUFFIXES[form]} ${part}]`;
 }
 
 export type NumberedKind = Exclude<FoundKind, PersonGroup | "dob">;
