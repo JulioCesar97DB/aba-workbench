@@ -1,6 +1,6 @@
 ---
 id: instruments
-version: 2
+version: 3
 updated: 2026-11-23
 sources: General descriptions of the Vineland-3 and the BASC-3 Parenting Relationship Questionnaire (score metrics and scale names as the instruments define them), and general descriptions of the FAST, the MAS, ABC and scatterplot recording, the ABLLS-R and preference assessments as behavior analysts use them. Not from the payer documents.
 confirmed: no, pending review by the BCBA (the whole file; the sections added in version 2 have not been seen by her at all)
@@ -61,7 +61,7 @@ The Vineland-3 and the BASC-3 PRQ describe global functioning; they never establ
 ### Preference assessments
 
 - Ways of finding what the child currently prefers, which tells the plan what can work as a reinforcer: caregiver interview or checklist (indirect), free-operant observation (time spent with items when all are available), and trial-based methods (single stimulus, paired stimulus, multiple stimulus with or without replacement), which give a ranking.
-- Report the method, the items and the ranking or result as recorded. A preference is not proof that an item reinforces behavior; preferences change, so the plan reassesses them.
+- Report the items and the ranking or result as recorded, and the method only when the sources name it. A preference is not proof that an item reinforces behavior; preferences change, so the plan reassesses them.
 
 ## Combining evidence into a hypothesis
 

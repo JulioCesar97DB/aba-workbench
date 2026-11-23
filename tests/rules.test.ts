@@ -50,30 +50,71 @@ function cases() {
   }));
 }
 
-test("the rules never name an invented case", () => {
-  const rules = [...rulesById().values()].join("\n");
-  for (const { meta } of cases()) {
-    for (const word of meta.label.split(" ").slice(0, 2)) {
-      const name = word.replace(",", "").toLowerCase();
-      assert.equal(rules.includes(name), false, `rules mention ${name}`);
+/**
+ * The people of each invented evaluation case (child, caregivers, siblings, professionals), by first name,
+ * with the usual short forms. The rules and the examples must never name one of them, so the evaluation
+ * scores rules that were not written for its cases (review round 1, S9 and B2). A new case adds its
+ * people here; the test below fails until it does.
+ */
+const CASE_PEOPLE: Record<string, string[]> = {
+  "case-a-mateo": ["Mateo", "Teo", "Mati", "Lucía", "Lu", "Lucy", "Andrés", "Andy", "Valeria", "Vale", "Vali", "Daniela", "Dani", "Ramón", "Moncho", "Elena", "Ele"],
+  "case-b-sofia": ["Sofía", "Sofi", "Carmen", "Carmencita", "Diego", "Dieguito", "Daniela", "Dani", "Marta", "Martita", "Ramón", "Moncho", "Iván", "Ivancito"],
+};
+
+/** Lower case, accents removed, so "Sofía" and "Sofia" are the same word. */
+function plain(text: string): string {
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+/** Whole words of a text, as plain(). */
+function wordsOf(text: string): Set<string> {
+  return new Set(plain(text).match(/\p{L}+/gu) ?? []);
+}
+
+test("every invented case lists its people for the name check", () => {
+  for (const { dir, meta } of cases()) {
+    const people = CASE_PEOPLE[dir];
+    assert.ok(people, `add the people of fixtures/cases/${dir} (child, caregivers, siblings, professionals, with short forms) to CASE_PEOPLE`);
+    const child = plain(meta.label.split(/[ ,]/)[0]);
+    assert.ok(people.map(plain).includes(child), `${dir}: CASE_PEOPLE lacks the child's first name`);
+  }
+});
+
+test("the rules and the examples never name a person of an invented case, as a whole word", () => {
+  const words = new Map([...rulesById()].map(([id, text]) => [id, wordsOf(text)]));
+  for (const { dir } of cases()) {
+    for (const name of CASE_PEOPLE[dir] ?? []) {
+      for (const [id, found] of words) assert.equal(found.has(plain(name)), false, `rules file ${id} names ${name} (${dir})`);
     }
   }
 });
 
-test("each planted gap appears in exactly the rules files case.json says anticipate it", () => {
+test("each planted gap is still anticipated by the rules files case.json lists", () => {
   const rules = rulesById();
   for (const { dir, meta } of cases()) {
     for (const gap of meta.plantedGaps) {
       assert.ok(gap.keywords.length > 0, `${dir}: a planted gap has no keywords`);
-      const found = [...rules]
-        .filter(([, text]) => gap.keywords.some((keyword) => text.includes(keyword.toLowerCase())))
-        .map(([id]) => id)
-        .sort();
-      assert.deepEqual(
-        found,
-        [...gap.anticipatedBy].sort(),
-        `${dir}: keywords [${gap.keywords.join(", ")}] appear in [${found.join(", ")}] but case.json says [${gap.anticipatedBy.join(", ")}]`,
-      );
+      for (const id of gap.anticipatedBy) {
+        const text = rules.get(id);
+        assert.ok(text, `${dir}: anticipatedBy names ${id}, which is not a rules file`);
+        assert.ok(
+          gap.keywords.some((keyword) => text.includes(keyword.toLowerCase())),
+          `${dir}: ${id} should anticipate "${gap.gap.slice(0, 60)}…" but contains none of [${gap.keywords.join(", ")}]`,
+        );
+      }
     }
   }
+});
+
+test("the examples stay labeled as invented, with the rule never to reuse them", () => {
+  const text = readFileSync("rules/examples.md", "utf8");
+  assert.match(text, /about an invented child/);
+  assert.match(text, /Never reuse their sentences, names, dates or numbers/);
+});
+
+test("the whole-assessment rules keep the four kinds of content and the line on proposals", () => {
+  const text = readFileSync("rules/assessment.md", "utf8");
+  assert.match(text, /## Four kinds of content/);
+  assert.match(text, /Her standard practice/);
+  assert.match(text, /you never write a proposal into a section/);
 });

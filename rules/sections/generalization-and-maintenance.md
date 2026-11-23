@@ -1,6 +1,6 @@
 ---
 id: section-generalization-and-maintenance
-version: 2
+version: 3
 updated: 2026-11-23
 paragraphs: 2-2
 words: 200-320
@@ -20,9 +20,11 @@ Exactly two paragraphs.
 
 It is written for the whole plan, not goal by goal, in about 200 to 300 words.
 
-1. Generalization. Skills and replacement behaviors are taught with the same SD (discriminative stimulus) and then practiced across people, settings, materials and routines: name this child's settings (home, school, community, as the assessment names them) and people (the caregivers, siblings, teachers, RBTs the sources name). The prompt hierarchy is adjusted as the child's proficiency grows: prompts are faded, while visual supports the child relies on stay in place. Skills are brought under the natural consequences of the child's own routines. Coordination with the child's other providers (school, therapists) for generalization is named here when the sources name those providers, with the caregivers' permission. One or two brief examples taken from this child's own goals and replacement behaviors, as named elsewhere in the assessment, make it this child's.
+1. Generalization. Skills and replacement behaviors are taught with the same SD (discriminative stimulus) and then practiced across settings and people: name this child's settings (home, school, community, as the assessment names them) and people (the caregivers, siblings, teachers, RBTs the sources name). The prompt hierarchy is adjusted as the child's proficiency grows. One or two brief examples taken from this child's own goals and replacement behaviors, as named elsewhere in the assessment, make it this child's.
 
 2. Maintenance. After mastery, weekly probes check that each skill is still performed. The reinforcement schedule is thinned from continuous to intermittent, and prompts are faded. Close by saying that if performance drops, the reinforcement schedule and the prompts that were removed are reinstated, and removed again once the level is regained.
+
+This is her own description of the section. Anything more that she writes the same way in every case (for example how she programs for generalization beyond settings and people, or coordination with other providers) is her standard practice: add it only as her standing instructions for this section give it (see the four kinds of content).
 
 ## Gaps in this section
 

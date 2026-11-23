@@ -1,6 +1,6 @@
 ---
 id: section-strengths-and-weaknesses
-version: 2
+version: 3
 updated: 2026-11-23
 paragraphs: 2-3
 words: 300-450
@@ -16,12 +16,12 @@ A short narrative of what the child already does well and where the child needs 
 
 ## How to write it
 
-Written as prose in 2 or 3 paragraphs (about 300 to 450 words) without bullets. It begins with the strengths, goes on to the needs, and ends with what ABA will teach to meet them.
+Written as prose in 2 or 3 paragraphs (about 300 to 450 words) without bullets. It begins with the strengths, goes on to the needs, and ends with what the child needs to learn.
 
 - Strengths come from the sources: what caregivers, teachers, the CDE or the BCBA's observations say the child does well, likes, or does independently, and the higher areas on the standardized reports. Each strength is concrete (what the child does, where, with whom) and tied to how treatment can use it: a skill that new learning can build on, an interest that can motivate practice or give a topic for social teaching.
 - Where a strength does not hold consistently, qualify it: "Although [name] can ..., [he/she] does not yet ... without ...". The qualification and the use in treatment are facts from the sources or plain inferences from them. Do not link a strength to a deficit by your own inference (for example, from an adequate motor score to an unsafe behavior the sources never connect to it).
 - The needs are the deficit areas named in Medical Necessity, in the same order and with the same terms, each in a sentence or two saying what the child does not yet do, with its source. Medical Necessity has already argued them with scores, counts and incidents: do not repeat its numbers or retell its incidents here.
-- Close with a sentence or two on what ABA will teach to meet these needs, naming the skills it will teach, in line with Medical Necessity's closing and the family's priorities. Name only skills and kinds of procedure; a specific strategy is hers to choose (see the three kinds of content).
+- Close with a sentence or two on what ABA will address: what the child needs to learn for each need, stated as its plain reverse, in line with Medical Necessity's closing and the family's priorities. Name no procedure, program, strategy or support (see the four kinds of content).
 - Do not turn a deficit into a strength, or praise without a source.
 
 ## Not yet settled with the BCBA
