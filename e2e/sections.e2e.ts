@@ -398,6 +398,76 @@ test("out of order: version 1, then ask for changes; the version's answer after 
   await expect(page.getByTestId("section-view")).toContainText("The school reports that his communication plan is now in place.");
 });
 
+/*
+ * A check's save that overtakes her answer (review 2 of PR #15, R2-1): during "Check
+ * again" she picks version 1 and makes a new version from it; the check saves after her
+ * change, and its news comes back before her answer. Her answer is then older than the
+ * snapshot shown, yet what she just did must be shown: the new version, with her text.
+ */
+
+/** Environmental Changes with three versions, the third "Could not be checked" (her Background Information is there to compare), and Check again running slowly. */
+async function checkingAgain(launch: Parameters<typeof openSection>[0], home: string) {
+  const opened = await openSection(launch, home, "background-information", "en", { consistency: "Maybe." });
+  const { app, page } = opened;
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Her own background text.");
+  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/report/environmental-changes`);
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
+  await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+  await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("Ask for changes in your own words").fill("mention that the school started the communication plan");
+  await page.getByRole("button", { name: "Create version 3" }).click();
+  await expect(page.getByTestId("section-checks")).toContainText("Could not be checked", { timeout: 20_000 });
+
+  await setDraftingSpeed(app, 500);
+  await page.getByRole("button", { name: "Check again" }).click();
+  await expect(page.getByTestId("section-checks")).toContainText("Checking");
+  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
+  return opened;
+}
+
+/**
+ * Her new version 4 is on disk, then the check ends and saves after it. Her answer is held,
+ * so only the check's news can bring version 4 into the version bar.
+ */
+async function checkSavedAfterHer(page: Page, caseFile: string) {
+  await expect.poll(() => sectionData(caseFile, "environmental-changes").versions.length).toBe(4);
+  expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ currentVersion: 4 });
+  await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(4, { timeout: 20_000 });
+}
+
+test("check overtakes: during a check, version 1 then each line a paragraph; the new version is shown", async ({ launch, home }) => {
+  const { app, page, caseFile } = await checkingAgain(launch, home);
+  const release = await holdAnswers(app, "sections:save-text");
+  await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+  await checkSavedAfterHer(page, caseFile);
+  await expect(page.getByTestId("section-checks")).not.toContainText("Checking");
+
+  await release();
+  await settle(page);
+  // She asked for each line as a paragraph: the file shows version 4; so must the screen.
+  await expect(page.getByRole("button", { name: "Version 4" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("lines-notice")).toHaveCount(0);
+});
+
+test("check overtakes: during a check, she edits version 1's text; after Done her edit is what the screen shows", async ({ launch, home }) => {
+  const { app, page, caseFile } = await checkingAgain(launch, home);
+  await page.getByRole("button", { name: "Edit the text" }).click();
+  const release = await holdAnswers(app, "sections:save-text");
+  await page.getByTestId("section-text").fill("Para one.\n\nPara two, edited by her.\n\nPara three.");
+  await checkSavedAfterHer(page, caseFile);
+  expect(sectionData(caseFile, "environmental-changes").versions[3].text).toBe("Para one.\n\nPara two, edited by her.\n\nPara three.");
+
+  await release();
+  await settle(page);
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("button", { name: /^Version 4/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("section-view")).toContainText("Para two, edited by her.");
+});
+
 /* Review round 2: B3, the kept text goes back in its box */
 
 /** Puts the caret at the end of a text area (Cmd+End does not move it in a macOS text area). */

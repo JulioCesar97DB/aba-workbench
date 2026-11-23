@@ -146,12 +146,18 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
    * back in another order than the changes were saved (a slow or busy disk), so a snapshot
    * older than the one shown (its revision, the case's save time) is dropped: it would
    * undo a newer change on screen, such as an approval she just made or a version just saved.
+   * (The revision is the case's save time, which each save makes later than the last; a
+   * case file replaced by an older copy while the clock is behind would hold the screen on
+   * what it shows until the section is opened again. Nothing on disk is affected.)
    */
   const shownRevision = useRef(initial.revision);
+  /** The snapshot shown: the newest taken. */
+  const shown = useRef(initial);
   const take = useCallback(
     (next: SectionDetail, sections?: SectionSummary[]): boolean => {
       if (isOlderRevision(next.revision, shownRevision.current)) return false;
       shownRevision.current = next.revision;
+      shown.current = next;
       setDetail(next);
       if (sections) patch(caseId, { sections });
       return true;
@@ -159,13 +165,18 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     [caseId, patch],
   );
 
-  /** Shows a snapshot and the version it holds as current, unless it is older than the one shown. */
+  /**
+   * The answer to what she just did (her newest action, her text, Try again): the version
+   * it holds as current is shown. When a newer snapshot is shown already (a check saved
+   * after her change, and its news came first), that one is kept, and its current version
+   * shown: it already holds her change, so what she just did is never hidden.
+   */
   const accept = useCallback(
     (next: SectionDetail, sections?: SectionSummary[]) => {
-      if (!take(next, sections)) return;
-      setViewed(next.currentVersion);
+      const newest = take(next, sections) ? next : shown.current;
+      setViewed(newest.currentVersion);
       // A version saved from elsewhere (Try again after a reload) shows the text instead of the two ways to start.
-      setMode((current) => (current === "choose" && next.versions.length > 0 ? "view" : current));
+      setMode((current) => (current === "choose" && newest.versions.length > 0 ? "view" : current));
     },
     [take],
   );
