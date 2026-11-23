@@ -382,3 +382,14 @@ test("the answer schemas follow strict structured outputs: every object closed a
   walk(mapAnswerSchema("map-facts"), "facts");
   walk(mapAnswerSchema("map-behaviors"), "behaviors");
 });
+
+test("a claim whose value is one of a fixed list carries that list in the schema (the real run's settings and strengths)", () => {
+  type Node = { properties: Record<string, Node>; items: Node; anyOf: Node[]; enum?: string[] };
+  const facts = mapAnswerSchema("map-facts") as unknown as Node;
+  const valueOf = (claim: Node) => claim.anyOf[0].properties.value.enum;
+  const settings = facts.properties.settings.items.properties;
+  assert.deepEqual(valueOf(settings.kind), ["home", "school", "community", "clinic", "other"]);
+  assert.deepEqual(valueOf(settings.evidence), ["observed", "reported"]);
+  assert.deepEqual(valueOf(facts.properties.strengths.items.properties.kind), ["strength", "interest", "preference", "reinforcer"]);
+  assert.deepEqual(valueOf(facts.properties.client.anyOf[0].properties.otherServices.items.properties.paid), ["paid", "not-paid"]);
+});

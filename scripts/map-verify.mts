@@ -25,7 +25,8 @@ import { installRehearsalProvider, REHEARSAL_CLAUDE_KEY } from "../eval/rehearsa
 const { values: args } = parseArgs({ options: { case: { type: "string", default: "case-b-sofia" }, rehearse: { type: "boolean", default: false } } });
 const root = process.cwd();
 const WINDOW_CHECK_MS = 5_000;
-const DRAFT_TIMEOUT_MS = 20 * 60 * 1000;
+/** The real route took about 15 minutes for the facts request alone (with its repair) on 2026-11-23. */
+const DRAFT_TIMEOUT_MS = 60 * 60 * 1000;
 
 function fail(message: string): never {
   console.error(`map-verify: ${message}`);
@@ -167,7 +168,7 @@ const outcome = (await page.evaluate(
     const done = new Promise<void>((resolve) => {
       const stop = api.onGenerationUpdate((update) => {
         if (update.generationId !== generationId) return;
-        if (update.event.type !== "text") events.push(update.event);
+        if (update.event.type !== "text") events.push({ ...update.event, seconds: Math.round((performance.now() - started) / 1000) });
         if (update.event.type === "finished") {
           stop();
           resolve();
@@ -203,7 +204,8 @@ const summary = {
   started: outcome.start.outcome,
   seconds: Math.round(outcome.seconds),
   errors: outcome.events.filter((event) => event.type === "error"),
-  saved: outcome.events.filter((event) => event.type === "map-saved").map((event) => event.type === "map-saved" && { step: event.step, written: event.written, problems: event.problems }),
+  saved: outcome.events.filter((event) => event.type === "map-saved").map((event) => event.type === "map-saved" && { step: event.step, written: event.written, problems: event.problems, seconds: (event as { seconds?: number }).seconds }),
+  finished: outcome.events.find((event) => event.type === "finished") ?? null,
   requests: (map?.extractions ?? []).map((record: Record<string, unknown>) => ({
     kind: record.kind,
     format: record.format,

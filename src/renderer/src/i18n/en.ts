@@ -535,7 +535,7 @@ export const en = {
       writing_other: "Writing… {{count}} characters so far.",
       repairing: "Some quotes did not match their sources: asking the AI to fix its answer…",
       plainJson: "This AI does not take the structured format: asking it again in plain JSON…",
-      time: "It usually takes 2 to 6 minutes. You review everything before it is used.",
+      time: "It can take 15 to 30 minutes. You review everything before it is used.",
       stop: "Stop",
       saved: "The AI drafted the map. Review each part: nothing is used until you approve it.",
       partial: "The case facts are saved; the behaviors are not.",

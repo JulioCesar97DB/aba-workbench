@@ -113,7 +113,7 @@ A PDF's text cannot be read yet, so its quotes are marked "not checked" (D32), a
 **On screen.**
 - The AI action sits in the header, kept in its own component (`src/renderer/src/case-map/MapDraft.tsx`) so it moves as it is into the "Con la IA" side of the two-ways bar when the UX redesign's UX-3 lands.
 - An empty map shows the two ways side by side ("A mano" / "Con la IA").
-- While the AI works, a panel shows the two steps, what is arriving, "It usually takes 2 to 6 minutes", and Stop. When a request's parts are saved, the screen shows them at once.
+- While the AI works, a panel shows the two steps, what is arriving, "It can take 15 to 30 minutes" (measured on the ChatGPT route, pull request 2), and Stop. When a request's parts are saved, the screen shows them at once.
 - Each chip says how its quote was checked ("not checked" for a PDF, "not found" in the warning color).
 
 ## Where the code is

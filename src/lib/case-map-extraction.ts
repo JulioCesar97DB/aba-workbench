@@ -40,6 +40,7 @@ function object(properties: Record<string, Schema>): Schema {
   return { type: "object", additionalProperties: false, required: Object.keys(properties), properties };
 }
 
+const SERVICE_PAID = ["paid", "not-paid"] as const;
 const ORIGIN_VALUES = ["extracted", "her", "ai-drafted", "hypothesis", "proposed"] as const;
 const REF_KINDS = ["source", "section", "note"] as const;
 
@@ -47,6 +48,8 @@ const refSchema = object({ kind: choice(REF_KINDS), id: str, quote: str });
 const claimSchema = object({ value: str, refs: list(refSchema), origin: choice(ORIGIN_VALUES), check: nullable(str) });
 const maybeClaim = nullable(claimSchema);
 const claims = list(claimSchema);
+/** A claim whose value is one of a fixed list: the list is in the schema, so a strict route cannot answer anything else. */
+const choiceClaim = (values: readonly string[]): Schema => nullable(object({ value: choice(values), refs: list(refSchema), origin: choice(ORIGIN_VALUES), check: nullable(str) }));
 const openItemSchema = object({ kind: choice(OPEN_ITEM_KINDS), text: str, homeSection: nullable(int) });
 
 const factsSchema = object({
@@ -62,12 +65,12 @@ const factsSchema = object({
       grade: maybeClaim,
       schedule: maybeClaim,
       iep: maybeClaim,
-      otherServices: list(object({ name: claimSchema, provider: maybeClaim, paid: maybeClaim })),
+      otherServices: list(object({ name: claimSchema, provider: maybeClaim, paid: choiceClaim(SERVICE_PAID) })),
       languages: claims,
     }),
   ),
   caregivers: list(object({ key: str, role: maybeClaim, language: maybeClaim, availability: maybeClaim, participation: maybeClaim, limits: maybeClaim, mitigation: maybeClaim })),
-  settings: list(object({ key: str, name: maybeClaim, kind: maybeClaim, evidence: maybeClaim, by: maybeClaim, dates: maybeClaim })),
+  settings: list(object({ key: str, name: maybeClaim, kind: choiceClaim(SETTING_KINDS), evidence: choiceClaim(SETTING_EVIDENCE), by: maybeClaim, dates: maybeClaim })),
   deficits: list(
     object({
       key: str,
@@ -77,7 +80,7 @@ const factsSchema = object({
       impact: maybeClaim,
     }),
   ),
-  strengths: list(object({ key: str, text: maybeClaim, kind: maybeClaim, setting: maybeClaim })),
+  strengths: list(object({ key: str, text: maybeClaim, kind: choiceClaim(STRENGTH_KINDS), setting: maybeClaim })),
   facts: list(object({ key: str, text: maybeClaim, homeSection: nullable(int) })),
   openItems: list(openItemSchema),
   report: list(object({ kind: choice(REPORT_ITEM_KINDS), text: str, sections: list(str), refs: list(refSchema) })),
@@ -351,7 +354,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
         visitClaim(service.name, `client.otherServices[${index}].name`);
         visitClaim(service.provider, `client.otherServices[${index}].provider`);
         visitClaim(service.paid, `client.otherServices[${index}].paid`);
-        oneOf(service.paid, ["paid", "not-paid"], `client.otherServices[${index}].paid`);
+        oneOf(service.paid, SERVICE_PAID, `client.otherServices[${index}].paid`);
       });
     }
     facts.caregivers.forEach((item, index) => {

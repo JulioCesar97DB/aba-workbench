@@ -524,7 +524,7 @@ export const es: Messages = {
       writing_other: "Escribiendo… {{count}} caracteres hasta ahora.",
       repairing: "Algunas citas no coincidían con sus fuentes: le pide a la IA que corrija su respuesta…",
       plainJson: "Esta IA no acepta el formato estructurado: se lo vuelve a pedir en JSON simple…",
-      time: "Suele tardar de 2 a 6 minutos. Tú revisas todo antes de que se use.",
+      time: "Puede tardar de 15 a 30 minutos. Tú revisas todo antes de que se use.",
       stop: "Detener",
       saved: "La IA armó el mapa. Revisa cada parte: nada se usa hasta que la apruebes.",
       partial: "Los datos del caso quedaron guardados; las conductas no.",
