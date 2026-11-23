@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { checkSourceTitle, type SourceChange, type SourceType } from "../../shared/sources.ts";
 import { registerFlusher, sourceAnswer, useCaseSaves } from "./case-saves.tsx";
 import { TextField } from "./components/TextField.tsx";
+import { dateFieldOrder } from "./format.ts";
 import { SOURCE_TYPES } from "../../shared/sources.ts";
 import { Select } from "./components/Select.tsx";
 import { sourceTypeLang, sourceTypeName } from "./source-labels.tsx";
@@ -154,9 +155,16 @@ export function SourceTypeSelect({ value, onChange }: { value: SourceType; onCha
   );
 }
 
-/** A date field (the system's own, keyboard-friendly); "" when cleared. Only a whole, valid date is passed on. */
+/**
+ * A date field (the system's own, keyboard-friendly); "" when cleared. Only a whole, valid
+ * date is passed on. It follows the computer's regional format, so its hint says the order
+ * to type the date in (owner's decision T20).
+ */
 export function SourceDateField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const { t } = useTranslation();
+  const order = dateFieldOrder(navigator.language)
+    .map((part) => t(`sources.dateParts.${part}`))
+    .join("/");
   return (
     <TextField
       className="max-w-56"
@@ -164,7 +172,7 @@ export function SourceDateField({ value, onChange }: { value: string; onChange: 
       min="1900-01-01"
       max="2100-12-31"
       label={t("sources.dateLabel")}
-      description={t("sources.dateDescription")}
+      description={`${t("sources.dateDescription")} ${t("sources.dateOrder", { order })}`}
       value={value}
       onChange={(event) => {
         const next = event.currentTarget.value;

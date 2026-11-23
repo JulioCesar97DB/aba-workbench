@@ -25,3 +25,16 @@ export function formatDate(language: Language, iso: string): string {
 export function formatDateTime(language: Language, iso: string): string {
   return new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 }
+
+export type DatePart = "day" | "month" | "year";
+
+/**
+ * The order of day, month and year in the system's own date field (`type="date"`), which
+ * follows the computer's regional settings (navigator.language), not the screen language:
+ * a Spanish screen on a Windows set to US English shows mm/dd/yyyy. The hint under the
+ * field names that order in the screen language (owner's decision T20).
+ */
+export function dateFieldOrder(locale: string): DatePart[] {
+  const parts = new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(Date.UTC(2026, 10, 23, 12)));
+  return parts.map((part) => part.type).filter((type): type is DatePart => type === "day" || type === "month" || type === "year");
+}

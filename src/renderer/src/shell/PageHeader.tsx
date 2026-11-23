@@ -1,14 +1,21 @@
 import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+/** A number, a version or a path inside a sentence: the one thing in Plex Mono (owner's decision T17). */
+export function Mono({ children }: { children: ReactNode }) {
+  return <span className="font-mono tabular-nums">{children}</span>;
+}
+
 /**
  * The compact header of the working area: the screen's title (its only h1), a line of
- * technical detail in Plex Mono, and the screen's actions. It also sets the window title.
+ * detail, and the screen's actions. The detail line is a sentence, so it is in Plex Sans;
+ * only a number, a version or a path inside it is in Plex Mono, wrapped in <Mono> by the
+ * screen (owner's decision T17). It also sets the window title.
  * The h1 can take focus (tabIndex -1) so the skip link and a navigation can land on it.
  *
  * It stays outside the scrolling content, and from --container-split up it is one row of
  * fixed height (--spacing-header, 64 px) that never wraps (owner's decision T1): the title
- * and the detail line shorten with an ellipsis (the whole title is its tooltip), what
+ * and the detail line shorten with an ellipsis (the whole title is its tooltip once cut), what
  * follows the title (a section's versions) scrolls sideways within its place, and the
  * actions keep theirs. So a button never moves when a title is long, a section has many
  * versions or the screen is in Spanish. On a narrower working area it may wrap.
@@ -45,7 +52,7 @@ export function PageHeader({ title, titleLang, meta, afterTitle, actions }: { ti
             <div className="-my-1 flex min-w-0 items-center py-1 [scrollbar-width:none] @split:shrink-[4] @split:overflow-x-auto @split:[&>*]:flex-nowrap">{afterTitle}</div>
           ) : null}
         </div>
-        {meta ? <p className="min-w-0 font-mono text-xs text-fg-muted @split:truncate">{meta}</p> : null}
+        {meta ? <p className="min-w-0 text-xs text-fg-muted @split:truncate">{meta}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-1.5 @split:shrink-0 @split:flex-nowrap">{actions}</div> : null}
     </header>

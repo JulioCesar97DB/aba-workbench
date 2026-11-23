@@ -222,7 +222,7 @@ function TextCounter({ id, length, full, oneLongParagraph }: { id: string; lengt
   const max = formatCount(language, MAX_SOURCE_TEXT_LENGTH);
   return (
     <div id={id} className="flex flex-col gap-1">
-      <p className="font-mono text-xs text-fg-muted tabular-nums">{t("sources.textCounter", { count: formatCount(language, length), max })}</p>
+      <p className="text-xs text-fg-muted tabular-nums">{t("sources.textCounter", { count: formatCount(language, length), max })}</p>
       {full ? (
         <p role="alert" className="max-w-measure text-sm font-medium text-danger">
           {t("sources.textTooLong", { max })}

@@ -84,6 +84,26 @@ async function completeSignIn(app: Parameters<typeof connectionStubLog>[0], opti
   return authorize!;
 }
 
+test("Settings: the AI connection comes first, with the model in one line; then the language, the cases folder and About", async ({ app }) => {
+  const page = await firstScreen(app);
+  await openSettings(page);
+  // The order she needs them in (owner's decision U12).
+  await expect(page.getByRole("main").getByRole("heading", { level: 2 })).toHaveText(["AI connection", "Screen language", "Cases folder", "About"]);
+  const section = page.getByRole("region", { name: "AI connection" });
+  await expect(section).toContainText("The AI drafts the case map and the sections. Nothing is sent unless you ask. Connect one; ChatGPT is the usual one.");
+  await expect(section).toContainText("Model: the most capable (recommended)");
+  const change = section.getByRole("button", { name: "Change", exact: true });
+  await expect(change).toHaveAttribute("aria-expanded", "false");
+  await expect(section.getByRole("combobox")).toHaveCount(0);
+  await change.click();
+  await expect(change).toHaveAttribute("aria-expanded", "true");
+  await section.getByRole("combobox", { name: "Claude" }).click();
+  await page.getByRole("option", { name: /about half the cost/ }).click();
+  await expect(page.getByText("Saved. The next request uses it.")).toBeVisible();
+  // Each provider by name once they differ.
+  await expect(section).toContainText("Model: the most capable (recommended) for ChatGPT · about half the cost for Claude");
+});
+
 test("ChatGPT: sign in through the system browser, see the account, survive a restart, sign out", async ({ launch, profile }) => {
   const { jwks } = await signingKey();
   let app = await launch();

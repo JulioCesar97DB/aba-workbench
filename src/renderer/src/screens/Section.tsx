@@ -15,6 +15,7 @@ import { cn } from "../components/cn.ts";
 import { ButtonLink } from "../components/Link.tsx";
 import { Select } from "../components/Select.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
+import { aiErrorKind, aiErrorNeedsSettings } from "../ai-errors.ts";
 import { useConnections } from "../connections.tsx";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase, usePatchOpenedCase, useSetCaseSources } from "../open-case.tsx";
@@ -30,7 +31,7 @@ import {
   type SectionGeneration,
 } from "../section-generation.tsx";
 import { sourceName, sourceNameLang } from "../source-labels.tsx";
-import { PageHeader } from "../shell/PageHeader.tsx";
+import { Mono, PageHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 
 /*
@@ -694,16 +695,30 @@ export function formatUsd(language: string, amount: number): string {
   return new Intl.NumberFormat(language, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: amount > 0 && amount < 0.1 ? 3 : 2 }).format(amount);
 }
 
-/** "v3: “shorter, and mention the school”", who wrote it and what it cost. */
+/** Marks where a value goes in a translated sentence, so the value can be a React node. */
+const SLOT = "\u0000";
+
+/**
+ * "v3: “shorter, and mention the school”", who wrote it and what it cost. A sentence in
+ * Plex Sans; the version and the cost, numbers, in Plex Mono (owner's decision T17).
+ */
 function VersionLine({ version }: { version: SectionVersion }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const cost = version.costUsd === null ? null : formatUsd(language, version.costUsd);
+  const [before, after] = t("section.versionMeta", { version: SLOT, label: versionLabel(t, version) }).split(SLOT);
   return (
     <span>
-      {t("section.versionMeta", { number: version.number, label: versionLabel(t, version) })}
+      {before}
+      <Mono>{t("section.stateDraft", { number: version.number })}</Mono>
+      {after}
       {version.model ? ` · ${t("section.writtenBy", { model: modelLabel(version.model) })}` : ""}
-      {cost ? ` · ${cost}` : ""}
+      {cost ? (
+        <>
+          {" · "}
+          <Mono>{cost}</Mono>
+        </>
+      ) : null}
     </span>
   );
 }
@@ -958,16 +973,36 @@ function GenerationOutcomeMessage({ generation }: { generation: SectionGeneratio
               ? t("section.notOneParagraph")
               : outcome.kind === "too-long"
                 ? t("section.tooLong")
-                : t("section.failed", { message: outcome.message || t("section.unknownError") });
+                : t("section.failed");
+  // A failed request says what to do in her words; the provider's English text waits under "Technical details" (owner's decision T11).
+  const kind = outcome.kind === "failed" ? aiErrorKind(outcome.code) : null;
   // A failed request can be sent again as it was (the first Improve of the real runs failed on a dropped connection, 2026-11-23).
   const canRetry = outcome.kind === "failed" && generation.request !== null;
   return (
-    <div role="alert" className={cn("flex flex-wrap items-center gap-3 rounded-md border px-3.5 py-2", outcome.kind === "stopped" ? "border-border" : "border-danger")}>
-      <p className={cn("text-sm font-medium", outcome.kind === "stopped" ? "text-fg" : "text-danger")}>{message}</p>
-      {canRetry ? (
-        <Button size="sm" data-testid="section-try-again" onClick={() => void retrySectionGeneration(generation)}>
-          {t("sources.tryAgain")}
-        </Button>
+    <div role="alert" className={cn("flex flex-col gap-2 rounded-md border px-3.5 py-2", outcome.kind === "stopped" ? "border-border" : "border-danger")}>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className={cn("text-sm font-medium", outcome.kind === "stopped" ? "text-fg" : "text-danger")}>
+          {message}
+          {kind ? ` ${t(`section.failedWhy.${kind}`)}` : null}
+        </p>
+        {canRetry ? (
+          <Button size="sm" data-testid="section-try-again" onClick={() => void retrySectionGeneration(generation)}>
+            {t("sources.tryAgain")}
+          </Button>
+        ) : null}
+        {kind && aiErrorNeedsSettings(kind) ? (
+          <ButtonLink to="/settings" size="sm">
+            {t("section.openSettings")}
+          </ButtonLink>
+        ) : null}
+      </div>
+      {outcome.kind === "failed" && outcome.message ? (
+        <details className="text-sm text-fg-muted">
+          <summary className="w-fit cursor-pointer rounded-sm underline underline-offset-2 hover:decoration-2">{t("section.technicalDetails")}</summary>
+          <p lang="en" data-testid="section-error-details" className="mt-1 break-words">
+            {outcome.message}
+          </p>
+        </details>
       ) : null}
     </div>
   );

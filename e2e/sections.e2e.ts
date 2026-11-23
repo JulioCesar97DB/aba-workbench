@@ -149,7 +149,7 @@ test("pick up a section she already wrote, improve it, and draft another that bu
   const herText = "The child is a 4-year-old boy who lives at home with his parents.\n\nSpanish and English are spoken at home.";
   await page.getByTestId("section-text").fill(herText);
   await screenshot(page, "section-6-paste-es");
-  await page.getByRole("button", { name: "Dejarla así" }).click();
+  await page.getByRole("button", { name: "Listo, dejarla así" }).click();
   await expect(page.getByTestId("section-view")).toContainText("Spanish and English are spoken at home.");
   await expect(sidebarItem(page, "Background Information", "es")).toContainText("Tuya");
   expect(sectionData(caseFile, "background-information").versions[0]).toMatchObject({ number: 1, kind: "hers", text: herText });
@@ -191,8 +191,13 @@ test("a failed request says what went wrong and offers Try again, which sends th
   await setDraftingFailures(app, 1);
   await page.getByRole("button", { name: /Draft it with the AI/ }).click();
   const failure = page.getByRole("alert").filter({ hasText: "The AI could not finish" });
-  await expect(failure).toContainText("stubbed failure");
-  await expect(failure).toContainText("Nothing was saved");
+  await expect(failure).toContainText("The AI could not finish and nothing was saved; your versions are unchanged. Try again in a moment.");
+  // The provider's own words wait under "Technical details", in English (owner's decision T11).
+  const details = failure.getByTestId("section-error-details");
+  await expect(details).toBeHidden();
+  await failure.getByText("Technical details").click();
+  await expect(details).toContainText("stubbed failure");
+  await expect(details).toHaveAttribute("lang", "en");
   await screenshot(page, "section-10-failed-en");
   await failure.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByTestId("section-view")).toContainText("ABA will teach", { timeout: 20_000 });
@@ -226,7 +231,7 @@ test("her edits, instructions and notes survive a restart; the file keeps every 
   const { app, page, caseFile } = await openSection(launch, home, "generalization-and-maintenance");
   await page.getByRole("button", { name: /I already wrote it/ }).click();
   await page.getByTestId("section-text").fill("Generalization paragraph.\n\nMaintenance paragraph.");
-  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
   await page.getByRole("button", { name: "Edit the text" }).click();
   await page.getByTestId("section-text").fill("Generalization paragraph, edited.\n\nMaintenance paragraph.");
   await page.getByRole("button", { name: "Done" }).click();
@@ -336,7 +341,7 @@ test("B3: what she typed in a section that could not be saved is still there aft
     await page.getByRole("button", { name: "Try again" }).click();
     await expect(notice).toBeHidden();
     expect(sectionData(caseFile, "crisis-plan").versions[0].text).toBe("Typed while the folder refused.");
-    await page.getByRole("button", { name: "Keep it as it is" }).click();
+    await page.getByRole("button", { name: "Done, keep it as it is" }).click();
     await expect(page.getByTestId("section-view")).toContainText("Typed while the folder refused.");
     expect(sectionData(caseFile, "crisis-plan").versions).toHaveLength(1);
   } finally {
@@ -502,7 +507,7 @@ async function checkingAgain(launch: Parameters<typeof openSection>[0], home: st
   const { app, page } = opened;
   await page.getByRole("button", { name: /I already wrote it/ }).click();
   await page.getByTestId("section-text").fill("Her own background text.");
-  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/environmental-changes`);
   await page.getByRole("button", { name: /I already wrote it/ }).click();
   await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
@@ -611,7 +616,7 @@ test("B3 round 2, section text: after a reload the editor reopens with her corre
   const caseFolder = path.dirname(caseFile);
   await page.getByRole("button", { name: /I already wrote it/ }).click();
   await page.getByTestId("section-text").fill("Hers v1.");
-  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
   await expect(page.getByTestId("section-view")).toContainText("Hers v1.");
   await page.getByRole("button", { name: "Edit the text" }).click();
   chmodSync(caseFolder, 0o555);
@@ -748,7 +753,7 @@ test("R4-1: Stop pressed at once, 25 rounds on one screen: the screen and the fi
   // Her own Background Information, so every draft of Medical Necessity is followed by a check.
   await page.getByRole("button", { name: /I already wrote it/ }).click();
   await page.getByTestId("section-text").fill("Her own background text.");
-  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/medical-necessity`);
   await expect(heading(page)).toHaveText("Medical Necessity Criteria");
   const versionsOnDisk = () => (sectionData(caseFile, "medical-necessity")?.versions ?? []).length;
@@ -795,7 +800,7 @@ test("L-1: Skip pressed while Check again is still being prepared stops the chec
   const { app, page, caseFile } = await openSection(launch, home, "background-information", "en", { consistency: "Maybe." });
   await page.getByRole("button", { name: /I already wrote it/ }).click();
   await page.getByTestId("section-text").fill("Her own background text.");
-  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/medical-necessity`);
   await page.getByRole("button", { name: /Draft it with the AI/ }).click();
   await expect(page.getByTestId("section-checks")).toContainText("Could not be checked", { timeout: 20_000 });

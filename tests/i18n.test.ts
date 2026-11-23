@@ -70,3 +70,27 @@ test("strings: the only tag is <term></term>, and it is balanced", () => {
     }
   }
 });
+
+test("dates: the hint names the date field's order, which follows the computer's region", async () => {
+  const { dateFieldOrder } = await import("../src/renderer/src/format.ts");
+  assert.deepEqual(dateFieldOrder("en-US"), ["month", "day", "year"]);
+  assert.deepEqual(dateFieldOrder("es-MX"), ["day", "month", "year"]);
+  assert.deepEqual(dateFieldOrder("en-GB"), ["day", "month", "year"]);
+  assert.deepEqual(Object.keys(es.sources.dateParts).sort(), ["day", "month", "year"]);
+});
+
+test("strings: the five steps' names in the screen language (owner's decision P1)", () => {
+  assert.deepEqual([es.steps.sources, es.steps.caseMap, es.steps.plan, es.steps.report, es.steps.review], ["Documentos", "Mapa del caso", "Plan", "Informe", "Revisión y copia"]);
+  assert.deepEqual([en.steps.sources, en.steps.caseMap, en.steps.plan, en.steps.report, en.steps.review], ["Documents", "Case map", "Plan", "Report", "Review and copy"]);
+  // "Fuentes" was a researcher's word (audit U16): the screens say "documentos".
+  for (const [key, value] of spanish) {
+    if (key.startsWith("caseMap.")) continue; // the case map's own strings belong to its pull requests
+    assert.doesNotMatch(value, /\bfuentes?\b/i, `es: ${key}`);
+  }
+});
+
+test("strings: Settings says what the AI does and when anything is sent (audit U12), no longer that drafting comes later", () => {
+  assert.equal(es.connections.intro, "La IA redacta el mapa del caso y las secciones. Solo se le envía algo cuando tú lo pides. Conecta una; ChatGPT es la habitual.");
+  assert.equal(en.connections.intro, "The AI drafts the case map and the sections. Nothing is sent unless you ask. Connect one; ChatGPT is the usual one.");
+  for (const [key, value] of [...english, ...spanish]) assert.doesNotMatch(value, /later version|versión posterior/, key);
+});

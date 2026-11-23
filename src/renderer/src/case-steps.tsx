@@ -1,8 +1,4 @@
 import type { TFunction } from "i18next";
-import type { ReactNode } from "react";
-import { Term } from "./components/Term.tsx";
-import { TERMS } from "./i18n/terms.ts";
-
 import { CASE_STEPS, type CaseStep } from "./steps.ts";
 
 export { CASE_STEPS, type CaseStep };
@@ -21,23 +17,20 @@ export function newTextPath(caseId: string, type: string): string {
   return `/cases/${caseId}/sources/new/${type}`;
 }
 
-/** Interventions is a clinical term: English in both languages. The case map is named in the screen's language ("Mapa del caso"). */
-const ENGLISH_STEPS: Partial<Record<CaseStep, string>> = {
-  interventions: TERMS.interventions,
-};
+/** The steps' own names, in the screen's language (owner's decision P1): Documents, Case map, Plan, Report, Review and copy. Their paths stay as they are (T13). */
+const STEP_KEYS = {
+  sources: "sources",
+  "case-map": "caseMap",
+  interventions: "plan",
+  report: "report",
+  review: "review",
+} as const satisfies Record<CaseStep, string>;
 
 export function stepTitle(t: TFunction, step: CaseStep): string {
-  const english = ENGLISH_STEPS[step];
-  if (english) return english;
-  if (step === "case-map") return t("steps.caseMap");
-  return t(`steps.${step as "sources" | "report" | "review"}`);
+  return t(`steps.${STEP_KEYS[step]}`);
 }
 
-/** The language of a step's title, for its lang attribute (undefined: the screen's). */
-export function stepTitleLang(step: CaseStep): "en" | undefined {
-  return ENGLISH_STEPS[step] ? "en" : undefined;
-}
-
-export function StepLabel({ t, step }: { t: TFunction; step: CaseStep }): ReactNode {
-  return stepTitleLang(step) ? <Term>{stepTitle(t, step)}</Term> : stepTitle(t, step);
+/** What the step holds, in a few words, under its name in the sidebar. */
+export function stepSubtitle(t: TFunction, step: CaseStep): string {
+  return t(`steps.subtitles.${STEP_KEYS[step]}`);
 }
