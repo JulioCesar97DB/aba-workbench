@@ -1,5 +1,5 @@
 import type { GenerationEvent } from "../lib/generation-events.ts";
-import type { CaseMapSummary, CaseMapView, MapCollection, MapPartId } from "./case-map.ts";
+import type { CaseMapSummary, CaseMapView, MapCollection, MapPartId, MapRequestKind } from "./case-map.ts";
 import type { ReportSectionId } from "./report-sections.ts";
 import type { SectionDetail, SectionRequestInput, SectionSummary } from "./sections.ts";
 import type { AddPdfsResult, CaseSources, DroppedPdf, FailedSave, NewTextSource, ReadSourceTextResult, SourceChange, SourceSaveResult } from "./sources.ts";
@@ -153,7 +153,8 @@ export type MapSaveFailure = { outcome: "case-unavailable" } | { outcome: "not-s
  */
 export type MapSaveResult = { outcome: "saved"; map: CaseMapView; summary: CaseMapSummary; version: number | null; itemId: string | null } | MapSaveFailure;
 
-export type GetCaseMapResult = { outcome: "read"; map: CaseMapView } | { outcome: "case-unavailable" };
+/** The map, and her standing instructions for it (her thresholds, D16): empty until she confirms them. */
+export type GetCaseMapResult = { outcome: "read"; map: CaseMapView; instructions: string } | { outcome: "case-unavailable" };
 
 /* A case's report sections (src/shared/sections.ts). */
 
@@ -251,6 +252,14 @@ export type GenerationUpdateEvent =
   | { type: "saved"; result: SectionSaveResult }
   /** The consistency check that runs after each new AI version, saved with it. */
   | { type: "checked"; result: SectionSaveResult }
+  /**
+   * A case map draft at work (step 1, pull request 2): which of its two requests, what it is
+   * doing (writing, asked again to fix its answer, asked again as plain JSON), and how much
+   * of the answer has arrived.
+   */
+  | { type: "map-progress"; step: MapRequestKind; phase: "writing" | "repairing" | "plain-json"; characters: number }
+  /** One request's parts saved: the whole map as saved, the parts written, and how many problems the checks still found. */
+  | { type: "map-saved"; step: MapRequestKind; result: MapSaveResult; written: MapPartId[]; kept: MapPartId[]; problems: number }
   | { type: "finished"; cancelled: boolean };
 
 export interface GenerationUpdate {
@@ -495,8 +504,12 @@ export interface AbaApi {
   startSectionGeneration(caseId: string, sectionId: ReportSectionId, generationId: string, provider: DraftingProvider, request: SectionRequestInput): Promise<StartSectionResult>;
   /** Runs the consistency check again on one version (it failed, was stopped, or her sections changed since). Updates arrive like a request's; the result in "checked". */
   checkSection(caseId: string, sectionId: ReportSectionId, generationId: string, provider: DraftingProvider, version: number): Promise<StartSectionResult>;
-  /** Saves her standing instructions for a section, for all her cases. `caseId` is the case she typed them in: where a save that failed is shown again. */
-  saveSectionInstructions(caseId: string, sectionId: ReportSectionId, text: string): Promise<InstructionsSaveResult>;
+  /**
+   * Saves her standing instructions for a section, or for the case map ("case-map": her
+   * definition thresholds, D16), for all her cases. `caseId` is the case she typed them in:
+   * where a save that failed is shown again.
+   */
+  saveSectionInstructions(caseId: string, sectionId: ReportSectionId | "case-map", text: string): Promise<InstructionsSaveResult>;
   /** Saves her notes for this session, in the case. */
   saveSessionNotes(caseId: string, text: string): Promise<NotesSaveResult>;
   /** "Start a new session": archives the notes (kept in the case, never sent again) and empties the box. */
@@ -532,6 +545,12 @@ export interface AbaApi {
   setMapPartVersion(caseId: string, part: MapPartId, version: number): Promise<MapSaveResult>;
   /** Approves a version of a part (null takes the approval back). */
   approveMapPart(caseId: string, part: MapPartId, version: number | null): Promise<MapSaveResult>;
+  /**
+   * "Draft the map" / "Update the map" (step 1, pull request 2): the AI's two requests, one
+   * after the other. Progress arrives as "map-progress" updates, each request's saved parts
+   * as "map-saved"; Stop is cancelGeneration.
+   */
+  startMapDraft(caseId: string, generationId: string, provider: DraftingProvider): Promise<StartSectionResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -592,6 +611,7 @@ export const IPC_CHANNELS = {
   removeMapItem: "case-map:remove-item",
   setMapPartVersion: "case-map:set-current",
   approveMapPart: "case-map:approve",
+  startMapDraft: "case-map:draft",
   getAiPreferences: "settings:get-ai",
   setModel: "settings:set-model",
 } as const;

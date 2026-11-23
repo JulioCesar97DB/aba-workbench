@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LANGUAGES, type AiPreferences, type CasesFolderInfo, type DraftingProvider, type Language } from "../../../shared/api.ts";
 import { MODEL_CHOICES } from "../../../shared/models.ts";
@@ -15,7 +15,10 @@ import { WorkArea } from "../shell/WorkArea.tsx";
 import { ConnectionsSection } from "./Connections.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
-/** Settings: the screen language, the cases folder and the AI connections. */
+/**
+ * Settings, in the order she needs them (owner's decision U12): the AI connection first,
+ * with the model as one line under it, then the screen language, the cases folder and About.
+ */
 export function SettingsScreen() {
   const { t } = useTranslation();
   const info = useAppInfo();
@@ -32,6 +35,10 @@ export function SettingsScreen() {
 
   return (
     <WorkArea header={<PageHeader title={t("settings.title")} />} contentClassName="max-w-3xl">
+      <ConnectionsSection>
+        <ModelLine />
+      </ConnectionsSection>
+
       <SettingsSection heading={t("settings.languageHeading")}>
         <Select
           label={t("settings.languageLabel")}
@@ -50,10 +57,6 @@ export function SettingsScreen() {
       </SettingsSection>
 
       <CasesFolderSection />
-
-      <ConnectionsSection />
-
-      <ModelsSection />
 
       <SettingsSection heading={t("settings.aboutHeading")}>
         {info ? (
@@ -157,10 +160,13 @@ function CasesFolderSection() {
 
 /**
  * The model each provider writes with (owner's decision, 2026-11-22): the most capable by
- * default, or the other one offered, which costs about half as much.
+ * default, or the other one offered, which costs about half as much. One line under the AI
+ * connection says which is used (U12); "Change" opens the choice for each provider.
  */
-function ModelsSection() {
+function ModelLine() {
   const { t } = useTranslation();
+  const choicesId = useId();
+  const [open, setOpen] = useState(false);
   const [preferences, setPreferences] = useState<AiPreferences | null>(null);
   const [message, setMessage] = useState<{ text: string; problem: boolean } | null>(null);
   useEffect(() => {
@@ -176,26 +182,48 @@ function ModelsSection() {
     }
   }
 
+  const providers = ["openai", "anthropic"] as const;
+  const providerName = (provider: DraftingProvider) => (provider === "anthropic" ? t("settings.modelClaude") : t("settings.modelChatgpt"));
+  const best = (provider: DraftingProvider) => preferences?.models[provider] === MODEL_CHOICES[provider][0].id;
+  const choiceText = (provider: DraftingProvider) => (best(provider) ? t("settings.modelBest") : t("settings.modelLower"));
+  // One choice when both providers use the same kind of model; otherwise each by name.
+  const summary = preferences
+    ? best("openai") === best("anthropic")
+      ? choiceText("openai")
+      : providers.map((provider) => t("settings.modelEach", { provider: providerName(provider), choice: choiceText(provider) })).join(" · ")
+    : null;
+
   return (
-    <SettingsSection heading={t("settings.modelsHeading")}>
-      <p className="max-w-measure text-fg-muted">{t("settings.modelsBody")}</p>
+    <div className="flex flex-col gap-2.5">
       {preferences ? (
-        <div className="flex flex-wrap gap-6">
-          {(["anthropic", "openai"] as const).map((provider) => (
-            <div key={provider} className="min-w-60">
-              <Select
-                label={provider === "anthropic" ? t("settings.modelClaude") : t("settings.modelChatgpt")}
-                value={preferences.models[provider]}
-                options={MODEL_CHOICES[provider].map((choice, index) => ({ value: choice.id, label: index === 0 ? t("settings.modelMostCapable", { model: choice.label }) : t("settings.modelLowerCost", { model: choice.label }), lang: undefined }))}
-                onValueChange={(value) => void choose(provider, value)}
-              />
-            </div>
-          ))}
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-fg-muted">{t("settings.modelLabel")}</span>{" "}
+          <span>{summary}</span>{" "}
+          <Button size="sm" aria-expanded={open} aria-controls={open ? choicesId : undefined} onClick={() => setOpen((value) => !value)}>
+            {t("settings.modelChange")}
+          </Button>
+        </p>
+      ) : null}
+      {preferences && open ? (
+        <div id={choicesId} className="flex flex-col gap-2.5">
+          <p className="max-w-measure text-sm text-fg-muted">{t("settings.modelsBody")}</p>
+          <div className="flex flex-wrap gap-6">
+            {providers.map((provider) => (
+              <div key={provider} className="min-w-60">
+                <Select
+                  label={providerName(provider)}
+                  value={preferences.models[provider]}
+                  options={MODEL_CHOICES[provider].map((choice, index) => ({ value: choice.id, label: index === 0 ? t("settings.modelMostCapable", { model: choice.label }) : t("settings.modelLowerCost", { model: choice.label }), lang: undefined }))}
+                  onValueChange={(value) => void choose(provider, value)}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
       <p role="status" className={message?.problem ? "max-w-measure text-sm font-medium text-danger" : "max-w-measure text-sm text-fg-muted"}>
         {message?.text}
       </p>
-    </SettingsSection>
+    </div>
   );
 }

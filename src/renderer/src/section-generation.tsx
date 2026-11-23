@@ -21,7 +21,8 @@ export type GenerationOutcome =
   /** The answer was longer than a section can be: nothing was saved. */
   | { kind: "too-long" }
   | { kind: "stopped" }
-  | { kind: "failed"; message: string }
+  /** The provider's error code (src/renderer/src/ai-errors.ts says what it means) and its English message, safe to show. */
+  | { kind: "failed"; code: string; message: string }
   | { kind: "incomplete" }
   | { kind: "refused" }
   | { kind: "not-saved" };
@@ -86,7 +87,7 @@ function apply(update: GenerationUpdate) {
       if (!event.complete && !current.outcome) set({ ...current, outcome: { kind: "incomplete" } });
       return;
     case "error":
-      set({ ...current, outcome: { kind: "failed", message: event.message } });
+      set({ ...current, outcome: { kind: "failed", code: event.code, message: event.message } });
       return;
     case "saved":
       if (event.result.outcome === "saved") {
@@ -156,7 +157,7 @@ export async function startSectionGeneration(caseId: string, sectionId: ReportSe
     return result.outcome;
   } catch {
     notStarted.delete(id);
-    set({ id, caseId, sectionId, request, provider, phase: "done", text: "", outcome: { kind: "failed", message: "" } });
+    set({ id, caseId, sectionId, request, provider, phase: "done", text: "", outcome: { kind: "failed", code: "internal_error", message: "" } });
     return "error";
   }
 }

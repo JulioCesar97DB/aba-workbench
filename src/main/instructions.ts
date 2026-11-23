@@ -18,6 +18,8 @@ import { removeLeftoverAppDataTemporaryFiles, writeFileDurably } from "./durable
  */
 
 export const INSTRUCTIONS_FILE_NAME = "instructions.json";
+/** Whose standing instructions: a report section's, or the case map's (her definition thresholds, D16). */
+export type InstructionsId = ReportSectionId | "case-map";
 export const INSTRUCTIONS_FILE_VERSION = 1;
 /** Typing pauses closer together than this are one editing pass: one entry in the history. */
 export const EDITING_PASS_MS = 10 * 60 * 1000;
@@ -65,7 +67,7 @@ export function serializeInstructionsFile(file: InstructionsFile): string {
 }
 
 /** The file with one section's text changed; the earlier text joins the history when a new editing pass starts. Null when nothing changed. */
-export function changeInstructions(file: InstructionsFile, id: ReportSectionId, raw: string, now: Date): InstructionsFile | null {
+export function changeInstructions(file: InstructionsFile, id: InstructionsId, raw: string, now: Date): InstructionsFile | null {
   const text = normalizeLineEndings(raw);
   if (text.length > MAX_INSTRUCTIONS_LENGTH) throw new Error("Refused: the instructions are too long.");
   const current = file.sections[id];
@@ -104,8 +106,8 @@ export class InstructionsStore {
     return read;
   }
 
-  /** A section's instructions; empty when there are none or the file cannot be read. */
-  async get(id: ReportSectionId): Promise<string> {
+  /** A section's (or the case map's) instructions; empty when there are none or the file cannot be read. */
+  async get(id: InstructionsId): Promise<string> {
     await this.queue;
     const read = await this.read();
     return read.ok ? (read.file.sections[id]?.text ?? "") : "";
@@ -119,7 +121,7 @@ export class InstructionsStore {
   }
 
   /** Saves a section's instructions; false when the file could not be written or cannot be read whole. */
-  save(id: ReportSectionId, text: string): Promise<boolean> {
+  save(id: InstructionsId, text: string): Promise<boolean> {
     const run = this.queue.then(async () => {
       const read = await this.read();
       if (!read.ok) return false;

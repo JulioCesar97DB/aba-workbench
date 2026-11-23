@@ -31,11 +31,22 @@ const TEXT_PAIRS: Array<[text: string, background: string]> = [
   ["surface", "fg"], // tooltip
   ["neutral", "neutral-subtle"], // status badge
   ["success", "success-subtle"], // status badge: connected
-  ["warning", "warning-subtle"], // status badge: needs attention
+  ["warning", "warning-subtle"], // status badge: needs attention; the trial bar above every screen
   ["warning", "surface"],
   ["danger", "surface"], // error message
   ["fg-on-nav-warning", "nav"], // error message on the sidebar
   ["fg-on-nav-warning", "nav-hover"],
+  ["fg", "ai-subtle"], // what the AI does or proposes
+  ["fg-muted", "ai-subtle"],
+  ["fg-on-accent-subtle", "ai-subtle"],
+  ["accent", "ai-subtle"],
+  ["warning", "ai-subtle"],
+  ["fg-on-accent", "success"], // the current step, done: its check
+  ["fg-on-accent", "warning"], // the current step, in progress: its number
+  ["nav", "dot-done"], // a step done: its check
+  ["nav", "dot-draft"], // a step in progress: its number
+  ["fg", "nav-current"], // the current step, not started: its number
+  ["fg-muted", "nav-current"], // the current step's count, "Soon" and subtitle
 ];
 
 const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
@@ -45,6 +56,11 @@ const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
   ["focus-on-nav", "nav"],
   ["focus-on-nav", "nav-hover"],
   ["dot-empty", "nav"],
+  ["dot-done", "nav"], // a step done, on the sidebar
+  ["dot-draft", "nav"], // a step in progress
+  ["focus", "ai-subtle"],
+  ["focus", "warning-subtle"], // "What this means" in the trial bar
+  ["fg-muted", "nav-current"], // the current step's hollow circle
 ];
 
 function luminance(hex: string): number {

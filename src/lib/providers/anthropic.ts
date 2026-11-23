@@ -87,7 +87,9 @@ function buildParams(options: GenerateOptions, includeTask = true) {
     max_tokens: options.maxOutputTokens,
     // Current models think adaptively; effort is the control (Opus 5.5 defaults to medium).
     thinking: { type: "adaptive" as const },
-    output_config: { effort: options.effort },
+    // A JSON schema the answer must follow (the case map's requests, the evaluation's judge):
+    // Claude's structured outputs enforce it.
+    output_config: { effort: options.effort, ...(options.outputFormat ? { format: { type: "json_schema" as const, schema: options.outputFormat.schema } } : {}) },
     system: [{ type: "text" as const, text: prompt.system, cache_control: CACHE }],
     messages: [{ role: "user" as const, content }],
     ...(SERVER_SIDE_FALLBACKS ?? {}),

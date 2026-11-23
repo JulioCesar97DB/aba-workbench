@@ -1,7 +1,7 @@
+import type { TFunction } from "i18next";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router";
-import type { DraftingProvider } from "../../../shared/api.ts";
 import { modelLabel } from "../../../shared/models.ts";
 import { findReportSection, REPORT_SECTIONS, type ReportSection } from "../../../shared/report-sections.ts";
 import { checkStructure, findMarkers, hasLinesInParagraphs, linesAsParagraphs, MAX_REQUEST_LENGTH, splitParagraphs, type StructureIssue } from "../../../shared/section-text.ts";
@@ -15,7 +15,8 @@ import { cn } from "../components/cn.ts";
 import { ButtonLink } from "../components/Link.tsx";
 import { Select } from "../components/Select.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
-import { useConnections } from "../connections.tsx";
+import { aiErrorKind, aiErrorNeedsSettings } from "../ai-errors.ts";
+import { PROVIDER_NAMES, useProviders } from "../drafting-provider.tsx";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase, usePatchOpenedCase, useSetCaseSources } from "../open-case.tsx";
 import {
@@ -30,7 +31,7 @@ import {
   type SectionGeneration,
 } from "../section-generation.tsx";
 import { sourceName, sourceNameLang } from "../source-labels.tsx";
-import { PageHeader } from "../shell/PageHeader.tsx";
+import { Mono, PageHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 
 /*
@@ -91,32 +92,6 @@ function SectionLoader({ caseId, section }: { caseId: string; section: ReportSec
 }
 
 /** The connected providers, and the one to write with: the last she used when it is still connected. */
-function useProviders(): { available: DraftingProvider[]; provider: DraftingProvider | null; choose: (provider: DraftingProvider) => void } {
-  const { connections } = useConnections();
-  const [chosen, setChosen] = useState<DraftingProvider | null>(null);
-  const [last, setLast] = useState<DraftingProvider | null>(null);
-  useEffect(() => {
-    let live = true;
-    window.aba.getAiPreferences().then(
-      (preferences) => {
-        if (live) setLast(preferences.lastProvider);
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, []);
-  const available: DraftingProvider[] = [];
-  if (connections && !connections.problem) {
-    if (connections.claude.state === "connected") available.push("anthropic");
-    if (connections.chatgpt.state === "connected") available.push("openai");
-  }
-  const pick = [chosen, last].find((candidate): candidate is DraftingProvider => candidate !== null && available.includes(candidate));
-  return { available, provider: pick ?? available[0] ?? null, choose: setChosen };
-}
-
-const PROVIDER_NAMES: Record<DraftingProvider, string> = { anthropic: "Claude", openai: "ChatGPT" };
 
 function SectionWorkspace({ caseId, section, initial }: { caseId: string; section: ReportSection; initial: SectionDetail }) {
   const { t } = useTranslation();
@@ -312,7 +287,6 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
       }
     >
       <div className="flex max-w-measure flex-col gap-4">
-        <NotReadyNotice />
         {failures.map((item) => (
           <div key={item.id} role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-danger px-3.5 py-2 text-md font-medium text-danger">
             <span>{t(`section.failedSave.${item.about}`)}</span>
@@ -430,17 +404,6 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         <ProviderLine providers={providers} />
       </div>
     </WorkArea>
-  );
-}
-
-/** The plain warning that the app is not ready for real client data: de-identification is not plugged in yet. */
-function NotReadyNotice() {
-  const { t } = useTranslation();
-  return (
-    <div data-testid="not-ready-notice" className="flex flex-col gap-1 rounded-md border border-warning bg-warning-subtle px-3.5 py-2.5 text-warning">
-      <p className="text-sm font-semibold">{t("section.notReadyTitle")}</p>
-      <p className="text-sm">{t("section.notReadyBody")}</p>
-    </div>
   );
 }
 
@@ -679,7 +642,7 @@ function VersionBar({ detail, current, disabled, onShow }: { detail: SectionDeta
   );
 }
 
-export function versionLabel(t: ReturnType<typeof useTranslation>["t"], version: SectionVersion): string {
+export function versionLabel(t: TFunction, version: SectionVersion): string {
   switch (version.kind) {
     case "hers":
       return t("section.labelHers");
@@ -706,16 +669,30 @@ export function formatUsd(language: string, amount: number): string {
   return new Intl.NumberFormat(language, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: amount > 0 && amount < 0.1 ? 3 : 2 }).format(amount);
 }
 
-/** "v3: “shorter, and mention the school”", who wrote it and what it cost. */
+/** Marks where a value goes in a translated sentence, so the value can be a React node. */
+const SLOT = "\u0000";
+
+/**
+ * "v3: “shorter, and mention the school”", who wrote it and what it cost. A sentence in
+ * Plex Sans; the version and the cost, numbers, in Plex Mono (owner's decision T17).
+ */
 function VersionLine({ version }: { version: SectionVersion }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const cost = version.costUsd === null ? null : formatUsd(language, version.costUsd);
+  const [before, after] = t("section.versionMeta", { version: SLOT, label: versionLabel(t, version) }).split(SLOT);
   return (
     <span>
-      {t("section.versionMeta", { number: version.number, label: versionLabel(t, version) })}
+      {before}
+      <Mono>{t("section.stateDraft", { number: version.number })}</Mono>
+      {after}
       {version.model ? ` · ${t("section.writtenBy", { model: modelLabel(version.model) })}` : ""}
-      {cost ? ` · ${cost}` : ""}
+      {cost ? (
+        <>
+          {" · "}
+          <Mono>{cost}</Mono>
+        </>
+      ) : null}
     </span>
   );
 }
@@ -970,16 +947,36 @@ function GenerationOutcomeMessage({ generation }: { generation: SectionGeneratio
               ? t("section.notOneParagraph")
               : outcome.kind === "too-long"
                 ? t("section.tooLong")
-                : t("section.failed", { message: outcome.message || t("section.unknownError") });
+                : t("section.failed");
+  // A failed request says what to do in her words; the provider's English text waits under "Technical details" (owner's decision T11).
+  const kind = outcome.kind === "failed" ? aiErrorKind(outcome.code) : null;
   // A failed request can be sent again as it was (the first Improve of the real runs failed on a dropped connection, 2026-11-23).
   const canRetry = outcome.kind === "failed" && generation.request !== null;
   return (
-    <div role="alert" className={cn("flex flex-wrap items-center gap-3 rounded-md border px-3.5 py-2", outcome.kind === "stopped" ? "border-border" : "border-danger")}>
-      <p className={cn("text-sm font-medium", outcome.kind === "stopped" ? "text-fg" : "text-danger")}>{message}</p>
-      {canRetry ? (
-        <Button size="sm" data-testid="section-try-again" onClick={() => void retrySectionGeneration(generation)}>
-          {t("sources.tryAgain")}
-        </Button>
+    <div role="alert" className={cn("flex flex-col gap-2 rounded-md border px-3.5 py-2", outcome.kind === "stopped" ? "border-border" : "border-danger")}>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className={cn("text-sm font-medium", outcome.kind === "stopped" ? "text-fg" : "text-danger")}>
+          {message}
+          {kind ? ` ${t(`section.failedWhy.${kind}`)}` : null}
+        </p>
+        {canRetry ? (
+          <Button size="sm" data-testid="section-try-again" onClick={() => void retrySectionGeneration(generation)}>
+            {t("sources.tryAgain")}
+          </Button>
+        ) : null}
+        {kind && aiErrorNeedsSettings(kind) ? (
+          <ButtonLink to="/settings" size="sm">
+            {t("section.openSettings")}
+          </ButtonLink>
+        ) : null}
+      </div>
+      {outcome.kind === "failed" && outcome.message ? (
+        <details className="text-sm text-fg-muted">
+          <summary className="w-fit cursor-pointer rounded-sm underline underline-offset-2 hover:decoration-2">{t("section.technicalDetails")}</summary>
+          <p lang="en" data-testid="section-error-details" className="mt-1 break-words">
+            {outcome.message}
+          </p>
+        </details>
       ) : null}
     </div>
   );
@@ -1188,7 +1185,7 @@ function SectionChecks({ detail, version, checking, canCheck, onRecheck }: { det
   );
 }
 
-function structureIssueText(t: ReturnType<typeof useTranslation>["t"], issue: StructureIssue): string {
+function structureIssueText(t: TFunction, issue: StructureIssue): string {
   if (issue.kind === "paragraphs") return t("section.structureParagraphs", { count: issue.count, min: issue.min, max: issue.max });
   if (issue.kind === "words") return t("section.structureWords", { count: issue.count, min: issue.min, max: issue.max });
   return t("section.structureFormatting", { number: issue.paragraph + 1 });

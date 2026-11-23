@@ -105,7 +105,7 @@ test("release workflow: the Mac job builds, mounts, checks, starts the app on bo
   assert.match(mac, /CSC_FOR_PULL_REQUEST: "true"\n(?:\s+[A-Z_]+: .*\n)*\s+run: \|\n\s+pnpm package:mac/);
 });
 
-test("release workflow: one pre-release gets both installers and both SHA-256 files, once both jobs passed", () => {
+test("release workflow: one release gets both installers and both SHA-256 files, once both jobs passed", () => {
   const publish = job("publish");
   assert.match(publish, /needs: \[installer, mac-installer\]/);
   assert.match(publish, /name: windows-installer\n/);

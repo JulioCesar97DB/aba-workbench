@@ -1,7 +1,7 @@
 {
   "name": "aba-workbench",
   "productName": "ABA Workbench",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Drafts ABA initial assessments section by section. Desktop app for macOS and Windows.",
   "license": "Apache-2.0",
@@ -20,7 +20,8 @@
     "test:e2e": "install-electron && electron-vite build && playwright test --project=built",
     "test:e2e:packaged": "playwright test --project=packaged",
     "phase0": "node --env-file-if-exists=.env.phase0 scripts/phase0.mts",
-    "eval": "node eval/run.mts"
+    "eval": "node eval/run.mts",
+    "map-verify": "node scripts/map-verify.mts"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^1.12.0",

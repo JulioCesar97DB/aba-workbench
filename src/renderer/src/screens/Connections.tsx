@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatGptConnection, ChatGptSignInResult, CheckConnectionResult, ClaudeConnection, CredentialsProblem, SaveClaudeKeyResult } from "../../../shared/api.ts";
@@ -73,7 +74,8 @@ function useBadge() {
   };
 }
 
-export function ConnectionsSection() {
+/** The AI connection, first in Settings; `children` (the model line) follows the two cards. */
+export function ConnectionsSection({ children }: { children?: ReactNode }) {
   const { t } = useTranslation();
   const { connections, failed } = useConnections();
   const problem = connections?.problem ?? null;
@@ -86,6 +88,7 @@ export function ConnectionsSection() {
         <ChatGptCard connection={connections?.chatgpt ?? null} blocked={problem !== null || connections === null} />
         <ClaudeCard connection={connections?.claude ?? null} blocked={problem !== null || connections === null} />
       </div>
+      {children}
     </SettingsSection>
   );
 }
@@ -125,7 +128,7 @@ function CredentialsProblemNotice({ problem }: { problem: CredentialsProblem }) 
   );
 }
 
-function checkMessage(t: ReturnType<typeof useTranslation>["t"], provider: "chatgpt" | "claude", result: CheckConnectionResult | null): Message {
+function checkMessage(t: TFunction, provider: "chatgpt" | "claude", result: CheckConnectionResult | null): Message {
   if (result === null) return { text: t("connections.failed"), problem: true };
   switch (result.outcome) {
     case "working":

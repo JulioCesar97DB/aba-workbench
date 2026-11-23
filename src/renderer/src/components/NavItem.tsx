@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { NavLink } from "react-router";
 import { cn } from "./cn.ts";
+import type { StepState } from "../step-states.ts";
 
 /*
  * Links of the dark sidebar. The current one is marked aria-current="page" (by NavLink)
@@ -23,6 +24,65 @@ export function NavItem({ to, end, number, children, detail }: { to: string; end
   );
 }
 
+const stepBase =
+  "group flex items-center gap-2.5 rounded-md px-2 text-fg-on-nav no-underline transition-colors hover:bg-nav-hover aria-[current=page]:bg-nav-current aria-[current=page]:font-semibold aria-[current=page]:text-fg-on-nav-current";
+
+/**
+ * A step of the case: a circle with its number (or a check once done) that shows its
+ * state (filled green once done, filled amber while in progress, hollow before, dashed
+ * when not built yet), its name, and a count after it. The state is also said in words to a screen
+ * reader; a step not built yet says "Soon" on screen too. Under its name, a few words on
+ * what it holds (`subtitle`): out of the link's name, which says the step, and offered as
+ * its description (aria-describedby reads it though it is aria-hidden). `compact` trims the row
+ * to 36 px and leaves the subtitle out while the report's sections are listed under it,
+ * so the whole sidebar fits a 1366x768 window.
+ */
+export function StepNavItem({ to, number, state, stateText, laterTag, detail, subtitle, compact, children }: { to: string; number: number; state: StepState; stateText: string; laterTag: string; detail?: ReactNode; subtitle?: string; compact?: boolean; children: ReactNode }) {
+  const subtitleId = useId();
+  const showSubtitle = Boolean(subtitle) && !compact;
+  return (
+    <NavLink to={to} aria-describedby={showSubtitle ? subtitleId : undefined} className={cn(stepBase, compact ? "min-h-9" : "min-h-control py-1")}>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "grid size-5.5 shrink-0 place-items-center rounded-full font-mono text-2xs font-semibold tabular-nums",
+          state === "done" && "bg-dot-done text-nav group-aria-[current=page]:bg-success group-aria-[current=page]:text-fg-on-accent",
+          state === "in-progress" && "bg-dot-draft text-nav group-aria-[current=page]:bg-warning group-aria-[current=page]:text-fg-on-accent",
+          state === "not-started" && "border border-dot-empty text-fg-on-nav-muted group-aria-[current=page]:border-fg-muted group-aria-[current=page]:text-fg",
+          state === "later" && "border border-dashed border-dot-empty text-fg-on-nav-muted group-aria-[current=page]:border-fg-muted group-aria-[current=page]:text-fg",
+        )}
+      >
+        {state === "done" ? (
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2.5 6.5l2.2 2.2L9.5 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          number
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        {children}
+        <span className="sr-only">, {stateText}</span>
+        {showSubtitle ? (
+          <span id={subtitleId} aria-hidden="true" className="block text-xs leading-snug font-normal text-fg-on-nav-muted group-aria-[current=page]:text-fg-muted">
+            {subtitle}
+          </span>
+        ) : null}
+      </span>
+      {state === "later" ? (
+        <span aria-hidden="true" className="shrink-0 rounded-sm border border-dashed border-fg-on-nav-muted px-1 text-2xs font-semibold tracking-eyebrow text-fg-on-nav-muted uppercase group-aria-[current=page]:border-fg-muted group-aria-[current=page]:text-fg-muted">
+          {laterTag}
+        </span>
+      ) : detail !== undefined ? (
+        // Shown only: the step's label says the count in words (review M6).
+        <span aria-hidden="true" className="shrink-0 font-mono text-xs text-fg-on-nav-muted group-aria-[current=page]:text-fg-muted">
+          {detail}
+        </span>
+      ) : null}
+    </NavLink>
+  );
+}
+
 /**
  * A report section: a status dot, its English title, and its state in words after it
  * ("Yours", "v3", "Approved"; read by a screen reader too). The dot repeats the state:
@@ -34,7 +94,7 @@ export function SectionNavItem({ to, title, state, detail, statusLabel }: { to: 
       to={to}
       className={({ isActive }) =>
         cn(
-          "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-fg-on-nav no-underline transition-colors hover:bg-nav-hover",
+          "flex min-h-6.75 items-center gap-2 rounded-md px-2 py-1 text-sm leading-tight text-fg-on-nav no-underline transition-colors hover:bg-nav-hover",
           isActive && "bg-nav-hover font-semibold",
         )
       }

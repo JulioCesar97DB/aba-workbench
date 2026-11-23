@@ -9,6 +9,8 @@ import { OpenCaseContext, PatchOpenedCaseContext, SetCaseSourcesContext, useCase
 import { Button } from "../components/Button.tsx";
 import { Dialog, DialogClose } from "../components/Dialog.tsx";
 import { AppSidebar, CaseSidebar } from "./Sidebar.tsx";
+import { TrialBar } from "./TrialBar.tsx";
+import { NotesPanel, OpenNotesContext } from "./NotesPanel.tsx";
 import { Eyebrow } from "./WorkArea.tsx";
 
 /*
@@ -16,7 +18,9 @@ import { Eyebrow } from "./WorkArea.tsx";
  * left and the working area (each screen's header, content and right rail) on the right.
  * Inside a case the sidebar shows the case; elsewhere, the app's screens. Below
  * --breakpoint-sidebar the sidebar leaves the screen: a dark bar with a Menu button takes
- * its place and opens it as a panel. Each part scrolls on its own.
+ * its place and opens it as a panel. Above the working area, one slim line says the app is
+ * not ready for real client data. Nothing here scrolls: each screen's WorkArea scrolls its
+ * own content and rail, and the sidebar its own list.
  */
 export function AppShell() {
   const { t } = useTranslation();
@@ -25,6 +29,11 @@ export function AppShell() {
   const { state: openCase, setSources, patch } = useCaseLoader(inCase?.params.caseId);
   // A version the AI saved changes the section's state in the sidebar, wherever she is.
   useOnSectionSaved(useCallback((caseId, result) => patch(caseId, { sections: result.sections }), [patch]));
+  // Today's notes: one panel for the open case, opened from the sidebar (review round 1, S1).
+  // Open for the case it was opened in only, so another case never opens with it open.
+  const [notesOpenFor, setNotesOpenFor] = useState<string | null>(null);
+  const openedId = openCase?.outcome === "opened" ? openCase.case.id : null;
+  const openNotes = useCallback(() => setNotesOpenFor(openedId), [openedId]);
   const sidebar =
     openCase?.outcome === "opened" ? (
       <CaseSidebar
@@ -33,12 +42,14 @@ export function AppShell() {
         sections={openCase.case.sections}
         notes={openCase.case.notes}
         caseMap={openCase.case.caseMap}
+        sourceCount={openCase.case.sources.sources.filter((source) => !source.removedAt).length}
         caseDetail={formatAge(t, language, openCase.case.clientAge) ?? t("case.ageNotGiven")}
       />
     ) : (
       <AppSidebar />
     );
   return (
+    <OpenNotesContext value={openNotes}>
     <OpenCaseContext value={openCase}>
     <SetCaseSourcesContext value={setSources}>
     <PatchOpenedCaseContext value={patch}>
@@ -49,15 +60,26 @@ export function AppShell() {
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <NarrowBar sidebar={sidebar} />
-        <div className="@container flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <TrialBar />
+        <div className="@container flex min-h-0 flex-1 flex-col">
           <Outlet />
         </div>
       </div>
+      {openCase?.outcome === "opened" ? (
+        <NotesPanel
+          key={openCase.case.id}
+          caseId={openCase.case.id}
+          notes={openCase.case.notes}
+          open={notesOpenFor === openCase.case.id}
+          onOpenChange={(next) => setNotesOpenFor(next ? openCase.case.id : null)}
+        />
+      ) : null}
       <RouteAnnouncer />
     </div>
     </PatchOpenedCaseContext>
     </SetCaseSourcesContext>
     </OpenCaseContext>
+    </OpenNotesContext>
   );
 }
 
@@ -109,9 +131,9 @@ function NarrowBar({ sidebar }: { sidebar: ReactNode }) {
         <div
           data-surface="nav"
           className="flex min-h-0 flex-1 flex-col"
-          // Following a link closes the panel.
+          // Following a link closes the panel, and so does opening today's notes.
           onClickCapture={(event) => {
-            if ((event.target as Element).closest("a")) setOpen(false);
+            if ((event.target as Element).closest("a, [data-closes-menu]")) setOpen(false);
           }}
         >
           <div className="flex justify-end px-3.5 pt-2">
