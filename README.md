@@ -36,7 +36,7 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the int
 | `fixtures/cases/` | Two invented cases. |
 | `fixtures/pdf-text/` | Invented PDFs for the text extraction (a layout check, a scan, a scan inside a text PDF), the HTML they are made from, and the expected text of every fixture PDF. |
 | `packaging/macos/` | What macOS shows when the app first asks to open a protected folder the user chose (Documents, Desktop, Downloads, a drive, a cloud storage folder), in each language (`<language>.lproj/InfoPlist.strings`). |
-| `licenses/` | Licenses of what ships inside the app: the IBM Plex fonts' SIL Open Font License and PDF.js's Apache License 2.0 ([licenses/README.md](licenses/README.md)). Copied into the packaged app. |
+| `licenses/` | Licenses of what ships inside the app: the IBM Plex fonts' SIL Open Font License and PDF.js's Apache License 2.0 ([licenses/README.md](licenses/README.md)). Copied into the packaged app with `THIRD-PARTY-NOTICES.txt`, which the build writes: every bundled package with its license text. |
 | `scripts/` | `phase0.mts` and its spending cap, the fixture PDF renderer (`render-fixture-pdfs.mts`), and the dev server's style nonce (`dev-style-nonce.ts`). |
 | `tests/` | Unit tests. |
 | `e2e/` | Window tests (Playwright, Electron). |
