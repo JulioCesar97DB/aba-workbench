@@ -120,6 +120,7 @@ export const en = {
     "not-allowed-mac": "ABA Workbench is not allowed to open the cases folder. To allow it, open System Settings, then Privacy & Security, then Files & Folders, and turn on access for ABA Workbench. Or choose another folder.",
     "not-allowed": "Your computer does not let ABA Workbench open the cases folder. Choose another folder.",
     "not-writable": "ABA Workbench can open the cases folder but cannot save in it. Choose another folder.",
+    "inside-app": "The cases folder is inside ABA Workbench's own program folder, which updating or uninstalling the app deletes, so ABA Workbench does not use it. Choose a folder of your own.",
     notCreatedYet: "It will be created when you make your first case.",
     choose: "Choose another folder…",
     showMac: "Show in Finder",

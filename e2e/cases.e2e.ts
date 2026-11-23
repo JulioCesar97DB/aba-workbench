@@ -1,7 +1,7 @@
 import type { ElectronApplication, Page } from "@playwright/test";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { defaultCasesFolder, expect, goTo, SAMPLE_CASE, seedCase, startSecondCopy, stubFileManager, stubFolderDialog, test } from "./app.ts";
+import { defaultCasesFolder, expect, goTo, packagedExecutable, SAMPLE_CASE, seedCase, startSecondCopy, stubFileManager, stubFolderDialog, test } from "./app.ts";
 
 /*
  * Cases as a user meets them: creating one, finding it in the list, opening it after a
@@ -175,14 +175,37 @@ test("the packaged app refuses a cases folder inside its own install folder, whi
   const installFolder = process.platform === "darwin" ? path.dirname(path.dirname(resources)) : path.dirname(resources);
   await goTo(page, "/settings");
   const section = page.getByRole("region", { name: "Cases folder" });
-  for (const chosen of [installFolder, resources]) {
-    await stubFolderDialog(app, chosen);
-    await section.getByRole("button", { name: "Choose another folder…" }).click();
-    await expect(section.getByRole("status")).toHaveText(
-      "That folder is inside ABA Workbench's own program folder, which updating or uninstalling the app deletes. The cases folder did not change. Choose a folder of your own.",
-    );
-    await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(home));
+  // A link in her home folder that leads into it (a junction on Windows) is the same folder.
+  const link = path.join(home, "Casos");
+  symlinkSync(resources, link, process.platform === "win32" ? "junction" : "dir");
+  try {
+    for (const chosen of [installFolder, resources, link]) {
+      await stubFolderDialog(app, chosen);
+      await section.getByRole("button", { name: "Choose another folder…" }).click();
+      await expect(section.getByRole("status")).toHaveText(
+        "That folder is inside ABA Workbench's own program folder, which updating or uninstalling the app deletes. The cases folder did not change. Choose a folder of your own.",
+      );
+      await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(home));
+    }
+  } finally {
+    // The link itself, never what it leads to: the home folder's cleanup must not reach the app.
+    unlinkSync(link);
   }
+});
+
+test("a cases folder inside the install folder that the settings already name is reported on Home and never used", async ({ launch }, testInfo) => {
+  test.skip(testInfo.project.name !== "packaged", "packaged app only: the built app has no install folder");
+  // The packaged app's resources folder: <install folder>/resources, or ABA Workbench.app/Contents/Resources.
+  const executable = packagedExecutable();
+  const resources = process.platform === "darwin" ? path.join(path.dirname(path.dirname(executable)), "Resources") : path.join(path.dirname(executable), "resources");
+  const before = readdirSync(resources).sort();
+  const app = await launch({ casesFolder: resources });
+  const page = await openApp(app);
+  await expect(page.getByRole("heading", { name: "Your cases folder cannot be used" })).toBeVisible();
+  await expect(
+    page.getByText("The cases folder is inside ABA Workbench's own program folder, which updating or uninstalling the app deletes, so ABA Workbench does not use it. Choose a folder of your own."),
+  ).toBeVisible();
+  expect(readdirSync(resources).sort()).toEqual(before);
 });
 
 test("change the cases folder in Settings; it is remembered, and the list follows it", async ({ launch, home, profile }, testInfo) => {

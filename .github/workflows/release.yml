@@ -43,14 +43,33 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # A tag run needs dev's and main's history for the check below.
+          fetch-depth: ${{ github.ref_type == 'tag' && '0' || '1' }}
+
+      # Only a commit already on dev or main is published, so a tag pushed on any other
+      # commit (a branch, a fork's commit) is refused before anything is built. ci.yml has
+      # passed on dev and main's commits; see docs/windows.md.
+      - name: Check a tag's commit is on dev or main (tags only)
+        if: github.ref_type == 'tag'
+        run: |
+          for branch in dev main; do
+            if git merge-base --is-ancestor "$GITHUB_SHA" "origin/$branch"; then
+              echo "$GITHUB_SHA is on $branch."
+              exit 0
+            fi
+          done
+          echo "::error::The tagged commit $GITHUB_SHA is on neither dev nor main; nothing is published from it."
+          exit 1
 
       # pnpm from package.json's packageManager, Node.js from .nvmrc, then
-      # `pnpm install --frozen-lockfile`. The store is only restored here; ci.yml saves it.
+      # `pnpm install --frozen-lockfile`. The store is restored on pull requests and branch
+      # runs, never on a tag run, which builds what is published from a fresh download
+      # (no cache another run wrote); ci.yml saves it.
       - name: Set up pnpm and Node.js, install dependencies
         uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           require-lockfile: true
-          cache: true
+          cache: ${{ github.ref_type != 'tag' }}
           save-cache: false
 
       - name: Show Node.js and pnpm versions
@@ -114,7 +133,11 @@ jobs:
       # The packaged window tests, on the installed app, each with its own temporary profile
       # and cases folder (Playwright drives it; it shows its window on this runner).
       - name: Window tests on the installed app
-        run: pnpm test:e2e:packaged
+        run: |
+          # The install step named the installed app; without it the tests would quietly use dist/win-unpacked.
+          test -n "$ABA_PACKAGED_EXECUTABLE"
+          echo "Testing $ABA_PACKAGED_EXECUTABLE"
+          pnpm test:e2e:packaged
 
       - name: Put Spanish first in Windows' languages
         shell: powershell
@@ -126,6 +149,14 @@ jobs:
         env:
           ABA_INSTALLED_APP_CHECK: "1"
         run: pnpm exec playwright test --project=packaged windows-installed.e2e.ts
+
+      # The update path: the same installer again over the installed app, which first runs
+      # the installed app's own uninstaller, as every later version's installer will.
+      - name: Install again over it (an update), keeping every file she made
+        shell: powershell
+        env:
+          INSTALLER: ${{ steps.name.outputs.installer }}
+        run: ./scripts/windows-installer-check.ps1 -Step reinstall -Installer "dist\$env:INSTALLER"
 
       - name: Uninstall, keeping every file she made
         shell: powershell

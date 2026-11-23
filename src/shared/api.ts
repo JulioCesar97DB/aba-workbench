@@ -39,10 +39,12 @@ export interface Settings {
 /**
  * Whether the cases folder can be used (src/main/cases-folder.ts): "ready"; the default
  * folder not made yet ("not-created-yet", made with the first case); or a problem the
- * interface explains, offering to choose another folder.
+ * interface explains, offering to choose another folder. "inside-app": the folder is in
+ * the app's own install folder, which an update or uninstalling deletes whole (owner's
+ * decision, 2026-11-23); it is never read or written.
  */
 export type CasesFolderState = "ready" | "not-created-yet" | CasesFolderProblem;
-export type CasesFolderProblem = "missing" | "not-a-folder" | "not-allowed" | "not-writable";
+export type CasesFolderProblem = "missing" | "not-a-folder" | "not-allowed" | "not-writable" | "inside-app";
 
 export interface CasesFolderInfo {
   /**

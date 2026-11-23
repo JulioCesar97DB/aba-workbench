@@ -1,10 +1,11 @@
 import { _electron as electron } from "@playwright/test";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { describeAccess } from "../src/main/owner-only.ts";
+import { isSameOrInside } from "../src/main/cases-folder.ts";
+import { accessEntries, describeAccess } from "../src/main/owner-only.ts";
 import type { AbaApi } from "../src/shared/api.ts";
-import { execFileSync } from "node:child_process";
 import { connectionStubLog, expect, packagedExecutable, stubConnections, stubFolderDialog, test } from "./app.ts";
 
 /*
@@ -31,11 +32,9 @@ const requested = process.env.ABA_INSTALLED_APP_CHECK === "1";
 const CASE_LABEL = "Invented installer check";
 const FAKE_CLAUDE_KEY = "sk-ant-api03-installer-check-not-a-real-key";
 
-const same = (a: string, b: string) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
-const inside = (folder: string, parent: string) => {
-  const relative = path.relative(parent.toLowerCase(), folder.toLowerCase());
-  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
-};
+// As the app compares folders on Windows: without case, as Win32 reads names.
+const same = (a: string, b: string) => isSameOrInside(a, b) && isSameOrInside(b, a);
+const inside = (folder: string, parent: string) => isSameOrInside(folder, parent);
 
 // eslint-disable-next-line no-empty-pattern -- the test needs no fixture: it starts the installed app itself.
 test("the installed app's first start: Spanish from Windows, cases in the home folder although Documents and Desktop are in OneDrive, owner-only credentials, sign-in on 127.0.0.1 only", async ({}, testInfo) => {
@@ -107,8 +106,7 @@ test("the installed app's first start: Spanish from Windows, cases in the home f
     expect((await page.evaluate((key) => (globalThis as unknown as { aba: AbaApi }).aba.saveClaudeKey(key), FAKE_CLAUDE_KEY)).outcome).toBe("saved");
     const credentials = path.join(where.userData, "credentials.json");
     const access = await describeAccess(credentials);
-    const entries = access.split(/\r?\n/).filter((line) => /:\([A-Z,()]+\)\s*$/.test(line.trim()) || /:\(F\)/.test(line));
-    expect(entries, access).toHaveLength(1);
+    expect(accessEntries(access), access).toHaveLength(1);
     expect(access).not.toMatch(/\(I\)/);
 
     // ChatGPT sign-in: its one-time listener is bound to 127.0.0.1 only, never to every

@@ -15,7 +15,7 @@ import { openaiProvider } from "../lib/providers/openai.ts";
 import { INSTRUCTIONS_FILE_NAME, InstructionsStore } from "./instructions.ts";
 import { SectionService } from "./sections.ts";
 import { IPC_CHANNELS } from "../shared/api.ts";
-import { defaultCasesFolder } from "./cases-folder.ts";
+import { defaultCasesFolder, installFolder, isInsideOnDisk } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
 import { APP_ID, resolveHiddenMode, resolveHomeFolder, resolveRulesDir } from "./paths.ts";
 import { APP_ORIGIN, registerAppScheme, serveRenderer } from "./protocol.ts";
@@ -82,8 +82,19 @@ function homeFolder(): string {
   return resolveHomeFolder({ isPackaged: app.isPackaged, override: app.commandLine.getSwitchValue("home-folder"), home: app.getPath("home") });
 }
 
+/*
+ * The packaged app's own install folder, which an update or uninstalling deletes whole: a
+ * cases folder in it, by any name, is refused when chosen and, if the settings already
+ * name one, reported and never used (owner's decision, 2026-11-23).
+ */
+const appFolder = installFolder({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
+async function insideApp(folder: string): Promise<boolean> {
+  return appFolder !== null && (await isInsideOnDisk(folder, appFolder));
+}
+
 // The cases, in the folder chosen in Settings or in <home>/ABA Workbench.
 const cases = new CaseLibrary({
+  insideApp,
   location: async () => {
     const fallback = defaultCasesFolder(homeFolder());
     const chosen = (await settings.get()).casesFolder;
@@ -142,6 +153,7 @@ registerIpc({
   connections,
   sections,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
+  insideApp,
 });
 
 /*

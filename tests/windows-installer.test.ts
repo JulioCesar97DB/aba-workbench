@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { ICON_FILE, ICON_SIZES, icoMatches } from "../scripts/render-app-icon.mts";
-import { installFolder, isSameOrInside } from "../src/main/cases-folder.ts";
+import { CaseLibrary } from "../src/main/cases.ts";
+import { installFolder, isInsideOnDisk, isSameOrInside, win32Canonical, type FolderLookup } from "../src/main/cases-folder.ts";
 import { APP_ID } from "../src/main/paths.ts";
 
 /*
@@ -100,6 +103,103 @@ test("install folder: a cases folder in it or under it is caught, in any case on
   assert.equal(isSameOrInside("/applications/aba workbench.app/Contents", "/Applications/ABA Workbench.app", "darwin", path.posix), true);
 });
 
+test("install folder: Win32 drops trailing dots and spaces from each name, and so does the comparison", () => {
+  assert.equal(win32Canonical("C:\\Programs\\aba-workbench.\\Casos. \\"), "C:\\Programs\\aba-workbench\\Casos\\");
+  assert.equal(win32Canonical("C:\\a\\..\\b\\.\\c"), "C:\\a\\..\\b\\.\\c");
+  const app = "C:\\Users\\Ana\\AppData\\Local\\Programs\\aba-workbench";
+  for (const folder of [`${app}.\\Casos`, `${app} \\Casos`, `${app}..\\Casos`, `${app}. .`]) assert.equal(isSameOrInside(folder, app, "win32", path.win32), true, folder);
+  // Only Windows reads names that way.
+  assert.equal(isSameOrInside("/opt/aba-workbench./cases", "/opt/aba-workbench", "linux", path.posix), false);
+});
+
+/** A temporary install folder and a place beside it, removed after the test. */
+function sandbox(t: { after: (fn: () => void) => void }) {
+  // Its real path at once: macOS's temporary folder is itself behind a link (/var -> /private/var).
+  const root = realpathSync.native(mkdtempSync(path.join(tmpdir(), "aba-install-guard-")));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const app = path.join(root, "Programs", "aba-workbench");
+  mkdirSync(path.join(app, "resources"), { recursive: true });
+  mkdirSync(path.join(root, "Ana"), { recursive: true });
+  return { root, app };
+}
+
+test("install folder: a link to it or into it is caught by its real path; a folder beside it is not", { skip: process.platform === "win32" }, async (t) => {
+  const { root, app } = sandbox(t);
+  symlinkSync(path.join(app, "resources"), path.join(root, "Ana", "Casos"));
+  symlinkSync(root, path.join(root, "Ana", "up"));
+  const cases: Array<[string, boolean]> = [
+    [path.join(root, "Ana", "Casos"), true],
+    [path.join(root, "Ana", "Casos", "not made yet"), true],
+    [path.join(root, "Ana", "up", "Programs", "aba-workbench", "Casos"), true],
+    [path.join(root, "Ana", "up", "Programs"), false],
+    [path.join(root, "Ana"), false],
+    [path.join(root, "Ana", "ABA Workbench"), false],
+  ];
+  for (const [folder, inside] of cases) assert.equal(await isInsideOnDisk(folder, app), inside, folder);
+});
+
+test("install folder: a junction, an 8.3 short name, a trailing dot and \\\\localhost\\C$ all reach it, and all are caught (Windows)", { skip: process.platform !== "win32" }, async (t) => {
+  const { root, app } = sandbox(t);
+  // A junction, as mklink /J makes, from her folder into the install folder.
+  symlinkSync(path.join(app, "resources"), path.join(root, "Ana", "Casos"), "junction");
+  assert.equal(await isInsideOnDisk(path.join(root, "Ana", "Casos"), app), true, "junction");
+  assert.equal(await isInsideOnDisk(path.join(root, "Ana", "Casos", "not made yet"), app), true, "under a junction");
+  // The name with a trailing dot that Win32 drops.
+  assert.equal(await isInsideOnDisk(`${app}.\\resources`, app), true, "trailing dot");
+  // The 8.3 short name, when the volume makes them.
+  const short = execFileSync("cmd.exe", ["/d", "/c", `for %I in ("${app}") do @echo %~sI`], { encoding: "utf8" }).trim();
+  if (short.toLowerCase() !== app.toLowerCase() && existsSync(short)) {
+    assert.notEqual(path.basename(short).toLowerCase(), "aba-workbench", short);
+    assert.equal(await isInsideOnDisk(path.join(short, "Casos"), app), true, `8.3 name ${short}`);
+  } else {
+    t.diagnostic(`This volume makes no 8.3 short names (${short}); that case was not exercised.`);
+  }
+  // The same folder through this computer's administrative share, when it is open.
+  const unc = `\\\\localhost\\${app[0]}$${app.slice(2)}`;
+  if (existsSync(unc)) assert.equal(await isInsideOnDisk(path.join(unc, "resources"), app), true, unc);
+  else t.diagnostic(`${unc} is not reachable here; that case was not exercised.`);
+  assert.equal(await isInsideOnDisk(path.join(root, "Ana"), app), false, "beside it");
+});
+
+test("install folder: a name its real path does not unify (subst, a network path) is caught by volume and file number; a number 0 is never trusted", async () => {
+  const folders: Record<string, { dev: bigint; ino: bigint }> = {
+    "/Programs/aba-workbench": { dev: 7n, ino: 42n },
+    "/X": { dev: 7n, ino: 42n },
+    "/X/Casos": { dev: 7n, ino: 43n },
+    "/Y": { dev: 7n, ino: 44n },
+    "/": { dev: 7n, ino: 1n },
+  };
+  const lookup = (ids = folders): FolderLookup => ({
+    realpath: async (folder) => {
+      if (!(folder in ids)) throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      return folder;
+    },
+    identity: async (folder) => {
+      const id = ids[folder];
+      if (!id) throw new Error("missing");
+      return id;
+    },
+  });
+  assert.equal(await isInsideOnDisk("/X/Casos", "/Programs/aba-workbench", "linux", lookup()), true);
+  assert.equal(await isInsideOnDisk("/X/Casos/not made yet", "/Programs/aba-workbench", "linux", lookup()), true);
+  assert.equal(await isInsideOnDisk("/Y", "/Programs/aba-workbench", "linux", lookup()), false);
+  const noNumbers = Object.fromEntries(Object.entries(folders).map(([key, id]) => [key, { dev: id.dev, ino: 0n }]));
+  assert.equal(await isInsideOnDisk("/X/Casos", "/Programs/aba-workbench", "linux", lookup(noNumbers)), false);
+  // An install folder that cannot be read leaves only the text comparison.
+  assert.equal(await isInsideOnDisk("/X/Casos", "/Gone", "linux", lookup()), false);
+  assert.equal(await isInsideOnDisk("/Gone/Casos", "/Gone", "linux", lookup()), true);
+});
+
+test("install folder: a cases folder already saved in the settings inside it is reported, never listed, read or written", async (t) => {
+  const { app } = sandbox(t);
+  const folder = path.join(app, "Casos");
+  const lib = new CaseLibrary({ location: async () => ({ folder, isDefault: false }), log: () => undefined, insideApp: (candidate) => isInsideOnDisk(candidate, app) });
+  assert.equal((await lib.folderInfo()).state, "inside-app");
+  assert.deepEqual((await lib.list()).cases, []);
+  assert.deepEqual(await lib.create({ label: "Invented case" }), { outcome: "folder-problem", problem: "inside-app" });
+  assert.equal(existsSync(folder), false, "nothing made in the install folder");
+});
+
 const workflowsDir = path.join(".github", "workflows");
 const release = readFileSync(path.join(workflowsDir, "release.yml"), "utf8");
 
@@ -138,6 +238,8 @@ test("release workflow: every check passes on windows-2025 before the installer 
   const installer = job("installer");
   assert.match(installer, /runs-on: windows-2025/);
   const order = [
+    "git merge-base --is-ancestor",
+    '"v$version"',
     "pnpm lint",
     "pnpm typecheck",
     "pnpm test",
@@ -145,9 +247,11 @@ test("release workflow: every check passes on windows-2025 before the installer 
     "pnpm package:windows",
     "-Step onedrive",
     "-Step install",
+    'test -n "$ABA_PACKAGED_EXECUTABLE"',
     "pnpm test:e2e:packaged",
     "-Step spanish",
     "--project=packaged windows-installed.e2e.ts",
+    "-Step reinstall",
     "-Step uninstall",
     "sha256sum",
     "actions/upload-artifact@",
@@ -159,8 +263,13 @@ test("release workflow: every check passes on windows-2025 before the installer 
     positions,
     "in this order",
   );
-  // A tag that is not package.json's version is refused before anything is built.
-  assert.ok(installer.indexOf('"v$version"') < installer.indexOf("pnpm lint"));
+  // Before anything is built, a tag run refuses a commit that is on neither dev nor main,
+  // and a tag that is not package.json's version (both in the order above).
+  assert.match(installer, /if: github\.ref_type == 'tag'\n\s+run: \|\n\s+for branch in dev main; do/);
+  assert.match(installer, /fetch-depth: \$\{\{ github\.ref_type == 'tag' && '0' \|\| '1' \}\}/);
+  // A tag run installs its dependencies fresh, never from a cache another run wrote.
+  assert.match(installer, /cache: \$\{\{ github\.ref_type != 'tag' \}\}/);
+  assert.match(installer, /save-cache: false/);
   // No step is allowed to fail quietly.
   assert.doesNotMatch(release, /continue-on-error/);
 });

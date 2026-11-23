@@ -13,14 +13,18 @@
                Start menu and Desktop shortcuts, nothing signed. Gives the tests the
                installed executable (ABA_PACKAGED_EXECUTABLE, through GITHUB_ENV).
     spanish    Puts Spanish first in Windows' languages, as on a Spanish Windows.
-    uninstall  Adds a file of hers to the cases folder and to the app's data folder,
-               records every file in both, uninstalls silently, and checks that the app, its
-               shortcuts and its uninstall entry are gone while every one of her files is
-               still there, unchanged.
+    reinstall  The update path: adds a file of hers to the cases folder and to the app's
+               data folder, records every file in both, then runs the installer (-Installer)
+               again over the installed app, which first runs the installed app's own
+               uninstaller as every update does. Checks the app and its shortcuts are back
+               and every one of her files is still there, unchanged.
+    uninstall  Records every file in both folders again, uninstalls silently, and checks
+               that the app, its shortcuts and its uninstall entry are gone while every one
+               of her files is still there, unchanged.
   Windows PowerShell 5.1; ASCII only, so it reads the same in any code page.
 #>
 param(
-  [Parameter(Mandatory = $true)][ValidateSet("onedrive", "install", "spanish", "uninstall")][string]$Step,
+  [Parameter(Mandatory = $true)][ValidateSet("onedrive", "install", "spanish", "reinstall", "uninstall")][string]$Step,
   [string]$Installer
 )
 
@@ -39,13 +43,26 @@ function Pass([string]$message) {
   Write-Host "ok - $message"
 }
 
-# The app's uninstall entry under one registry hive, or null.
-function Find-UninstallEntry([string]$hive) {
-  $root = "${hive}:\$UninstallRoot"
+# Where Windows lists installed apps: the user's, and the machine's in its 64-bit and 32-bit views.
+$UserUninstall = "HKCU:\$UninstallRoot"
+$MachineUninstall = @("HKLM:\$UninstallRoot", "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall")
+
+# The app's uninstall entry under one registry key, or null. A key the uninstaller removes
+# while this reads it, or one with no values, is skipped rather than failing the check.
+function Find-UninstallEntry([string]$root) {
   if (-not (Test-Path $root)) { return $null }
-  foreach ($key in Get-ChildItem $root) {
-    $entry = Get-ItemProperty $key.PSPath
+  foreach ($key in @(Get-ChildItem $root -ErrorAction SilentlyContinue)) {
+    $entry = Get-ItemProperty $key.PSPath -ErrorAction SilentlyContinue
+    if ($null -eq $entry) { continue }
     if (($entry.PSObject.Properties.Name -contains "DisplayName") -and ($entry.DisplayName -like "$ProductName*")) { return $entry }
+  }
+  return $null
+}
+
+function Find-MachineUninstallEntry {
+  foreach ($root in $MachineUninstall) {
+    $entry = Find-UninstallEntry $root
+    if ($null -ne $entry) { return $entry }
   }
   return $null
 }
@@ -77,6 +94,78 @@ function Wait-Until([scriptblock]$condition, [int]$seconds, [string]$what) {
   }
 }
 
+# Her cases folder and the app's data folder: what neither an update nor uninstalling may touch.
+function Get-HerFolders {
+  return @((Join-Path $env:USERPROFILE "ABA Workbench"), (Join-Path $env:APPDATA "ABA Workbench"))
+}
+
+# Checks what e2e/windows-installed.e2e.ts left (her first case, her credentials file),
+# adds a file of her own to each folder, which no part of the app wrote, and records every
+# file in both.
+function Get-HerFilesBefore([string]$what) {
+  $cases, $appData = Get-HerFolders
+  foreach ($expected in @((Join-Path $cases "Invented installer check\aba-case.json"), (Join-Path $appData "credentials.json"))) {
+    if (-not (Test-Path -LiteralPath $expected)) { Fail "Missing before $($what): $expected (did the installed-app check run?)" }
+  }
+  Set-Content -LiteralPath (Join-Path $cases "Invented installer check\her own notes.txt") -Value "Invented notes, written by hand." -Encoding ASCII
+  Set-Content -LiteralPath (Join-Path $appData "her own file.txt") -Value "Invented file, written by hand." -Encoding ASCII
+  $before = Get-Snapshot (Get-HerFolders)
+  Pass "recorded $($before.Count) files in the cases folder and the app's data folder"
+  return $before
+}
+
+function Assert-HerFilesKept($before, [string]$what) {
+  $after = Get-Snapshot (Get-HerFolders)
+  foreach ($file in $before.Keys) {
+    if (-not $after.ContainsKey($file)) { Fail "$what deleted $file" }
+    if ($after[$file] -ne $before[$file]) { Fail "$what changed $file" }
+  }
+  Pass "after $($what.ToLower()), every one of the $($before.Count) files in the cases folder and the app's data folder is still there, unchanged"
+}
+
+# The installed app, its writing rules, and both shortcuts opening it; returns its executable.
+function Assert-Installed {
+  Wait-Until { $null -ne (Find-UninstallEntry $UserUninstall) } 120 "the uninstall entry in HKEY_CURRENT_USER"
+  if ($null -ne (Find-MachineUninstallEntry)) { Fail "An uninstall entry is in HKEY_LOCAL_MACHINE: the install was not per-user." }
+  $entry = Find-UninstallEntry $UserUninstall
+  Pass "uninstall entry in the user's registry only: '$($entry.DisplayName)', version $($entry.DisplayVersion)"
+
+  $executable = Get-InstalledExecutable $entry
+  Wait-Until { Test-Path -LiteralPath $executable } 60 "the installed executable"
+  $programs = Join-Path $env:LOCALAPPDATA "Programs"
+  if (-not $executable.StartsWith($programs + "\", [StringComparison]::OrdinalIgnoreCase)) { Fail "Installed at $executable, not under $programs." }
+  if ((Split-Path -Leaf $executable) -ne "$ProductName.exe") { Fail "The executable is $executable." }
+  Pass "installed per user: $executable"
+  if ((Get-AuthenticodeSignature -LiteralPath $executable).Status -ne "NotSigned") { Fail "The installed app is signed; it should not be." }
+  $rules = Join-Path (Split-Path -Parent $executable) "resources\rules\assessment.md"
+  if (-not (Test-Path -LiteralPath $rules)) { Fail "The writing rules are not at $rules." }
+  Pass "the writing rules are in the install folder's resources"
+
+  $shell = New-Object -ComObject WScript.Shell
+  foreach ($link in @((Get-StartMenuShortcut), (Get-DesktopShortcut))) {
+    Wait-Until { Test-Path -LiteralPath $link } 30 "the shortcut $link"
+    $target = $shell.CreateShortcut($link).TargetPath
+    if ($target -ne $executable) { Fail "The shortcut $link opens $target, not $executable." }
+    Pass "shortcut $link opens the app"
+  }
+  if (Get-Process -Name $ProductName -ErrorAction SilentlyContinue) { Fail "A silent install must not start the app." }
+  return $executable
+}
+
+# Runs the installer silently; a per-user install asks for no administrator rights (the
+# runner would show no prompt, and the install would fail if it did).
+function Invoke-Installer([string]$installer) {
+  if (-not $installer -or -not (Test-Path -LiteralPath $installer)) { Fail "No installer at '$installer'." }
+  $installer = (Resolve-Path -LiteralPath $installer).Path
+  $signature = Get-AuthenticodeSignature -LiteralPath $installer
+  if ($signature.Status -ne "NotSigned") { Fail "The installer's signature status is $($signature.Status); it should be unsigned (owner's decision)." }
+  Pass "the installer is unsigned, as decided"
+  if (Get-Process -Name $ProductName -ErrorAction SilentlyContinue) { Fail "The app is running." }
+  # The process ends when the install has (an update first runs the installed app's uninstaller and waits for it).
+  $process = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru -Wait
+  if ($process.ExitCode -ne 0) { Fail "The installer ended with exit code $($process.ExitCode)." }
+}
+
 # Run in a new process: a process keeps the folder paths it has already looked up.
 function Get-FreshFolderPath([string]$name) {
   return (& powershell.exe -NoProfile -NonInteractive -Command "[Environment]::GetFolderPath('$name')").Trim()
@@ -106,45 +195,11 @@ public static extern int SHSetKnownFolderPath(ref Guid rfid, uint dwFlags, IntPt
   }
 
   "install" {
-    if (-not $Installer -or -not (Test-Path -LiteralPath $Installer)) { Fail "No installer at '$Installer'." }
-    $Installer = (Resolve-Path -LiteralPath $Installer).Path
-    $signature = Get-AuthenticodeSignature -LiteralPath $Installer
-    if ($signature.Status -ne "NotSigned") { Fail "The installer's signature status is $($signature.Status); it should be unsigned (owner's decision)." }
-    Pass "the installer is unsigned, as decided"
-
-    # /S: silent. A per-user install asks for no administrator rights; the runner would show
-    # no prompt and the install would fail if it did. The process ends when the install has.
-    $process = Start-Process -FilePath $Installer -ArgumentList "/S" -PassThru -Wait
-    if ($process.ExitCode -ne 0) { Fail "The installer ended with exit code $($process.ExitCode)." }
-
-    Wait-Until { $null -ne (Find-UninstallEntry "HKCU") } 120 "the uninstall entry in HKEY_CURRENT_USER"
-    if ($null -ne (Find-UninstallEntry "HKLM")) { Fail "An uninstall entry is in HKEY_LOCAL_MACHINE: the install was not per-user." }
-    $entry = Find-UninstallEntry "HKCU"
-    Pass "uninstall entry in the user's registry only: '$($entry.DisplayName)', version $($entry.DisplayVersion)"
-
-    $executable = Get-InstalledExecutable $entry
-    Wait-Until { Test-Path -LiteralPath $executable } 60 "the installed executable"
-    $programs = Join-Path $env:LOCALAPPDATA "Programs"
-    if (-not $executable.StartsWith($programs + "\", [StringComparison]::OrdinalIgnoreCase)) { Fail "Installed at $executable, not under $programs." }
-    if ((Split-Path -Leaf $executable) -ne "$ProductName.exe") { Fail "The executable is $executable." }
-    Pass "installed per user: $executable"
-    if ((Get-AuthenticodeSignature -LiteralPath $executable).Status -ne "NotSigned") { Fail "The installed app is signed; it should not be." }
-    $rules = Join-Path (Split-Path -Parent $executable) "resources\rules\assessment.md"
-    if (-not (Test-Path -LiteralPath $rules)) { Fail "The writing rules are not at $rules." }
-    Pass "the writing rules are in the install folder's resources"
-
-    $shell = New-Object -ComObject WScript.Shell
-    foreach ($link in @((Get-StartMenuShortcut), (Get-DesktopShortcut))) {
-      Wait-Until { Test-Path -LiteralPath $link } 30 "the shortcut $link"
-      $target = $shell.CreateShortcut($link).TargetPath
-      if ($target -ne $executable) { Fail "The shortcut $link opens $target, not $executable." }
-      Pass "shortcut $link opens the app"
-    }
-
-    if (Get-Process -Name $ProductName -ErrorAction SilentlyContinue) { Fail "A silent install must not start the app." }
+    if ($null -ne (Find-UninstallEntry $UserUninstall)) { Fail "The app is already installed." }
+    Invoke-Installer $Installer
+    $executable = Assert-Installed
     $utf8 = New-Object System.Text.UTF8Encoding $false
     [IO.File]::AppendAllText($env:GITHUB_ENV, "ABA_PACKAGED_EXECUTABLE=$executable`n", $utf8)
-    [IO.File]::AppendAllText($env:GITHUB_ENV, "ABA_INSTALL_FOLDER=$(Split-Path -Parent $executable)`n", $utf8)
   }
 
   "spanish" {
@@ -154,22 +209,23 @@ public static extern int SHSetKnownFolderPath(ref Guid rfid, uint dwFlags, IntPt
     Pass "Windows' first language is $first"
   }
 
+  "reinstall" {
+    $entry = Find-UninstallEntry $UserUninstall
+    if ($null -eq $entry) { Fail "The app is not installed." }
+    $executableBefore = Get-InstalledExecutable $entry
+    $before = Get-HerFilesBefore "updating"
+    Invoke-Installer $Installer
+    $executable = Assert-Installed
+    if ($executable -ne $executableBefore) { Fail "The update moved the app from $executableBefore to $executable." }
+    Assert-HerFilesKept $before "Updating"
+  }
+
   "uninstall" {
-    $entry = Find-UninstallEntry "HKCU"
+    $entry = Find-UninstallEntry $UserUninstall
     if ($null -eq $entry) { Fail "The app is not installed." }
     $executable = Get-InstalledExecutable $entry
     $installFolder = Split-Path -Parent $executable
-    $cases = Join-Path $env:USERPROFILE "ABA Workbench"
-    $appData = Join-Path $env:APPDATA "ABA Workbench"
-    # Left by e2e/windows-installed.e2e.ts: her first case and her credentials file.
-    foreach ($expected in @((Join-Path $cases "Invented installer check\aba-case.json"), (Join-Path $appData "credentials.json"))) {
-      if (-not (Test-Path -LiteralPath $expected)) { Fail "Missing before uninstalling: $expected (did the installed-app check run?)" }
-    }
-    # A file of her own in each, which no part of the app wrote.
-    Set-Content -LiteralPath (Join-Path $cases "Invented installer check\her own notes.txt") -Value "Invented notes, written by hand." -Encoding ASCII
-    Set-Content -LiteralPath (Join-Path $appData "her own file.txt") -Value "Invented file, written by hand." -Encoding ASCII
-    $before = Get-Snapshot @($cases, $appData)
-    Pass "recorded $($before.Count) files in the cases folder and the app's data folder"
+    $before = Get-HerFilesBefore "uninstalling"
 
     if (Get-Process -Name $ProductName -ErrorAction SilentlyContinue) { Fail "The app is still running." }
     # The uninstaller copies itself elsewhere and starts again from there, so its first
@@ -178,7 +234,7 @@ public static extern int SHSetKnownFolderPath(ref Guid rfid, uint dwFlags, IntPt
     if (-not $quiet) { Fail "The uninstall entry has no QuietUninstallString." }
     $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/d /s /c `"$quiet`"" -PassThru -Wait -WindowStyle Hidden
     if ($process.ExitCode -ne 0) { Fail "The uninstaller ended with exit code $($process.ExitCode)." }
-    Wait-Until { ($null -eq (Find-UninstallEntry "HKCU")) -and -not (Test-Path -LiteralPath $executable) } 120 "the uninstaller to finish"
+    Wait-Until { ($null -eq (Find-UninstallEntry $UserUninstall)) -and -not (Test-Path -LiteralPath $executable) } 120 "the uninstaller to finish"
 
     if (Test-Path -LiteralPath $installFolder) { Fail "The install folder is still there: $installFolder" }
     Pass "the install folder is gone"
@@ -186,12 +242,6 @@ public static extern int SHSetKnownFolderPath(ref Guid rfid, uint dwFlags, IntPt
       if (Test-Path -LiteralPath $link) { Fail "The shortcut is still there: $link" }
     }
     Pass "the Start menu and Desktop shortcuts are gone"
-
-    $after = Get-Snapshot @($cases, $appData)
-    foreach ($file in $before.Keys) {
-      if (-not $after.ContainsKey($file)) { Fail "Uninstalling deleted $file" }
-      if ($after[$file] -ne $before[$file]) { Fail "Uninstalling changed $file" }
-    }
-    Pass "every one of the $($before.Count) files in the cases folder and the app's data folder is still there, unchanged"
+    Assert-HerFilesKept $before "Uninstalling"
   }
 }

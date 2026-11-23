@@ -225,9 +225,9 @@ The default cases folder, in the home folder, needs no permission. macOS asks th
 
 ## Packaging
 
-`pnpm package` runs `electron-vite build` and `electron-builder --dir` with `electron-builder.yml`: an unpacked app for the current platform and architecture in `dist/`, unsigned, with the default Electron icon. The app archive holds only `out/` and `package.json`; the provider SDKs and Zod are bundled into `out/main/index.js`, and the interface, with its fonts, is in `out/renderer/`. Next to the archive, in the resources folder, are `rules/` and `licenses/` (the IBM Plex fonts' SIL Open Font License, which must travel with them; the packaged window tests check it is there).
+`pnpm package` runs `electron-vite build` and `electron-builder --dir` with `electron-builder.yml`: an unpacked app for the current platform and architecture in `dist/`, unsigned, with the app's icon on Windows (`packaging/windows/icon.ico`) and Electron's default icon on macOS and Linux. The app archive holds only `out/` and `package.json`; the provider SDKs and Zod are bundled into `out/main/index.js`, and the interface, with its fonts, is in `out/renderer/`. Next to the archive, in the resources folder, are `rules/` and `licenses/` (the IBM Plex fonts' SIL Open Font License, which must travel with them; the packaged window tests check it is there).
 
-`pnpm package:windows` builds the Windows installer (NSIS, one click, per user, unsigned, x64), and `.github/workflows/release.yml` builds, installs, tests, uninstalls and publishes it: [windows.md](windows.md). The packaged app refuses a cases folder inside its own install folder, which an update or uninstalling deletes.
+`pnpm package:windows` builds the Windows installer (NSIS, one click, per user, unsigned, x64), and `.github/workflows/release.yml` builds, installs, tests, uninstalls and publishes it: [windows.md](windows.md). The packaged app refuses a cases folder inside its own install folder, which an update or uninstalling deletes, by any name for it, and never uses one the settings already name ([windows.md](windows.md#the-installer)).
 
 ## macOS and Windows
 

@@ -2,7 +2,7 @@ import path from "node:path";
 
 /**
  * The app's permanent identity: electron-builder.yml's appId (owner's decision,
- * 2026-11-23). tests/packaging.test.ts keeps the two the same.
+ * 2026-11-23). tests/windows-installer.test.ts keeps the two the same.
  */
 export const APP_ID = "io.github.juliocesar97db.aba-workbench";
 

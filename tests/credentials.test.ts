@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { CREDENTIALS_FILE_NAME, CredentialsStore, parseCredentials, serializeCredentials, unreadableFileName, type StoredCredentials } from "../src/main/credentials.ts";
 import { writeFileDurably } from "../src/main/durable-write.ts";
-import { describeAccess, ownerOnlyAclFile, ownerOnlySddl, parseWhoamiSid, restrictToOwner } from "../src/main/owner-only.ts";
+import { accessEntries, describeAccess, ownerOnlyAclFile, ownerOnlySddl, parseWhoamiSid, restrictToOwner } from "../src/main/owner-only.ts";
 
 const HOST_ID = "urn:uuid:5b6f0f8e-2d7a-4c1e-9b3a-7e2f4d6c8a10";
 const SIGNED_IN = {
@@ -177,11 +177,6 @@ test("Windows owner-only: whoami's SID and the access list icacls sets", () => {
   assert.equal(ownerOnlyAclFile("credentials.json.1.tmp", "S-1-5-21-1-2-3-1001").toString("utf16le"), "credentials.json.1.tmp\r\nD:P(A;;FA;;;S-1-5-21-1-2-3-1001)\r\n");
 });
 
-/** The access entries icacls lists for a file: one per "name:(rights)". */
-function accessEntries(icaclsOutput: string): string[] {
-  return icaclsOutput.split(/\r?\n/).filter((line) => /:\([A-Z,()]+\)\s*$/.test(line.trim()) || /:\(F\)/.test(line));
-}
-
 test("Windows owner-only: icacls leaves an empty file with one access entry, the current user's", { skip: process.platform !== "win32" }, async (t) => {
   const dir = await folder(t);
   const file = path.join(dir, "probe.json");
@@ -214,8 +209,7 @@ test("Windows owner-only: the saved file has one access entry, the current user'
   const store = new CredentialsStore(file, { log: () => undefined });
   await store.hostId();
   const access = await describeAccess(file);
-  const entries = access.split(/\r?\n/).filter((line) => /:\([A-Z,()]+\)\s*$/.test(line.trim()) || /:\(F\)/.test(line));
-  assert.equal(entries.length, 1, access);
+  assert.equal(accessEntries(access).length, 1, access);
   assert.doesNotMatch(access, /\(I\)/, "no inherited entry");
 });
 

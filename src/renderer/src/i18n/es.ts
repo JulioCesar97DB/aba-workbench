@@ -112,6 +112,7 @@ export const es: Messages = {
     "not-allowed-mac": "ABA Workbench no tiene permiso para abrir la carpeta de casos. Para dárselo, abre Configuración del Sistema, luego Privacidad y seguridad, luego Archivos y carpetas, y activa el acceso para ABA Workbench. O elige otra carpeta.",
     "not-allowed": "Tu computadora no deja que ABA Workbench abra la carpeta de casos. Elige otra carpeta.",
     "not-writable": "ABA Workbench puede abrir la carpeta de casos, pero no puede guardar en ella. Elige otra carpeta.",
+    "inside-app": "La carpeta de casos está dentro de la carpeta del programa ABA Workbench, que se borra al actualizar o desinstalar la aplicación, así que ABA Workbench no la usa. Elige una carpeta tuya.",
     notCreatedYet: "Se creará cuando crees tu primer caso.",
     choose: "Elegir otra carpeta…",
     showMac: "Mostrar en Finder",

@@ -1,4 +1,6 @@
+import { realpath as realpathCallback } from "node:fs";
 import { access, constants, open, readdir, rm, stat } from "node:fs/promises";
+import { promisify } from "node:util";
 import path from "node:path";
 import type { CasesFolderState } from "../shared/api.ts";
 import { TEMPORARY_SUFFIX } from "./durable-write.ts";
@@ -36,13 +38,95 @@ export function installFolder(location: { isPackaged: boolean; resourcesPath: st
 }
 
 /**
- * Whether `folder` is `parent` or inside it. Windows and macOS compare without case, as
- * their file systems do by default; `p` is only there so tests can check Windows paths.
+ * A Windows path as Win32 reads it: each name loses its trailing dots and spaces
+ * ("aba-workbench.\Casos" is "aba-workbench\Casos"), which path.win32 keeps.
+ */
+export function win32Canonical(value: string): string {
+  return value
+    .split(/([\\/]+)/)
+    .map((part, index) => (index % 2 === 1 || part === "." || part === ".." || /^[. ]+$/.test(part) ? part : part.replace(/[. ]+$/, "")))
+    .join("");
+}
+
+/**
+ * Whether `folder` is `parent` or inside it, as text. Windows and macOS compare without
+ * case, as their file systems do by default, and Windows as Win32 reads names
+ * (win32Canonical); `p` is only there so tests can check Windows paths on any machine.
+ * Other names for the same folder (a link, a junction, an 8.3 short name) need
+ * isInsideOnDisk.
  */
 export function isSameOrInside(folder: string, parent: string, platform: NodeJS.Platform = process.platform, p: path.PlatformPath = path): boolean {
+  const canonical = (value: string) => (platform === "win32" ? win32Canonical(value) : value);
   const fold = (value: string) => (platform === "linux" ? value : value.toLowerCase());
-  const relative = p.relative(fold(p.resolve(parent)), fold(p.resolve(folder)));
+  const relative = p.relative(fold(p.resolve(canonical(parent))), fold(p.resolve(canonical(folder))));
   return relative === "" || (relative !== ".." && !relative.startsWith(`..${p.sep}`) && !p.isAbsolute(relative));
+}
+
+/** What isInsideOnDisk reads from the disk; tests replace it. */
+export interface FolderLookup {
+  /** The path with every link, junction and short name resolved (fs.realpath.native). */
+  realpath: (folder: string) => Promise<string>;
+  /** The folder's volume and file number, which no other name for it changes. */
+  identity: (folder: string) => Promise<{ dev: bigint; ino: bigint }>;
+}
+
+const nativeRealpath = promisify(realpathCallback.native);
+
+export const diskLookup: FolderLookup = {
+  realpath: (folder) => nativeRealpath(folder),
+  identity: async (folder) => {
+    const info = await stat(folder, { bigint: true });
+    return { dev: info.dev, ino: info.ino };
+  },
+};
+
+/**
+ * The real path of `folder`, even when it does not exist yet: the deepest part that
+ * exists, resolved, then the rest as written.
+ */
+async function realPathOf(folder: string, lookup: FolderLookup): Promise<string> {
+  const rest: string[] = [];
+  for (let current = path.resolve(folder); ; current = path.dirname(current)) {
+    try {
+      return path.join(await lookup.realpath(current), ...rest.reverse());
+    } catch {
+      if (path.dirname(current) === current) return path.resolve(folder);
+      rest.push(path.basename(current));
+    }
+  }
+}
+
+/**
+ * Whether `folder` is `parent` or inside it on the disk, by any name: as text; then by
+ * their real paths, which resolve links, junctions, 8.3 short names and Win32's trailing
+ * dots; then by identity, every folder from `folder`'s real path up to its root compared
+ * with `parent` by volume and file number, which also catches names a real path does not
+ * unify (a network path to this computer, a drive letter made with subst). An identity
+ * of 0 (a file system without file numbers) is never compared.
+ */
+export async function isInsideOnDisk(folder: string, parent: string, platform: NodeJS.Platform = process.platform, lookup: FolderLookup = diskLookup): Promise<boolean> {
+  if (isSameOrInside(folder, parent, platform)) return true;
+  let realParent: string;
+  try {
+    realParent = await lookup.realpath(parent);
+  } catch {
+    // The install folder cannot be read: only the text comparison above can say anything.
+    return false;
+  }
+  const realFolder = await realPathOf(folder, lookup);
+  if (isSameOrInside(realFolder, realParent, platform)) return true;
+  let target: { dev: bigint; ino: bigint };
+  try {
+    target = await lookup.identity(realParent);
+  } catch {
+    return false;
+  }
+  if (target.ino === 0n) return false;
+  for (let current = realFolder; ; current = path.dirname(current)) {
+    const found = await lookup.identity(current).catch(() => null);
+    if (found && found.dev === target.dev && found.ino === target.ino) return true;
+    if (path.dirname(current) === current) return false;
+  }
 }
 
 /** The file a write check makes and removes at once (Windows only, see canWrite). */
