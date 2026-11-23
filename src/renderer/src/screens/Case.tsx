@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, Outlet, useParams } from "react-router";
-import { findReportSection, REPORT_SECTIONS } from "../../../shared/report-sections.ts";
+import { Navigate, Outlet } from "react-router";
+import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
 import { CASE_STEPS, casePath, stepTitle, stepTitleLang, type CaseStep } from "../case-steps.tsx";
 import { casesFolderProblemText } from "../cases-folder.tsx";
@@ -14,6 +14,10 @@ import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 import { useOpenCaseState, useOpenedCase } from "../open-case.tsx";
 import { sourceName, sourceNameLang } from "../source-labels.tsx";
 import { Placeholder } from "./Placeholder.tsx";
+import { sectionStateText } from "../shell/Sidebar.tsx";
+import { formatUsd } from "./Section.tsx";
+import { useLanguage } from "../language.tsx";
+import type { SectionSummary } from "../../../shared/sections.ts";
 
 /*
  * The case workspace: the five steps and the report's sections. AppShell opens the case
@@ -85,12 +89,18 @@ export function StepScreen({ step }: { step: keyof typeof STEP_BODIES }) {
 /** The report: its sections, each with its status. */
 export function ReportScreen() {
   const { t } = useTranslation();
-  const caseId = useOpenedCase().id;
+  const opened = useOpenedCase();
+  const caseId = opened.id;
   const meta = useStepMeta("report");
+  const states = new Map(opened.sections.map((section) => [section.id, section]));
+  const { language } = useLanguage();
+  // What the AI cost for this case: every version and check whose price is known (review, low 2).
+  const spent = opened.sections.reduce((sum, section) => sum + section.costUsd, 0);
   return (
     <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />}>
       <div className="flex max-w-measure flex-col gap-5">
-        <Placeholder>{t("workspace.reportBody")}</Placeholder>
+        <p className="text-md">{t("workspace.reportBody")}</p>
+        {spent > 0 ? <p className="text-sm text-fg-muted">{t("section.caseCost", { cost: formatUsd(language, spent) })}</p> : null}
         <Table>
           <TableHead>
             <TableRow>
@@ -112,7 +122,7 @@ export function ReportScreen() {
                   </TextLink>
                 </TableRowHeader>
                 <TableCell className="py-2 text-right">
-                  <StatusBadge>{t("status.notStarted")}</StatusBadge>
+                  <SectionStateBadge summary={states.get(section.id)} />
                 </TableCell>
               </TableRow>
             ))}
@@ -123,40 +133,13 @@ export function ReportScreen() {
   );
 }
 
-/** One section of the report. */
-export function ReportSectionScreen() {
-  const { t } = useTranslation();
-  const opened = useOpenedCase();
-  const caseId = opened.id;
-  const { sectionId } = useParams();
-  const section = findReportSection(sectionId);
-  if (!section) return <Navigate to={casePath(caseId, "report")} replace />;
-  const number = REPORT_SECTIONS.indexOf(section) + 1;
-  return (
-    <WorkArea
-      header={
-        <PageHeader
-          title={section.title}
-          titleLang="en"
-          meta={`${opened.label} · ${t("workspace.sectionPosition", { number, total: REPORT_SECTIONS.length })}`}
-        />
-      }
-      rail={<CaseRail />}
-    >
-      <Placeholder>{t("workspace.sectionBody")}</Placeholder>
-    </WorkArea>
-  );
-}
-
-/** The right rail: the case's sources, the PDFs in its folder, and the checks run on a draft. */
+/** The right rail: the case's sources and the PDFs in its folder. Each section's checks are on its own screen. */
 export function CaseRail() {
   const { t } = useTranslation();
   const { files, sources } = useOpenedCase();
   const active = sources.sources.filter((source) => !source.removedAt);
   const sourcesId = useId();
   const filesId = useId();
-  const checksId = useId();
-  const checks = [t("rail.checkStructure"), t("rail.checkMissing"), t("rail.checkContradictions")];
   return (
     <>
       <section aria-labelledby={sourcesId} className="flex flex-col gap-1.5">
@@ -191,24 +174,15 @@ export function CaseRail() {
           <p className="text-sm text-fg-muted">{t("rail.noFiles")}</p>
         )}
       </section>
-      <section aria-labelledby={checksId} className="flex flex-col gap-1.5">
-        <Eyebrow id={checksId} className="text-fg-muted">
-          {t("rail.checks")}
-        </Eyebrow>
-        <Table>
-          <TableBody>
-            {checks.map((check) => (
-              <TableRow key={check}>
-                <TableRowHeader>{check}</TableRowHeader>
-                <TableCell className="text-right">
-                  <StatusBadge>{t("status.notRun")}</StatusBadge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </section>
     </>
   );
 }
 
+
+/** A section's state in the report's table. */
+function SectionStateBadge({ summary }: { summary: SectionSummary | undefined }) {
+  const { t } = useTranslation();
+  if (!summary || summary.state === "not-started") return <StatusBadge>{t("status.notStarted")}</StatusBadge>;
+  const text = sectionStateText(t, summary).long;
+  return <StatusBadge tone={summary.state === "drafted" ? "accent" : "success"}>{text}</StatusBadge>;
+}

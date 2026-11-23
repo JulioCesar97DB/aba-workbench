@@ -1,6 +1,6 @@
 import { measureRequest, requestTooLargeMessage } from "./limits.ts";
 import { toSafeError } from "./providers/index.ts";
-import type { Effort, Provider, ProviderCredential, SourceDocument } from "./providers/types.ts";
+import type { Effort, PromptParts, Provider, ProviderCredential, SourceDocument } from "./providers/types.ts";
 import { buildPrompt, type SectionId } from "./rules.ts";
 import type { GenerationEvent } from "./generation-events.ts";
 
@@ -30,8 +30,6 @@ export interface GenerationRequest {
  * Nothing here logs the request: not the key, not the sources.
  */
 export async function* runGeneration(request: GenerationRequest): AsyncGenerator<GenerationEvent> {
-  const { provider, signal } = request;
-
   let built: Awaited<ReturnType<typeof buildPrompt>>;
   try {
     built = await buildPrompt(request.section, request.sources, request.rulesDir);
@@ -40,7 +38,30 @@ export async function* runGeneration(request: GenerationRequest): AsyncGenerator
     yield { type: "error", code: "rules_error", message: "The writing rules could not be loaded.", status: null };
     return;
   }
-  const { prompt, rulesVersions } = built;
+  yield* runPromptGeneration({ ...request, prompt: built.prompt, rulesVersions: built.rulesVersions });
+}
+
+/** A generation whose prompt is already built (the section workspace builds it in src/main/outgoing.ts). */
+export interface PromptGenerationRequest {
+  provider: Provider;
+  credential: ProviderCredential;
+  model: string;
+  section: string;
+  effort: Effort;
+  maxOutputTokens: number;
+  mode: "generate" | "prewarm";
+  prompt: PromptParts;
+  rulesVersions: Record<string, string>;
+  signal: AbortSignal;
+}
+
+/**
+ * Sends a built prompt: checks the provider's size limit, then streams the provider's
+ * events. Failures become an "error" event whose message is safe to show; after a cancel
+ * nothing more is reported. Nothing here logs the request.
+ */
+export async function* runPromptGeneration(request: PromptGenerationRequest): AsyncGenerator<GenerationEvent> {
+  const { provider, signal, prompt, rulesVersions } = request;
   // Checked before anything is sent: the provider would refuse it anyway, after the upload.
   const tooLarge = requestTooLargeMessage(provider.id, measureRequest(prompt));
   if (tooLarge) {

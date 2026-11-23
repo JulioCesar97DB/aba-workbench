@@ -24,11 +24,11 @@ export function NavItem({ to, end, number, children, detail }: { to: string; end
 }
 
 /**
- * A report section: a status dot, its English title, and its status in words (read by a
- * screen reader; the dot shows it). Every section is "not started" until drafting exists;
- * the reference's ready and draft states arrive with it.
+ * A report section: a status dot, its English title, and its state in words after it
+ * ("Yours", "v3", "Approved"; read by a screen reader too). The dot repeats the state:
+ * hollow when not started, green when hers or approved, amber when an AI draft waits.
  */
-export function SectionNavItem({ to, title, statusLabel }: { to: string; title: string; statusLabel: string }) {
+export function SectionNavItem({ to, title, state, detail, statusLabel }: { to: string; title: string; state: "not-started" | "hers" | "drafted" | "approved"; detail: string | null; statusLabel: string }) {
   return (
     <NavLink
       to={to}
@@ -39,10 +39,23 @@ export function SectionNavItem({ to, title, statusLabel }: { to: string; title: 
         )
       }
     >
-      <span aria-hidden="true" className="size-2 shrink-0 rounded-full border border-dot-empty" />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "size-2 shrink-0 rounded-full",
+          state === "not-started" && "border border-dot-empty",
+          (state === "hers" || state === "approved") && "bg-dot-done",
+          state === "drafted" && "bg-dot-draft",
+        )}
+      />
       <span lang="en" className="min-w-0 flex-1">
         {title}
       </span>
+      {detail ? (
+        <span aria-hidden="true" className="shrink-0 text-xs font-normal text-fg-on-nav-muted">
+          {detail}
+        </span>
+      ) : null}
       <span className="sr-only">{statusLabel}</span>
     </NavLink>
   );

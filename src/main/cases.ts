@@ -16,7 +16,7 @@ import {
   type UnreadableReason,
 } from "../shared/api.ts";
 import { guessPdfType, MAX_SOURCES, type AddPdfsResult, type CaseSources, type PdfProblem, type ReadSourceTextResult, type SourceSaveResult } from "../shared/sources.ts";
-import { CASE_FILE_NAME, ClientAgeSchema, MAX_CASE_FILE_BYTES, MAX_LISTED_FILES, newCaseData, nextUpdatedAt, readCaseFile, serializeCaseFile, type CaseData } from "./case-file.ts";
+import { CASE_FILE_NAME, ClientAgeSchema, MAX_CASE_FILE_BYTES, MAX_LISTED_FILES, newCaseData, nextUpdatedAt, readableCaseFileText, readCaseFile, type CaseData } from "./case-file.ts";
 import { checkDroppedPdf, copyPdfIntoFolder, findSamePdf, isPdfFile, readChosenPdf, type LoadedPdf } from "./case-pdfs.ts";
 import {
   addPdfSource,
@@ -33,6 +33,7 @@ import {
   sourceText,
 } from "./case-sources.ts";
 import { caseFolderNames } from "./case-folder-name.ts";
+import { SectionInputError, sectionSummaries, sessionNotes } from "./case-sections.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { finishInterruptedSave, isLeftBehind, isTemporaryFileOf, writeFileDurably } from "./durable-write.ts";
 
@@ -194,8 +195,8 @@ function newestFirst(a: { data: CaseData; name: string }, b: { data: CaseData; n
 /** What withCase found: the case could not be used, nothing was saved (with work's answer), it was saved, or saving failed. */
 type CaseWork<T> =
   | { kind: "unavailable" }
-  | { kind: "unchanged"; value: T; sources: CaseSources }
-  | { kind: "saved"; sources: CaseSources }
+  | { kind: "unchanged"; value: T; sources: CaseSources; data: CaseData }
+  | { kind: "saved"; sources: CaseSources; data: CaseData; value: T }
   | { kind: "failed"; outcome: "not-saved" | "case-full"; sources: CaseSources };
 
 function checkCaseId(caseId: unknown): string {
@@ -403,7 +404,9 @@ export class CaseLibrary {
 
     const data = newCaseData({ id: this.options.newId(), label: label.label, clientAge: parsed.data.clientAge ?? null, now: this.options.now() });
     try {
-      await this.options.writeFile(path.join(caseFolder, CASE_FILE_NAME), serializeCaseFile(data));
+      const text = readableCaseFileText(data);
+      if (text === null) throw new Error("the new case would not read back whole");
+      await this.options.writeFile(path.join(caseFolder, CASE_FILE_NAME), text);
     } catch (error) {
       this.options.log(`The case's data file could not be written (${(error as Error).message}).`);
       // The folder is new and empty: remove it, so no half-made case is left. rmdir never removes a folder with files in it.
@@ -474,6 +477,8 @@ export class CaseLibrary {
         ...caseSummary(data),
         files: data.files.map(({ name, bytes, modifiedAt }) => ({ name, bytes, modifiedAt })),
         sources: caseSources(data, files),
+        sections: sectionSummaries(data),
+        notes: sessionNotes(data),
       };
       return { outcome: "opened", case: detail };
     });
@@ -717,10 +722,10 @@ export class CaseLibrary {
         try {
           done = await work(read.data, folder, before);
         } catch (error) {
-          if (error instanceof SourceInputError) throw new Error(error.message, { cause: error });
+          if (error instanceof SourceInputError || error instanceof SectionInputError) throw new Error(error.message, { cause: error });
           throw error;
         }
-        if (done.save === null) return { kind: "unchanged", value: done.value, sources: caseSources(read.data, before) };
+        if (done.save === null) return { kind: "unchanged", value: done.value, sources: caseSources(read.data, before), data: read.data };
         // A PDF the work copied in is in the folder now.
         const files = await scan(before);
         const byName = new Map(done.save.files.map((file) => [file.name, file]));
@@ -729,7 +734,12 @@ export class CaseLibrary {
           files: files.map((file) => ({ ...byName.get(file.name), ...file })),
           updatedAt: nextUpdatedAt(read.data.updatedAt, this.options.now()),
         };
-        const text = serializeCaseFile(next);
+        const text = readableCaseFileText(next);
+        if (text === null) {
+          // Never write what would make the case unreadable (review B1): refuse the save, keep the file as it is.
+          this.options.log("A case was not saved: the change would not read back whole.");
+          return { kind: "failed", outcome: "not-saved", sources: caseSources(read.data, files) };
+        }
         if (Buffer.byteLength(text, "utf8") > MAX_CASE_FILE_BYTES) return { kind: "failed", outcome: "case-full", sources: caseSources(read.data, files) };
         try {
           await this.options.writeFile(path.join(folder, CASE_FILE_NAME), text);
@@ -737,10 +747,32 @@ export class CaseLibrary {
           this.options.log(`A case could not be saved (${(error as Error).message}).`);
           return { kind: "failed", outcome: "not-saved", sources: caseSources(read.data, files) };
         }
-        return { kind: "saved", sources: caseSources(next, files) };
+        return { kind: "saved", sources: caseSources(next, files), data: next, value: done.value };
       });
       if (outcome !== "moved") return outcome;
     }
+    return { kind: "unavailable" };
+  }
+
+  /**
+   * Runs `work` on a case as it is on disk now, in its save queue (the report's sections
+   * use it: src/main/sections.ts). When `work` gives data to save, it is written durably,
+   * and the answer holds the case as saved. A case that is gone, damaged, from a newer
+   * version, or in a cases folder that cannot be used, is never written to.
+   */
+  async changeCase<T>(
+    caseId: unknown,
+    work: (data: CaseData, folder: string, now: string) => Promise<{ save: CaseData | null; value: T }> | { save: CaseData | null; value: T },
+  ): Promise<{ kind: "saved" | "unchanged"; data: CaseData; value: T; folder: string } | { kind: "failed"; outcome: "not-saved" | "case-full" } | { kind: "unavailable" }> {
+    const id = checkCaseId(caseId);
+    let folderUsed = "";
+    const result = await this.withCase(id, async (data, folder) => {
+      folderUsed = folder;
+      return work(data, folder, this.nextTime(data));
+    });
+    if (result.kind === "saved") return { kind: "saved", data: result.data, value: result.value, folder: folderUsed };
+    if (result.kind === "unchanged") return { kind: "unchanged", data: result.data, value: result.value, folder: folderUsed };
+    if (result.kind === "failed") return { kind: "failed", outcome: result.outcome };
     return { kind: "unavailable" };
   }
 
@@ -770,7 +802,9 @@ export class CaseLibrary {
   private async write(folder: string, data: CaseData, { strict = false } = {}): Promise<CaseData> {
     const next = { ...data, updatedAt: nextUpdatedAt(data.updatedAt, this.options.now()) };
     try {
-      await this.options.writeFile(path.join(folder, CASE_FILE_NAME), serializeCaseFile(next));
+      const text = readableCaseFileText(next);
+      if (text === null) throw new Error("the change would not read back whole");
+      await this.options.writeFile(path.join(folder, CASE_FILE_NAME), text);
       return next;
     } catch (error) {
       this.options.log(`A case could not be saved (${(error as Error).message}).`);

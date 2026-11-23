@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { checkCaseLabel, isCaseId, MAX_CLIENT_AGE_YEARS, type CaseFile, type ClientAge } from "../shared/api.ts";
 import { checkSourceTitle, isSourceDate, MAX_SOURCE_TEXT_LENGTH, MAX_SOURCES } from "../shared/sources.ts";
+import { MAX_NOTES_LENGTH, MAX_REQUEST_LENGTH, MAX_SECTION_TEXT_LENGTH } from "../shared/section-text.ts";
+import { MAX_CONSISTENCY_ITEM_LENGTH } from "../lib/rules.ts";
 
 /*
  * A case's data file: aba-case.json, inside the case's folder, next to its PDFs (which
@@ -9,8 +11,9 @@ import { checkSourceTitle, isSourceDate, MAX_SOURCE_TEXT_LENGTH, MAX_SOURCES } f
  *
  * Version 1 held what Phase 1 needed: the id, the label, the client's age if given, the
  * created and updated times, and the PDFs found in the folder. Version 2 adds the case's
- * sources (pasted texts, and PDFs copied into the folder). Later phases add their own
- * top-level keys (behaviors, drafts) and raise the version, with a migration.
+ * sources (pasted texts, and PDFs copied into the folder). Version 3 adds the report's
+ * sections (every version of each, hers and the AI's) and her notes for the session.
+ * Later phases add their own top-level keys and raise the version, with a migration.
  *
  * Rules that keep a user's data safe:
  * - A key this version does not know is kept as it is when the file is saved.
@@ -21,7 +24,7 @@ import { checkSourceTitle, isSourceDate, MAX_SOURCE_TEXT_LENGTH, MAX_SOURCES } f
 
 export const CASE_FILE_NAME = "aba-case.json";
 /** Raise it, and add a step to MIGRATIONS, when the shape changes. */
-export const CASE_SCHEMA_VERSION = 2;
+export const CASE_SCHEMA_VERSION = 3;
 /**
  * A data file larger than this is not one the app wrote, and a save that would make one
  * is refused. Pasted texts live in the file: a case with a dozen long reports is a few
@@ -113,6 +116,96 @@ export type StoredSource = z.infer<typeof SourceSchema>;
 export type StoredTextSource = z.infer<typeof TextSourceSchema>;
 export type StoredPdfSource = z.infer<typeof PdfSourceSchema>;
 
+/*
+ * The report's sections (version 3), by section id. Each keeps every version ever made,
+ * hers and the AI's: nothing is removed or rewritten, except the version she is typing in
+ * (her pasted text, or an edit), which is updated as she types. "currentVersion" is the
+ * one shown, "approvedVersion" the one she approved.
+ */
+const VersionNumberSchema = z.int().min(1).max(1_000_000);
+
+/** What an AI version was made from and by, so any version can be traced back. */
+const GenerationRecordSchema = z.looseObject({
+  provider: z.string().max(32),
+  requestedModel: z.string().max(200),
+  servedModel: z.string().max(200),
+  effort: z.string().max(16),
+  rulesVersions: z.record(z.string().max(100), z.string().max(100)),
+  /** The sources sent, by id and title as the model saw them. */
+  sourcesUsed: z.array(z.looseObject({ id: z.string().max(64), title: z.string().max(1000) })).max(MAX_SOURCES),
+  /** Her other sections sent as context, by id and version. */
+  sectionsUsed: z.array(z.looseObject({ id: z.string().max(64), version: VersionNumberSchema })).max(100),
+  /** Her standing instructions and session notes as they were sent. */
+  instructions: z.string().max(MAX_NOTES_LENGTH * 2).optional(),
+  notes: z.string().max(MAX_NOTES_LENGTH * 2).optional(),
+  /** Whether the client's details were hidden before sending. */
+  deidentified: z.boolean(),
+  usage: z.looseObject({
+    uncachedInputTokens: z.int().min(0),
+    cacheWriteTokens: z.int().min(0),
+    cacheReadTokens: z.int().min(0),
+    outputTokens: z.int().min(0),
+  }),
+  costUsd: z.number().min(0).nullable(),
+});
+
+const StoredVersionSchema = z.looseObject({
+  number: VersionNumberSchema,
+  /** "hers", "draft", "change", "paragraph", "improve", "edited"; a kind a newer app writes is kept as it is. */
+  kind: z.string().regex(/^[a-z][a-z-]{0,31}$/),
+  createdAt: TimestampSchema,
+  /** Her own text changes while she types in it; AI versions never change. */
+  updatedAt: TimestampSchema.optional(),
+  basedOn: VersionNumberSchema.optional(),
+  /** Her edit of the version she had approved: final for the other sections, like her own text (review round 2, L1). */
+  fromApproved: z.literal(true).optional(),
+  request: z.string().max(MAX_REQUEST_LENGTH).optional(),
+  paragraphIndex: z.int().min(0).max(10_000).optional(),
+  text: z.string().max(MAX_SECTION_TEXT_LENGTH),
+  generation: GenerationRecordSchema.optional(),
+  /** The consistency check run on an AI version right after it was saved. */
+  consistency: z
+    .looseObject({
+      status: z.string().max(32),
+      items: z.array(z.string().max(MAX_CONSISTENCY_ITEM_LENGTH)).max(100),
+      checkedAt: TimestampSchema,
+      model: z.string().max(200).nullable(),
+      costUsd: z.number().min(0).nullable(),
+      /** Her sections it compared against, by id and version. */
+      sectionsCompared: z.array(z.looseObject({ id: z.string().max(64), version: VersionNumberSchema })).max(100),
+    })
+    .optional(),
+});
+
+const StoredSectionSchema = z.looseObject({
+  currentVersion: VersionNumberSchema.nullable(),
+  approvedVersion: VersionNumberSchema.nullable(),
+  approvedAt: TimestampSchema.optional(),
+  versions: z
+    .array(StoredVersionSchema)
+    .max(10_000)
+    .refine((versions) => new Set(versions.map((version) => version.number)).size === versions.length),
+});
+
+/** Her notes for the session under way: used in every request until she starts a new session. */
+const SessionNotesSchema = z.looseObject({
+  text: z.string().max(MAX_NOTES_LENGTH),
+  startedAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+});
+
+/** A session's notes after "Start a new session": kept, never shown to the AI again. */
+const ArchivedNotesSchema = z.looseObject({
+  text: z.string().max(MAX_NOTES_LENGTH),
+  startedAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+  endedAt: TimestampSchema,
+});
+
+export type StoredVersion = z.infer<typeof StoredVersionSchema>;
+export type StoredSection = z.infer<typeof StoredSectionSchema>;
+export type GenerationRecord = z.infer<typeof GenerationRecordSchema>;
+
 const CaseFileSchema = z.looseObject({
   schemaVersion: z.literal(CASE_SCHEMA_VERSION),
   id: z.string().refine(isCaseId),
@@ -126,6 +219,10 @@ const CaseFileSchema = z.looseObject({
     .array(SourceSchema)
     .max(MAX_SOURCES)
     .refine((sources) => new Set(sources.map((source) => source.id)).size === sources.length),
+  // A section id this version does not know (a newer app's) is kept as it is.
+  sections: z.record(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/), StoredSectionSchema),
+  sessionNotes: SessionNotesSchema.optional(),
+  sessionNotesArchive: z.array(ArchivedNotesSchema).max(10_000).optional(),
 });
 
 /** A case's data, as the app holds it; unknown keys ride along. */
@@ -136,11 +233,14 @@ export type Migration = (data: Record<string, unknown>) => Record<string, unknow
 
 /**
  * MIGRATIONS[n] upgrades a version-n file. A version 1 file is read as version 2 with no
- * sources; it is written as version 2 only when the case is next saved.
+ * sources, and a version 2 file as version 3 with no sections; it is written in the
+ * current version only when the case is next saved.
  */
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   // A key "sources" in a version 1 file (none was ever written) is kept and must then read as version 2's.
   1: (data) => ("sources" in data ? data : { ...data, sources: [] }),
+  // A version 2 file has no sections yet; a key "sections" in one (none was ever written) is kept and must read as version 3's.
+  2: (data) => ("sections" in data ? data : { ...data, sections: {} }),
 };
 
 export type CaseFileProblem = "damaged" | "newer-version";
@@ -291,9 +391,35 @@ function orderedSource(source: StoredSource): Record<string, unknown> {
 
 /** The file's text: the known keys first, in a fixed order, then any others as they were. */
 export function serializeCaseFile(data: CaseData): string {
-  const { schemaVersion, id, label, clientAge, createdAt, updatedAt, files, sources, ...rest } = data;
-  const ordered = { schemaVersion, id, label, ...(clientAge ? { clientAge } : {}), createdAt, updatedAt, files, sources: sources.map(orderedSource), ...rest };
+  const { schemaVersion, id, label, clientAge, createdAt, updatedAt, files, sources, sessionNotes, sessionNotesArchive, sections, ...rest } = data;
+  const ordered = {
+    schemaVersion,
+    id,
+    label,
+    ...(clientAge ? { clientAge } : {}),
+    createdAt,
+    updatedAt,
+    files,
+    sources: sources.map(orderedSource),
+    ...(sessionNotes ? { sessionNotes } : {}),
+    ...(sessionNotesArchive ? { sessionNotesArchive } : {}),
+    sections,
+    ...rest,
+  };
   return `${JSON.stringify(ordered, null, 2)}\n`;
+}
+
+/**
+ * The file's text, only when it reads back whole under the same rules it is read with
+ * (readCaseFile: UTF-8, lossless JSON, the schema and every limit in it); null otherwise.
+ * Every write of a data file goes through it, so nothing the app writes can make a case
+ * unreadable: a value past a limit (a model's answer longer than the schema allows, say)
+ * refuses the save instead of locking the clinician out of the whole case.
+ */
+export function readableCaseFileText(data: CaseData): string | null {
+  const text = serializeCaseFile(data);
+  const read = readCaseFile(text);
+  return read.ok && read.migratedFrom === null ? text : null;
 }
 
 /** A new case's data. */
@@ -308,6 +434,7 @@ export function newCaseData(options: { id: string; label: string; clientAge: Cli
     updatedAt: time,
     files: (options.files ?? []).map((file) => ({ ...file })),
     sources: [],
+    sections: {},
   };
 }
 

@@ -98,7 +98,7 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
 
   // On disk: version 2, one source, the text exactly as typed.
   let data = caseData(casesFolder);
-  expect(data.schemaVersion).toBe(2);
+  expect(data.schemaVersion).toBe(3);
   expect(data.sources).toEqual([
     {
       id: expect.stringMatching(/^[0-9a-f-]{36}$/),

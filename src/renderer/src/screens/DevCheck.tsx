@@ -40,6 +40,10 @@ function applyEvent(run: Run, event: GenerationUpdateEvent): Run {
       return { ...run, status: `Error: ${event.message}` };
     case "finished":
       return { ...run, finished: true, status: event.cancelled ? "Cancelled" : run.status };
+    // Only a section's generation saves a version or checks it; the development check never does.
+    case "saved":
+    case "checked":
+      return run;
   }
 }
 

@@ -218,12 +218,23 @@ export interface DroppedPdf {
  * A change to a case's sources that could not be saved, as the main process keeps it
  * (src/main/failed-saves.ts) until it is saved: a reload of the window does not forget it.
  */
+/** Why a change could not be saved, as the interface explains it. */
+export type FailedSaveFailure = Exclude<SourceSaveResult["outcome"], "saved"> | "error";
+
 export interface FailedSave {
   id: string;
   caseId: string;
   /** The case's label, or null when the app has not seen the case (its folder is gone, say). */
   label: string | null;
-  failure: Exclude<SourceSaveResult["outcome"], "saved"> | "error";
+  failure: FailedSaveFailure;
+  /** What it changes: a source, a report section's text, her instructions for a section, or her session notes. */
+  about: "source" | "section" | "instructions" | "notes";
+  /** The section, for "section" and "instructions". */
+  sectionId: string | null;
+  /** What she typed, kept while it is not saved (a section's text, instructions, notes): the box it came from shows it again after a reload. Null for a source's change. */
+  text: string | null;
+  /** For a section's text: the version that editing pass was writing to, or null. */
+  editing: number | null;
 }
 
 export type ReadSourceTextResult = { outcome: "read"; text: string } | { outcome: "source-not-found" } | { outcome: "case-unavailable" };

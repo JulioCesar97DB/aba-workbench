@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { LARGEST_PDF_FOR, pdfSizeWarning } from "../src/lib/limits.ts";
-import { CASE_FILE_NAME, MAX_CASE_FILE_BYTES, newCaseData, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
+import { CASE_FILE_NAME, MAX_CASE_FILE_BYTES, newCaseData, readCaseFile, serializeCaseFile, CASE_SCHEMA_VERSION } from "../src/main/case-file.ts";
 import { pdfFileNames } from "../src/main/case-folder-name.ts";
 import { copyPdfIntoFolder, findSamePdf, writeNewFile } from "../src/main/case-pdfs.ts";
 import { addTextSource, caseSources, changeSource, setRemoved, textPreview } from "../src/main/case-sources.ts";
@@ -232,7 +232,7 @@ test("cases: pasted texts are saved in the data file, changed, removed and resto
       preview: "Invented notes.",
     },
   ]);
-  assert.equal(dataOf(caseFolder).schemaVersion, 2);
+  assert.equal(dataOf(caseFolder).schemaVersion, CASE_SCHEMA_VERSION);
   assert.equal((await lib.changeSource(id, sourceId, { text: "Changed." })).outcome, "saved");
   assert.deepEqual(await lib.readSourceText(id, sourceId), { outcome: "read", text: "Changed." });
   assert.equal((await lib.setSourceRemoved(id, sourceId, true)).outcome, "saved");
@@ -271,7 +271,7 @@ test("cases: a version 1 case gets its sources on the first save, keeping keys i
   assert.equal(dataOf(caseFolder).schemaVersion, 1);
   assert.equal((await lib.addTextSource(CASE_ID, { type: "iep", text: "x" })).outcome, "saved");
   const data = dataOf(caseFolder);
-  assert.equal(data.schemaVersion, 2);
+  assert.equal(data.schemaVersion, CASE_SCHEMA_VERSION);
   assert.deepEqual(data.extra, [1, 2]);
   assert.equal(data.sources.length, 1);
 });
@@ -280,7 +280,7 @@ test("cases: a newer case is never written; a save over the size limit is refuse
   const { lib, id, caseFolder } = await newCase(tempFolder());
   const file = path.join(caseFolder, CASE_FILE_NAME);
   const good = readFileSync(file, "utf8");
-  writeFileSync(file, JSON.stringify({ ...JSON.parse(good), schemaVersion: 3 }));
+  writeFileSync(file, JSON.stringify({ ...JSON.parse(good), schemaVersion: CASE_SCHEMA_VERSION + 1 }));
   const newer = readFileSync(file, "utf8");
   assert.deepEqual(await lib.addTextSource(id, { type: "cde", text: "x" }), { outcome: "case-unavailable" });
   assert.equal(readFileSync(file, "utf8"), newer);

@@ -26,11 +26,14 @@ export type SaveState =
   | { status: "failed"; failure: SaveFailure; retry: () => void };
 
 /** What a save answers: the case's sources as saved, or why not. */
-export type SaveAnswer<T> = { ok: true; sources: CaseSources; value: T } | { ok: false; failure: SaveFailure };
+/** `sources` is null for a save that does not change sources (a section's text, instructions, notes). */
+export type SaveAnswer<T> = { ok: true; sources: CaseSources | null; value: T } | { ok: false; failure: SaveFailure };
 
 const pending = new Map<string, number>();
 const savedOnce = new Set<string>();
 let failed: FailedSave[] = [];
+/** True once the list has been read from the main process at least once on this page. */
+let failedLoaded = false;
 const inFlight = new Set<Promise<unknown>>();
 const flushers = new Set<() => Promise<void>>();
 const listeners = new Set<() => void>();
@@ -45,8 +48,11 @@ function changed() {
 export async function refreshFailedSaves(): Promise<void> {
   try {
     failed = await window.aba.listFailedSaves();
+    failedLoaded = true;
   } catch {
-    // Kept as it was: the next save reads it again.
+    // Kept as it was: the next save reads it again. The boxes do not wait for it any
+    // longer: she can always type (review round 4, L-2).
+    failedLoaded = true;
   }
   changed();
 }
@@ -75,7 +81,7 @@ export function runSave<T>(caseId: string, save: () => Promise<SaveAnswer<T>>, o
         answer = { ok: false, failure: "error" };
       }
       if (answer.ok) {
-        onSaved(answer.sources);
+        if (answer.sources) onSaved(answer.sources);
         savedOnce.add(caseId);
       }
       return answer;
@@ -83,9 +89,55 @@ export function runSave<T>(caseId: string, save: () => Promise<SaveAnswer<T>>, o
   );
 }
 
-/** "Try again": the main process runs the change that failed again. */
-function retry(item: FailedSave, onSaved: (sources: CaseSources) => void): void {
-  void runSave(item.caseId, async () => sourceAnswer(await window.aba.retryFailedSave(item.id)), onSaved);
+/** Told when a change that is not a source's (a section's text, instructions, notes) was saved by "Try again", so its screen reads it again. */
+const retriedListeners = new Set<(item: FailedSave) => void>();
+
+export function onRetried(listener: (item: FailedSave) => void): () => void {
+  retriedListeners.add(listener);
+  return () => retriedListeners.delete(listener);
+}
+
+/** "Try again": the main process runs the change that failed again, with what was typed then. */
+export function retry(item: FailedSave, onSaved: (sources: CaseSources) => void): void {
+  void runSave(
+    item.caseId,
+    async (): Promise<SaveAnswer<null>> => {
+      const result = await window.aba.retryFailedSave(item.id);
+      if (result.outcome !== "saved") return { ok: false, failure: result.outcome === "case-full" || result.outcome === "case-unavailable" || result.outcome === "source-not-found" ? result.outcome : "not-saved" };
+      if (item.about !== "source") for (const listener of retriedListeners) listener(item);
+      return { ok: true, sources: "sources" in result ? result.sources : null, value: null };
+    },
+    onSaved,
+  );
+}
+
+/**
+ * Tracks a save that is not a change to sources (a section's text, her instructions, her
+ * notes): closing waits for it. Whether it failed is the main process's to keep (it keeps
+ * the change itself, src/main/failed-saves.ts), so a reload forgets neither the failure
+ * nor what was typed (review B3); the list is read again after it. Resolves whether it was saved.
+ */
+export function trackSave(caseId: string, work: Promise<boolean>): Promise<boolean> {
+  return track(caseId, work.catch(() => false));
+}
+
+/** Whether the list of changes not saved has been read on this page yet. */
+export function useFailedSavesLoaded(): boolean {
+  // The page reads it when it starts (main.tsx) and after every save.
+  useVersion();
+  return failedLoaded;
+}
+
+/** Every change not saved, as the main process keeps it. */
+export function useFailedSaveList(): FailedSave[] {
+  useVersion();
+  return failed;
+}
+
+/** The changes not saved that are about a case's report sections: what was typed in a section, its instructions or the notes. */
+export function useSectionFailures(caseId: string): FailedSave[] {
+  useVersion();
+  return failed.filter((item) => item.caseId === caseId && item.about !== "source");
 }
 
 /** A screen's typing still waiting for its pause: saved at once when the window is about to close or the page to unload. */

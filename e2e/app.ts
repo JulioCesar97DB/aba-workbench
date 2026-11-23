@@ -274,4 +274,88 @@ export async function setStubAnswers(
   }, answers);
 }
 
+/** What the faked Claude saw for each request of the section workspace. */
+export interface DraftingStubLog {
+  requests: Array<{ url: string; body: string | null }>;
+}
+
+/**
+ * Replaces, inside the app's main process, every way out to the AI providers with a fake
+ * Claude that drafts invented text: its model list accepts `claudeKey`, and each request
+ * to /v1/messages streams back, as Anthropic's server-sent events, an answer fitting the
+ * request (a draft, a whole-text change, one paragraph, an improvement, or a consistency
+ * check). `msPerChunk` slows the stream so a test can stop it. Anything else is refused,
+ * so no test can reach a real provider.
+ */
+export async function stubDrafting(app: ElectronApplication, options: { claudeKey: string; msPerChunk?: number; consistency?: string }): Promise<void> {
+  await app.evaluate((_electron, { claudeKey, msPerChunk, consistency }) => {
+    const g = globalThis as unknown as { draftingStub: { requests: Array<{ url: string; body: string | null }>; msPerChunk: number }; fetch: typeof fetch };
+    g.draftingStub = { requests: [], msPerChunk: msPerChunk ?? 0 };
+    const stub = g.draftingStub;
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+    const DRAFT = [
+      "Medical necessity for ABA services was established through the CDE, the Vineland-3 Comprehensive Parent/Caregiver Interview, the caregiver interview and direct observation, which show deficits in communication, daily living skills and social participation.",
+      "On the Vineland-3, the child obtained an Adaptive Behavior Composite of 68 [MISSING: percentile rank, not on the score report]; Communication was 66 and Daily Living Skills 70.",
+      "In communication, the CDE describes single-word requests. His mother reports that he pulls an adult to the refrigerator instead of asking. ABA will teach functional communication requests to replace crying.",
+    ];
+    const answerFor = (task: string): string => {
+      if (task.includes("Consistency check")) return consistency ?? "NO CONTRADICTIONS";
+      if (task.includes("Paragraph change request")) return "On the Vineland-3, the child obtained an Adaptive Behavior Composite of 68, which means that his everyday skills are well below those of most children his age [MISSING: percentile rank, not on the score report].";
+      if (task.includes("Change request")) return [DRAFT[0], DRAFT[1], `${DRAFT[2]} The school reports that his communication plan is now in place.`].join("\n\n");
+      if (task.includes("Improve request")) return "The child is a 4-year-old boy who lives at home with his mother, father and older brother; Spanish and English are spoken at home.\n\nHe was diagnosed with Autism Spectrum Disorder, as documented in the CDE.";
+      return DRAFT.join("\n\n");
+    };
+    g.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const body = typeof init?.body === "string" ? init.body : null;
+      stub.requests.push({ url, body });
+      const headers = new Headers(init?.headers);
+      const key = (headers.get("authorization") ?? headers.get("x-api-key") ?? "").replace(/^Bearer /, "");
+      if (url.startsWith("https://api.anthropic.com/v1/models")) {
+        return key === claudeKey
+          ? json({ data: [{ type: "model", id: "claude-fable-5-2", display_name: "Claude Fable 5.2", created_at: "2026-01-01T00:00:00Z" }], has_more: false, first_id: null, last_id: null })
+          : json({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }, 401);
+      }
+      if (url.startsWith("https://api.anthropic.com/v1/messages")) {
+        const request = JSON.parse(body ?? "{}") as { model: string; messages: Array<{ content: Array<{ type: string; text?: string }> }> };
+        const task = request.messages[0].content.at(-1)?.text ?? "";
+        const text = answerFor(task);
+        const usage = { input_tokens: 1200, output_tokens: 1, cache_creation_input_tokens: 9000, cache_read_input_tokens: 0 };
+        const events: Array<[string, unknown]> = [
+          ["message_start", { type: "message_start", message: { id: "msg_fake", type: "message", role: "assistant", model: request.model, content: [], stop_reason: null, stop_sequence: null, stop_details: null, usage } }],
+          ["content_block_start", { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }],
+          ...(text.match(/[^ ]+ */g) ?? []).map((piece): [string, unknown] => ["content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: piece } }]),
+          ["content_block_stop", { type: "content_block_stop", index: 0 }],
+          ["message_delta", { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null, stop_details: null }, usage: { output_tokens: 600 } }],
+          ["message_stop", { type: "message_stop" }],
+        ];
+        const encoder = new TextEncoder();
+        const signal = init?.signal;
+        const stream = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            for (const [event, data] of events) {
+              if (signal?.aborted) break;
+              controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+              if (stub.msPerChunk > 0) await new Promise((resolve) => setTimeout(resolve, stub.msPerChunk));
+            }
+            controller.close();
+          },
+        });
+        return new Response(stream, { headers: { "content-type": "text/event-stream" } });
+      }
+      throw new Error(`The test refused a request to ${new URL(url).host}: no test reaches a real provider.`);
+    }) as typeof fetch;
+  }, options);
+}
+
+export function draftingStubLog(app: ElectronApplication): Promise<DraftingStubLog> {
+  return app.evaluate(() => ({ requests: [...(globalThis as unknown as { draftingStub: DraftingStubLog }).draftingStub.requests] }));
+}
+
+export async function setDraftingSpeed(app: ElectronApplication, msPerChunk: number): Promise<void> {
+  await app.evaluate((_electron, ms) => {
+    (globalThis as unknown as { draftingStub: { msPerChunk: number } }).draftingStub.msPerChunk = ms;
+  }, msPerChunk);
+}
+
 export { expect } from "@playwright/test";

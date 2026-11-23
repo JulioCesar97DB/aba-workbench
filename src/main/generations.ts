@@ -1,5 +1,7 @@
-import type { GenerationEvent } from "../lib/generation-events.ts";
-import { isGenerationId, type GenerationUpdate } from "../shared/api.ts";
+import { isGenerationId, type GenerationUpdate, type GenerationUpdateEvent } from "../shared/api.ts";
+
+/** What a generation reports before its "finished" (which the registry adds). */
+type RunEvent = Exclude<GenerationUpdateEvent, { type: "finished" }>;
 
 /**
  * How many generations one window may run at once. A generation spends the user's money
@@ -35,7 +37,7 @@ export class GenerationRegistry {
   start(
     owner: number,
     generationId: string,
-    run: (signal: AbortSignal) => AsyncIterable<GenerationEvent>,
+    run: (signal: AbortSignal) => AsyncIterable<RunEvent>,
     emit: (update: GenerationUpdate) => void,
   ): StartResult {
     if (!isGenerationId(generationId) || this.#running.has(generationId)) return "invalid-id";
@@ -79,7 +81,7 @@ export class GenerationRegistry {
   async #pump(
     generationId: string,
     entry: Running,
-    run: (signal: AbortSignal) => AsyncIterable<GenerationEvent>,
+    run: (signal: AbortSignal) => AsyncIterable<RunEvent>,
     emit: (update: GenerationUpdate) => void,
   ): Promise<void> {
     const { signal } = entry.controller;
@@ -88,7 +90,10 @@ export class GenerationRegistry {
     };
     try {
       for await (const event of run(signal)) {
-        if (signal.aborted) break;
+        // After a Stop nothing more is sent, except a version already written: the interface
+        // must learn of every version on disk (review round 4, R4-1).
+        // A section's run yields nothing between its write and that "saved" (src/main/section-generation.ts).
+        if (signal.aborted && event.type !== "saved") break;
         send({ generationId, event });
       }
     } catch {

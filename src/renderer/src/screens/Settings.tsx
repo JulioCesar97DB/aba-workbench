@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LANGUAGES, type CasesFolderInfo, type Language } from "../../../shared/api.ts";
+import { LANGUAGES, type AiPreferences, type CasesFolderInfo, type DraftingProvider, type Language } from "../../../shared/api.ts";
+import { MODEL_CHOICES } from "../../../shared/models.ts";
 import { useAppInfo } from "../app-info.tsx";
 import { casesFolderProblemText, useShowInFolderLabel } from "../cases-folder.tsx";
 import { Button } from "../components/Button.tsx";
@@ -51,6 +52,8 @@ export function SettingsScreen() {
       <CasesFolderSection />
 
       <ConnectionsSection />
+
+      <ModelsSection />
 
       <SettingsSection heading={t("settings.aboutHeading")}>
         {info ? (
@@ -146,6 +149,51 @@ function CasesFolderSection() {
         {message?.text}
       </p>
       <p className="max-w-measure text-sm text-fg-muted">{t("settings.casesFolderChangeNote")}</p>
+    </SettingsSection>
+  );
+}
+
+/**
+ * The model each provider writes with (owner's decision, 2026-11-22): the most capable by
+ * default, or the other one offered, which costs about half as much.
+ */
+function ModelsSection() {
+  const { t } = useTranslation();
+  const [preferences, setPreferences] = useState<AiPreferences | null>(null);
+  const [message, setMessage] = useState<{ text: string; problem: boolean } | null>(null);
+  useEffect(() => {
+    window.aba.getAiPreferences().then(setPreferences, () => setMessage({ text: t("settings.modelsReadFailed"), problem: true }));
+  }, [t]);
+
+  async function choose(provider: DraftingProvider, model: string) {
+    try {
+      setPreferences(await window.aba.setModel(provider, model));
+      setMessage({ text: t("settings.modelSaved"), problem: false });
+    } catch {
+      setMessage({ text: t("settings.modelNotSaved"), problem: true });
+    }
+  }
+
+  return (
+    <SettingsSection heading={t("settings.modelsHeading")}>
+      <p className="max-w-measure text-fg-muted">{t("settings.modelsBody")}</p>
+      {preferences ? (
+        <div className="flex flex-wrap gap-6">
+          {(["anthropic", "openai"] as const).map((provider) => (
+            <div key={provider} className="min-w-60">
+              <Select
+                label={provider === "anthropic" ? t("settings.modelClaude") : t("settings.modelChatgpt")}
+                value={preferences.models[provider]}
+                options={MODEL_CHOICES[provider].map((choice, index) => ({ value: choice.id, label: index === 0 ? t("settings.modelMostCapable", { model: choice.label }) : t("settings.modelLowerCost", { model: choice.label }), lang: undefined }))}
+                onValueChange={(value) => void choose(provider, value)}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <p role="status" className={message?.problem ? "max-w-measure text-sm font-medium text-danger" : "max-w-measure text-sm text-fg-muted"}>
+        {message?.text}
+      </p>
     </SettingsSection>
   );
 }

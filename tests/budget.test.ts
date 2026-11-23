@@ -26,8 +26,8 @@ test("worst case uses the full output allowance, the pre-warm and a Claude fallb
   // 20,000 x $2.50 x 2 writes + 32,000 x $10, per million
   assert.equal(sol.toFixed(4), "0.4200");
   const opus = worstCaseCallUsd({ provider: "anthropic", model: "claude-opus-5-5", inputTokens: 20_000, maxOutputTokens: 32_000, prewarm: false });
-  // own attempt 20,000 x $5 + 32,000 x $20; fallback attempt 20,000 x $6.25 + 32,000 x $25
-  assert.equal(opus.toFixed(4), (0.1 + 0.64 + 0.125 + 0.8).toFixed(4));
+  // 1-hour cache writes: own attempt 20,000 x $8 + 32,000 x $20; fallback attempt 20,000 x $10 + 32,000 x $25
+  assert.equal(opus.toFixed(4), (0.16 + 0.64 + 0.2 + 0.8).toFixed(4));
   assert.throws(() => worstCaseCallUsd({ provider: "anthropic", model: "claude-unknown", inputTokens: 1, maxOutputTokens: 1, prewarm: false }), UnknownPriceError);
 });
 

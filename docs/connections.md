@@ -101,8 +101,8 @@ Version 1 (owner's decision on the format, 2026-11-22). Keys this version does n
 | --- | --- | --- |
 | `auth.openai.com` (system browser) | The authorize request above. | A token in a URL, other than the ID token as `id_token_hint`, which OpenAI's docs ask for and which goes only to this endpoint. |
 | `auth.openai.com` (the app) | The code exchange, refreshes, revocation; a GET of the published keys. | A client secret (there is none). |
-| `api.openai.com` | With the sign-in: the model list (the connection check). Later, the drafting requests described above. | Anything from a case while connecting; `store: true`. |
-| `api.anthropic.com` | The model list with the pasted key (the check). | Anything from a case while connecting. |
+| `api.openai.com` | With the sign-in: the model list (the connection check). The section workspace's requests when she writes with ChatGPT: the rules, the case's sources, her own and approved sections, her instructions and notes, and her request, all prepared by `prepareOutgoingRequest` ([sections.md](sections.md#what-is-sent-to-the-model)). | Anything from a case while connecting; `store: true`; anything from a case until she asks for a draft, a change, an improvement or (after a new version) its consistency check. |
+| `api.anthropic.com` | The model list with the pasted key (the check). The section workspace's requests when she writes with Claude, as above. | Anything from a case while connecting, or before she asks. |
 | `chatgpt.com` (system browser) | Opening the usage settings page. | Anything at all from the app. |
 
 Every request from the main process goes only to those addresses and never follows a redirect (`pinnedFetch` in `src/lib/providers/endpoints.ts`, now used for `https://auth.openai.com` too). Keys and tokens never reach the interface, are never logged, never appear in an error message and are never written anywhere but the credentials file: the interface learns states (connected, not connected, signing in, needs attention), the account's display name, and fixed messages; the main process's log names only error codes, never a key, a token, a path or a response body.

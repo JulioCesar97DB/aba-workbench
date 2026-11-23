@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent, ty
 import {
   IPC_CHANNELS,
   isCaseId,
+  type AiPreferences,
   type AppInfo,
   type CaseList,
   type CasesFolderInfo,
@@ -17,15 +18,22 @@ import {
   type SaveClaudeKeyResult,
   type Settings,
   type StartOverResult,
+  type StartSectionResult,
+  type SectionSaveResult,
+  type InstructionsSaveResult,
+  type NotesSaveResult,
+  isGenerationId,
 } from "../shared/api.ts";
 import type { AddPdfsResult, FailedSave, ReadSourceTextResult, SourceSaveResult } from "../shared/sources.ts";
 import type { CaseLibrary } from "./cases.ts";
-import type { FailedSaves } from "./failed-saves.ts";
+import type { FailedSaves, SaveResult } from "./failed-saves.ts";
 import type { ConnectionService } from "./connections.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { runDevCheckGeneration } from "./dev-check.ts";
 import { GenerationRegistry, MAX_RUNNING_PER_WINDOW } from "./generations.ts";
 import type { SettingsStore } from "./settings.ts";
+import type { SectionService } from "./sections.ts";
+import { defaultModel } from "../shared/models.ts";
 
 /**
  * The main-process side of window.aba (src/shared/api.ts). Every handler first checks
@@ -38,9 +46,17 @@ export function registerIpc(options: {
   /** Changes to sources that could not be saved (src/main/failed-saves.ts); every change goes through it. */
   failedSaves: FailedSaves;
   connections: ConnectionService;
+  sections: SectionService;
   isTrustedSender: (event: IpcMainInvokeEvent) => boolean;
 }): void {
   const generations = new GenerationRegistry();
+  const aiPreferences = async (): Promise<AiPreferences> => {
+    const saved = await options.settings.get();
+    return {
+      models: { anthropic: saved.models?.anthropic ?? defaultModel("anthropic"), openai: saved.models?.openai ?? defaultModel("openai") },
+      lastProvider: saved.lastProvider ?? null,
+    };
+  };
   const assertTrusted = (event: IpcMainInvokeEvent) => {
     if (!options.isTrustedSender(event)) throw new Error("Refused: the message does not come from the app's window.");
   };
@@ -285,7 +301,12 @@ export function registerIpc(options: {
     return options.failedSaves.list();
   });
 
-  ipcMain.handle(IPC_CHANNELS.retryFailedSave, (event, id: unknown): Promise<SourceSaveResult> => {
+  ipcMain.handle(IPC_CHANNELS.failedSaveShown, (event, id: unknown): void => {
+    assertTrusted(event);
+    options.failedSaves.markShown(id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.retryFailedSave, (event, id: unknown): Promise<SaveResult> => {
     assertTrusted(event);
     return sourceCall(() => options.failedSaves.retry(id), "The change could not be saved.");
   });
@@ -346,6 +367,100 @@ export function registerIpc(options: {
     );
     if (result === "invalid-id") throw new Error("Refused: the generation id is not a new UUID.");
     if (result === "busy") throw new Error(`Refused: ${MAX_RUNNING_PER_WINDOW} generations are already running in this window.`);
+  });
+
+  /*
+   * The report's sections (src/main/sections.ts checks every argument). A section's
+   * generation belongs to the page that started it, like the development check's.
+   */
+  const sectionCall = <T>(work: () => Promise<T>, message: string): Promise<T> =>
+    work().catch((error: unknown) => {
+      throw safeError(error, message);
+    });
+
+  ipcMain.handle(IPC_CHANNELS.getSection, (event, caseId: unknown, sectionId: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.sections.get(caseId, sectionId), "The section could not be read.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.saveSectionText, (event, caseId: unknown, sectionId: unknown, text: unknown, editing: unknown) => {
+    assertTrusted(event);
+    // Through the failed saves, which keep what was typed when it cannot be saved (review B3).
+    return sectionCall(() => options.failedSaves.save<SectionSaveResult>(caseId, { kind: "section-text", sectionId, text, editing }), "The text could not be saved.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.setCurrentVersion, (event, caseId: unknown, sectionId: unknown, version: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.sections.setCurrent(caseId, sectionId, version), "The version could not be shown.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.approveSection, (event, caseId: unknown, sectionId: unknown, version: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.sections.approve(caseId, sectionId, version), "The approval could not be saved.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.saveSectionInstructions, (event, caseId: unknown, sectionId: unknown, text: unknown) => {
+    assertTrusted(event);
+    // The case is where she typed them: where a save that failed is shown again.
+    if (!isCaseId(caseId)) throw new Error("Refused: not a case id.");
+    return sectionCall(() => options.failedSaves.save<InstructionsSaveResult>(caseId, { kind: "instructions", sectionId, text }), "The instructions could not be saved.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.saveSessionNotes, (event, caseId: unknown, text: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.failedSaves.save<NotesSaveResult>(caseId, { kind: "notes", text }), "The notes could not be saved.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.startNewSession, (event, caseId: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.sections.startNewSession(caseId), "A new session could not be started.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.copySection, (event, caseId: unknown, sectionId: unknown, version: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.sections.copy(caseId, sectionId, version), "The section could not be copied.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getAiPreferences, (event) => {
+    assertTrusted(event);
+    return sectionCall(aiPreferences, "The AI settings could not be read.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.setModel, (event, provider: unknown, model: unknown) => {
+    assertTrusted(event);
+    return sectionCall(async () => {
+      await options.settings.setModel(provider, model);
+      return aiPreferences();
+    }, "The model could not be saved.");
+  });
+
+  // A section's request, or a check run again: both are prepared in src/main/sections.ts and run like any generation.
+  const startSectionRun = async (
+    event: IpcMainInvokeEvent,
+    generationId: unknown,
+    prepare: () => ReturnType<SectionService["prepareGeneration"]>,
+  ): Promise<StartSectionResult> => {
+    if (!isGenerationId(generationId)) throw new Error("Refused: the generation id is not a new UUID.");
+    const sender = event.sender;
+    if (generations.countFor(sender.id) >= MAX_RUNNING_PER_WINDOW) return { outcome: "busy" };
+    const ready = await sectionCall(prepare, "The request could not be started.");
+    if (ready.outcome !== "ready") return { outcome: ready.outcome };
+    watch(sender);
+    const result = generations.start(sender.id, generationId, ready.run, (update) => {
+      if (!sender.isDestroyed()) sender.send(IPC_CHANNELS.generationUpdate, update);
+    });
+    if (result === "invalid-id") throw new Error("Refused: the generation id is not a new UUID.");
+    return result === "busy" ? { outcome: "busy" } : { outcome: "started" };
+  };
+
+  ipcMain.handle(IPC_CHANNELS.startSectionGeneration, (event, caseId: unknown, sectionId: unknown, generationId: unknown, provider: unknown, request: unknown): Promise<StartSectionResult> => {
+    assertTrusted(event);
+    return startSectionRun(event, generationId, () => options.sections.prepareGeneration(caseId, sectionId, provider, request));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.checkSection, (event, caseId: unknown, sectionId: unknown, generationId: unknown, provider: unknown, version: unknown): Promise<StartSectionResult> => {
+    assertTrusted(event);
+    return startSectionRun(event, generationId, () => options.sections.prepareCheck(caseId, sectionId, provider, version));
   });
 
   ipcMain.handle(IPC_CHANNELS.cancelGeneration, (event, generationId: unknown): void => {

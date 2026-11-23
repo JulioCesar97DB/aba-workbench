@@ -14,9 +14,15 @@ export type OpenCaseState = OpenCaseResult | { outcome: "loading" } | { outcome:
 
 export const OpenCaseContext = createContext<OpenCaseState | null>(null);
 export const SetCaseSourcesContext = createContext<((caseId: string, sources: CaseSources) => void) | null>(null);
+/** Replaces parts of the opened case with what a save answered (its sections' states, its notes). */
+export const PatchOpenedCaseContext = createContext<((caseId: string, patch: Partial<Pick<CaseDetail, "sections" | "notes">>) => void) | null>(null);
 
 /** Loads the case in the address; null outside a case. */
-export function useCaseLoader(caseId: string | undefined): { state: OpenCaseState | null; setSources: (caseId: string, sources: CaseSources) => void } {
+export function useCaseLoader(caseId: string | undefined): {
+  state: OpenCaseState | null;
+  setSources: (caseId: string, sources: CaseSources) => void;
+  patch: (caseId: string, patch: Partial<Pick<CaseDetail, "sections" | "notes">>) => void;
+} {
   const [loaded, setLoaded] = useState<{ id: string; state: OpenCaseState } | null>(null);
   useEffect(() => {
     if (!caseId || !isCaseId(caseId)) return;
@@ -40,13 +46,19 @@ export function useCaseLoader(caseId: string | undefined): { state: OpenCaseStat
       return { id, state: { outcome: "opened", case: { ...opened, sources, files: sources.files, pdfCount: sources.files.length, updatedAt: sources.updatedAt } } };
     });
   }, []);
+  const patch = useCallback((id: string, change: Partial<Pick<CaseDetail, "sections" | "notes">>) => {
+    setLoaded((previous) => {
+      if (previous?.id !== id || previous.state.outcome !== "opened") return previous;
+      return { id, state: { outcome: "opened", case: { ...previous.state.case, ...change } } };
+    });
+  }, []);
   const state = useMemo((): OpenCaseState | null => {
     if (!caseId) return null;
     // An address that is not a case id is not sent to the main process at all.
     if (!isCaseId(caseId)) return { outcome: "not-found" };
     return loaded?.id === caseId ? loaded.state : { outcome: "loading" };
   }, [caseId, loaded]);
-  return { state, setSources };
+  return { state, setSources, patch };
 }
 
 export function useOpenCaseState(): OpenCaseState | null {
@@ -65,4 +77,11 @@ export function useSetCaseSources(): (caseId: string, sources: CaseSources) => v
   const set = useContext(SetCaseSourcesContext);
   if (!set) throw new Error("useSetCaseSources is used outside AppShell.");
   return set;
+}
+
+/** Replaces the opened case's sections or notes with the ones a save answered. */
+export function usePatchOpenedCase(): (caseId: string, patch: Partial<Pick<CaseDetail, "sections" | "notes">>) => void {
+  const patch = useContext(PatchOpenedCaseContext);
+  if (!patch) throw new Error("usePatchOpenedCase is used outside AppShell.");
+  return patch;
 }

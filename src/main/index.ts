@@ -1,16 +1,19 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, shell } from "electron";
 import { appMenuTemplate } from "./app-menu.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CaseLibrary } from "./cases.ts";
-import { FailedSaves, runOnCases } from "./failed-saves.ts";
+import { FailedSaves, runSaves } from "./failed-saves.ts";
 import { createCloseGuard, createQuitWait, SAVE_WAIT_MS, UNSAVED_DIALOG, withTimeout, type UnsavedProblem } from "./close-guard.ts";
 import { ChatGptSession } from "./chatgpt-session.ts";
 import { ConnectionService } from "./connections.ts";
 import { CREDENTIALS_FILE_NAME, CredentialsStore } from "./credentials.ts";
 import { anthropicProvider } from "../lib/providers/anthropic.ts";
+import { openaiProvider } from "../lib/providers/openai.ts";
+import { INSTRUCTIONS_FILE_NAME, InstructionsStore } from "./instructions.ts";
+import { SectionService } from "./sections.ts";
 import { IPC_CHANNELS } from "../shared/api.ts";
 import { defaultCasesFolder } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
@@ -70,7 +73,8 @@ const cases = new CaseLibrary({
 });
 
 // Changes to sources that could not be saved, kept while the app runs (a reload does not forget them).
-const failedSaves = new FailedSaves({ run: runOnCases(cases), labelOf: (caseId) => cases.labelOf(caseId) });
+// Section text, instructions and notes go through it too (made below; used only once a save runs).
+const failedSaves = new FailedSaves({ run: runSaves(cases, () => sections), labelOf: (caseId) => cases.labelOf(caseId) });
 
 // The AI connections: the Claude key and the ChatGPT sign-in, in credentials.json in the
 // app's own data folder, owner-only (src/main/credentials.ts). The interface is told each
@@ -96,12 +100,28 @@ const connections = new ConnectionService({
   },
 });
 
+// The report's sections: her standing instructions per section live in the app's own
+// data folder (instructions.json), everything else in each case's data file.
+const sections = new SectionService({
+  cases,
+  instructions: new InstructionsStore(path.join(app.getPath("userData"), INSTRUCTIONS_FILE_NAME)),
+  rulesDir,
+  provider: (id) => (id === "anthropic" ? anthropicProvider : openaiProvider),
+  credential: (id) => connections.credentialFor(id),
+  chosenModel: async (id) => (await settings.get()).models?.[id] ?? null,
+  rememberProvider: (id) => settings.setLastProvider(id),
+  claudeKeyRefused: () => connections.claudeKeyRefused(),
+  // Both forms in one item, written at once: plain text and minimal HTML.
+  writeClipboard: (content) => clipboard.write([new ClipboardItem({ "text/plain": content.text, "text/html": content.html })]),
+});
+
 registerIpc({
   rulesDir,
   settings,
   cases,
   failedSaves,
   connections,
+  sections,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
 });
 
@@ -198,6 +218,10 @@ function createWindow(): void {
    * failedSaves, so the reloaded page shows it again. Not calling preventDefault keeps the page.
    */
   let reloading = false;
+  // A page that reloads starts with no box showing a kept text: each box tells again when it shows one (review round 3, R3-1).
+  window.webContents.on("did-navigate", () => failedSaves.newPage());
+  window.webContents.on("render-process-gone", () => failedSaves.newPage());
+
   window.webContents.on("will-prevent-unload", (event) => {
     if (closing) {
       // The window is closing (its guard already saved): the saves still running finish here, without the page.

@@ -57,7 +57,12 @@ function makeClient(apiKey: string, deps: ProviderDeps): Anthropic {
  * system (rules) ▼ | sources ▼ | task
  * Two cache breakpoints: the rules are shared by every case, the sources by every
  * section of one case. The task after the last breakpoint is never written to cache.
+ *
+ * One-hour cache (owner's decision, 2026-11-22): writing it costs twice the input price
+ * instead of 1.25 times, but she reads and corrects for more than five minutes between
+ * requests, so the default five-minute cache would be written again on almost every one.
  */
+const CACHE = { type: "ephemeral" as const, ttl: "1h" as const };
 function buildParams(options: GenerateOptions, includeTask = true) {
   const { prompt } = options;
   const content: Array<Anthropic.Beta.Messages.BetaTextBlockParam | Anthropic.Beta.Messages.BetaRequestDocumentBlock> = [];
@@ -74,7 +79,7 @@ function buildParams(options: GenerateOptions, includeTask = true) {
     }
   }
   const lastSource = content.at(-1);
-  if (lastSource) lastSource.cache_control = { type: "ephemeral" };
+  if (lastSource) lastSource.cache_control = CACHE;
   if (includeTask) content.push({ type: "text", text: prompt.task });
 
   return {
@@ -83,7 +88,7 @@ function buildParams(options: GenerateOptions, includeTask = true) {
     // Current models think adaptively; effort is the control (Opus 5.5 defaults to medium).
     thinking: { type: "adaptive" as const },
     output_config: { effort: options.effort },
-    system: [{ type: "text" as const, text: prompt.system, cache_control: { type: "ephemeral" as const } }],
+    system: [{ type: "text" as const, text: prompt.system, cache_control: CACHE }],
     messages: [{ role: "user" as const, content }],
     ...(SERVER_SIDE_FALLBACKS ?? {}),
   };

@@ -4,7 +4,8 @@ import { RouterProvider } from "react-router/dom";
 import { AppInfoProvider } from "./app-info.tsx";
 import { ConnectionsProvider } from "./connections.tsx";
 import { TooltipProvider } from "./components/Tooltip.tsx";
-import { CaseIndex, CaseRoute, ReportScreen, ReportSectionScreen, StepScreen } from "./screens/Case.tsx";
+import { CaseIndex, CaseRoute, ReportScreen, StepScreen } from "./screens/Case.tsx";
+import { SectionScreen } from "./screens/Section.tsx";
 import { DevCheck } from "./screens/DevCheck.tsx";
 import { Home } from "./screens/Home.tsx";
 import { NotFound } from "./screens/NotFound.tsx";
@@ -39,7 +40,7 @@ const router = createHashRouter([
           { path: "behaviors", element: <StepScreen step="behaviors" /> },
           { path: "interventions", element: <StepScreen step="interventions" /> },
           { path: "report", element: <ReportScreen /> },
-          { path: "report/:sectionId", element: <ReportSectionScreen /> },
+          { path: "report/:sectionId", element: <SectionScreen /> },
           { path: "review", element: <StepScreen step="review" /> },
           { path: "*", element: <NotFound /> },
         ],
