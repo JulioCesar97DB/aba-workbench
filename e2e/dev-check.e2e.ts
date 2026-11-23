@@ -113,7 +113,7 @@ test("a mock generation streams to completion, with the rules found", async ({ a
   const final = (await output.textContent()) ?? "";
   expect(final.length).toBeGreaterThan(partial.length);
   expect(final).toContain("Rules sent as the cached prefix");
-  await expect(page.getByText(/^Rules: /)).toHaveText(/^Rules: assessment \S+, payer-florida-molina \S+, instruments \S+, section-medical-necessity \S+$/);
+  await expect(page.getByText(/^Rules: /)).toHaveText(/^Rules: assessment \S+, guide \S+, style \S+, examples \S+, payer-florida-molina \S+, instruments \S+, section-medical-necessity \S+$/);
   await expect(page.getByRole("button", { name: "Run mock generation" })).toBeEnabled();
 });
 
