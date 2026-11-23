@@ -83,7 +83,7 @@ test("AI errors: each kind has a sentence in both languages, and those with a wa
 
 test("Try again is offered only where sending the same request again can work (UX-2 follow-up)", () => {
   const retry = AI_ERROR_KINDS.filter((kind) => aiErrorCanRetry(kind));
-  assert.deepEqual(retry.sort(), ["busy", "caseFiles", "connection", "limit", "other"]);
+  assert.deepEqual(retry.sort(), ["busy", "caseFiles", "connection", "limit", "other", "refused"]);
   // A way out in Settings is never also a retry: one button, the one that can work.
   for (const kind of AI_ERROR_KINDS) assert.ok(!(aiErrorCanRetry(kind) && aiErrorNeedsSettings(kind)), kind);
 });

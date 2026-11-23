@@ -271,7 +271,12 @@ test("a key the provider no longer accepts says so in Spanish, with its way out 
   await expect(failure.getByText("Detalles técnicos", { exact: true })).toBeVisible();
   // A key no longer accepted: sending it again cannot work, so there is no "Volver a intentar" (UX-2 follow-up).
   await expect(failure.getByRole("button", { name: "Volver a intentar" })).toHaveCount(0);
-  await failure.getByRole("link", { name: "Abrir Ajustes" }).click();
+  // One way out, not two (UX-3 review round 1, B2): the key is no longer connected, so the AI card's
+  // "Conectar la IA" leads to Ajustes, and the error box has no "Abrir Ajustes" of its own.
+  const aiCard = page.getByTestId("two-ways").locator("[data-way='ai']");
+  await expect(aiCard.getByRole("link", { name: "Conectar la IA" })).toBeVisible();
+  await expect(failure.getByRole("link", { name: "Abrir Ajustes" })).toHaveCount(0);
+  await aiCard.getByRole("link", { name: "Conectar la IA" }).click();
   await expect(page.locator("#page-title")).toHaveText("Ajustes");
 });
 
