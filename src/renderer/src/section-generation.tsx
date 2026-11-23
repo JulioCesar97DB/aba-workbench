@@ -12,6 +12,8 @@ import type { SectionRequestInput } from "../../shared/sections.ts";
 
 export type GenerationOutcome =
   | { kind: "saved" }
+  /** Stop came while the finished text was being written: the version exists, and the screen says so. */
+  | { kind: "saved-before-stop" }
   /** A check run again ended (its result is in the version). */
   | { kind: "checked" }
   /** A paragraph change answered with more than the paragraph: nothing was saved. */
@@ -41,6 +43,8 @@ const byKey = new Map<string, SectionGeneration>();
  * its id yet, so the stop is sent again as soon as the request has started.
  */
 const stopRequested = new Set<string>();
+/** Requests whose start has not returned yet: a Stop on them is remembered (review round 4, L-1), whatever their phase. */
+const notStarted = new Set<string>();
 const listeners = new Set<() => void>();
 let snapshot = 0;
 /** Told each saved section, so the screen and the sidebar show it. */
@@ -100,7 +104,15 @@ function apply(update: GenerationUpdate) {
       if (current.request === null) set({ ...current, outcome: { kind: "checked" } });
       return;
     case "finished":
-      set({ ...current, phase: "done", outcome: current.outcome ?? (current.request === null ? { kind: "checked" } : event.cancelled ? { kind: "stopped" } : { kind: "incomplete" }) });
+      set({
+        ...current,
+        phase: "done",
+        // A version that reached the disk is reported as saved, even when Stop came during the write (review round 4, R4-1).
+        outcome:
+          event.cancelled && current.outcome?.kind === "saved"
+            ? { kind: "saved-before-stop" }
+            : (current.outcome ?? (current.request === null ? { kind: "checked" } : event.cancelled ? { kind: "stopped" } : { kind: "incomplete" })),
+      });
       return;
     default:
       return;
@@ -125,8 +137,10 @@ export async function startSectionGeneration(caseId: string, sectionId: ReportSe
   const id = crypto.randomUUID();
   const previous = byKey.get(keyOf(caseId, sectionId));
   set({ id, caseId, sectionId, request, phase: "starting", text: "", outcome: null });
+  notStarted.add(id);
   try {
     const result = await window.aba.startSectionGeneration(caseId, sectionId, id, provider, request);
+    notStarted.delete(id);
     if (result.outcome === "started" && stopRequested.has(id)) void window.aba.cancelGeneration(id);
     stopRequested.delete(id);
     if (result.outcome !== "started") {
@@ -139,6 +153,7 @@ export async function startSectionGeneration(caseId: string, sectionId: ReportSe
     }
     return result.outcome;
   } catch {
+    notStarted.delete(id);
     set({ id, caseId, sectionId, request, phase: "done", text: "", outcome: { kind: "failed", message: "" } });
     return "error";
   }
@@ -149,20 +164,23 @@ export async function startSectionCheck(caseId: string, sectionId: ReportSection
   ensureSubscribed();
   const id = crypto.randomUUID();
   set({ id, caseId, sectionId, request: null, phase: "checking", text: "", outcome: null });
+  notStarted.add(id);
   try {
     const result = await window.aba.checkSection(caseId, sectionId, id, provider, version);
+    notStarted.delete(id);
     if (result.outcome === "started" && stopRequested.has(id)) void window.aba.cancelGeneration(id);
     stopRequested.delete(id);
     if (result.outcome !== "started") set({ id, caseId, sectionId, request: null, phase: "done", text: "", outcome: { kind: "checked" } });
     return result.outcome;
   } catch {
+    notStarted.delete(id);
     set({ id, caseId, sectionId, request: null, phase: "done", text: "", outcome: { kind: "checked" } });
     return "error";
   }
 }
 
 export function stopSectionGeneration(generation: SectionGeneration): void {
-  if (generation.phase === "starting") stopRequested.add(generation.id);
+  if (notStarted.has(generation.id)) stopRequested.add(generation.id);
   void window.aba.cancelGeneration(generation.id);
 }
 

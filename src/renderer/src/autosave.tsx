@@ -91,7 +91,12 @@ export function useAutosave({ caseId, initial, savedValue = initial, save }: { c
  * keystroke builds on it. The main process is told the box shows it, so that box's next
  * save may replace it. After "Try again", the box knows the text is on disk.
  */
-export function useKeptText(box: ReturnType<typeof useAutosave>, match: (item: FailedSave) => boolean, onRestored?: (item: FailedSave) => void): void {
+/**
+ * Returns whether the box may take typing yet: not before the list of kept texts has been
+ * read on this page, so nothing she types can race a kept text it should have shown
+ * (review round 4, L-2). The box is read-only for those few milliseconds.
+ */
+export function useKeptText(box: ReturnType<typeof useAutosave>, match: (item: FailedSave) => boolean, onRestored?: (item: FailedSave) => void): boolean {
   const failed = useFailedSaveList();
   const loaded = useFailedSavesLoaded();
   // Decided once, when the box mounts and the list is known (review round 3, R3-1): never
@@ -116,4 +121,5 @@ export function useKeptText(box: ReturnType<typeof useAutosave>, match: (item: F
       }),
     [box, match],
   );
+  return loaded;
 }

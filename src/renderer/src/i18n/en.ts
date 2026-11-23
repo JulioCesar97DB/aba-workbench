@@ -304,6 +304,7 @@ export const en = {
     thinking: "The AI is reading the case…",
     writing: "The AI is writing…",
     stop: "Stop",
+    savedBeforeStop: "The AI's text was already finished and being saved when you pressed Stop, so this version was saved.",
     stopped: "Stopped. Nothing was saved; your versions are unchanged.",
     failed: "The AI could not finish ({{message}}). Nothing was saved; your versions are unchanged.",
     incomplete: "The answer was cut short, so it was not saved. Your versions are unchanged.",

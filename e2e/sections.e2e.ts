@@ -440,3 +440,86 @@ test("R3-1: deleting text while saves fail, then a reload: the box shows her new
     chmodSync(caseFolder, 0o755);
   }
 });
+
+/* Review round 4: R4-1 */
+
+test("R4-1: Stop pressed at once, 25 rounds on one screen: the screen and the file always agree", async ({ launch, home }) => {
+  const { page, caseFile } = await openSection(launch, home, "background-information");
+  // Her own Background Information, so every draft of Medical Necessity is followed by a check.
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Her own background text.");
+  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/report/medical-necessity`);
+  await expect(heading(page)).toHaveText("Medical Necessity Criteria");
+  const versionsOnDisk = () => (sectionData(caseFile, "medical-necessity")?.versions ?? []).length;
+  const stopOrSkip = page.getByRole("button", { name: /^(Stop|Skip the check)$/ });
+  const stoppedMessage = page.getByText("Stopped. Nothing was saved; your versions are unchanged.");
+  const tally = { saved: 0, stopped: 0 };
+  // The section has loaded (the notice is drawn with it).
+  await expect(page.getByTestId("not-ready-notice")).toBeVisible();
+  for (let round = 1; round <= 25; round++) {
+    const before = versionsOnDisk();
+    if (before > 0) await page.getByLabel("Ask for changes in your own words").fill(`round ${round}`);
+    // The request, then Stop at once, from inside the page: 0 to 4 ms apart, changing each
+    // round, so the Stop lands while preparing, while writing, during the save or after it.
+    await page.evaluate(async (delay) => {
+      type Button = { textContent: string | null; click(): void };
+      const buttons = () => [...(globalThis as unknown as { document: { querySelectorAll(selector: string): Iterable<Button> } }).document.querySelectorAll("button")];
+      buttons()
+        .find((button) => /Draft it with the AI|^Create version/.test(button.textContent ?? ""))
+        ?.click();
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      for (let tries = 0; tries < 200; tries++) {
+        const stop = buttons().find((button) => /^(Stop|Skip the check)$/.test((button.textContent ?? "").trim()));
+        if (stop) {
+          stop.click();
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+    }, round % 5);
+    await expect(stopOrSkip).toHaveCount(0, { timeout: 10_000 });
+    const after = versionsOnDisk();
+    expect(after === before || after === before + 1, `round ${round}: at most one version`).toBe(true);
+    // What the screen shows is what the file holds.
+    await expect(page.getByRole("group", { name: "Versions" }).getByRole("button")).toHaveCount(after);
+    if (after > before) await expect(stoppedMessage, `round ${round}: a saved version is never called not saved`).toHaveCount(0);
+    else if (await stoppedMessage.isVisible()) expect(after, `round ${round}`).toBe(before);
+    tally[after > before ? "saved" : "stopped"]++;
+  }
+  // Both outcomes happen over the rounds (the Stop lands before, during or after the write); each one agreed.
+  console.log(`R4-1 rounds: ${tally.saved} saved, ${tally.stopped} stopped`);
+});
+
+test("L-1: Skip pressed while Check again is still being prepared stops the check", async ({ launch, home, }) => {
+  const { app, page, caseFile } = await openSection(launch, home, "background-information", "en", { consistency: "Maybe." });
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Her own background text.");
+  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/report/medical-necessity`);
+  await page.getByRole("button", { name: /Draft it with the AI/ }).click();
+  await expect(page.getByTestId("section-checks")).toContainText("Could not be checked", { timeout: 20_000 });
+  const before = sectionData(caseFile, "medical-necessity").versions[0].consistency.checkedAt;
+  // A slow answer: a Skip that reaches the main process stops it before it ends.
+  await setDraftingSpeed(app, 300);
+  const clicked = await page.evaluate(async () => {
+    type Button = { textContent: string | null; click(): void };
+    const buttons = () => [...(globalThis as unknown as { document: { querySelectorAll(selector: string): Iterable<Button> } }).document.querySelectorAll("button")];
+    buttons().find((button) => (button.textContent ?? "").trim() === "Check again")?.click();
+    // As soon as Skip is drawn, while the check is still being prepared.
+    for (let tries = 0; tries < 200; tries++) {
+      const skip = buttons().find((button) => (button.textContent ?? "").trim() === "Skip the check");
+      if (skip) {
+        skip.click();
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    return false;
+  });
+  expect(clicked).toBe(true);
+  await expect(page.getByRole("button", { name: "Skip the check" })).toHaveCount(0, { timeout: 10_000 });
+  await page.waitForTimeout(800);
+  expect(sectionData(caseFile, "medical-necessity").versions[0].consistency.checkedAt).toBe(before);
+  await expect(page.getByRole("button", { name: "Check again" })).toBeVisible();
+});

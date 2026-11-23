@@ -322,11 +322,19 @@ export class SectionService {
       section: id,
       signal,
       save: async ({ text, done }) => {
+        // Stop pressed by now: nothing is written (review round 4, R4-1).
+        if (signal.aborted) return null;
         if (request.kind === "paragraph" && !isParagraphAnswer(baseText ?? "", request.paragraphIndex, text)) return { outcome: "not-one-paragraph" };
         const finalText = request.kind === "paragraph" ? replaceParagraph(baseText ?? "", request.paragraphIndex, text) : tidySectionText(text);
         if (finalText === null) return { outcome: "not-saved" };
         if (finalText.length > MAX_SECTION_TEXT_LENGTH) return { outcome: "too-long" };
+        let stopped = false;
         const result = await this.options.cases.changeCase(args.caseId, (data, _folder, now) => {
+          // The last moment before the write, in the case's save queue: a Stop here still writes nothing.
+          if (signal.aborted) {
+            stopped = true;
+            return { save: null, value: null };
+          }
           const added = addAiVersion(data, id, {
             kind: request.kind as Exclude<VersionKind, "hers" | "edited">,
             text: finalText,
@@ -339,6 +347,7 @@ export class SectionService {
           savedVersion = added.version;
           return { save: added.data, value: null };
         });
+        if (stopped) return null;
         if (result.kind === "unavailable") return { outcome: "case-unavailable" };
         if (result.kind === "failed") return { outcome: result.outcome };
         savedData = result.data;

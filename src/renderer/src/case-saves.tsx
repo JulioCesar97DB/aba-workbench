@@ -50,7 +50,9 @@ export async function refreshFailedSaves(): Promise<void> {
     failed = await window.aba.listFailedSaves();
     failedLoaded = true;
   } catch {
-    // Kept as it was: the next save reads it again.
+    // Kept as it was: the next save reads it again. The boxes do not wait for it any
+    // longer: she can always type (review round 4, L-2).
+    failedLoaded = true;
   }
   changed();
 }

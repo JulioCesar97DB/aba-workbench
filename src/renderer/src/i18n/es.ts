@@ -294,6 +294,7 @@ export const es: Messages = {
     thinking: "La IA está leyendo el caso…",
     writing: "La IA está escribiendo…",
     stop: "Detener",
+    savedBeforeStop: "El texto de la IA ya estaba terminado y guardándose cuando pulsaste Detener, así que esta versión se guardó.",
     stopped: "Detenida. No se guardó nada; tus versiones siguen igual.",
     failed: "La IA no pudo terminar ({{message}}). No se guardó nada; tus versiones siguen igual.",
     incomplete: "La respuesta quedó cortada, así que no se guardó. Tus versiones siguen igual.",

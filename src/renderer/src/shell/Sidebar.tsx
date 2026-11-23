@@ -289,7 +289,7 @@ function NotesBox({
   });
   // Notes she typed that could not be saved come back in this box after a reload (review round 2, B3).
   const isMine = useCallback((item: FailedSave) => item.about === "notes" && item.caseId === caseId, [caseId]);
-  useKeptText(notes, isMine);
+  const ready = useKeptText(notes, isMine);
   useEffect(
     () =>
       onRetried((item) => {
@@ -303,6 +303,7 @@ function NotesBox({
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
         data-testid="session-notes"
+        readOnly={!ready}
         value={notes.value}
         placeholder={t("section.notesPlaceholder")}
         onChange={(event) => notes.setValue(event.target.value)}

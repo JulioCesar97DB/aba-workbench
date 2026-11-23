@@ -8,7 +8,7 @@ import { checkStructure, findMarkers, hasLinesInParagraphs, linesAsParagraphs, M
 import type { SectionDetail, SectionRequestInput, SectionSummary, SectionVersion } from "../../../shared/sections.ts";
 import { useAutosave, useKeptText } from "../autosave.tsx";
 import type { FailedSave } from "../../../shared/sources.ts";
-import { onRetried, retry, useSectionFailures } from "../case-saves.tsx";
+import { onRetried, retry, useFailedSavesLoaded, useSectionFailures } from "../case-saves.tsx";
 import { casePath } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { cn } from "../components/cn.ts";
@@ -546,6 +546,8 @@ function OwnTextEditor({
       return true;
     },
   });
+  // Not before the page has read the kept texts (review round 4, L-2).
+  const listLoaded = useFailedSavesLoaded();
   // The box shows the kept text: from now on its saves are built on it.
   useEffect(() => {
     if (keptId) void window.aba.failedSaveShown(keptId).catch(() => undefined);
@@ -581,6 +583,7 @@ function OwnTextEditor({
           lang="en"
           aria-describedby={hintId}
           data-testid="section-text"
+          readOnly={!listLoaded}
           value={text.value}
           onChange={(event) => text.setValue(event.target.value)}
           onBlur={() => void text.flush()}
@@ -904,6 +907,13 @@ function GenerationOutcomeMessage({ generation }: { generation: SectionGeneratio
   const { t } = useTranslation();
   const outcome = generation.outcome;
   if (!outcome || outcome.kind === "saved" || outcome.kind === "checked") return null;
+  if (outcome.kind === "saved-before-stop") {
+    return (
+      <p role="status" className="rounded-md border border-border px-3.5 py-2 text-sm font-medium text-fg">
+        {t("section.savedBeforeStop")}
+      </p>
+    );
+  }
   const message =
     outcome.kind === "stopped"
       ? t("section.stopped")
@@ -955,7 +965,7 @@ function SectionRail({
     save: async (text) => (await window.aba.saveSectionInstructions(caseId, section.id, text)).outcome === "saved",
   });
   // Instructions she typed that could not be saved come back in this box after a reload, from whichever case (review round 2, B3).
-  useKeptText(
+  const instructionsReady = useKeptText(
     instructions,
     useCallback((item: FailedSave) => item.about === "instructions" && item.sectionId === section.id, [section.id]),
   );
@@ -971,6 +981,7 @@ function SectionRail({
           aria-labelledby={instructionsId}
           aria-describedby={hintId}
           data-testid="section-instructions"
+          readOnly={!instructionsReady}
           value={instructions.value}
           placeholder={t("section.instructionsPlaceholder")}
           onChange={(event) => instructions.setValue(event.target.value)}

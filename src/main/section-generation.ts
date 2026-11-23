@@ -17,7 +17,8 @@ export type SectionGenerationEvent<Saved> = GenerationEvent | { type: "saved"; r
  * One request of the section workspace, from a prepared request (src/main/outgoing.ts)
  * to a saved version. The text is restored as it streams in; once the model finishes on
  * its own, `save` turns the whole text into a version and its answer is the last event.
- * A refusal, a stop, an error or a text cut short is never saved.
+ * A refusal, a stop before the write, an error or a text cut short is never saved; a
+ * version written is always reported, even when Stop came during the write.
  */
 export async function* runSectionGeneration<Saved>(options: {
   prepared: PreparedRequest;
@@ -28,7 +29,8 @@ export async function* runSectionGeneration<Saved>(options: {
   maxOutputTokens: number;
   section: string;
   signal: AbortSignal;
-  save: (finished: FinishedText) => Promise<Saved>;
+  /** Writes the version; null when it wrote nothing because Stop came first. */
+  save: (finished: FinishedText) => Promise<Saved | null>;
 }): AsyncGenerator<SectionGenerationEvent<Saved>> {
   // The type system already asks for one; this also refuses anything built elsewhere.
   if (!isPreparedRequest(options.prepared)) throw new Error("A section request must be prepared by prepareOutgoingRequest.");
@@ -67,5 +69,9 @@ export async function* runSectionGeneration<Saved>(options: {
     yield event;
   }
   if (signal.aborted || refused || !done?.complete || text.trim() === "") return;
-  yield { type: "saved", result: await options.save({ text, done }) };
+  // `save` checks the stop again right before it writes and answers null when it wrote
+  // nothing. Once it has written, its answer is always delivered, even if Stop came during
+  // the write (review round 4, R4-1): the screen then shows the version that exists.
+  const saved = await options.save({ text, done });
+  if (saved !== null) yield { type: "saved", result: saved };
 }

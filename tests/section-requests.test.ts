@@ -8,6 +8,8 @@ import { buildSectionPrompt, loadSectionShape, quoteForPrompt, SECTIONS, type Se
 import { prepareOutgoingRequest, outgoingSourceTitle, StreamRestorer, type OutgoingInput } from "../src/main/outgoing.ts";
 import { runSectionGeneration, type SectionGenerationEvent } from "../src/main/section-generation.ts";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
+import { GenerationRegistry } from "../src/main/generations.ts";
+import type { GenerationUpdate } from "../src/shared/api.ts";
 
 const base = { sources: [{ id: "a", title: "CDE", kind: "text" as const, text: "Invented CDE notes." }], herSections: [], instructions: null, notes: null };
 
@@ -177,4 +179,93 @@ test("a refusal, a text cut short, an empty answer or a stop is never saved", as
   controller.abort();
   const { saved } = await run(mockProvider, controller.signal);
   assert.equal(saved.length, 0);
+});
+
+/* Review round 4: R4-1 */
+
+test("R4-1: a Stop before the write saves nothing; a Stop during the write still reports the version written", async () => {
+  // Stop before the save: save is never asked.
+  {
+    const controller = new AbortController();
+    let asked = 0;
+    const events = [];
+    for await (const event of runSectionGeneration({
+      prepared: await prepareOutgoingRequest(input()),
+      provider: { ...mockProvider, async *generate(options) { yield { type: "text" as const, delta: "Text." }; controller.abort(); yield { type: "done" as const, complete: true, stopReason: "end_turn", servedModel: options.model, usage, attempts: null }; } },
+      credential: { kind: "api-key", apiKey: "" },
+      model: "mock-echo",
+      effort: "high",
+      maxOutputTokens: 1000,
+      section: "medical-necessity",
+      signal: controller.signal,
+      save: async () => (asked++, "written"),
+    })) events.push(event);
+    assert.equal(asked, 0);
+    assert.ok(!events.some((e) => e.type === "saved"));
+  }
+  // Stop during the write: the version written is reported.
+  {
+    const controller = new AbortController();
+    const events = [];
+    for await (const event of runSectionGeneration({
+      prepared: await prepareOutgoingRequest(input()),
+      provider: mockProvider,
+      credential: { kind: "api-key", apiKey: "" },
+      model: "mock-echo",
+      effort: "high",
+      maxOutputTokens: 1000,
+      section: "medical-necessity",
+      signal: controller.signal,
+      save: async () => {
+        controller.abort();
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return "written";
+      },
+    })) events.push(event);
+    assert.deepEqual(events.at(-1), { type: "saved", result: "written" });
+  }
+  // A save that saw the Stop just before writing answers null: nothing reported.
+  {
+    const events = [];
+    for await (const event of runSectionGeneration({
+      prepared: await prepareOutgoingRequest(input()),
+      provider: mockProvider,
+      credential: { kind: "api-key", apiKey: "" },
+      model: "mock-echo",
+      effort: "high",
+      maxOutputTokens: 1000,
+      section: "medical-necessity",
+      signal: new AbortController().signal,
+      save: async () => null,
+    })) events.push(event);
+    assert.ok(!events.some((e) => e.type === "saved"));
+  }
+});
+
+test("R4-1: after a Stop the registry sends nothing more, except a version already written", async () => {
+  const registry = new GenerationRegistry();
+  const sent: GenerationUpdate[] = [];
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const id = "11111111-2222-4333-8444-555555555555";
+  registry.start(
+    1,
+    id,
+    async function* () {
+      yield { type: "status", phase: "writing" };
+      // The write is under way when Stop comes; its answer is the next event.
+      await gate;
+      yield { type: "saved", result: { outcome: "not-saved" } };
+      yield { type: "text", delta: "nothing after it is sent" };
+    },
+    (update) => sent.push(update),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  registry.cancel(1, id);
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(
+    sent.map((update) => update.event.type),
+    ["status", "saved", "finished"],
+  );
 });
