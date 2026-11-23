@@ -67,11 +67,11 @@ function library(folder: string, extra: Partial<ConstructorParameters<typeof Cas
 
 /* The data file */
 
-test("case file: a new case's data file has the version 3 shape, and reads back the same", () => {
+test("case file: a new case's data file has the version 4 shape (no case map yet), and reads back the same", () => {
   const data = sample();
   const text = serializeCaseFile(data);
   assert.deepEqual(JSON.parse(text), {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: ID,
     label: "M.F. initial assessment",
     clientAge: { years: 4, months: 2 },
@@ -157,11 +157,12 @@ test("case file: an older version is migrated one step at a time; a missing step
   for (const bad of [null, [], "x", {}, { schemaVersion: "2" }, { schemaVersion: 0 }, { schemaVersion: Number.MAX_SAFE_INTEGER + 2 }]) {
     assert.equal(migrateCaseData(bad, 3, migrations).ok, false, JSON.stringify(bad));
   }
-  // The real chain: version 3 is current; a version 1 file gains an empty list of sources, a version 2 file an empty set of sections.
-  assert.equal(CASE_SCHEMA_VERSION, 3);
-  assert.deepEqual(migrateCaseData({ schemaVersion: 1 }), { ok: true, data: { schemaVersion: 3, sources: [], sections: {} }, migratedFrom: 1 });
-  assert.deepEqual(migrateCaseData({ schemaVersion: 2 }), { ok: true, data: { schemaVersion: 3, sections: {} }, migratedFrom: 2 });
-  assert.deepEqual(migrateCaseData({ schemaVersion: 3 }), { ok: true, data: { schemaVersion: 3 }, migratedFrom: null });
+  // The real chain: version 4 is current; a version 1 file gains an empty list of sources, a version 2 file an empty set of sections, and a version 3 file nothing (no case map until she makes one, D7).
+  assert.equal(CASE_SCHEMA_VERSION, 4);
+  assert.deepEqual(migrateCaseData({ schemaVersion: 1 }), { ok: true, data: { schemaVersion: 4, sources: [], sections: {} }, migratedFrom: 1 });
+  assert.deepEqual(migrateCaseData({ schemaVersion: 2 }), { ok: true, data: { schemaVersion: 4, sections: {} }, migratedFrom: 2 });
+  assert.deepEqual(migrateCaseData({ schemaVersion: 3 }), { ok: true, data: { schemaVersion: 4 }, migratedFrom: 3 });
+  assert.deepEqual(migrateCaseData({ schemaVersion: 4 }), { ok: true, data: { schemaVersion: 4 }, migratedFrom: null });
 });
 
 test("case file: the updated time always moves forward", () => {
@@ -364,6 +365,7 @@ test("cases: create a case, list it, open it; the folder holds only its data fil
       sources: { sources: [], files: [], totalPdfWarning: null, pdfLimits: { chatgpt: 37_500_000, claude: 96_000_000 }, updatedAt: created.case.updatedAt },
       sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0 })),
       notes: "",
+      caseMap: { approved: 0, withContent: 0 },
     },
   });
 });

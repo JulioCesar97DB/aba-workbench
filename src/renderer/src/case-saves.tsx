@@ -134,10 +134,19 @@ export function useFailedSaveList(): FailedSave[] {
   return failed;
 }
 
+/** A change not saved that is about the report's sections: a section's text, its instructions or the notes. */
+export type SectionFailure = FailedSave & { about: "section" | "instructions" | "notes" };
+
 /** The changes not saved that are about a case's report sections: what was typed in a section, its instructions or the notes. */
-export function useSectionFailures(caseId: string): FailedSave[] {
+export function useSectionFailures(caseId: string): SectionFailure[] {
   useVersion();
-  return failed.filter((item) => item.caseId === caseId && item.about !== "source");
+  return failed.filter((item): item is SectionFailure => item.caseId === caseId && (item.about === "section" || item.about === "instructions" || item.about === "notes"));
+}
+
+/** The changes not saved that are about a case's map: what was typed in an item (src/renderer/src/screens/CaseMap.tsx). */
+export function useMapFailures(caseId: string): FailedSave[] {
+  useVersion();
+  return failed.filter((item) => item.caseId === caseId && item.about === "map");
 }
 
 /** A screen's typing still waiting for its pause: saved at once when the window is about to close or the page to unload. */

@@ -3,6 +3,7 @@ import { checkCaseLabel, isCaseId, MAX_CLIENT_AGE_YEARS, type CaseFile, type Cli
 import { checkSourceTitle, isSourceDate, MAX_SOURCE_TEXT_LENGTH, MAX_SOURCES } from "../shared/sources.ts";
 import { MAX_NOTES_LENGTH, MAX_REQUEST_LENGTH, MAX_SECTION_TEXT_LENGTH } from "../shared/section-text.ts";
 import { MAX_CONSISTENCY_ITEM_LENGTH } from "../lib/rules.ts";
+import { CaseMapSchema } from "./case-map.ts";
 
 /*
  * A case's data file: aba-case.json, inside the case's folder, next to its PDFs (which
@@ -13,7 +14,9 @@ import { MAX_CONSISTENCY_ITEM_LENGTH } from "../lib/rules.ts";
  * created and updated times, and the PDFs found in the folder. Version 2 adds the case's
  * sources (pasted texts, and PDFs copied into the folder). Version 3 adds the report's
  * sections (every version of each, hers and the AI's) and her notes for the session.
- * Later phases add their own top-level keys and raise the version, with a migration.
+ * Version 4 adds the case map (src/main/case-map.ts), which a case has only once she
+ * drafts or types one. Later phases add their own top-level keys and raise the version,
+ * with a migration.
  *
  * Rules that keep a user's data safe:
  * - A key this version does not know is kept as it is when the file is saved.
@@ -24,7 +27,7 @@ import { MAX_CONSISTENCY_ITEM_LENGTH } from "../lib/rules.ts";
 
 export const CASE_FILE_NAME = "aba-case.json";
 /** Raise it, and add a step to MIGRATIONS, when the shape changes. */
-export const CASE_SCHEMA_VERSION = 3;
+export const CASE_SCHEMA_VERSION = 4;
 /**
  * A data file larger than this is not one the app wrote, and a save that would make one
  * is refused. Pasted texts live in the file: a case with a dozen long reports is a few
@@ -236,6 +239,8 @@ const CaseFileSchema = z.looseObject({
   sections: z.record(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/), StoredSectionSchema),
   sessionNotes: SessionNotesSchema.optional(),
   sessionNotesArchive: z.array(ArchivedNotesSchema).max(10_000).optional(),
+  /** The case map (version 4): absent until she drafts or types one. */
+  caseMap: CaseMapSchema.optional(),
 });
 
 /** A case's data, as the app holds it; unknown keys ride along. */
@@ -246,14 +251,17 @@ export type Migration = (data: Record<string, unknown>) => Record<string, unknow
 
 /**
  * MIGRATIONS[n] upgrades a version-n file. A version 1 file is read as version 2 with no
- * sources, and a version 2 file as version 3 with no sections; it is written in the
- * current version only when the case is next saved.
+ * sources, a version 2 file as version 3 with no sections, and a version 3 file as
+ * version 4 with no case map (D7: no map until she drafts or types one); it is written in
+ * the current version only when the case is next saved.
  */
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   // A key "sources" in a version 1 file (none was ever written) is kept and must then read as version 2's.
   1: (data) => ("sources" in data ? data : { ...data, sources: [] }),
   // A version 2 file has no sections yet; a key "sections" in one (none was ever written) is kept and must read as version 3's.
   2: (data) => ("sections" in data ? data : { ...data, sections: {} }),
+  // Nothing to add: the case map is optional. A key "caseMap" in a version 3 file (none was ever written) is kept and must read as version 4's.
+  3: (data) => data,
 };
 
 export type CaseFileProblem = "damaged" | "newer-version";
@@ -404,7 +412,7 @@ function orderedSource(source: StoredSource): Record<string, unknown> {
 
 /** The file's text: the known keys first, in a fixed order, then any others as they were. */
 export function serializeCaseFile(data: CaseData): string {
-  const { schemaVersion, id, label, clientAge, createdAt, updatedAt, files, sources, sessionNotes, sessionNotesArchive, sections, ...rest } = data;
+  const { schemaVersion, id, label, clientAge, createdAt, updatedAt, files, sources, sessionNotes, sessionNotesArchive, sections, caseMap, ...rest } = data;
   const ordered = {
     schemaVersion,
     id,
@@ -417,6 +425,7 @@ export function serializeCaseFile(data: CaseData): string {
     ...(sessionNotes ? { sessionNotes } : {}),
     ...(sessionNotesArchive ? { sessionNotesArchive } : {}),
     sections,
+    ...(caseMap ? { caseMap } : {}),
     ...rest,
   };
   return `${JSON.stringify(ordered, null, 2)}\n`;

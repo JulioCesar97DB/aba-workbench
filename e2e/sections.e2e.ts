@@ -110,7 +110,7 @@ test("draft a section, change one paragraph, ask for changes, go back, approve a
   const stored = sectionData(caseFile, "medical-necessity");
   expect(stored.approvedVersion).toBe(3);
   expect(stored.versions[0].generation.deidentified).toBe(false);
-  expect(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion).toBe(3);
+  expect(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion).toBe(4);
   // Every request went to the faked Claude: the draft and two changes (no check: no other section of hers yet).
   const log = await draftingStubLog(app);
   expect(log.requests.filter((r) => r.url.includes("/v1/messages"))).toHaveLength(3);

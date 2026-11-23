@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { InstructionsSaveResult, NotesSaveResult, SectionSaveResult } from "../shared/api.ts";
+import type { InstructionsSaveResult, MapSaveResult, NotesSaveResult, SectionSaveResult } from "../shared/api.ts";
 import type { FailedSave, FailedSaveFailure, SourceSaveResult } from "../shared/sources.ts";
+import type { CaseMapService } from "./case-map-service.ts";
 import type { CaseLibrary } from "./cases.ts";
 import type { SectionService } from "./sections.ts";
 
@@ -13,11 +14,14 @@ import type { SectionService } from "./sections.ts";
  *
  * The same holds for what she types in the report's sections (review B3, the owner's
  * decision of item 60): a section's text with its editing pass, her standing
- * instructions for a section, and her session notes.
+ * instructions for a section, and her session notes. And for what she types in an item
+ * of the case map (owner's decision, 2026-11-23, step 1 PR 1): the item's fields, as JSON
+ * text, with the part's editing pass.
  *
  * Each change has a key: the thing it changes ("text:<source id>", "title:<source id>",
  * "removed:<source id>", "text:new-<case id>" for a new text, "section-text:<section id>",
- * "notes", and "instructions:<section id>", which is the same in every case). A later change with the same
+ * "notes", "map-item:<part>/<list>/<item id>", and "instructions:<section id>", which is
+ * the same in every case). A later change with the same
  * key that is saved replaces a failed one: trying the older one again would undo the newer.
  * Nothing here imports Electron, so it is unit-tested.
  */
@@ -28,17 +32,22 @@ export type SaveOp =
   | { kind: "removed"; sourceId: string; removed: boolean }
   | { kind: "section-text"; sectionId: unknown; text: unknown; editing: unknown }
   | { kind: "instructions"; sectionId: unknown; text: unknown }
-  | { kind: "notes"; text: unknown };
+  | { kind: "notes"; text: unknown }
+  | { kind: "map-item"; part: unknown; collection: unknown; itemId: unknown; text: unknown; editing: unknown };
 
 /** What any of those changes answers. */
-export type SaveResult = SourceSaveResult | SectionSaveResult | NotesSaveResult | InstructionsSaveResult;
+export type SaveResult = SourceSaveResult | SectionSaveResult | NotesSaveResult | InstructionsSaveResult | MapSaveResult;
 
-/** Runs a change through the case library, or the section service for what is typed in the report's sections. */
+/** Runs a change through the case library, the section service for what is typed in the report's sections, or the case map's service. */
 export function runSaves(
   cases: Pick<CaseLibrary, "addTextSource" | "changeSource" | "setSourceRemoved">,
   sections: () => Pick<SectionService, "saveText" | "saveInstructions" | "saveNotes">,
+  caseMap: () => Pick<CaseMapService, "saveItem"> = () => {
+    throw new Error("No case map service.");
+  },
 ): FailedSavesOptions["run"] {
   return (caseId, op) => {
+    if (op.kind === "map-item") return caseMap().saveItem(caseId, op.part, op.collection, op.itemId, op.text, op.editing);
     if (op.kind === "add-text") return cases.addTextSource(caseId, op.input);
     if (op.kind === "change") return cases.changeSource(caseId, op.sourceId, op.change);
     if (op.kind === "removed") return cases.setSourceRemoved(caseId, op.sourceId, op.removed);
@@ -67,6 +76,7 @@ export function saveKey(caseId: string, op: SaveOp, entryId = ""): string {
   // Her instructions are the same in every case: a later save from any case replaces a failed one.
   if (op.kind === "instructions") return `*/instructions:${String(op.sectionId)}`;
   if (op.kind === "notes") return `${caseId}/notes`;
+  if (op.kind === "map-item") return `${caseId}/map-item:${mapItemOf(op)}`;
   return `${caseId}/${Object.keys(op.change).sort().join("+")}:${op.sourceId}`;
 }
 
@@ -82,7 +92,13 @@ function aboutOf(op: SaveOp): Pick<FailedSave, "about" | "sectionId"> {
   if (op.kind === "section-text") return { about: "section", sectionId: typeof op.sectionId === "string" ? op.sectionId : null };
   if (op.kind === "instructions") return { about: "instructions", sectionId: typeof op.sectionId === "string" ? op.sectionId : null };
   if (op.kind === "notes") return { about: "notes", sectionId: null };
+  if (op.kind === "map-item") return { about: "map", sectionId: null };
   return { about: "source", sectionId: null };
+}
+
+/** A map item's key: "<part>/<items or groups>/<item id>". */
+function mapItemOf(op: Extract<SaveOp, { kind: "map-item" }>): string {
+  return `${String(op.part)}/${String(op.collection)}/${String(op.itemId)}`;
 }
 
 interface Entry {
@@ -99,9 +115,9 @@ interface Entry {
   shown: boolean;
 }
 
-/** What she typed, for a change to a section's text, her instructions or her notes; null for a source's change. */
+/** What she typed, for a change to a section's text, her instructions, her notes or a map item; null for a source's change. */
 function typedText(op: SaveOp): string | null {
-  if (op.kind !== "section-text" && op.kind !== "instructions" && op.kind !== "notes") return null;
+  if (op.kind !== "section-text" && op.kind !== "instructions" && op.kind !== "notes" && op.kind !== "map-item") return null;
   return typeof op.text === "string" ? op.text : null;
 }
 
@@ -167,16 +183,16 @@ export class FailedSaves {
   }
 
   /**
-   * Before a section's text is saved, a kept text of that section that this save does not
-   * contain, and that no box has shown, is saved as its own version first (review round 2,
-   * B3): a version costs nothing, and so the kept text is never dropped by a save that was
-   * not built on it.
+   * Before a section's text (or a map item) is saved, a kept text of it that this save does
+   * not contain, and that no box has shown, is saved as its own version first (review round
+   * 2, B3): a version costs nothing, and so the kept text is never dropped by a save that
+   * was not built on it.
    */
   private async keepSectionText(caseId: string, op: SaveOp): Promise<void> {
-    if (op.kind !== "section-text") return;
+    if (op.kind !== "section-text" && op.kind !== "map-item") return;
     const key = saveKey(caseId, op);
     for (const [entryKey, entry] of [...this.entries]) {
-      if (!sameThing(entryKey, key) || entry.shown || contains(typedText(op), typedText(entry.op)) || entry.op.kind !== "section-text") continue;
+      if (!sameThing(entryKey, key) || entry.shown || contains(typedText(op), typedText(entry.op)) || entry.op.kind !== op.kind) continue;
       try {
         const kept = await this.options.run(caseId, { ...entry.op, editing: null });
         if (kept.outcome === "saved") this.entries.delete(entryKey);
@@ -210,7 +226,8 @@ export class FailedSaves {
         ...aboutOf(op),
         // What she typed, so the interface can put it back in its box after a reload.
         text: typedText(op),
-        editing: op.kind === "section-text" && typeof op.editing === "number" ? op.editing : null,
+        editing: (op.kind === "section-text" || op.kind === "map-item") && typeof op.editing === "number" ? op.editing : null,
+        mapItem: op.kind === "map-item" ? mapItemOf(op) : null,
       }));
   }
 

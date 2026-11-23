@@ -227,14 +227,16 @@ export interface FailedSave {
   /** The case's label, or null when the app has not seen the case (its folder is gone, say). */
   label: string | null;
   failure: FailedSaveFailure;
-  /** What it changes: a source, a report section's text, her instructions for a section, or her session notes. */
-  about: "source" | "section" | "instructions" | "notes";
+  /** What it changes: a source, a report section's text, her instructions for a section, her session notes, or an item of the case map. */
+  about: "source" | "section" | "instructions" | "notes" | "map";
   /** The section, for "section" and "instructions". */
   sectionId: string | null;
   /** What she typed, kept while it is not saved (a section's text, instructions, notes): the box it came from shows it again after a reload. Null for a source's change. */
   text: string | null;
-  /** For a section's text: the version that editing pass was writing to, or null. */
+  /** For a section's text or a map item: the version that editing pass was writing to, or null. */
   editing: number | null;
+  /** For a map item: "<part>/<items or groups>/<item id>"; null otherwise. */
+  mapItem: string | null;
 }
 
 export type ReadSourceTextResult = { outcome: "read"; text: string } | { outcome: "source-not-found" } | { outcome: "case-unavailable" };

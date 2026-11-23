@@ -22,6 +22,7 @@ import {
   type SectionSaveResult,
   type InstructionsSaveResult,
   type NotesSaveResult,
+  type MapSaveResult,
   isGenerationId,
 } from "../shared/api.ts";
 import type { AddPdfsResult, FailedSave, ReadSourceTextResult, SourceSaveResult } from "../shared/sources.ts";
@@ -33,6 +34,7 @@ import { runDevCheckGeneration } from "./dev-check.ts";
 import { GenerationRegistry, MAX_RUNNING_PER_WINDOW } from "./generations.ts";
 import type { SettingsStore } from "./settings.ts";
 import type { SectionService } from "./sections.ts";
+import type { CaseMapService } from "./case-map-service.ts";
 import { defaultModel } from "../shared/models.ts";
 
 /**
@@ -47,6 +49,8 @@ export function registerIpc(options: {
   failedSaves: FailedSaves;
   connections: ConnectionService;
   sections: SectionService;
+  /** The case map (src/main/case-map-service.ts). */
+  caseMap: CaseMapService;
   isTrustedSender: (event: IpcMainInvokeEvent) => boolean;
   /** Whether a folder is inside the app's own install folder (src/main/cases-folder.ts, isInsideOnDisk). */
   insideApp: (folder: string) => Promise<boolean>;
@@ -428,6 +432,41 @@ export function registerIpc(options: {
   ipcMain.handle(IPC_CHANNELS.copySection, (event, caseId: unknown, sectionId: unknown, version: unknown) => {
     assertTrusted(event);
     return sectionCall(() => options.sections.copy(caseId, sectionId, version), "The section could not be copied.");
+  });
+
+  /*
+   * The case map (src/main/case-map-service.ts checks every argument). What she types in an
+   * item goes through the failed saves, like a section's text, so it is kept when it cannot
+   * be saved and shown again after a reload.
+   */
+  ipcMain.handle(IPC_CHANNELS.getCaseMap, (event, caseId: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.caseMap.get(caseId), "The case map could not be read.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.saveMapItem, (event, caseId: unknown, part: unknown, collection: unknown, itemId: unknown, item: unknown, editing: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.failedSaves.save<MapSaveResult>(caseId, { kind: "map-item", part, collection, itemId, text: item, editing }), "The change could not be saved.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.addMapItem, (event, caseId: unknown, part: unknown, collection: unknown, item: unknown, editing: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.caseMap.addItem(caseId, part, collection, item, editing), "The item could not be added.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.removeMapItem, (event, caseId: unknown, part: unknown, collection: unknown, itemId: unknown, editing: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.caseMap.removeItem(caseId, part, collection, itemId, editing), "The item could not be removed.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.setMapPartVersion, (event, caseId: unknown, part: unknown, version: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.caseMap.setCurrent(caseId, part, version), "The version could not be shown.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.approveMapPart, (event, caseId: unknown, part: unknown, version: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.caseMap.approve(caseId, part, version), "The approval could not be saved.");
   });
 
   ipcMain.handle(IPC_CHANNELS.getAiPreferences, (event) => {

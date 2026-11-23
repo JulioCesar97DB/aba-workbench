@@ -139,7 +139,7 @@ test("a draft streams in and becomes a version with what made it; nothing to com
   assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
   assert.deepEqual(checked.result.section.versions[0].consistency, { status: "nothing-to-compare", items: [], stale: false });
   const stored = JSON.parse(readFileSync(caseFile, "utf8"));
-  assert.equal(stored.schemaVersion, 3);
+  assert.equal(stored.schemaVersion, 4);
   const record = stored.sections["medical-necessity"].versions[0].generation;
   assert.equal(record.deidentified, false);
   assert.equal(record.effort, "high");
