@@ -133,14 +133,3 @@ export function stepStates(inputs: Pick<NextInputs, "sources" | "caseMap" | "sec
 export function everythingDone(inputs: NextInputs): boolean {
   return workThing(inputs).kind === "all-ready";
 }
-
-/**
- * The case she worked on last, for Home's "Sigue donde lo dejaste": the one saved last (its
- * data file's updatedAt, which every save moves on). Nothing more is stored to know it (T7).
- * Of two saved at the same moment, the first listed (the newer).
- */
-export function lastCase<T extends { updatedAt: string }>(cases: readonly T[]): T | null {
-  let found: T | null = null;
-  for (const item of cases) if (!found || Date.parse(item.updatedAt) > Date.parse(found.updatedAt)) found = item;
-  return found;
-}

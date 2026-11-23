@@ -128,7 +128,7 @@ export interface CaseSummary {
 export interface CaseProgress {
   /** Its documents, not counting removed ones. */
   sources: number;
-  /** Its case map: parts approved, out of parts with something in them. */
+  /** Its case map: parts with something in them, and how many of those are approved (src/shared/case-progress.ts). */
   caseMap: CaseMapSummary;
   /** The first part of the map, in the map's order, with something in it and not approved; null when none. */
   mapPartToApprove: MapPartId | null;
@@ -136,9 +136,9 @@ export interface CaseProgress {
   sections: Array<Pick<SectionSummary, "id" | "state">>;
 }
 
-/** A case as Home lists it, with how far it is. */
+/** A case as Home lists it, with how far it is; null when that could not be read (the case is still listed). */
 export interface ListedCase extends CaseSummary {
-  progress: CaseProgress;
+  progress: CaseProgress | null;
 }
 
 /** A PDF in the case's folder: its name only, never a path. */
@@ -159,6 +159,8 @@ export interface CaseDetail extends CaseSummary {
   notes: string;
   /** Its case map (src/shared/case-map.ts): parts approved, out of parts with something in them. */
   caseMap: CaseMapSummary;
+  /** How far it is when it was opened, as Home lists it; null when that could not be read. */
+  progress: CaseProgress | null;
 }
 
 /* A case's map (src/shared/case-map.ts). */
@@ -244,7 +246,7 @@ export interface UnreadableFolder {
 
 export interface CaseList {
   folder: CasesFolderInfo;
-  /** Newest first (by creation). Empty when the folder cannot be read. */
+  /** The case saved last first (updatedAt, then created, then folder name). Empty when the folder cannot be read. */
   cases: ListedCase[];
   /** By folder name. */
   unreadable: UnreadableFolder[];

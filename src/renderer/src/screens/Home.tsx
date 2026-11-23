@@ -2,7 +2,7 @@ import type { TFunction } from "i18next";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
-import { checkCaseLabel, type CaseList, type CasesFolderInfo, type CaseSummary, type ClientAge, type Language, type ListedCase, type UnreadableFolder } from "../../../shared/api.ts";
+import { checkCaseLabel, type CaseList, type CaseProgress, type CasesFolderInfo, type CaseSummary, type ClientAge, type Language, type ListedCase, type UnreadableFolder } from "../../../shared/api.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
 import { CASE_STEPS, casePath, caseSummaryPath, stepTitle, type CaseStep } from "../case-steps.tsx";
@@ -18,7 +18,7 @@ import { useProviders } from "../drafting-provider.tsx";
 import { formatAge, formatDate, formatShortDate, formatTime, relativeDay } from "../format.ts";
 import { useLanguage } from "../language.tsx";
 import { useFailedSaves } from "../case-saves.tsx";
-import { currentStep, lastCase, nextThing, nextThingPath, stepStates, type NextInputs } from "../next-thing.ts";
+import { currentStep, nextThing, nextThingPath, stepStates, type NextInputs, type NextThing } from "../next-thing.ts";
 import { useNextWords } from "../next-thing-words.tsx";
 import { readySections } from "../step-states.ts";
 import { PageHeader } from "../shell/PageHeader.tsx";
@@ -110,7 +110,8 @@ function CasesView({ list, onFolderChosen, onNewCase }: { list: CaseList; onFold
   const providers = useProviders();
   const noAi = !providers.loading && providers.available.length === 0;
   const unsaved = new Set(useFailedSaves().map((item) => item.caseId));
-  const last = lastCase(cases);
+  // The list comes with the case saved last first (owner's decision on review round 1, S1): that one is to continue.
+  const last = cases.at(0);
   return (
     <>
       {usable && folder.state !== "not-writable" ? null : <FolderProblem folder={folder} onChosen={onFolderChosen} />}
@@ -128,8 +129,14 @@ function CasesView({ list, onFolderChosen, onNewCase }: { list: CaseList; onFold
   );
 }
 
-function nextInputs(item: ListedCase, unsaved: boolean): NextInputs {
-  return { unsaved, ...item.progress };
+/**
+ * A case's next thing and its step, from its progress; null when its progress could not be
+ * read (the case is listed all the same, and opens on its summary).
+ */
+function caseWork(item: ListedCase, unsaved: boolean): { progress: CaseProgress; thing: NextThing; step: CaseStep | null } | null {
+  if (!item.progress) return null;
+  const inputs: NextInputs = { unsaved, ...item.progress };
+  return { progress: item.progress, thing: nextThing(inputs), step: currentStep(inputs) };
 }
 
 /** "guardado hoy, 11:23", "ayer, 9:05", "20 nov": when the case was last saved. */
@@ -141,8 +148,8 @@ function savedWhen(t: TFunction, language: Language, iso: string): string {
 }
 
 /** The progress of the step the case is at, in a few words: "3 de 9 secciones listas". */
-function progressWords(t: TFunction, item: ListedCase, step: CaseStep | null): string {
-  const { sources, caseMap, sections } = item.progress;
+function progressWords(t: TFunction, progress: CaseProgress, step: CaseStep | null): string {
+  const { sources, caseMap, sections } = progress;
   const total = REPORT_SECTIONS.length;
   if (step === "sources") return t("home.progress.noDocuments");
   if (step === "case-map") return caseMap.withContent === 0 ? t("home.progress.mapNotStarted", { count: sources }) : t("home.progress.mapParts", { approved: caseMap.approved, total: caseMap.withContent });
@@ -150,35 +157,58 @@ function progressWords(t: TFunction, item: ListedCase, step: CaseStep | null): s
   return t("home.progress.allReady", { total });
 }
 
-/** "Sigue donde lo dejaste": the last case, its step, what comes next, and "Continuar". */
+/** The step the case is at and its progress: "Informe · 3 de 9 secciones listas"; "Lista · …" once done. */
+function stepWords(t: TFunction, work: NonNullable<ReturnType<typeof caseWork>>): string {
+  return `${work.step ? stepTitle(t, work.step) : t("home.allDoneLine")} · ${progressWords(t, work.progress, work.step)}`;
+}
+
+/** "Sigue donde lo dejaste": the case saved last, its step, what comes next, and "Continuar". */
 function ContinueCard({ item, unsaved }: { item: ListedCase; unsaved: boolean }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const headingId = useId();
-  const inputs = nextInputs(item, unsaved);
-  const thing = nextThing(inputs);
-  const words = useNextWords(thing);
-  const step = currentStep(inputs);
-  const where = step ? t("home.stepLine", { number: CASE_STEPS.indexOf(step) + 1, total: CASE_STEPS.length, step: stepTitle(t, step) }) : t("home.allDoneLine");
+  const labelId = useId();
+  const nextId = useId();
+  const work = caseWork(item, unsaved);
+  const where = work
+    ? `${work.step ? t("home.stepLine", { number: CASE_STEPS.indexOf(work.step) + 1, total: CASE_STEPS.length, step: stepTitle(t, work.step) }) : t("home.allDoneLine")} · ${progressWords(t, work.progress, work.step)} · `
+    : "";
   return (
     <section aria-labelledby={headingId} data-testid="continue-card" className="flex flex-col gap-3 rounded-lg border border-border-control bg-surface px-5 py-4 @split:flex-row @split:items-center @split:gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Eyebrow id={headingId} className="text-fg-muted">
           {t("home.continueHeading")}
         </Eyebrow>
-        <p className="text-md font-semibold break-words">{item.label}</p>
+        <p id={labelId} className="text-md font-semibold break-words">
+          {item.label}
+        </p>
         <p className="text-sm text-fg-muted">
-          {where} · {progressWords(t, item, step)} · {t("home.savedLine", { when: savedWhen(t, language, item.updatedAt) })}
+          {where}
+          {t("home.savedLine", { when: savedWhen(t, language, item.updatedAt) })}
         </p>
-        <p className="text-sm">
-          {t("home.nextLine")} {words.title}
-        </p>
+        {work ? <NextLine id={nextId} thing={work.thing} /> : null}
       </div>
-      <ButtonLink to={nextThingPath(item.id, thing)} variant="primary" className="shrink-0 self-start @split:self-auto" aria-describedby={headingId}>
+      {/* Its name says the case and its next thing, not only the card's heading (review round 1, M3). */}
+      <ButtonLink
+        to={work ? nextThingPath(item.id, work.thing) : caseSummaryPath(item.id)}
+        variant="primary"
+        className="shrink-0 self-start @split:self-auto"
+        aria-describedby={work ? `${labelId} ${nextId}` : labelId}
+      >
         {t("home.continue")}
         <Icon name="arrow" />
       </ButtonLink>
     </section>
+  );
+}
+
+function NextLine({ id, thing }: { id: string; thing: NextThing }) {
+  const { t } = useTranslation();
+  const words = useNextWords(thing);
+  return (
+    <p id={id} className="text-sm">
+      {t("home.nextLine")} {words.title}
+    </p>
   );
 }
 
@@ -208,10 +238,9 @@ function CaseRow({ item, unsaved }: { item: ListedCase; unsaved: boolean }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const nameId = useId();
-  const inputs = nextInputs(item, unsaved);
-  const thing = nextThing(inputs);
-  const step = currentStep(inputs);
-  const done = thing.kind === "all-ready";
+  const work = caseWork(item, unsaved);
+  // Done, or its progress could not be read: "Abrir", to its summary.
+  const open = !work || work.thing.kind === "all-ready";
   const age = formatAge(t, language, item.clientAge) ?? t("case.ageNotGiven");
   return (
     <li data-testid="case-row" className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border px-4 py-2.5 last:border-b-0">
@@ -219,19 +248,17 @@ function CaseRow({ item, unsaved }: { item: ListedCase; unsaved: boolean }) {
         <Link id={nameId} data-testid="case-name" to={caseSummaryPath(item.id)} className="self-start rounded-sm text-base font-semibold break-words text-fg underline-offset-2 hover:underline">
           {item.label}
         </Link>
-        <span className="text-sm text-fg-muted">
-          {age} · {step ? stepTitle(t, step) : t("home.allDoneLine")} · {progressWords(t, item, step)}
-        </span>
+        <span className="text-sm text-fg-muted">{work ? `${age} · ${stepWords(t, work)}` : age}</span>
       </div>
-      <StepProgressBar steps={stepStates(item.progress)} />
+      {work ? <StepProgressBar steps={stepStates(work.progress)} /> : <span aria-hidden="true" className="w-32 shrink-0" />}
       <span className="w-28 shrink-0 text-right text-sm text-fg-muted">
         <span className="sr-only">{t("home.lastSaved", { when: savedWhen(t, language, item.updatedAt) })}</span>
         <time aria-hidden="true" dateTime={item.updatedAt}>
           {savedWhen(t, language, item.updatedAt)}
         </time>
       </span>
-      <ButtonLink to={done ? caseSummaryPath(item.id) : nextThingPath(item.id, thing)} size="sm" className="w-28 shrink-0" aria-describedby={nameId}>
-        {done ? t("home.open") : t("home.continue")}
+      <ButtonLink to={open || !work ? caseSummaryPath(item.id) : nextThingPath(item.id, work.thing)} size="sm" className="w-28 shrink-0" aria-describedby={nameId}>
+        {open ? t("home.open") : t("home.continue")}
       </ButtonLink>
     </li>
   );

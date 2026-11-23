@@ -58,6 +58,8 @@
   --color-mark: #fff4dc;
   /* What the AI does or proposes: the same light amber tint, named for that use (owner's decision T21). */
   --color-ai-subtle: #fff4dc;
+  /* The case summary's "Lo siguiente" card: the light amber tint of mockup 03, accepted with it (UX-5 review round 1, M4). */
+  --color-next-subtle: #fff4dc;
 
   --color-backdrop: rgb(22 32 42 / 0.55);
 

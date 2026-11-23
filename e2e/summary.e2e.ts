@@ -47,9 +47,11 @@ test("Home: the last case saved to continue, each case's step and progress in wo
   await addDocument(page, mapCase);
   await addMapPart(page, mapCase, "caregivers", { role: "Mother" }, true);
   await addMapPart(page, mapCase, "behaviors", { name: "Invented behavior" }, false);
-  // Saved last: the one to continue, although it was not made last.
-  await addDocument(page, done, "iep");
   await create(page, "Empty case");
+  // Saved last (a moment later, so no two times are the same): the one to continue and the
+  // first listed, although it was made first (owner's decision on review round 1, S1).
+  await page.waitForTimeout(20);
+  await addDocument(page, done, "iep");
 
   await goTo(page, "/settings");
   await goTo(page, "/");
@@ -61,18 +63,22 @@ test("Home: the last case saved to continue, each case's step and progress in wo
   // With cases to continue, "New case" is no longer the primary action (§4).
   await expect(page.getByRole("button", { name: "New case" })).not.toHaveClass(/bg-accent/);
 
+  // The order, by last saved, is checked once; every other check finds its row by name.
   const rows = page.getByTestId("case-row");
-  await expect(rows.getByTestId("case-name")).toHaveText(["Empty case", "Map case", "Done case"]);
-  await expect(rows.nth(0)).toContainText("6 years · Documents · no documents yet");
-  await expect(rows.nth(1)).toContainText("6 years · Case map · 1 of 2 parts approved");
-  await expect(rows.nth(2)).toContainText("6 years · Ready · all 9 sections ready");
-  await expect(rows.nth(1).getByRole("img")).toHaveAccessibleName("The five steps: Documents, done; Case map, in progress; Plan, not in the app yet; Report, not started; Review and copy, not in the app yet");
-  await expect(rows.nth(2).getByRole("link", { name: "Open" })).toBeVisible();
+  await expect(rows.getByTestId("case-name")).toHaveText(["Done case", "Empty case", "Map case"]);
+  const row = (name: string) => rows.filter({ has: page.getByTestId("case-name").getByText(name, { exact: true }) });
+  await expect(row("Empty case")).toContainText("6 years · Documents · no documents yet");
+  await expect(row("Map case")).toContainText("6 years · Case map · 1 of 2 parts approved");
+  await expect(row("Done case")).toContainText("6 years · Ready · all 9 sections ready");
+  await expect(row("Map case").getByRole("img")).toHaveAccessibleName("The five steps: Documents, done; Case map, in progress; Plan, not in the app yet; Report, not started; Review and copy, not in the app yet");
+  await expect(row("Done case").getByRole("link", { name: "Open" })).toBeVisible();
+  // The card's Continuar says which case it continues, and what comes next (review round 1, M3).
+  await expect(card.getByRole("link", { name: "Continue" })).toHaveAccessibleDescription("Done case Next: The 9 sections are ready");
   // No AI card: one is connected.
   await expect(page.getByTestId("connect-ai-home")).toHaveCount(0);
 
   // Continuar goes straight to the next thing: the map's first part with content not approved.
-  await rows.nth(1).getByRole("link", { name: "Continue" }).click();
+  await row("Map case").getByRole("link", { name: "Continue" }).click();
   await expect(heading(page)).toHaveText("Case map");
   expect(page.url()).toContain(`#/cases/${mapCase}/case-map?part=behaviors`);
 
@@ -85,7 +91,7 @@ test("Home: the last case saved to continue, each case's step and progress in wo
 
   // A done case's "Open" goes to its summary.
   await page.getByRole("link", { name: "All cases" }).click();
-  await rows.nth(2).getByRole("link", { name: "Open" }).click();
+  await row("Done case").getByRole("link", { name: "Open" }).click();
   await expect(heading(page)).toHaveText("Case summary");
   await expect(page.getByTestId("next-thing")).toHaveAttribute("data-kind", "all-ready");
 });

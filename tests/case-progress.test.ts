@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { newCaseData, type CaseData } from "../src/main/case-file.ts";
-import { addMapItem, approveMapPart } from "../src/main/case-map.ts";
+import { addMapItem, approveMapPart, removeMapItem } from "../src/main/case-map.ts";
 import { saveOwnText } from "../src/main/case-sections.ts";
-import { caseProgress } from "../src/main/cases.ts";
+import { caseProgress, listedCase } from "../src/main/cases.ts";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
 
 /*
@@ -57,4 +57,32 @@ test("the map's first part with content not approved, in the map's order; sectio
   progress = caseProgress(saved.data);
   assert.equal(progress.sections.find((section) => section.id === "medical-necessity")?.state, "hers");
   assert.equal(progress.sections.filter((section) => section.state === "not-started").length, REPORT_SECTIONS.length - 1);
+});
+
+test("a part approved while empty is not counted: approved never says more than the parts with content (review round 1, M2)", () => {
+  let data = blank();
+  const behaviors = addMapItem(data, "behaviors", "items", { name: claim("Invented behavior") }, null, T1);
+  data = behaviors.data;
+  const caregivers = addMapItem(data, "caregivers", "items", { role: claim("Mother") }, null, T1);
+  data = approveMapPart(caregivers.data, "caregivers", caregivers.version, T1) ?? caregivers.data;
+  // "Risks" gets a version with no items (an added item, then removed), and is approved.
+  const risk = addMapItem(data, "risks", "items", { what: claim("Invented risk") }, null, T1);
+  const removed = removeMapItem(risk.data, "risks", "items", risk.itemId, risk.version, T1);
+  assert.ok(removed !== "item-not-found");
+  data = approveMapPart(removed.data, "risks", removed.version, T1) ?? removed.data;
+  const progress = caseProgress(data);
+  assert.deepEqual(progress.caseMap, { approved: 1, withContent: 2 });
+  assert.equal(progress.mapPartToApprove, "behaviors");
+});
+
+test("a case whose progress cannot be read is still listed, without it, and the reason is logged (review round 1, M6)", () => {
+  const logged: string[] = [];
+  const listed = listedCase(blank(), (message) => logged.push(message), () => {
+    throw new Error("a value this version does not expect");
+  });
+  assert.equal(listed.progress, null);
+  assert.equal(listed.label, "Invented progress case");
+  assert.deepEqual(logged, ["A case's progress could not be read (a value this version does not expect)."]);
+  // A readable case gets its progress.
+  assert.notEqual(listedCase(blank(), () => undefined).progress, null);
 });

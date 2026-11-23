@@ -51,7 +51,9 @@ const TEXT_PAIRS: Array<[text: string, background: string]> = [
   ["success", "surface-muted"], // the rail's checks: "None", "Complete"
   ["warning", "surface-muted"], // the rail's checks: "1 to look at"
   ["danger", "surface-muted"], // Documentos' rail: the PDFs too large for the AI
-  ["fg-on-accent-subtle", "surface"], // the case summary: "Lo siguiente"
+  ["fg-on-accent-subtle", "next-subtle"], // the case summary's "Lo siguiente": its heading
+  ["fg", "next-subtle"], // its sentence
+  ["fg-muted", "next-subtle"], // its second sentence
 ];
 
 const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
@@ -71,6 +73,7 @@ const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
   ["success", "surface-muted"], // a check passed, in the rail
   ["warning", "surface-muted"], // a point to look at, in the rail
   ["border-control", "surface-muted"], // Documentos: the buttons of the card for the folder's PDFs
+  ["accent", "next-subtle"], // the case summary's "Lo siguiente": its edge
 ];
 
 function luminance(hex: string): number {

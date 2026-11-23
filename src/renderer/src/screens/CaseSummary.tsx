@@ -1,6 +1,8 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { MAP_PARTS, type MapPartId } from "../../../shared/case-map.ts";
+import type { CaseProgress } from "../../../shared/api.ts";
+import type { CaseMapSummary } from "../../../shared/case-map.ts";
+import { mapProgress } from "../../../shared/case-progress.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import type { SourceType } from "../../../shared/sources.ts";
 import { CASE_STEPS, casePath, stepTitle, type CaseStep } from "../case-steps.tsx";
@@ -32,11 +34,11 @@ import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 export function CaseSummaryScreen() {
   const { t } = useTranslation();
   const opened = useOpenedCase();
-  const mapPart = useMapPartToApprove(opened.id, opened.caseMap.withContent);
+  const map = useMapProgress(opened.id, opened.progress, opened.caseMap);
   const unsaved = useFailedSaveList().some((item) => item.caseId === opened.id);
   useReadAgainAfterRetry(opened.id);
   const active = opened.sources.sources.filter((source) => !source.removedAt);
-  const inputs: NextInputs = { unsaved, sources: active.length, caseMap: opened.caseMap, mapPartToApprove: mapPart, sections: opened.sections };
+  const inputs: NextInputs = { unsaved, sources: active.length, caseMap: map.caseMap, mapPartToApprove: map.mapPartToApprove, sections: opened.sections };
   return (
     <WorkArea header={<PageHeader eyebrow={opened.label} title={t("summary.title")} />} contentClassName="max-w-list">
       <div className="flex flex-col gap-7">
@@ -49,31 +51,32 @@ export function CaseSummaryScreen() {
 }
 
 /**
- * The first part of the map with content and not approved, read from the map itself
- * (getCaseMap, the case map's API); null while it is read, when there is none, or when it
- * cannot be read (the card then names the map, not the part).
+ * The map's progress: its parts with content, how many are approved, and the first one to
+ * approve. It comes with the opened case (the same as Home's, computed by the main process),
+ * so the card names the part at once (review round 1, M1). The map is read again through its
+ * own API (getCaseMap) whenever its counts change in this window, an approval on the map's
+ * screen or a "Try again" say, so the part named is never one already approved; the value
+ * shown meanwhile is the last one known.
  */
-function useMapPartToApprove(caseId: string, withContent: number): MapPartId | null {
-  const [found, setFound] = useState<{ caseId: string; part: MapPartId | null } | null>(null);
+function useMapProgress(caseId: string, opened: CaseProgress | null, counts: CaseMapSummary): Pick<NextInputs, "caseMap" | "mapPartToApprove"> {
+  const [read, setRead] = useState<{ caseId: string; value: Pick<NextInputs, "caseMap" | "mapPartToApprove"> } | null>(null);
+  const { approved, withContent } = counts;
   useEffect(() => {
-    if (withContent === 0) return;
     let live = true;
     window.aba.getCaseMap(caseId).then(
       (result) => {
-        if (!live || result.outcome !== "read") return;
-        const part = MAP_PARTS.find((id) => {
-          const view = result.map.parts[id];
-          return view.status !== "approved" && (view.items.length > 0 || view.groups.length > 0);
-        });
-        setFound({ caseId, part: part ?? null });
+        if (live && result.outcome === "read") setRead({ caseId, value: mapProgress(result.map.parts) });
       },
       () => undefined,
     );
     return () => {
       live = false;
     };
-  }, [caseId, withContent]);
-  return withContent > 0 && found?.caseId === caseId ? found.part : null;
+  }, [caseId, approved, withContent]);
+  if (read?.caseId === caseId) return read.value;
+  if (opened) return { caseMap: opened.caseMap, mapPartToApprove: opened.mapPartToApprove };
+  // Neither known yet: the counts the sidebar shows, and the map named without its part.
+  return { caseMap: counts, mapPartToApprove: null };
 }
 
 /**
@@ -89,7 +92,7 @@ function useReadAgainAfterRetry(caseId: string) {
         if (item.caseId !== caseId) return;
         void window.aba.openCase(caseId).then(
           (result) => {
-            if (result.outcome === "opened") patch(caseId, { sections: result.case.sections, notes: result.case.notes, caseMap: result.case.caseMap });
+            if (result.outcome === "opened") patch(caseId, { sections: result.case.sections, notes: result.case.notes, caseMap: result.case.caseMap, progress: result.case.progress });
           },
           () => undefined,
         );
@@ -126,7 +129,7 @@ function NextCard({ caseId, inputs }: { caseId: string; inputs: NextInputs }) {
       aria-labelledby={headingId}
       data-testid="next-thing"
       data-kind={thing.kind}
-      className="flex flex-col gap-3 rounded-lg border-2 border-accent bg-surface px-5 py-4 @split:flex-row @split:items-center @split:gap-6"
+      className="flex flex-col gap-3 rounded-lg border-2 border-accent bg-next-subtle px-5 py-4 @split:flex-row @split:items-center @split:gap-6"
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Eyebrow id={headingId} className="text-fg-on-accent-subtle">

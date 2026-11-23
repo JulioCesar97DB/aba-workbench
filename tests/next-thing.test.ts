@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { REPORT_SECTIONS, type ReportSectionId } from "../src/shared/report-sections.ts";
 import type { SectionState } from "../src/shared/sections.ts";
-import { currentStep, everythingDone, lastCase, nextThing, nextThingPath, stepStates, type NextInputs } from "../src/renderer/src/next-thing.ts";
+import { currentStep, everythingDone, nextThing, nextThingPath, stepStates, type NextInputs } from "../src/renderer/src/next-thing.ts";
 
 /*
  * "Lo siguiente" (owner's proposal §6, decisions T7 and P8): the first rule that applies,
@@ -109,15 +109,4 @@ test("Home's five segments are the sidebar's step states, the two steps not buil
     stepStates({ sources: 2, caseMap: { approved: 1, withContent: 3 }, sections: sections("not-started", { [S1]: "hers" }) }).map((entry) => `${entry.step}:${entry.state}`),
     ["sources:done", "case-map:in-progress", "interventions:later", "report:in-progress", "review:later"],
   );
-});
-
-test("the last case is the one saved last, whatever order they are listed in; none with no case", () => {
-  const cases = [
-    { id: "newest", updatedAt: "2026-11-20T10:00:00.000Z" },
-    { id: "saved-last", updatedAt: "2026-11-23T09:00:00.000Z" },
-    { id: "same-moment", updatedAt: "2026-11-23T09:00:00.000Z" },
-    { id: "oldest", updatedAt: "2026-11-01T10:00:00.000Z" },
-  ];
-  assert.equal(lastCase(cases)?.id, "saved-last");
-  assert.equal(lastCase([]), null);
 });
