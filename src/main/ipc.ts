@@ -50,6 +50,11 @@ export function registerIpc(options: {
   isTrustedSender: (event: IpcMainInvokeEvent) => boolean;
   /** Whether a folder is inside the app's own install folder (src/main/cases-folder.ts, isInsideOnDisk). */
   insideApp: (folder: string) => Promise<boolean>;
+  /**
+   * The evaluation's judge (pnpm eval): only in a development build started with --hidden
+   * (src/main/index.ts). Otherwise its channel is never registered, so the call is refused.
+   */
+  judgeEnabled?: boolean;
 }): void {
   const generations = new GenerationRegistry();
   const aiPreferences = async (): Promise<AiPreferences> => {
@@ -466,6 +471,13 @@ export function registerIpc(options: {
     assertTrusted(event);
     return startSectionRun(event, generationId, () => options.sections.prepareCheck(caseId, sectionId, provider, version));
   });
+
+  if (options.judgeEnabled) {
+    ipcMain.handle(IPC_CHANNELS.judgeSection, (event, caseId: unknown, sectionId: unknown, generationId: unknown, provider: unknown, input: unknown): Promise<StartSectionResult> => {
+      assertTrusted(event);
+      return startSectionRun(event, generationId, () => options.sections.prepareJudge(caseId, sectionId, provider, input));
+    });
+  }
 
   ipcMain.handle(IPC_CHANNELS.cancelGeneration, (event, generationId: unknown): void => {
     assertTrusted(event);

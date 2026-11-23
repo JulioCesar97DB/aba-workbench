@@ -271,6 +271,8 @@ export function responsesRequest(options: GenerateOptions): OpenAI.Responses.Res
     stream: true as const,
     store: false, // nothing about the case is kept on OpenAI's side for later retrieval
     reasoning: { effort: options.effort },
+    // The evaluation's judge only (development): structured output in its JSON schema.
+    ...(options.outputFormat ? { text: { format: { type: "json_schema" as const, name: options.outputFormat.name, schema: options.outputFormat.schema, strict: true } } } : {}),
   };
   if (options.credential.kind === "chatgpt") {
     // The case's opaque key (src/main/cache-key.ts) keeps every request of a case on one cache

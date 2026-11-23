@@ -17,7 +17,7 @@ import { SectionService } from "./sections.ts";
 import { IPC_CHANNELS } from "../shared/api.ts";
 import { defaultCasesFolder, installFolder, isInsideOnDisk } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
-import { APP_ID, resolveHiddenMode, resolveHomeFolder, resolveRulesDir } from "./paths.ts";
+import { APP_ID, resolveHiddenMode, resolveHomeFolder, resolveJudgeEnabled, resolveRulesDir } from "./paths.ts";
 import { APP_ORIGIN, registerAppScheme, serveRenderer } from "./protocol.ts";
 import { denyAllPermissions, hardenWebContents } from "./security.ts";
 import { defaultLanguage, SETTINGS_FILE_NAME, SettingsStore } from "./settings.ts";
@@ -154,6 +154,8 @@ registerIpc({
   sections,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
   insideApp,
+  // The evaluation's judge (pnpm eval) only where scripts drive the app: development, hidden.
+  judgeEnabled: resolveJudgeEnabled({ isPackaged: app.isPackaged, hidden }),
 });
 
 /*

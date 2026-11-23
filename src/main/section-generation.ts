@@ -1,6 +1,6 @@
 import { runPromptGeneration } from "../lib/generate.ts";
 import type { GenerationEvent } from "../lib/generation-events.ts";
-import type { Effort, GenerateEvent, Provider, ProviderCredential } from "../lib/providers/types.ts";
+import type { Effort, GenerateEvent, OutputFormat, Provider, ProviderCredential } from "../lib/providers/types.ts";
 import { isPreparedRequest, StreamRestorer, type PreparedRequest } from "./outgoing.ts";
 
 /** What a finished generation hands over to be saved as a new version. */
@@ -31,6 +31,8 @@ export async function* runSectionGeneration<Saved>(options: {
   signal: AbortSignal;
   /** The case's opaque prompt-cache key (src/main/cache-key.ts). */
   cacheKey?: string | null;
+  /** Development only: the evaluation's judge asks for JSON in this schema. */
+  outputFormat?: OutputFormat | null;
   /** Writes the version; null when it wrote nothing because Stop came first. */
   save: (finished: FinishedText) => Promise<Saved | null>;
 }): AsyncGenerator<SectionGenerationEvent<Saved>> {
@@ -53,6 +55,7 @@ export async function* runSectionGeneration<Saved>(options: {
     rulesVersions: prepared.rulesVersions,
     signal,
     cacheKey: options.cacheKey ?? null,
+    outputFormat: options.outputFormat ?? null,
   });
   for await (const event of events) {
     if (signal.aborted) return;

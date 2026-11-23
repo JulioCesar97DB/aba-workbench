@@ -30,6 +30,7 @@ import {
   SectionRequestSchema,
   SectionTextSchema,
   sectionDetail,
+  sectionSummary,
   sectionSummaries,
   sessionNotes,
   setConsistency,
@@ -41,7 +42,9 @@ import {
 } from "./case-sections.ts";
 import type { CaseLibrary } from "./cases.ts";
 import type { InstructionsStore } from "./instructions.ts";
-import { outgoingSourcesOf, prepareOutgoingRequest, type PreparedRequest } from "./outgoing.ts";
+import { outgoingSourcesOf, prepareJudgeRequest, prepareOutgoingRequest, type PreparedRequest } from "./outgoing.ts";
+import { JUDGE_SCHEMA_NAME, JudgeInputSchema, judgeAnswerSchema } from "../lib/judge.ts";
+import { REPORT_SECTIONS } from "../shared/report-sections.ts";
 import { caseCacheKey } from "./cache-key.ts";
 import { runSectionGeneration } from "./section-generation.ts";
 
@@ -244,6 +247,66 @@ export class SectionService {
     const folder = read.folder;
     const check = (signal: AbortSignal) => this.checkAgain({ caseId: caseId as string, id, providerId, credential, model, folder, signal }, data, number);
     return { outcome: "ready", run: check };
+  }
+
+  /**
+   * Development only (pnpm eval; registered by src/main/ipc.ts only in a development build
+   * started with --hidden): the evaluation's judge scores one section against the rubric.
+   * The case is read as it is now: the current version of each section is what is judged.
+   * The answer streams back as text and is never saved to the case.
+   */
+  async prepareJudge(
+    caseId: unknown,
+    sectionId: unknown,
+    providerId: unknown,
+    input: unknown,
+  ): Promise<{ outcome: Exclude<StartSectionResult["outcome"], "started" | "busy"> } | { outcome: "ready"; run: (signal: AbortSignal) => AsyncIterable<Exclude<GenerationUpdateEvent, { type: "finished" }>> }> {
+    const id = parse(SectionIdSchema, sectionId, "not a section.");
+    if (providerId !== "anthropic" && providerId !== "openai") refuse("unknown provider.");
+    const judge = parse(JudgeInputSchema, input, "not a judge request.");
+    const credential = await this.options.credential(providerId);
+    if (!credential) return { outcome: "not-connected" };
+    const read = await this.options.cases.changeCase(caseId, () => ({ save: null, value: null }));
+    if (read.kind !== "unchanged" && read.kind !== "saved") return { outcome: "case-unavailable" };
+    const data = read.data;
+    const sections = REPORT_SECTIONS.flatMap(({ id: other }) => {
+      const current = sectionSummary(data, other).currentVersion;
+      const text = current === null ? null : versionText(data, other, current);
+      return text === null ? [] : [{ id: other, text }];
+    });
+    if (!sections.some((section) => section.id === id)) return { outcome: "version-not-found" };
+    const model = (await this.options.chosenModel(providerId)) ?? defaultModel(providerId);
+    const folder = read.folder;
+    const run = async function* (this: SectionService, signal: AbortSignal): AsyncGenerator<Exclude<GenerationUpdateEvent, { type: "finished" }>> {
+      let prepared: PreparedRequest;
+      try {
+        const instructions = await this.options.instructions.get(id);
+        prepared = await prepareJudgeRequest({ section: id, judge, sections, sources: outgoingSourcesOf(data, folder), notes: sessionNotes(data), instructions });
+      } catch (error) {
+        this.log(`A judge request could not be prepared (${(error as NodeJS.ErrnoException).code ?? "error"}).`);
+        yield { type: "error", code: "prepare_failed", message: "The case's sources could not be read.", status: null };
+        return;
+      }
+      const outputFormat =
+        judge.format === "json-schema"
+          ? { name: JUDGE_SCHEMA_NAME, schema: judgeAnswerSchema(id, judge.items.map((item) => item.id), judge.keyFacts.map((fact) => fact.id)) }
+          : null;
+      yield* runSectionGeneration<never>({
+        prepared,
+        provider: this.options.provider(providerId),
+        credential,
+        model,
+        effort: EFFORT,
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        section: id,
+        signal,
+        cacheKey: caseCacheKey(caseId as string),
+        outputFormat,
+        // Nothing is saved: the evaluation reads the answer from the stream.
+        save: async () => null,
+      });
+    }.bind(this);
+    return { outcome: "ready", run };
   }
 
   private async *checkAgain(

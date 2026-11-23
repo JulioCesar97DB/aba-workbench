@@ -1,0 +1,2402 @@
+{
+  "resultsVersion": 2,
+  "label": "2026-11-23T09-04-25-dev-rejudged",
+  "startedAt": "2026-11-23T09:04:25.549Z",
+  "finishedAt": "2026-11-23T09:11:16.942Z",
+  "rubricVersion": "2",
+  "judgePromptVersion": "2",
+  "checksVersion": "2",
+  "judgeSamples": 1,
+  "drafting": {
+    "label": "dev-checkout",
+    "commit": "363e3d7c0b8a0558f897ab9aba33d858d296ccee",
+    "branch": "HEAD",
+    "dirty": false,
+    "rulesVersions": {
+      "assessment": "3",
+      "payer-florida-molina": "2",
+      "instruments": "1",
+      "requests": "2",
+      "section-background-information": "1",
+      "section-medical-necessity": "3",
+      "section-strengths-and-weaknesses": "1",
+      "section-environmental-changes": "1",
+      "section-family-caregiver-involvement": "1",
+      "section-generalization-and-maintenance": "1",
+      "section-discharge-and-service-fading-plan": "2",
+      "section-risk-assessment": "1",
+      "section-crisis-plan": "2"
+    }
+  },
+  "judging": {
+    "label": "this checkout",
+    "commit": "84a66cb51d69dd602136854b43609f83a3a9639a",
+    "branch": "JulioCesar97DB/eval-harness",
+    "dirty": false,
+    "model": "gpt-6.2-astra"
+  },
+  "provider": "openai (ChatGPT sign-in)",
+  "model": "gpt-6.2-astra",
+  "mode": "chained",
+  "judgeFormat": "json-schema",
+  "requests": {
+    "drafts": 9,
+    "checks": 8,
+    "judges": 19,
+    "repairs": 0,
+    "baselineJudges": 0,
+    "total": 36
+  },
+  "launches": [
+    {
+      "role": "draft",
+      "at": "launch",
+      "visibleWindows": 0,
+      "focusedWindows": 0,
+      "dockVisible": false
+    },
+    {
+      "role": "draft",
+      "at": "end",
+      "visibleWindows": 0,
+      "focusedWindows": 0,
+      "dockVisible": false
+    },
+    {
+      "role": "judge",
+      "at": "launch",
+      "visibleWindows": 0,
+      "focusedWindows": 0,
+      "dockVisible": false
+    },
+    {
+      "role": "judge",
+      "at": "end",
+      "visibleWindows": 0,
+      "focusedWindows": 0,
+      "dockVisible": false
+    },
+    {
+      "role": "judge",
+      "at": "launch",
+      "visibleWindows": 0,
+      "focusedWindows": 0,
+      "dockVisible": false
+    },
+    {
+      "role": "judge",
+      "at": "end",
+      "visibleWindows": 0,
+      "focusedWindows": 0,
+      "dockVisible": false
+    },
+    {
+      "role": "judge",
+      "at": "launch",
+      "visibleWindows": 0,
+      "focusedWindows": 0,
+      "dockVisible": false
+    },
+    {
+      "role": "judge",
+      "at": "end",
+      "visibleWindows": 0,
+      "focusedWindows": 0,
+      "dockVisible": false
+    }
+  ],
+  "windowChecksDuring": 82,
+  "valid": true,
+  "invalidReason": null,
+  "fromRun": "2026-11-23T08-24-49-dev-complete",
+  "rejudged": true,
+  "cases": [
+    {
+      "caseId": "case-b-sofia",
+      "keyVersion": "2",
+      "sourcesLoaded": [
+        "cde",
+        "parent-interview",
+        "iep",
+        "fba-questionnaires",
+        "observations",
+        "behaviors",
+        "vineland-3",
+        "basc-3-prq",
+        "followup",
+        "notes"
+      ],
+      "inputs": {
+        "notes": "The mother confirmed by phone on 11/20/2026 that the YMCA after-school program accepted Sofía from 12/15/2026, and that she gave the program a copy of the IEP accommodations.",
+        "instructions": {
+          "background-information": "",
+          "medical-necessity": "",
+          "strengths-and-weaknesses": "",
+          "environmental-changes": "",
+          "family-caregiver-involvement": "",
+          "generalization-and-maintenance": "",
+          "discharge-and-service-fading-plan": "",
+          "risk-assessment": "",
+          "crisis-plan": ""
+        }
+      },
+      "keyNotes": [
+        "\"the 11/20 session note: the YMCA program accepted Sofía\" belongs to environmental-changes (step 0's section map)",
+        "\"the grandmother's trip to Colombia\" belongs to environmental-changes (step 0's section map)",
+        "\"the planned move and change of school\" belongs to environmental-changes (step 0's section map)",
+        "\"the September bus route change\" belongs to environmental-changes (step 0's section map)",
+        "\"running across the street on 10/10\" belongs to risk-assessment (step 0's section map)",
+        "\"the 09/14 head-banging episode and urgent care\" belongs to risk-assessment (step 0's section map)",
+        "\"the chair thrown at school on 03/12\" belongs to risk-assessment (step 0's section map)",
+        "\"the butter knife and the threat to Diego\" belongs to risk-assessment (step 0's section map)",
+        "fact dc-thresholds (discharge-and-service-fading-plan) is not scored: it rests on her standard practice"
+      ],
+      "sections": [
+        {
+          "id": "background-information",
+          "version": 1,
+          "text": "Sofía was 9 years old at her Vineland-3 interview on 10/05/2026. During the home interview that day, her mother, Carmen Inventada, described Sofía as a strong reader who remembers train schedules, enjoys drawing maps, helps feed the family dog and is affectionate with her maternal grandmother. Carmen reported that Sofía lives with her, her 6-year-old brother Diego and their 72-year-old maternal grandmother, who cares for the children from 3:00 to 5:30 p.m. while Carmen works. According to Carmen, Sofía’s father lives in another state and has no regular contact. The BCBA conducted the interview with Carmen in English; Carmen reported that the grandmother speaks only Spanish and is willing to learn strategies to use with Sofía.\n\nCarmen reported that Sofía was born at 39 weeks without complications, met early milestones on time and spoke in sentences by age 2. According to Carmen, teachers first raised concerns in kindergarten because Sofía had outbursts and played alone. Carmen reported that 6 months of school counseling in 2024 “did not change anything” and that Sofía has never received ABA.\n\nAccording to the Comprehensive Diagnostic Evaluation (CDE), Ramón Ejemplar, M.D., Sofía’s pediatrician and primary care physician, referred her because of aggression at home and school, explosive outbursts, leaving the classroom, school refusal and lack of friendships. Marta Supuesta, Ph.D., a Florida-licensed psychologist, evaluated Sofía on 07/15/2026 and 07/22/2026. In the report signed 07/30/2026, Dr. Supuesta diagnosed Autism Spectrum Disorder (F84.0), without accompanying intellectual impairment, with accompanying language impairment in pragmatic language, and Attention-Deficit/Hyperactivity Disorder, combined presentation (F90.2). [MISSING: DSM-5 autism support level, not specified in the available CDE notes.] During her 2-hour summer program observation on 07/22/2026, Dr. Supuesta observed that Sofía talked to an adult about train schedules for 15 minutes without checking the adult’s interest, shoved a peer who sat in her preferred seat and left the group activity twice. Dr. Supuesta recommended ABA at home and in the community for aggression, emotional regulation, flexibility and social skills, with parent training. She also recommended continued school speech-language services, a social skills group, medication management and coordination with the school team. According to the CDE notes, Dr. Ejemplar signed the physician’s order for behavior analysis on 08/04/2026.\n\nThe CDE identified Iván Hipotético, M.D., Sofía’s psychiatrist, as the prescriber of methylphenidate extended release, 18 mg every morning, started in March 2026. Carmen confirmed the dose during the parent interview and reported better focus in the morning but worse outbursts in the afternoon than before medication began. She reported psychiatry follow-up every 6 weeks. In the caregiver FBA interview, Carmen identified poor sleep and changes in routine as circumstances in which Sofía has more difficulty.\n\nAccording to Carmen, Sofía attends 4th grade at Ejemplo Elementary School from 8:30 a.m. to 3:00 p.m. in a general education classroom with ESE support. Her IEP, in effect from 04/17/2026 to 04/16/2027, documents grade-level reading and strong vocabulary. Although Sofía uses complete sentences, the IEP describes difficulty taking conversational turns and understanding nonliteral language. In math, the IEP places her about 1 year below grade level and notes that she does not finish independent work. The IEP provides 300 minutes per week of support facilitation in general education, 60 minutes per week of school speech-language therapy for pragmatic language and 30 minutes per week of school counseling. It also provides a visual schedule, advance notice of transitions and a break card. The IEP documents that Sofía leaves the classroom without permission 2 to 4 times per week, usually during writing or group work, and has physical altercations with peers about 2 times per week, mostly at lunch and recess. The IEP does not include behavior analysis services. According to the BCBA’s 10/28/2026 follow-up notes, the school-based FBA requested on 04/17/2026 was still pending, and Carmen signed releases for the school and psychiatrist.\n\nAt home, Carmen identified preventing injury to Diego as her first priority. She reported that Sofía hits, kicks or pushes him several times a day, often over the tablet or TV remote, and that he had a bruise on his upper arm the week before the interview. During the 10/07/2026 home observation, the BCBA saw Sofía push Diego to the floor and kick his leg after he picked up her train book. Carmen also reported that Sofía bites her hand or wrist when frustrated. According to Carmen, on 09/14/2026 Sofía struck her head against the bedroom wall during an outburst and sustained a cut above her eyebrow that was closed with skin glue at urgent care; the BCBA did not have the urgent care record. Beyond safety, Carmen wants Sofía to calm down without breaking things, go to school without a fight, make a friend and shower independently. During the 10/14/2026 evening observation, the BCBA recorded 14 verbal prompts over 38 minutes before Sofía entered the shower; she did not wash her hair.\n\nChanges in routine are a particular concern for the family. During the 10/28/2026 follow-up call, Carmen recalled that school refusal began around the time the bus route changed in early September, when a new driver began picking Sofía up 15 minutes earlier. Carmen reported that the grandmother would be away from 12/15/2026 to 01/20/2027. In a phone call with the BCBA on 11/20/2026, Carmen confirmed that the YMCA after-school program at Ejemplo Elementary School had accepted Sofía beginning 12/15/2026 and that she had given the program a copy of Sofía’s IEP accommodations. Carmen also reported a planned move to another school zone in March 2027 that would require a school change. She expressed concern about preparing Sofía for the move because even a change in the route home can lead to screaming and refusal to get out of the car.",
+          "words": 946,
+          "paragraphs": 7,
+          "markers": [
+            {
+              "kind": "missing",
+              "note": "DSM-5 autism support level, not specified in the available CDE notes."
+            }
+          ],
+          "generation": null,
+          "consistency": {
+            "status": "nothing-to-compare",
+            "items": []
+          },
+          "draftError": null,
+          "findings": [
+            {
+              "check": "shape",
+              "section": "background-information",
+              "severity": "minor",
+              "message": "946 words; her range is 600 to 850."
+            },
+            {
+              "check": "names",
+              "section": "background-information",
+              "severity": "major",
+              "provisional": true,
+              "message": "The mother is called by her or his given name (21 times): provisional, pending her answer, not scored."
+            },
+            {
+              "check": "data-density",
+              "section": "background-information",
+              "severity": "major",
+              "message": "3 numbers and no clause of meaning.",
+              "excerpt": "The IEP provides 300 minutes per week of support facilitation in general education, 60 minutes per week of school speech-language therapy for pragmatic languag…"
+            },
+            {
+              "check": "data-density",
+              "section": "background-information",
+              "severity": "major",
+              "message": "3 numbers and no clause of meaning.",
+              "excerpt": "The IEP documents that Sofía leaves the classroom without permission 2 to 4 times per week, usually during writing or group work, and has physical altercations…"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "observation the bcba recorded 14 verbal prompts over 38 minutes before sofía"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "2 hour summer program observation on 07 22 2026 dr supuesta observed"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "without permission 2 to 4 times per week usually during writing or"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "observation the bcba recorded 14 verbal prompts over 38 minutes before sofía"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "the iep documents that sofía leaves the classroom without permission 2 to"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with environmental-changes.",
+              "excerpt": "in a phone call with the bcba on 11 20 2026 carmen"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with environmental-changes.",
+              "excerpt": "had accepted sofía beginning 12 15 2026 and that she had given"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "wants sofía to calm down without breaking things go to school without"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "reported that the grandmother speaks only spanish and is willing to learn"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "according to carmen sofía's father lives in another state and has no"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "that the ymca after school program at ejemplo elementary school had accepted"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with discharge-and-service-fading-plan.",
+              "excerpt": "on 11 20 2026 carmen confirmed that the ymca after school program"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "several times a day often over the tablet or tv remote and"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "the bcba saw sofía push diego to the floor and kick his"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "on 09 14 2026 sofía struck her head against the bedroom wall"
+            },
+            {
+              "check": "repetition",
+              "section": "background-information",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "the iep documents that sofía leaves the classroom without permission 2 to"
+            }
+          ],
+          "scores": {
+            "markers": 2,
+            "shape": 1,
+            "numbers-sourced": 2,
+            "names": 2,
+            "repetition": 0,
+            "data-density": 1,
+            "banned-patterns": 2,
+            "examples-not-copied": 2,
+            "payer-readiness": 2,
+            "data-explained": 1,
+            "thread": 1,
+            "ownership": 0,
+            "attribution": 1,
+            "structure": 1,
+            "style": 2,
+            "nothing-invented": 2,
+            "key-facts": 2
+          },
+          "judge": {
+            "format": "json-schema",
+            "repaired": false,
+            "answers": [
+              {
+                "section": "background-information",
+                "items": [
+                  {
+                    "id": "data-explained",
+                    "score": 1,
+                    "reason": "The bruise shows the consequence of repeated aggression, and the shower observation shows what Sofía could not do independently. The school paragraph, however, lists service minutes and behavior frequencies without explaining what the classroom departures and altercations cost her in instruction or peer participation.",
+                    "evidence": [
+                      "he had a bruise on his upper arm the week before the interview",
+                      "14 verbal prompts over 38 minutes before Sofía entered the shower; she did not wash her hair",
+                      "leaves the classroom without permission 2 to 4 times per week, usually during writing or group work, and has physical altercations with peers about 2 times per week"
+                    ]
+                  },
+                  {
+                    "id": "thread",
+                    "score": 1,
+                    "reason": "The diagnoses, caregivers, aggression toward Diego and showering difficulty match the rest of the assessment. The account of safety focuses on injury at home and leaves out unsafe street crossing, a daily-living concern that the other sections assess and address.",
+                    "evidence": [
+                      "At home, Carmen identified preventing injury to Diego as her first priority.",
+                      "Beyond safety, Carmen wants Sofía to calm down without breaking things, go to school without a fight, make a friend and shower independently."
+                    ]
+                  },
+                  {
+                    "id": "ownership",
+                    "score": 0,
+                    "reason": "The home paragraph retells incidents that Risk Assessment and Medical Necessity use as evidence. The closing paragraph recounts the bus change, grandmother’s absence, YMCA acceptance and move in detail rather than briefly referring to Environmental Changes.",
+                    "evidence": [
+                      "the BCBA saw Sofía push Diego to the floor and kick his leg after he picked up her train book",
+                      "sustained a cut above her eyebrow that was closed with skin glue at urgent care",
+                      "the YMCA after-school program at Ejemplo Elementary School had accepted Sofía beginning 12/15/2026 and that she had given the program a copy of Sofía’s IEP accommodations"
+                    ]
+                  },
+                  {
+                    "id": "attribution",
+                    "score": 1,
+                    "reason": "Most sentences distinguish caregiver report, IEP documentation, the psychologist’s observation and the BCBA’s observation. The opening claim of the final paragraph does not name a source in that sentence, even though Carmen’s account supports it in the sentences that follow.",
+                    "evidence": [
+                      "During her 2-hour summer program observation on 07/22/2026, Dr. Supuesta observed",
+                      "During the 10/07/2026 home observation, the BCBA saw",
+                      "Changes in routine are a particular concern for the family."
+                    ]
+                  },
+                  {
+                    "id": "structure",
+                    "score": 1,
+                    "reason": "Most topics are present, but family priorities appear late, milestones and prior counseling precede diagnosis, and prior services are separated from current school services. The closing paragraph covers upcoming changes instead of the requested account of social life, play, sensory needs and transitions.",
+                    "evidence": [
+                      "Carmen reported that 6 months of school counseling in 2024 “did not change anything” and that Sofía has never received ABA.",
+                      "At home, Carmen identified preventing injury to Diego as her first priority.",
+                      "Carmen also reported a planned move to another school zone in March 2027 that would require a school change."
+                    ]
+                  },
+                  {
+                    "id": "style",
+                    "score": 2,
+                    "reason": "The narrative uses Sofía’s first name and “the BCBA,” describes current functioning in the present and completed observations in the past, and reports the family’s concerns without blame or promised outcomes.",
+                    "evidence": [
+                      "According to Carmen, Sofía attends 4th grade at Ejemplo Elementary School",
+                      "the BCBA recorded 14 verbal prompts over 38 minutes before Sofía entered the shower"
+                    ]
+                  },
+                  {
+                    "id": "nothing-invented",
+                    "score": 2,
+                    "reason": "The clinical history, observations and follow-up details are supported by the records. The psychologist’s recommendations are identified as recommendations rather than services Sofía already receives, and no autism support level is supplied.",
+                    "evidence": [
+                      "Dr. Supuesta recommended ABA at home and in the community",
+                      "[MISSING: DSM-5 autism support level, not specified in the available CDE notes.]",
+                      "In a phone call with the BCBA on 11/20/2026, Carmen confirmed that the YMCA after-school program at Ejemplo Elementary School had accepted Sofía"
+                    ]
+                  }
+                ],
+                "keyFacts": [
+                  {
+                    "id": "bi-referral",
+                    "status": "present",
+                    "quote": "Ramón Ejemplar, M.D., Sofía’s pediatrician and primary care physician, referred her … According to the CDE notes, Dr. Ejemplar signed the physician’s order for behavior analysis on 08/04/2026."
+                  },
+                  {
+                    "id": "bi-diagnosis",
+                    "status": "present",
+                    "quote": "Marta Supuesta, Ph.D., a Florida-licensed psychologist, evaluated Sofía on 07/15/2026 and 07/22/2026. In the report signed 07/30/2026, Dr. Supuesta diagnosed Autism Spectrum Disorder (F84.0), without accompanying intellectual impairment, with accompanying language impairment in pragmatic language, and Attention-Deficit/Hyperactivity Disorder, combined presentation (F90.2)."
+                  },
+                  {
+                    "id": "bi-household",
+                    "status": "present",
+                    "quote": "Carmen reported that Sofía lives with her, her 6-year-old brother Diego and their 72-year-old maternal grandmother, who cares for the children from 3:00 to 5:30 p.m. while Carmen works. According to Carmen, Sofía’s father lives in another state and has no regular contact."
+                  },
+                  {
+                    "id": "bi-medication",
+                    "status": "present",
+                    "quote": "The CDE identified Iván Hipotético, M.D., Sofía’s psychiatrist, as the prescriber of methylphenidate extended release, 18 mg every morning, started in March 2026."
+                  },
+                  {
+                    "id": "bi-development",
+                    "status": "present",
+                    "quote": "Carmen reported that Sofía was born at 39 weeks without complications, met early milestones on time and spoke in sentences by age 2. According to Carmen, teachers first raised concerns in kindergarten because Sofía had outbursts and played alone."
+                  },
+                  {
+                    "id": "bi-prior-services",
+                    "status": "present",
+                    "quote": "Carmen reported that 6 months of school counseling in 2024 “did not change anything” and that Sofía has never received ABA."
+                  },
+                  {
+                    "id": "bi-school",
+                    "status": "partial",
+                    "quote": "Sofía attends 4th grade at Ejemplo Elementary School from 8:30 a.m. to 3:00 p.m. in a general education classroom with ESE support. … The IEP provides 300 minutes per week of support facilitation in general education, 60 minutes per week of school speech-language therapy for pragmatic language and 30 minutes per week of school counseling."
+                  },
+                  {
+                    "id": "bi-languages",
+                    "status": "present",
+                    "quote": "The BCBA conducted the interview with Carmen in English; Carmen reported that the grandmother speaks only Spanish"
+                  },
+                  {
+                    "id": "bi-priorities",
+                    "status": "present",
+                    "quote": "At home, Carmen identified preventing injury to Diego as her first priority. … Beyond safety, Carmen wants Sofía to calm down without breaking things, go to school without a fight, make a friend and shower independently."
+                  }
+                ]
+              }
+            ],
+            "error": null,
+            "requests": 1,
+            "seconds": 44.33729999998212,
+            "usage": {
+              "uncachedInputTokens": 22612,
+              "cacheWriteTokens": 0,
+              "cacheReadTokens": 0,
+              "outputTokens": 1903,
+              "reasoningTokens": 167
+            },
+            "fingerprint": "08ba4cb6ac89b21d0eb71439af632e60"
+          }
+        },
+        {
+          "id": "medical-necessity",
+          "version": 1,
+          "text": "To assess Sofía’s need for ABA, Daniela Muestra, M.S., BCBA, reviewed the Comprehensive Diagnostic Evaluation (CDE) completed by Marta Supuesta, Ph.D., a Florida-licensed psychologist, on 07/15/2026 and 07/22/2026 and signed 07/30/2026, and the 04/17/2026 IEP from Ejemplo Elementary School, including the teacher’s account of behavior in class. On 10/05/2026, the BCBA interviewed Sofía’s mother, Carmen Inventada, at home and administered the Vineland-3 Comprehensive Parent/Caregiver Interview Form, BASC-3 Parenting Relationship Questionnaire (PRQ), Child/Adolescent form, Functional Analysis Screening Tool (FAST), Motivation Assessment Scale (MAS) and caregiver FBA interview with Carmen as respondent. The BCBA directly observed homework at home on 10/07/2026, a public library and neighborhood park outing on 10/10/2026, and dinner, shower and bedtime routines at home on 10/14/2026. Carmen provided follow-up information by phone on 10/28/2026 and 11/20/2026. Dr. Supuesta diagnosed Autism Spectrum Disorder (F84.0), without accompanying intellectual impairment, with accompanying language impairment in pragmatic language, and Attention-Deficit/Hyperactivity Disorder, combined presentation (F90.2). [MISSING: DSM-5 autism support level, not specified in the available CDE notes.] Together, the findings identify limitations in communication, daily living skills, socialization and social participation, safety during transitions, and behavioral regulation.\n\nOn the Vineland-3, Carmen’s responses yielded an Adaptive Behavior Composite standard score of 74 (4th percentile, Moderately Low), indicating that Sofía manages everyday demands less independently than most children her age. Communication was 81 (10th percentile, Moderately Low); Expressive skills were Adequate (v-scale 13), but Receptive and Written skills were Moderately Low (12 and 11). Daily Living Skills was 72 (3rd percentile, Moderately Low), with greater difficulty in Community (8, Low) and Domestic skills (9, Low) than in Personal skills (10, Moderately Low). Socialization was 66 (1st percentile, Low); Coping (5), Interpersonal Relationships (7) and Play and Leisure (9) were all Low, with managing frustration and change a particular difficulty. Motor Skills was a relative strength at 88 (21st percentile, Adequate); Sofía’s ability to move independently does not mean she can navigate a street safely. On the Maladaptive Behavior domain, where higher scores indicate more difficulty, Internalizing was Elevated (v-scale 19), and Externalizing and the Maladaptive Behavior Index were both Clinically Significant (22 each). Carmen rated hitting, kicking or pushing others, damaging property, threatening others and refusing school as occurring often. These ratings describe the extent of the concerns; the behavior-specific observations and interviews below inform the hypotheses about function.\n\nAlthough the IEP documents complete sentences, strong vocabulary and grade-level reading, it also describes difficulty taking conversational turns and understanding nonliteral language. Dr. Supuesta documented that Sofía does not ask questions back or repair misunderstandings and misreads teasing as aggression. Carmen described long stretches of talk about trains. At home on 10/07/2026, the BCBA listened as Sofía discussed train schedules for 11 minutes without responding to 2 attempts to change the topic. Her difficulty is not a lack of words but adjusting what she says in response to another person. ABA will use modeling, practice and feedback in everyday conversations to teach Sofía to pause, respond to a partner’s comment and ask for clarification. Practice with family and community partners will complement, rather than replace, the pragmatic language therapy provided under her IEP.\n\nFor daily living, Carmen reported that Sofía can dress herself and helps feed the dog but does not wash her hair independently and cannot order food or pay in a store. During the 10/14/2026 home observation, the BCBA recorded 14 verbal prompts over 38 minutes before Sofía entered the shower; she did not wash her hair. The Personal and Community scores thus reflect practical limits: a caregiver must repeatedly interrupt the evening routine to prompt hygiene, and Sofía cannot complete an everyday purchase on her own. ABA will break showering and hair washing into observable steps, reinforce steps completed independently and fade prompts. Guided practice ordering and paying will address the separate skills Sofía needs when a cashier speaks to her.\n\nThe Low Socialization score is reflected in missed opportunities to join peers even when they initiate contact. Carmen reported that Sofía has no friends at school or in the neighborhood. During the 2-hour summer program observation on 07/22/2026, Dr. Supuesta observed Sofía playing alone during free time and shoving a peer who sat in her preferred seat. At the park on 10/10/2026, the BCBA observed 2 girls invite Sofía to play tag. She recited the bus schedule instead; the girls walked away, and she played alone. ABA will teach Sofía to recognize an invitation, answer it and join a shared activity. Practice during community play will extend the IEP’s structured conversational turn-taking goal to situations in which no adult directs the exchange.\n\nFor leaving the area and school refusal, the BCBA recorded 1 community episode: on the way to the park, Sofía pulled her wrist free of Carmen’s hand and ran across the street without looking. There were no cars at that moment, but the crossing presented an immediate injury risk. At school, the IEP documents leaving class without permission 2 to 4 times per week, usually during writing or group work; Dr. Supuesta directly observed Sofía leave the group twice and be found in the hallway. The BCBA did not observe at school because district approval was pending. Carmen reported school refusal on 6 of 20 school days in October [CHECK: the 10/05/2026 interview notes give this October count; verify the attendance period with Carmen or school records]. Carmen reported that she arrived late to work or the grandmother kept Sofía home on those days. The MAS escape score of 5.0 on a 0-to-6 scale and the school task patterns support hypothesized escape from academic and social demands; the street crossing establishes danger, not its function. ABA will teach Sofía to stop, look and wait before crossing with an adult, rehearse changes to the school-morning routine and practice requesting a break rather than leaving, consistent with her IEP break card.\n\nAcross 6 hours of observation, the BCBA recorded 6 episodes of physical aggression, including pushing Diego to the floor and kicking him after he picked up Sofía’s train book. Carmen reported a bruise on Diego’s upper arm, and the IEP documents peer altercations about 2 times per week. For physical aggression, Carmen’s FAST escape endorsements (4 of 4) and MAS scores (escape 4.5, tangible 3.8) support escape from demands as the primary hypothesis and access to preferred items as secondary. The BCBA also recorded 6 verbal outbursts lasting 6 to 15 minutes (mean 9.7 minutes) and 3 episodes of property destruction. On 10/07/2026, Sofía tore her math worksheet and screamed for 12 minutes; her grandmother gave her the tablet, and neither homework attempt was completed. The IEP documents almost daily verbal outbursts and a chair thrown during a transition to writing on 03/12/2026, after which the class was evacuated for about 25 minutes. FAST escape endorsements of 4 of 4 for each behavior support hypothesized escape from demands and transitions for verbal outbursts and escape from demands for property destruction. The BCBA recorded 3 episodes of hand biting (self-injury), including 2 bites that left red marks during a second homework attempt. FAST endorsements suggest escape as primary (3 of 4) and automatic sensory stimulation as secondary (2 of 4). Separately, Carmen reported that head banging on 09/14/2026 caused a cut requiring skin glue at urgent care; the record was unavailable. To reduce injury and preserve participation, ABA will teach and differentially reinforce requesting help, a break or a turn with an item, using a calming strategy and returning to an interrupted task.\n\nThese findings support the medical necessity of ABA at home and in the community, where the BCBA directly observed injury risk, dependence during hygiene and difficulty sustaining peer interaction. Treatment will pair replacement-skill practice in those routines with school coordination so that break requests and transition cues are consistent without duplicating school instruction, counseling or speech-language therapy. On the BASC-3 PRQ, Carmen’s ratings of Attachment and Involvement were Average, while Discipline Practices (T-score 36), Parenting Confidence (34), Satisfaction with School (31) and Relational Frustration (68) were At-Risk. Carmen described feeling “exhausted and judged,” avoiding outings and dropping homework “to keep the peace.” Caregiver training will use rehearsal and feedback to help Carmen and the Spanish-speaking grandmother respond consistently to break requests, reinforce safe behavior and resume routines after a break, with training accessible in Spanish for the grandmother. The BCBA will measure target behavior frequency, outburst duration, independent requests, successful transitions, safe crossings and self-care steps completed without prompts. At reassessment, the Vineland-3 and BASC-3 PRQ will complement those direct measures by assessing broader changes in Sofía’s independence and Carmen’s experience managing daily routines.",
+          "words": 1425,
+          "paragraphs": 8,
+          "markers": [
+            {
+              "kind": "missing",
+              "note": "DSM-5 autism support level, not specified in the available CDE notes."
+            },
+            {
+              "kind": "check",
+              "note": "the 10/05/2026 interview notes give this October count; verify the attendance period with Carmen or school records"
+            }
+          ],
+          "generation": null,
+          "consistency": {
+            "status": "none",
+            "items": []
+          },
+          "draftError": null,
+          "findings": [
+            {
+              "check": "shape",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "1425 words; her range is 950 to 1150."
+            },
+            {
+              "check": "names",
+              "section": "medical-necessity",
+              "severity": "major",
+              "provisional": true,
+              "message": "The mother is called by her or his given name (18 times): provisional, pending her answer, not scored."
+            },
+            {
+              "check": "data-density",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "5 numbers and no clause of meaning.",
+              "excerpt": "Communication was 81 (10th percentile, Moderately Low); Expressive skills were Adequate (v-scale 13), but Receptive and Written skills were Moderately Low (12 …"
+            },
+            {
+              "check": "data-density",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "5 numbers and no clause of meaning.",
+              "excerpt": "Daily Living Skills was 72 (3rd percentile, Moderately Low), with greater difficulty in Community (8, Low) and Domestic skills (9, Low) than in Personal skills…"
+            },
+            {
+              "check": "data-density",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "5 numbers and no clause of meaning.",
+              "excerpt": "Socialization was 66 (1st percentile, Low); Coping (5), Interpersonal Relationships (7) and Play and Leisure (9) were all Low, with managing frustration and ch…"
+            },
+            {
+              "check": "data-density",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "4 numbers and no clause of meaning.",
+              "excerpt": "For physical aggression, Carmen’s FAST escape endorsements (4 of 4) and MAS scores (escape 4.5, tangible 3.8) support escape from demands as the primary hypoth…"
+            },
+            {
+              "check": "data-density",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "5 numbers and no clause of meaning.",
+              "excerpt": "The BCBA also recorded 6 verbal outbursts lasting 6 to 15 minutes (mean 9.7 minutes) and 3 episodes of property destruction."
+            },
+            {
+              "check": "data-density",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "4 numbers and no clause of meaning.",
+              "excerpt": "FAST endorsements suggest escape as primary (3 of 4) and automatic sensory stimulation as secondary (2 of 4)."
+            },
+            {
+              "check": "data-density",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "4 numbers and no clause of meaning.",
+              "excerpt": "On the BASC-3 PRQ, Carmen’s ratings of Attachment and Involvement were Average, while Discipline Practices (T-score 36), Parenting Confidence (34), Satisfactio…"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "observation the bcba recorded 14 verbal prompts over 38 minutes before sofía"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "2 hour summer program observation on 07 22 2026 dr supuesta observed"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "without permission 2 to 4 times per week usually during writing or"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "train schedules for 11 minutes without responding to 2 attempts to change"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "order food or pay in a store during the 10 14 2026"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "without permission 2 to 4 times per week usually during writing or"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "the bcba recorded 6 episodes of physical aggression including pushing diego to"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "the bcba also recorded 6 verbal outbursts lasting 6 to 15 minutes"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "carmen described feeling exhausted and judged avoiding outings and dropping homework to"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "for 12 minutes her grandmother gave her the tablet and neither homework"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "sofía pulled her wrist free of carmen's hand and ran across the"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "without permission 2 to 4 times per week usually during writing or"
+            },
+            {
+              "check": "repetition",
+              "section": "medical-necessity",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "found in the hallway the bcba did not observe at school because"
+            }
+          ],
+          "scores": {
+            "markers": 2,
+            "shape": 0,
+            "numbers-sourced": 2,
+            "names": 2,
+            "repetition": 0,
+            "data-density": 0,
+            "banned-patterns": 2,
+            "examples-not-copied": 2,
+            "payer-readiness": 2,
+            "data-explained": 1,
+            "thread": 1,
+            "ownership": 0,
+            "attribution": 1,
+            "structure": 1,
+            "style": 1,
+            "nothing-invented": 1,
+            "key-facts": 2
+          },
+          "judge": {
+            "format": "json-schema",
+            "repaired": false,
+            "answers": [
+              {
+                "section": "medical-necessity",
+                "items": [
+                  {
+                    "id": "data-explained",
+                    "score": 1,
+                    "reason": "The shower prompts, unsafe crossing and interrupted homework show what the data mean for Sofía. The Vineland-3 paragraph, however, runs through several subdomain scores before connecting them to caregiver examples; the Receptive and Written scores get classifications but no functional explanation.",
+                    "evidence": [
+                      "Receptive and Written skills were Moderately Low (12 and 11)",
+                      "Community (8, Low) and Domestic skills (9, Low) than in Personal skills (10, Moderately Low)",
+                      "14 verbal prompts over 38 minutes before Sofía entered the shower; she did not wash her hair"
+                    ]
+                  },
+                  {
+                    "id": "thread",
+                    "score": 1,
+                    "reason": "The target names, baselines, function hypotheses and replacement skills match the rest of the assessment. The closing connects ABA to school services but leaves out how it complements psychiatric medication management.",
+                    "evidence": [
+                      "escape from demands as the primary hypothesis and access to preferred items as secondary",
+                      "practice requesting a break rather than leaving, consistent with her IEP break card",
+                      "without duplicating school instruction, counseling or speech-language therapy"
+                    ]
+                  },
+                  {
+                    "id": "ownership",
+                    "score": 0,
+                    "reason": "The opening repeats evaluation history owned by Background Information. Beyond the incidents needed to argue impairment, the observation passage reconstructs much of the Risk Assessment, including the sibling injury, classroom evacuation, biting marks and urgent-care treatment.",
+                    "evidence": [
+                      "on 07/15/2026 and 07/22/2026 and signed 07/30/2026",
+                      "the class was evacuated for about 25 minutes",
+                      "a cut requiring skin glue at urgent care; the record was unavailable"
+                    ]
+                  },
+                  {
+                    "id": "attribution",
+                    "score": 1,
+                    "reason": "The draft distinguishes the BCBA’s observations from the evaluator’s observation, the IEP and Carmen’s reports. A few factual sentences rely on the preceding sentence to identify the observer rather than naming the source themselves.",
+                    "evidence": [
+                      "She recited the bus schedule instead; the girls walked away, and she played alone.",
+                      "There were no cars at that moment, but the crossing presented an immediate injury risk.",
+                      "On 10/07/2026, Sofía tore her math worksheet and screamed for 12 minutes; her grandmother gave her the tablet, and neither homework attempt was completed."
+                    ]
+                  },
+                  {
+                    "id": "structure",
+                    "score": 1,
+                    "reason": "The eight paragraphs broadly follow the requested order, and the autism support-level gap is marked. The opening describes the assessment process rather than directly stating that the evidence supports need, the domain scores are not tied at once to caregiver examples, and the closing omits psychiatry.",
+                    "evidence": [
+                      "To assess Sofía’s need for ABA",
+                      "[MISSING: DSM-5 autism support level, not specified in the available CDE notes.]",
+                      "without duplicating school instruction, counseling or speech-language therapy"
+                    ]
+                  },
+                  {
+                    "id": "style",
+                    "score": 1,
+                    "reason": "The main lapse is the credential- and date-heavy opening, which introduces the clinician by full name rather than as “the BCBA.” The functional examples otherwise use Sofía’s first name, distinguish observations from plans and avoid promising outcomes.",
+                    "evidence": [
+                      "Daniela Muestra, M.S., BCBA, reviewed the Comprehensive Diagnostic Evaluation (CDE) completed by Marta Supuesta, Ph.D., a Florida-licensed psychologist",
+                      "Her difficulty is not a lack of words but adjusting what she says in response to another person."
+                    ]
+                  },
+                  {
+                    "id": "nothing-invented",
+                    "score": 1,
+                    "reason": "The scores, incidents and function hypotheses are supported. The closing commits to using both standardized instruments again at reassessment; the sources establish their initial administration, not a decision to readminister them.",
+                    "evidence": [
+                      "At reassessment, the Vineland-3 and BASC-3 PRQ will complement those direct measures"
+                    ]
+                  }
+                ],
+                "keyFacts": [
+                  {
+                    "id": "mn-opening",
+                    "status": "present",
+                    "quote": "reviewed the Comprehensive Diagnostic Evaluation (CDE) … and the 04/17/2026 IEP … On 10/05/2026, the BCBA interviewed Sofía’s mother, Carmen Inventada, at home and administered the Vineland-3 Comprehensive Parent/Caregiver Interview Form, BASC-3 Parenting Relationship Questionnaire (PRQ), Child/Adolescent form, Functional Analysis Screening Tool (FAST), Motivation Assessment Scale (MAS) and caregiver FBA interview with Carmen as respondent. The BCBA directly observed homework at home on 10/07/2026, a public library and neighborhood park outing on 10/10/2026, and dinner, shower and bedtime routines at home on 10/14/2026. … Together, the findings identify limitations in communication, daily living skills, socialization and social participation, safety during transitions, and behavioral regulation."
+                  },
+                  {
+                    "id": "mn-vineland-domains",
+                    "status": "present",
+                    "quote": "Adaptive Behavior Composite standard score of 74 (4th percentile, Moderately Low) … Communication was 81 (10th percentile, Moderately Low) … Daily Living Skills was 72 (3rd percentile, Moderately Low) … Socialization was 66 (1st percentile, Low)"
+                  },
+                  {
+                    "id": "mn-vineland-subdomains",
+                    "status": "present",
+                    "quote": "Coping (5), Interpersonal Relationships (7) and Play and Leisure (9) were all Low, with managing frustration and change a particular difficulty. … The Low Socialization score is reflected in missed opportunities to join peers even when they initiate contact."
+                  },
+                  {
+                    "id": "mn-maladaptive",
+                    "status": "present",
+                    "quote": "Internalizing was Elevated (v-scale 19), and Externalizing and the Maladaptive Behavior Index were both Clinically Significant (22 each)."
+                  },
+                  {
+                    "id": "mn-prq",
+                    "status": "present",
+                    "quote": "Discipline Practices (T-score 36), Parenting Confidence (34), Satisfaction with School (31) and Relational Frustration (68) were At-Risk."
+                  },
+                  {
+                    "id": "mn-safety-incident",
+                    "status": "present",
+                    "quote": "a public library and neighborhood park outing on 10/10/2026 … on the way to the park, Sofía pulled her wrist free of Carmen’s hand and ran across the street without looking. There were no cars at that moment, but the crossing presented an immediate injury risk."
+                  },
+                  {
+                    "id": "mn-school-secondhand",
+                    "status": "present",
+                    "quote": "the IEP documents leaving class without permission 2 to 4 times per week, usually during writing or group work … The BCBA did not observe at school because district approval was pending. Carmen reported school refusal on 6 of 20 school days in October [CHECK: the 10/05/2026 interview notes give this October count; verify the attendance period with Carmen or school records]."
+                  },
+                  {
+                    "id": "mn-functions",
+                    "status": "present",
+                    "quote": "The MAS escape score of 5.0 on a 0-to-6 scale and the school task patterns support hypothesized escape from academic and social demands … Carmen’s FAST escape endorsements (4 of 4) and MAS scores (escape 4.5, tangible 3.8) support escape from demands as the primary hypothesis and access to preferred items as secondary. … FAST escape endorsements of 4 of 4 for each behavior support hypothesized escape from demands and transitions for verbal outbursts and escape from demands for property destruction. … FAST endorsements suggest escape as primary (3 of 4) and automatic sensory stimulation as secondary (2 of 4)."
+                  },
+                  {
+                    "id": "mn-aba",
+                    "status": "present",
+                    "quote": "teach Sofía to pause, respond to a partner’s comment and ask for clarification … reinforce steps completed independently and fade prompts. Guided practice ordering and paying will address the separate skills Sofía needs when a cashier speaks to her. … recognize an invitation, answer it and join a shared activity … stop, look and wait before crossing with an adult, rehearse changes to the school-morning routine and practice requesting a break rather than leaving … requesting help, a break or a turn with an item, using a calming strategy and returning to an interrupted task."
+                  },
+                  {
+                    "id": "mn-caregivers",
+                    "status": "partial",
+                    "quote": "Caregiver training will use rehearsal and feedback to help Carmen and the Spanish-speaking grandmother respond consistently to break requests, reinforce safe behavior and resume routines after a break, with training accessible in Spanish for the grandmother."
+                  },
+                  {
+                    "id": "mn-settings",
+                    "status": "partial",
+                    "quote": "ABA at home and in the community, where the BCBA directly observed injury risk, dependence during hygiene and difficulty sustaining peer interaction. Treatment will pair replacement-skill practice in those routines with school coordination so that break requests and transition cues are consistent without duplicating school instruction, counseling or speech-language therapy."
+                  }
+                ]
+              }
+            ],
+            "error": null,
+            "requests": 1,
+            "seconds": 54.585600000023845,
+            "usage": {
+              "uncachedInputTokens": 22979,
+              "cacheWriteTokens": 0,
+              "cacheReadTokens": 0,
+              "outputTokens": 2343,
+              "reasoningTokens": 265
+            },
+            "fingerprint": "986eb4c3a1237b1345e78cdce3c9bd53"
+          }
+        },
+        {
+          "id": "strengths-and-weaknesses",
+          "version": 1,
+          "text": "Sofía’s 04/17/2026 IEP describes a 4th-grade reader with strong decoding and vocabulary who speaks in complete sentences. Her mother, Carmen Inventada, reported that Sofía enjoys books about trains, remembers train schedules and likes drawing maps. These interests offer a starting point for practicing conversation about a shared activity. Although Sofía’s Expressive skills were Adequate on the 10/05/2026 Vineland-3, the IEP identifies difficulty taking turns in conversation and understanding nonliteral language. At home on 10/07/2026, the BCBA observed Sofía talk about train schedules for 11 minutes without responding to 2 attempts to change the topic.\n\nCarmen reported that Sofía dresses herself and helps feed the family dog, but she does not wash her hair independently or order food or pay in a store. During the 10/14/2026 home observation, the BCBA recorded 14 verbal prompts over 38 minutes before Sofía entered the shower; she did not wash her hair. In describing Sofía’s relationships, Carmen noted that Sofía is affectionate with her grandmother but has no friends at school or in the neighborhood. At the park on 10/10/2026, the BCBA observed a specific difficulty with joining peer play: when 2 girls invited Sofía to play tag, she recited the bus schedule, and the girls walked away.\n\nAlthough Motor Skills were Adequate on the Vineland-3, the BCBA observed Sofía pull free of her mother’s hand and run across the street without looking on the way to the park. Leaving the area and school refusal also limit school participation: the IEP documents that Sofía leaves the classroom without permission 2 to 4 times per week, usually during writing or group work, and Carmen reported that on school mornings Sofía sometimes locks herself in the bathroom or refuses to board the bus.\n\nSofía needs support to manage frustration without hurting herself or others or abandoning a task. Across 6 hours at home and in the community, the BCBA recorded 6 episodes of physical aggression, including pushing Diego to the floor and kicking him after he picked up her train book. The BCBA also recorded 6 verbal outbursts lasting 6 to 15 minutes, 3 episodes of property destruction and 3 episodes of hand biting (self-injury). During homework on 10/07/2026, the BCBA observed Sofía tear her math worksheet and scream during the first attempt, then bite her hand hard enough to leave red marks during the second. Neither attempt was completed, making homework a concrete routine in which to practice asking for help or a break and returning to the task.",
+          "words": 413,
+          "paragraphs": 4,
+          "markers": [],
+          "generation": null,
+          "consistency": {
+            "status": "none",
+            "items": []
+          },
+          "draftError": null,
+          "findings": [
+            {
+              "check": "shape",
+              "section": "strengths-and-weaknesses",
+              "severity": "minor",
+              "message": "4 paragraphs; her range is 2 to 3."
+            },
+            {
+              "check": "names",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "provisional": true,
+              "message": "The mother is called by her or his given name (4 times): provisional, pending her answer, not scored."
+            },
+            {
+              "check": "data-density",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "5 numbers and no clause of meaning.",
+              "excerpt": "The BCBA also recorded 6 verbal outbursts lasting 6 to 15 minutes, 3 episodes of property destruction and 3 episodes of hand biting (self-injury)."
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "observation the bcba recorded 14 verbal prompts over 38 minutes before sofía"
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "the iep documents that sofía leaves the classroom without permission 2 to"
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "train schedules for 11 minutes without responding to 2 attempts to change"
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "order food or pay in a store during the 10 14 2026"
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "without permission 2 to 4 times per week usually during writing or"
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "the bcba recorded 6 episodes of physical aggression including pushing diego to"
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "the bcba also recorded 6 verbal outbursts lasting 6 to 15 minutes"
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "during homework on 10 07 2026 the bcba observed sofía tear her"
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with discharge-and-service-fading-plan.",
+              "excerpt": "6 verbal outbursts lasting 6 to 15 minutes 3 episodes of property"
+            },
+            {
+              "check": "repetition",
+              "section": "strengths-and-weaknesses",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "the iep documents that sofía leaves the classroom without permission 2 to"
+            }
+          ],
+          "scores": {
+            "markers": 2,
+            "shape": 1,
+            "numbers-sourced": 2,
+            "names": 2,
+            "repetition": 0,
+            "data-density": 1,
+            "banned-patterns": 2,
+            "examples-not-copied": 2,
+            "payer-readiness": 2,
+            "data-explained": 1,
+            "thread": 2,
+            "ownership": 0,
+            "attribution": 1,
+            "structure": 0,
+            "style": 1,
+            "nothing-invented": 2,
+            "key-facts": 1
+          },
+          "judge": {
+            "format": "json-schema",
+            "repaired": false,
+            "answers": [
+              {
+                "section": "strengths-and-weaknesses",
+                "items": [
+                  {
+                    "id": "data-explained",
+                    "score": 1,
+                    "reason": "The conversation and shower observations show what the numbers mean for Sofía. The final paragraph, however, groups outburst frequency and duration with destruction and biting counts without explaining each baseline.",
+                    "evidence": [
+                      "without responding to 2 attempts to change the topic",
+                      "14 verbal prompts over 38 minutes before Sofía entered the shower",
+                      "6 verbal outbursts lasting 6 to 15 minutes, 3 episodes of property destruction and 3 episodes of hand biting (self-injury)"
+                    ]
+                  },
+                  {
+                    "id": "thread",
+                    "score": 2,
+                    "reason": "The section uses the same five target behaviors as Medical Necessity and connects them to the same functional needs, including joining peer play, participating in school and returning to homework after a break.",
+                    "evidence": [
+                      "difficulty with joining peer play",
+                      "Leaving the area and school refusal also limit school participation",
+                      "asking for help or a break and returning to the task"
+                    ]
+                  },
+                  {
+                    "id": "ownership",
+                    "score": 0,
+                    "reason": "Large parts repeat Medical Necessity’s timed observations and behavior baselines, as well as the street-crossing incident detailed in Risk Assessment. This goes beyond naming deficit areas and briefly qualifying strengths.",
+                    "evidence": [
+                      "14 verbal prompts over 38 minutes before Sofía entered the shower",
+                      "pull free of her mother’s hand and run across the street without looking",
+                      "Across 6 hours at home and in the community, the BCBA recorded 6 episodes of physical aggression"
+                    ]
+                  },
+                  {
+                    "id": "attribution",
+                    "score": 1,
+                    "reason": "Most sentences distinguish caregiver report, records and direct observation. The homework-completion finding relies on the previous sentence for its source, and the parent interview documents good memory generally, while the CDE specifically documents memorized schedules.",
+                    "evidence": [
+                      "Her mother, Carmen Inventada, reported that Sofía enjoys books about trains, remembers train schedules and likes drawing maps.",
+                      "Neither attempt was completed"
+                    ]
+                  },
+                  {
+                    "id": "structure",
+                    "score": 0,
+                    "reason": "The four paragraphs alternate strengths and deficits rather than presenting treatment-linked strengths first and needs second in two or three paragraphs. Only the interests receive an explicit treatment link, and the ending addresses homework rather than how ABA will address the needs overall.",
+                    "evidence": [
+                      "These interests offer a starting point for practicing conversation about a shared activity.",
+                      "Sofía is affectionate with her grandmother but has no friends at school or in the neighborhood",
+                      "making homework a concrete routine in which to practice asking for help or a break and returning to the task"
+                    ]
+                  },
+                  {
+                    "id": "style",
+                    "score": 1,
+                    "reason": "The prose generally uses Sofía’s first name, third-person references to the BCBA and past tense for observations. The closing sentence slips into passive voice, obscuring who did not finish the work.",
+                    "evidence": [
+                      "the BCBA observed Sofía talk about train schedules",
+                      "Neither attempt was completed"
+                    ]
+                  },
+                  {
+                    "id": "nothing-invented",
+                    "score": 2,
+                    "reason": "The clinical facts, counts and incidents are documented in the supplied records. The links to conversation practice and requesting help or a break use documented skill needs without introducing a new procedure or criterion.",
+                    "evidence": [
+                      "practicing conversation about a shared activity",
+                      "asking for help or a break and returning to the task"
+                    ]
+                  }
+                ],
+                "keyFacts": [
+                  {
+                    "id": "sw-reading",
+                    "status": "present",
+                    "quote": "Sofía’s 04/17/2026 IEP describes a 4th-grade reader with strong decoding and vocabulary"
+                  },
+                  {
+                    "id": "sw-interests",
+                    "status": "present",
+                    "quote": "Sofía enjoys books about trains, remembers train schedules and likes drawing maps. … she recited the bus schedule"
+                  },
+                  {
+                    "id": "sw-relationships",
+                    "status": "present",
+                    "quote": "helps feed the family dog … Sofía is affectionate with her grandmother"
+                  },
+                  {
+                    "id": "sw-vineland-adequate",
+                    "status": "partial",
+                    "quote": "Sofía’s Expressive skills were Adequate on the 10/05/2026 Vineland-3 … Motor Skills were Adequate on the Vineland-3"
+                  },
+                  {
+                    "id": "sw-weaknesses",
+                    "status": "partial",
+                    "quote": "the IEP identifies difficulty taking turns in conversation and understanding nonliteral language … Leaving the area and school refusal also limit school participation … asking for help or a break and returning to the task"
+                  }
+                ]
+              }
+            ],
+            "error": null,
+            "requests": 1,
+            "seconds": 46.541699999988076,
+            "usage": {
+              "uncachedInputTokens": 22315,
+              "cacheWriteTokens": 0,
+              "cacheReadTokens": 0,
+              "outputTokens": 1600,
+              "reasoningTokens": 494
+            },
+            "fingerprint": "c499143140ad3659cbe244225baca501"
+          }
+        },
+        {
+          "id": "environmental-changes",
+          "version": 1,
+          "text": "During the 10/28/2026 follow-up call, Carmen Inventada reported that Sofía’s school bus route changed in early September 2026, with a new driver and pickup 15 minutes earlier. Carmen recalled that school refusal began around that time. She described mornings when Sofía cried, locked herself in the bathroom or refused to board the bus; on those days, Carmen arrived late to work or Sofía stayed home with her grandmother. To address this disruption, the BCBA plans to rehearse changes to the school-morning routine with Sofía.\n\nCarmen reported on 10/28/2026 that Sofía’s maternal grandmother, who usually cares for Sofía and Diego from 3:00 to 5:30 p.m., would be in Colombia from 12/15/2026 to 01/20/2027. During her absence, the children would attend the YMCA after-school program at Ejemplo Elementary School from 3:00 to 6:00 p.m. Carmen initially worried that the program might not keep Sofía because of her behavior. In a phone call with the BCBA on 11/20/2026, Carmen confirmed that the program had accepted Sofía beginning 12/15/2026 and that she had given staff a copy of Sofía’s IEP accommodations. These include a visual schedule, advance warning before transitions and a break card. [MISSING: which accommodations YMCA staff plan to use during the after-school transition.]\n\nCarmen also reported on 10/28/2026 that the family plans to move to a 2-bedroom apartment in another school zone in March 2027 and that Sofía would change schools. At the time of the call, Carmen had not yet told Sofía about the move. Carmen’s concern about the transition is based on Sofía’s response to smaller changes: she reported that when the route home changes, Sofía screams and refuses to get out of the car. [MISSING: support planned for preparing Sofía for the move and the change of school.]",
+          "words": 290,
+          "paragraphs": 3,
+          "markers": [
+            {
+              "kind": "missing",
+              "note": "which accommodations YMCA staff plan to use during the after-school transition."
+            },
+            {
+              "kind": "missing",
+              "note": "support planned for preparing Sofía for the move and the change of school."
+            }
+          ],
+          "generation": null,
+          "consistency": {
+            "status": "none",
+            "items": []
+          },
+          "draftError": null,
+          "findings": [
+            {
+              "check": "shape",
+              "section": "environmental-changes",
+              "severity": "minor",
+              "message": "290 words; her range is 300 to 450."
+            },
+            {
+              "check": "names",
+              "section": "environmental-changes",
+              "severity": "major",
+              "provisional": true,
+              "message": "The mother is called by her or his given name (9 times): provisional, pending her answer, not scored."
+            },
+            {
+              "check": "repetition",
+              "section": "environmental-changes",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "in a phone call with the bcba on 11 20 2026 carmen"
+            },
+            {
+              "check": "repetition",
+              "section": "environmental-changes",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "had accepted sofía beginning 12 15 2026 and that she had given"
+            },
+            {
+              "check": "repetition",
+              "section": "environmental-changes",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "had accepted sofía beginning 12 15 2026 and that she had given"
+            },
+            {
+              "check": "repetition",
+              "section": "environmental-changes",
+              "severity": "major",
+              "message": "Shares 12+ words with discharge-and-service-fading-plan.",
+              "excerpt": "program had accepted sofía beginning 12 15 2026 and that she had"
+            },
+            {
+              "check": "repetition",
+              "section": "environmental-changes",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "sofía cried locked herself in the bathroom or refused to board the"
+            }
+          ],
+          "scores": {
+            "markers": 2,
+            "shape": 1,
+            "numbers-sourced": 2,
+            "names": 2,
+            "repetition": 0,
+            "data-density": 2,
+            "banned-patterns": 2,
+            "examples-not-copied": 2,
+            "payer-readiness": 2,
+            "data-explained": 2,
+            "thread": 2,
+            "ownership": 2,
+            "attribution": 1,
+            "structure": 1,
+            "style": 1,
+            "nothing-invented": 1,
+            "key-facts": 1
+          },
+          "judge": {
+            "format": "json-schema",
+            "repaired": false,
+            "answers": [
+              {
+                "section": "environmental-changes",
+                "items": [
+                  {
+                    "id": "data-explained",
+                    "score": 2,
+                    "reason": "The earlier pickup is linked to the reported onset of school refusal and its effect on attendance and Carmen’s work. The dates and hours explain when YMCA care would replace the grandmother’s care.",
+                    "evidence": [
+                      "pickup 15 minutes earlier",
+                      "on those days, Carmen arrived late to work or Sofía stayed home with her grandmother",
+                      "During her absence, the children would attend the YMCA after-school program"
+                    ]
+                  },
+                  {
+                    "id": "thread",
+                    "score": 2,
+                    "reason": "The account uses school refusal consistently with the other sections, preserves the distinction between timing and causation, and distinguishes sharing the IEP accommodations from YMCA staff agreeing to use them.",
+                    "evidence": [
+                      "Carmen recalled that school refusal began around that time.",
+                      "she had given staff a copy of Sofía’s IEP accommodations",
+                      "[MISSING: which accommodations YMCA staff plan to use during the after-school transition.]"
+                    ]
+                  },
+                  {
+                    "id": "ownership",
+                    "score": 2,
+                    "reason": "The section focuses on the bus change, temporary care arrangement and planned move. References to work, family routines and IEP accommodations explain the impact of those changes without retelling the broader history or treatment plan.",
+                    "evidence": [
+                      "Sofía’s school bus route changed in early September 2026",
+                      "During her absence, the children would attend the YMCA after-school program",
+                      "Sofía would change schools"
+                    ]
+                  },
+                  {
+                    "id": "attribution",
+                    "score": 1,
+                    "reason": "The dated calls and YMCA confirmation are clearly attributed to Carmen. The YMCA hours and list of accommodations rely on the preceding sentences for their sources rather than naming Carmen and the IEP in the respective sentences.",
+                    "evidence": [
+                      "During her absence, the children would attend the YMCA after-school program at Ejemplo Elementary School from 3:00 to 6:00 p.m.",
+                      "In a phone call with the BCBA on 11/20/2026, Carmen confirmed",
+                      "These include a visual schedule, advance warning before transitions and a break card."
+                    ]
+                  },
+                  {
+                    "id": "structure",
+                    "score": 1,
+                    "reason": "There are three paragraphs covering the reported changes, but the section opens with the bus chronology rather than drawing together examples of Sofía’s response to change. The route-home example comes last, and the bus rehearsal is proposed without a documented plan.",
+                    "evidence": [
+                      "During the 10/28/2026 follow-up call, Carmen Inventada reported that Sofía’s school bus route changed",
+                      "the BCBA plans to rehearse changes to the school-morning routine",
+                      "when the route home changes, Sofía screams and refuses to get out of the car"
+                    ]
+                  },
+                  {
+                    "id": "style",
+                    "score": 1,
+                    "reason": "The narrative uses plain, active language, refers to Sofía by first name and avoids blame or promised outcomes. The one plan sentence uses “plans to” instead of the specified “will.”",
+                    "evidence": [
+                      "the BCBA plans to rehearse changes to the school-morning routine with Sofía"
+                    ]
+                  },
+                  {
+                    "id": "nothing-invented",
+                    "score": 1,
+                    "reason": "Rehearsing changes to the school-morning routine is one unmarked clinical proposal not given in the sources, session note or standing instructions. Its appearance in other drafted sections does not establish it as the BCBA’s plan.",
+                    "evidence": [
+                      "To address this disruption, the BCBA plans to rehearse changes to the school-morning routine with Sofía."
+                    ]
+                  }
+                ],
+                "keyFacts": [
+                  {
+                    "id": "ec-bus",
+                    "status": "present",
+                    "quote": "Sofía’s school bus route changed in early September 2026, with a new driver and pickup 15 minutes earlier. Carmen recalled that school refusal began around that time."
+                  },
+                  {
+                    "id": "ec-grandmother",
+                    "status": "present",
+                    "quote": "would be in Colombia from 12/15/2026 to 01/20/2027. During her absence, the children would attend the YMCA after-school program at Ejemplo Elementary School from 3:00 to 6:00 p.m."
+                  },
+                  {
+                    "id": "ec-ymca-note",
+                    "status": "present",
+                    "quote": "In a phone call with the BCBA on 11/20/2026, Carmen confirmed that the program had accepted Sofía beginning 12/15/2026 and that she had given staff a copy of Sofía’s IEP accommodations."
+                  },
+                  {
+                    "id": "ec-move",
+                    "status": "present",
+                    "quote": "the family plans to move to a 2-bedroom apartment in another school zone in March 2027 and that Sofía would change schools. At the time of the call, Carmen had not yet told Sofía about the move."
+                  },
+                  {
+                    "id": "ec-response",
+                    "status": "partial",
+                    "quote": "she reported that when the route home changes, Sofía screams and refuses to get out of the car."
+                  },
+                  {
+                    "id": "ec-supports",
+                    "status": "partial",
+                    "quote": "These include a visual schedule, advance warning before transitions and a break card. [MISSING: which accommodations YMCA staff plan to use during the after-school transition.]"
+                  }
+                ]
+              }
+            ],
+            "error": null,
+            "requests": 1,
+            "seconds": 44.42169999998808,
+            "usage": {
+              "uncachedInputTokens": 22430,
+              "cacheWriteTokens": 0,
+              "cacheReadTokens": 0,
+              "outputTokens": 1569,
+              "reasoningTokens": 316
+            },
+            "fingerprint": "759f987a2828c5d8698c554980274941"
+          }
+        },
+        {
+          "id": "family-caregiver-involvement",
+          "version": 1,
+          "text": "During the 10/05/2026 home interview, Carmen Inventada identified her first priority for Sofía: “That she stops hurting her brother.” Carmen also wants Sofía to calm down without breaking things, go to school without a fight, make a friend and shower independently. Carmen reported that she works from 8:00 a.m. to 5:00 p.m. and can participate in caregiver training after 5:30 p.m. on weekdays and on Saturday mornings. Sofía’s maternal grandmother cares for Sofía and her 6-year-old brother Diego from 3:00 to 5:30 p.m., including during homework, when the BCBA observed physical aggression and hand biting (self-injury). Carmen completed the interview in English and reported that the grandmother speaks only Spanish and is willing to learn the strategies. The BCBA will make training accessible in Spanish so the grandmother can practice the same responses Carmen uses during evening routines. According to Carmen, Sofía’s father lives in another state and has no regular contact; routine practice at home will therefore depend on Carmen and the grandmother.\n\nOn the 10/05/2026 BASC-3 Parenting Relationship Questionnaire, Carmen’s ratings of Attachment, Communication and Involvement were Average. Her ratings of Discipline Practices (T-score 36), Parenting Confidence (T-score 34) and Relational Frustration (T-score 68) were At-Risk. In the caregiver interviews, Carmen described feeling “exhausted and judged,” avoiding outings and dropping homework “to keep the peace.” These findings support coaching during the routines Carmen finds difficult: the BCBA will model a response, give each caregiver an opportunity to rehearse it and provide feedback. Carmen’s Satisfaction with School rating was also At-Risk (T-score 31). She signed a release for the school on 10/28/2026, allowing the BCBA to coordinate break requests and transition cues with the school team.\n\nSafety training will address physical aggression toward Diego, verbal outbursts that include threats, property destruction, hand biting (self-injury) and the immediate danger of leaving an adult’s side near a street. On 10/28/2026, Carmen reported that she and the grandmother move Diego away and put breakable objects out of reach during outbursts. She reported that they began storing kitchen knives in a high cabinet after Sofía picked up a butter knife and threatened Diego in August; Sofía put it down when her grandmother asked, and no one was hurt. Carmen separately reported that head banging on 09/14/2026 caused a cut that required urgent care. The BCBA will rehearse with both caregivers how to protect Diego and reduce access to objects that could cause injury. [MISSING: individualized criteria and actions in the safety protocol for seeking emergency assistance during threats or self-injury.] For community safety, training will focus on prompting and reinforcing Sofía to stop, look and wait with an adult before crossing, because the BCBA observed her pull free of Carmen’s hand and run across a street without looking.\n\nDuring homework on 10/07/2026, the BCBA observed Sofía tear her worksheet and scream for 12 minutes. Her grandmother gave her the tablet, and neither homework attempt was completed. The BCBA will coach both caregivers to give advance notice before tablet time ends, use a visual schedule and prompt Sofía to request help, a break or a turn with an item before frustration escalates. Caregivers will practice honoring a break request, prompting a return to the interrupted task and reinforcing that return, so Sofía can obtain a break without having to scream or tear her work. For leaving the area and school refusal, Carmen will practice using familiar transition cues and rehearsing changes to the school-morning routine. During evening care, the BCBA will coach caregivers to prompt a calming strategy and to reinforce independent steps in showering and hair washing while fading verbal prompts. During outings, caregiver practice will include prompting a response to a peer’s invitation and then stepping back so Sofía can join the activity.\n\nCarmen reported that the grandmother will be in Colombia from 12/15/2026 to 01/20/2027, interrupting coached practice with her during the after-school routine. On 11/20/2026, Carmen confirmed to the BCBA that the YMCA after-school program at Ejemplo Elementary School had accepted Sofía beginning 12/15/2026 and that she had given staff a copy of the IEP accommodations. Carmen’s evening and Saturday availability provides opportunities to continue caregiver practice at home during the grandmother’s absence. Sharing the accommodations does not establish that YMCA staff will use the same cues. [MISSING: which transition supports YMCA staff will use and how caregiver training will resume with the grandmother after her return.]",
+          "words": 727,
+          "paragraphs": 5,
+          "markers": [
+            {
+              "kind": "missing",
+              "note": "individualized criteria and actions in the safety protocol for seeking emergency assistance during threats or self-injury."
+            },
+            {
+              "kind": "missing",
+              "note": "which transition supports YMCA staff will use and how caregiver training will resume with the grandmother after her return."
+            }
+          ],
+          "generation": null,
+          "consistency": {
+            "status": "none",
+            "items": []
+          },
+          "draftError": null,
+          "findings": [
+            {
+              "check": "shape",
+              "section": "family-caregiver-involvement",
+              "severity": "minor",
+              "message": "5 paragraphs; her range is 1 to 4."
+            },
+            {
+              "check": "shape",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "727 words; her range is 200 to 400."
+            },
+            {
+              "check": "names",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "provisional": true,
+              "message": "The mother is called by her or his given name (18 times): provisional, pending her answer, not scored."
+            },
+            {
+              "check": "payer-readiness",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Missing payer item (fci-caregivers): Each caregiver who takes part, named by role; not found: mother."
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "wants sofía to calm down without breaking things go to school without"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "reported that the grandmother speaks only spanish and is willing to learn"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "according to carmen sofía's father lives in another state and has no"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "that the ymca after school program at ejemplo elementary school had accepted"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "carmen described feeling exhausted and judged avoiding outings and dropping homework to"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "for 12 minutes her grandmother gave her the tablet and neither homework"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "during homework on 10 07 2026 the bcba observed sofía tear her"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with environmental-changes.",
+              "excerpt": "had accepted sofía beginning 12 15 2026 and that she had given"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with crisis-plan.",
+              "excerpt": "sofía put it down when her grandmother asked and no one was"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Shares 12+ words with crisis-plan.",
+              "excerpt": "pull free of carmen's hand and run across a street without looking"
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Retells \"the 11/20 session note: the YMCA program accepted Sofía\", whose home is environmental-changes (provisional home): 4 sections outside it tell it (background-information, family-caregiver-involvement, generalization-and-maintenance, discharge-and-service-fading-plan), 1 allowed."
+            },
+            {
+              "check": "repetition",
+              "section": "family-caregiver-involvement",
+              "severity": "major",
+              "message": "Retells \"the 09/14 head-banging episode and urgent care\", whose home is risk-assessment (provisional home): 4 sections outside it tell it (background-information, medical-necessity, family-caregiver-involvement, crisis-plan), 2 allowed."
+            }
+          ],
+          "scores": {
+            "markers": 2,
+            "shape": 0,
+            "numbers-sourced": 2,
+            "names": 2,
+            "repetition": 0,
+            "data-density": 2,
+            "banned-patterns": 2,
+            "examples-not-copied": 2,
+            "payer-readiness": 1,
+            "data-explained": 1,
+            "thread": 1,
+            "ownership": 0,
+            "attribution": 1,
+            "structure": 1,
+            "style": 1,
+            "nothing-invented": 0,
+            "key-facts": 2
+          },
+          "judge": {
+            "format": "json-schema",
+            "repaired": false,
+            "answers": [
+              {
+                "section": "family-caregiver-involvement",
+                "items": [
+                  {
+                    "id": "data-explained",
+                    "score": 1,
+                    "reason": "Carmen’s exhaustion and the example of dropping homework give the PRQ findings practical meaning, but the three At-Risk scores are presented as a group without distinguishing what each indicates for training.",
+                    "evidence": [
+                      "Discipline Practices (T-score 36), Parenting Confidence (T-score 34) and Relational Frustration (T-score 68) were At-Risk",
+                      "dropping homework “to keep the peace.”"
+                    ]
+                  },
+                  {
+                    "id": "thread",
+                    "score": 1,
+                    "reason": "The training connects the homework responses to break requests and returning to the task. The school-morning training names transition cues but omits Carmen’s report that Sofía sometimes stays home after refusal, leaving that training target less clearly grounded.",
+                    "evidence": [
+                      "prompting a return to the interrupted task and reinforcing that return",
+                      "Carmen will practice using familiar transition cues and rehearsing changes to the school-morning routine"
+                    ]
+                  },
+                  {
+                    "id": "ownership",
+                    "score": 0,
+                    "reason": "Beyond the permitted repeat of the family’s safety response, the section retells Risk Assessment incidents, revisits a Crisis Plan gap and recounts the YMCA update from Environmental Changes. These passages go well beyond identifying what the caregivers will practice and how the grandmother’s absence affects participation.",
+                    "evidence": [
+                      "Sofía put it down when her grandmother asked, and no one was hurt",
+                      "[MISSING: individualized criteria and actions in the safety protocol for seeking emergency assistance during threats or self-injury.]",
+                      "the YMCA after-school program at Ejemplo Elementary School had accepted Sofía beginning 12/15/2026"
+                    ]
+                  },
+                  {
+                    "id": "attribution",
+                    "score": 1,
+                    "reason": "Most evidence distinguishes Carmen’s reports, her questionnaire ratings and the BCBA’s observations. The grandmother’s usual care schedule and the signing of the school release, however, are stated without an evidence source in their respective sentences.",
+                    "evidence": [
+                      "Sofía’s maternal grandmother cares for Sofía and her 6-year-old brother Diego from 3:00 to 5:30 p.m.",
+                      "She signed a release for the school on 10/28/2026"
+                    ]
+                  },
+                  {
+                    "id": "structure",
+                    "score": 1,
+                    "reason": "The narrative covers priorities, availability, language access and mitigation for limited participation, but it uses five paragraphs rather than one to four. It describes the steps of Behavioral Skills Training instead of naming the procedure.",
+                    "evidence": [
+                      "the BCBA will model a response, give each caregiver an opportunity to rehearse it and provide feedback",
+                      "Carmen’s evening and Saturday availability provides opportunities to continue caregiver practice at home"
+                    ]
+                  },
+                  {
+                    "id": "style",
+                    "score": 1,
+                    "reason": "The wording generally stays active, uses Sofía’s first name and describes the family without blame. The safety passage is padded with incident outcomes that interrupt the account of caregiver training.",
+                    "evidence": [
+                      "Sofía put it down when her grandmother asked, and no one was hurt",
+                      "Carmen separately reported that head banging on 09/14/2026 caused a cut that required urgent care."
+                    ]
+                  },
+                  {
+                    "id": "nothing-invented",
+                    "score": 0,
+                    "reason": "The sources identify independent hygiene and joining peer play as goals, but do not specify fading verbal prompts during hygiene or prompting a reply to a peer and then stepping back. Both implementation choices are presented as settled plans without a check or missing-information marker.",
+                    "evidence": [
+                      "reinforce independent steps in showering and hair washing while fading verbal prompts",
+                      "prompting a response to a peer’s invitation and then stepping back"
+                    ]
+                  }
+                ],
+                "keyFacts": [
+                  {
+                    "id": "fci-mother",
+                    "status": "present",
+                    "quote": "Carmen reported that she works from 8:00 a.m. to 5:00 p.m. and can participate in caregiver training after 5:30 p.m. on weekdays and on Saturday mornings."
+                  },
+                  {
+                    "id": "fci-grandmother",
+                    "status": "present",
+                    "quote": "the grandmother speaks only Spanish and is willing to learn the strategies"
+                  },
+                  {
+                    "id": "fci-father",
+                    "status": "present",
+                    "quote": "According to Carmen, Sofía’s father lives in another state and has no regular contact"
+                  },
+                  {
+                    "id": "fci-prq",
+                    "status": "present",
+                    "quote": "Her ratings of Discipline Practices (T-score 36), Parenting Confidence (T-score 34) and Relational Frustration (T-score 68) were At-Risk."
+                  },
+                  {
+                    "id": "fci-current-responses",
+                    "status": "partial",
+                    "quote": "dropping homework “to keep the peace.” … Her grandmother gave her the tablet, and neither homework attempt was completed."
+                  },
+                  {
+                    "id": "fci-mother-stress",
+                    "status": "present",
+                    "quote": "Carmen described feeling “exhausted and judged,” avoiding outings"
+                  }
+                ]
+              }
+            ],
+            "error": null,
+            "requests": 1,
+            "seconds": 49.69879999998212,
+            "usage": {
+              "uncachedInputTokens": 22369,
+              "cacheWriteTokens": 0,
+              "cacheReadTokens": 0,
+              "outputTokens": 1762,
+              "reasoningTokens": 562
+            },
+            "fingerprint": "338aa387d4ab9e68f5290032fdad8d62"
+          }
+        },
+        {
+          "id": "generalization-and-maintenance",
+          "version": 1,
+          "text": "The BCBA will teach each replacement behavior with a consistent cue (discriminative stimulus) and then keep that cue the same as the person, activity or setting changes. For example, Sofía’s IEP specifies a visual cue for using her break card during class. At home, Sofía will practice using the card in response to the same cue during homework with her mother, Carmen, and her maternal grandmother, then returning to the unfinished task after the break. The BCBA will provide coaching in Spanish for the grandmother and coordinate with Sofía’s teacher at Ejemplo Elementary School so that practice at home supports the classroom goal. On 11/20/2026, Carmen confirmed that she had shared the IEP accommodations with the YMCA after-school program; the BCBA will check which cues staff plan to use rather than assume the break card is in use there. For social practice, Sofía will take conversational turns on a topic chosen by her brother Diego at home and practice responding to peers’ invitations at the neighborhood park. During outings to the public library and park, Sofía will practice stopping, looking and waiting with an adult before crossing. As Sofía becomes more proficient, the BCBA will adjust the prompt hierarchy, giving her an opportunity to respond to the cue before adding a reminder and maintaining adult supervision at street crossings.\n\nThe BCBA will conduct weekly probes of each mastered skill to check whether Sofía continues to perform it in the routine where she needs it. For example, the BCBA will record whether Sofía uses her break card and returns to homework without an additional reminder, which showering and hair-washing steps she completes without verbal prompts, and whether she stops, looks and waits at the curb with an adult. For each mastered skill, the BCBA will move from continuous reinforcement of independent responses to intermittent reinforcement and fade teaching prompts while keeping the routine cue in place. If weekly probes show a decline from the mastered level, the BCBA will reinstate the previous reinforcement schedule and the prompts that were removed. Once Sofía regains that level, the BCBA will thin reinforcement and fade those prompts again.",
+          "words": 354,
+          "paragraphs": 2,
+          "markers": [],
+          "generation": null,
+          "consistency": {
+            "status": "none",
+            "items": []
+          },
+          "draftError": null,
+          "findings": [
+            {
+              "check": "shape",
+              "section": "generalization-and-maintenance",
+              "severity": "major",
+              "message": "354 words; her range is 200 to 280."
+            },
+            {
+              "check": "names",
+              "section": "generalization-and-maintenance",
+              "severity": "major",
+              "provisional": true,
+              "message": "The mother is called by her or his given name (2 times): provisional, pending her answer, not scored."
+            },
+            {
+              "check": "repetition",
+              "section": "generalization-and-maintenance",
+              "severity": "major",
+              "message": "Retells \"the 11/20 session note: the YMCA program accepted Sofía\", whose home is environmental-changes (provisional home): 4 sections outside it tell it (background-information, family-caregiver-involvement, generalization-and-maintenance, discharge-and-service-fading-plan), 1 allowed."
+            }
+          ],
+          "scores": {
+            "markers": 2,
+            "shape": 0,
+            "numbers-sourced": 2,
+            "names": 2,
+            "repetition": 1,
+            "data-density": 2,
+            "banned-patterns": 2,
+            "examples-not-copied": 2,
+            "payer-readiness": 2,
+            "data-explained": 2,
+            "thread": 1,
+            "ownership": 2,
+            "attribution": 2,
+            "structure": 1,
+            "style": 2,
+            "nothing-invented": 1,
+            "key-facts": 0
+          },
+          "judge": {
+            "format": "json-schema",
+            "repaired": false,
+            "answers": [
+              {
+                "section": "generalization-and-maintenance",
+                "items": [
+                  {
+                    "id": "data-explained",
+                    "score": 2,
+                    "reason": "The section explains what the weekly probes will measure: whether Sofía still uses a mastered skill in the routine where she needs it. It does not repeat baseline counts or scores.",
+                    "evidence": [
+                      "weekly probes of each mastered skill to check whether Sofía continues to perform it in the routine where she needs it",
+                      "which showering and hair-washing steps she completes without verbal prompts"
+                    ]
+                  },
+                  {
+                    "id": "thread",
+                    "score": 1,
+                    "reason": "The break-card example connects the IEP goal to homework, and the crossing example preserves adult supervision as teaching prompts fade. Accepting routine changes and ordering or paying in a store, both addressed elsewhere in the assessment, have no comparable practice example.",
+                    "evidence": [
+                      "the same cue during homework with her mother, Carmen, and her maternal grandmother",
+                      "maintaining adult supervision at street crossings"
+                    ]
+                  },
+                  {
+                    "id": "ownership",
+                    "score": 2,
+                    "reason": "The references to the IEP, caregiver coaching and the YMCA explain how the BCBA will coordinate cues across settings. They do not retell the environmental change or the caregiver training plan.",
+                    "evidence": [
+                      "so that practice at home supports the classroom goal",
+                      "the BCBA will check which cues staff plan to use rather than assume the break card is in use there"
+                    ]
+                  },
+                  {
+                    "id": "attribution",
+                    "score": 2,
+                    "reason": "The section identifies the IEP as the source of the classroom cue and Carmen as the source of the YMCA update. It distinguishes those facts from planned practice and does not claim that the BCBA observed cue use at school or at the YMCA.",
+                    "evidence": [
+                      "Sofía’s IEP specifies a visual cue for using her break card during class",
+                      "On 11/20/2026, Carmen confirmed that she had shared the IEP accommodations with the YMCA after-school program"
+                    ]
+                  },
+                  {
+                    "id": "structure",
+                    "score": 1,
+                    "reason": "The two paragraphs cover generalization and then maintenance, including weekly probes, reinforcement thinning and what happens after a decline. The generalization paragraph varies people, activities and settings but not materials; receiving a break is the only natural consequence implied.",
+                    "evidence": [
+                      "as the person, activity or setting changes",
+                      "returning to the unfinished task after the break",
+                      "Once Sofía regains that level, the BCBA will thin reinforcement and fade those prompts again."
+                    ]
+                  },
+                  {
+                    "id": "style",
+                    "score": 2,
+                    "reason": "The section uses Sofía’s first name, refers to the BCBA in the third person and describes planned actions rather than promising improvement. The conditional language makes clear that maintenance depends on observed performance.",
+                    "evidence": [
+                      "The BCBA will conduct weekly probes",
+                      "If weekly probes show a decline from the mastered level"
+                    ]
+                  },
+                  {
+                    "id": "nothing-invented",
+                    "score": 1,
+                    "reason": "Prompt fading is specified, but the more specific procedure of waiting for a response to the cue before adding a reminder is an unmarked clinical choice. The weekly probes and reinforcement changes are explicitly supported by the standing instructions.",
+                    "evidence": [
+                      "adjust the prompt hierarchy, giving her an opportunity to respond to the cue before adding a reminder"
+                    ]
+                  }
+                ],
+                "keyFacts": [
+                  {
+                    "id": "gm-settings",
+                    "status": "partial",
+                    "quote": "At home, Sofía will practice using the card … coordinate with Sofía’s teacher at Ejemplo Elementary School … During outings to the public library and park"
+                  },
+                  {
+                    "id": "gm-people",
+                    "status": "present",
+                    "quote": "with her mother, Carmen, and her maternal grandmother … with Sofía’s teacher at Ejemplo Elementary School … on a topic chosen by her brother Diego"
+                  },
+                  {
+                    "id": "gm-examples",
+                    "status": "partial",
+                    "quote": "using her break card … responding to peers’ invitations at the neighborhood park … which showering and hair-washing steps she completes without verbal prompts, and whether she stops, looks and waits at the curb with an adult"
+                  }
+                ]
+              }
+            ],
+            "error": null,
+            "requests": 1,
+            "seconds": 43.90870000001788,
+            "usage": {
+              "uncachedInputTokens": 22279,
+              "cacheWriteTokens": 0,
+              "cacheReadTokens": 0,
+              "outputTokens": 1626,
+              "reasoningTokens": 642
+            },
+            "fingerprint": "4dddfa956f303aecdc8cd3ed590ef26e"
+          }
+        },
+        {
+          "id": "discharge-and-service-fading-plan",
+          "version": 1,
+          "text": "During the 10/28/2026 follow-up call, Carmen Inventada said she would consider treatment successful if Sofía “goes to school without a fight, stops hitting Diego, and can calm down without breaking things.” To evaluate readiness for discharge, the BCBA will compare treatment data with Sofía’s baselines. Across 6 hours of home and community observation, the BCBA recorded 6 episodes of physical aggression, 6 verbal outbursts lasting 6 to 15 minutes, 3 episodes of property destruction and 3 episodes of hand biting (self-injury). The BCBA will track the frequency of each behavior and the duration of verbal outbursts during routines such as homework, the end of tablet time and bedtime. For leaving the area and school refusal, the BCBA will review unsafe departures from an adult’s side during outings, classroom departures reported by the school and school mornings when refusal results in late arrival or absence. These outcomes will be reviewed separately so that improved attendance does not obscure a continuing street-crossing risk. [MISSING: discharge thresholds for each target behavior, including outburst duration, and the period for which reductions must be maintained.]\n\nDischarge will also require evidence that Sofía uses replacement skills when she needs them without a therapist directing the routine. During weekly probes, the BCBA will record whether Sofía requests help, a break or a turn with an item; uses a calming strategy when a routine changes; and returns to homework after a break. The BCBA will record which showering and hair-washing steps Sofía completes without verbal prompts and whether she stops, looks and waits before crossing with an adult. Adult supervision at crossings will remain in place as teaching prompts are faded. Other community measures will include whether Sofía responds to a peer’s invitation and joins play at the park, and whether she can order food or pay for a purchase. At school, the BCBA will request progress data on the IEP goals of using the break card with a visual cue instead of leaving class in 4 of 5 opportunities, using a taught calming strategy within 2 minutes in 3 of 5 observed opportunities, and taking at least 3 conversational turns on a peer-chosen topic in 4 of 5 opportunities. These are school goals; meeting them does not establish that Sofía can use the same skills at home or in the community. [MISSING: required independent steps or successful opportunities for each home and community skill, and number of weekly probes at criterionine needed for discharge.]\n\nThe BCBA will reduce direct service hours gradually as Sofía meets her behavior and skill goals and weekly probes show that gains hold with less therapist support. Caregiver training will continue as direct hours decrease, with coaching in Spanish for Sofía’s grandmother. Before discharge, the BCBA will observe whether Carmen and the grandmother can use transition cues, honor a break request, reinforce a return to the interrupted task, fade hygiene prompts and carry out safety strategies without coaching. [MISSING: caregiver implementation accuracy and number of independent demonstrations required in each caregiver’s usual routines.] If weekly probes show that a skill has fallen below its mastered level, the BCBA will defer further reduction, reinstate the previous prompts and reinforcement schedule, and check that Sofía regains the skill before fading support again.\n\nThe BCBA will review the timing of reductions with Carmen in light of changes in Sofía’s routines. On 11/20/2026, Carmen confirmed that the YMCA after-school program had accepted Sofía beginning 12/15/2026 and that she had shared the IEP accommodations with staff. The BCBA will verify which cues staff use rather than assume that skills demonstrated with the grandmother carry over to after-school care. Using the releases Carmen signed on 10/28/2026, the BCBA will plan the transition with Carmen, the school team, including the speech-language pathologist, and Sofía’s psychiatrist, Dr. Iván Hipotético. In preparing for the school change Carmen anticipates in March 2027, the BCBA will review which break and transition cues Sofía uses successfully and which routines still require support. The change of school will prompt a review of progress, not serve as a discharge criterion.",
+          "words": 673,
+          "paragraphs": 4,
+          "markers": [
+            {
+              "kind": "missing",
+              "note": "discharge thresholds for each target behavior, including outburst duration, and the period for which reductions must be maintained."
+            },
+            {
+              "kind": "missing",
+              "note": "required independent steps or successful opportunities for each home and community skill, and number of weekly probes at criterionine needed for discharge."
+            },
+            {
+              "kind": "missing",
+              "note": "caregiver implementation accuracy and number of independent demonstrations required in each caregiver’s usual routines."
+            }
+          ],
+          "generation": null,
+          "consistency": {
+            "status": "none",
+            "items": []
+          },
+          "draftError": null,
+          "findings": [
+            {
+              "check": "shape",
+              "section": "discharge-and-service-fading-plan",
+              "severity": "minor",
+              "message": "4 paragraphs; her range is 2 to 3."
+            },
+            {
+              "check": "names",
+              "section": "discharge-and-service-fading-plan",
+              "severity": "major",
+              "provisional": true,
+              "message": "The mother is called by her or his given name (7 times): provisional, pending her answer, not scored."
+            },
+            {
+              "check": "data-density",
+              "section": "discharge-and-service-fading-plan",
+              "severity": "major",
+              "message": "7 numbers and no clause of meaning.",
+              "excerpt": "Across 6 hours of home and community observation, the BCBA recorded 6 episodes of physical aggression, 6 verbal outbursts lasting 6 to 15 minutes, 3 episodes o…"
+            },
+            {
+              "check": "data-density",
+              "section": "discharge-and-service-fading-plan",
+              "severity": "major",
+              "message": "8 numbers and no clause of meaning.",
+              "excerpt": "At school, the BCBA will request progress data on the IEP goals of using the break card with a visual cue instead of leaving class in 4 of 5 opportunities, usi…"
+            },
+            {
+              "check": "repetition",
+              "section": "discharge-and-service-fading-plan",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "on 11 20 2026 carmen confirmed that the ymca after school program"
+            },
+            {
+              "check": "repetition",
+              "section": "discharge-and-service-fading-plan",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "6 verbal outbursts lasting 6 to 15 minutes 3 episodes of property"
+            },
+            {
+              "check": "repetition",
+              "section": "discharge-and-service-fading-plan",
+              "severity": "major",
+              "message": "Shares 12+ words with environmental-changes.",
+              "excerpt": "program had accepted sofía beginning 12 15 2026 and that she had"
+            },
+            {
+              "check": "repetition",
+              "section": "discharge-and-service-fading-plan",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "across 6 hours of home and community observation the bcba recorded 6"
+            },
+            {
+              "check": "repetition",
+              "section": "discharge-and-service-fading-plan",
+              "severity": "major",
+              "message": "Retells \"the 11/20 session note: the YMCA program accepted Sofía\", whose home is environmental-changes (provisional home): 4 sections outside it tell it (background-information, family-caregiver-involvement, generalization-and-maintenance, discharge-and-service-fading-plan), 1 allowed."
+            }
+          ],
+          "scores": {
+            "markers": 2,
+            "shape": 1,
+            "numbers-sourced": 2,
+            "names": 2,
+            "repetition": 0,
+            "data-density": 1,
+            "banned-patterns": 2,
+            "examples-not-copied": 2,
+            "payer-readiness": 2,
+            "data-explained": 1,
+            "thread": 1,
+            "ownership": 1,
+            "attribution": 2,
+            "structure": 1,
+            "style": 1,
+            "nothing-invented": 0,
+            "key-facts": 1
+          },
+          "judge": {
+            "format": "json-schema",
+            "repaired": false,
+            "answers": [
+              {
+                "section": "discharge-and-service-fading-plan",
+                "items": [
+                  {
+                    "id": "data-explained",
+                    "score": 1,
+                    "reason": "The section explains why better attendance would not establish safer street crossing. The four observed behavior baselines, however, appear in one list without explaining what the individual counts mean for Sofía.",
+                    "evidence": [
+                      "6 episodes of physical aggression, 6 verbal outbursts lasting 6 to 15 minutes, 3 episodes of property destruction and 3 episodes of hand biting",
+                      "improved attendance does not obscure a continuing street-crossing risk"
+                    ]
+                  },
+                  {
+                    "id": "thread",
+                    "score": 1,
+                    "reason": "The target names, routines and caregivers match the rest of the assessment. The baseline comparison is incomplete for leaving the area and school refusal: the section identifies what to track but does not connect those measures to the observed community departure, the IEP frequency or the caregiver-reported refusal baseline.",
+                    "evidence": [
+                      "the BCBA will compare treatment data with Sofía’s baselines",
+                      "unsafe departures from an adult’s side during outings, classroom departures reported by the school and school mornings when refusal results in late arrival or absence"
+                    ]
+                  },
+                  {
+                    "id": "ownership",
+                    "score": 1,
+                    "reason": "Most of the section addresses readiness and fading, but it repeats the YMCA update from Environmental Changes and describes the prompt-and-reinforcement procedure owned by Generalization and Maintenance. Deferring an hours reduction is a discharge decision; the details of reteaching the skill are not.",
+                    "evidence": [
+                      "reinstate the previous prompts and reinforcement schedule",
+                      "the YMCA after-school program had accepted Sofía beginning 12/15/2026 and that she had shared the IEP accommodations with staff"
+                    ]
+                  },
+                  {
+                    "id": "attribution",
+                    "score": 2,
+                    "reason": "The section distinguishes Carmen’s reports, the BCBA’s direct observations and the IEP’s goals. It describes school progress data as something the BCBA will request, not as evidence the BCBA has already observed.",
+                    "evidence": [
+                      "During the 10/28/2026 follow-up call, Carmen Inventada said",
+                      "Across 6 hours of home and community observation, the BCBA recorded",
+                      "the BCBA will request progress data on the IEP goals"
+                    ]
+                  },
+                  {
+                    "id": "structure",
+                    "score": 1,
+                    "reason": "The four paragraphs cover behaviors, skills, caregivers, fading and coordination, but omit the required opening discharge grounds and exceed the two- or three-paragraph format. Caregiver training is described as continuing, not increasing, as direct hours decrease.",
+                    "evidence": [
+                      "To evaluate readiness for discharge, the BCBA will compare treatment data with Sofía’s baselines.",
+                      "Caregiver training will continue as direct hours decrease"
+                    ]
+                  },
+                  {
+                    "id": "style",
+                    "score": 1,
+                    "reason": "The narrative generally uses Sofía’s first name, the BCBA in the third person and future tense for planned actions. A typographical error obscures the missing skill criterion.",
+                    "evidence": [
+                      "number of weekly probes at criterionine needed for discharge"
+                    ]
+                  },
+                  {
+                    "id": "nothing-invented",
+                    "score": 0,
+                    "reason": "The section marks unknown discharge thresholds rather than guessing them, but states a weekly probe schedule and a specific prompt-and-reinforcement reinstatement procedure without qualification. Their appearance in another drafted section does not establish them in the sources, session notes or standing instructions.",
+                    "evidence": [
+                      "During weekly probes, the BCBA will record",
+                      "reinstate the previous prompts and reinforcement schedule"
+                    ]
+                  }
+                ],
+                "keyFacts": [
+                  {
+                    "id": "dc-behaviors",
+                    "status": "partial",
+                    "quote": "Across 6 hours of home and community observation, the BCBA recorded 6 episodes of physical aggression, 6 verbal outbursts lasting 6 to 15 minutes, 3 episodes of property destruction and 3 episodes of hand biting (self-injury)."
+                  },
+                  {
+                    "id": "dc-skills",
+                    "status": "partial",
+                    "quote": "The BCBA will record which showering and hair-washing steps Sofía completes without verbal prompts and whether she stops, looks and waits before crossing with an adult."
+                  },
+                  {
+                    "id": "dc-caregivers",
+                    "status": "present",
+                    "quote": "Before discharge, the BCBA will observe whether Carmen and the grandmother can use transition cues, honor a break request, reinforce a return to the interrupted task, fade hygiene prompts and carry out safety strategies without coaching."
+                  },
+                  {
+                    "id": "dc-coordination",
+                    "status": "present",
+                    "quote": "Using the releases Carmen signed on 10/28/2026, the BCBA will plan the transition with Carmen, the school team, including the speech-language pathologist, and Sofía’s psychiatrist, Dr. Iván Hipotético."
+                  }
+                ]
+              }
+            ],
+            "error": null,
+            "requests": 1,
+            "seconds": 46.0055,
+            "usage": {
+              "uncachedInputTokens": 22414,
+              "cacheWriteTokens": 0,
+              "cacheReadTokens": 0,
+              "outputTokens": 1821,
+              "reasoningTokens": 690
+            },
+            "fingerprint": "b0313aa72585dd80e80cad184b037528"
+          }
+        },
+        {
+          "id": "risk-assessment",
+          "version": 1,
+          "text": "Physical aggression places Sofía’s 6-year-old brother Diego at risk of repeated injury. During the 10/05/2026 interview, her mother, Carmen Inventada, reported that Sofía hits, kicks or pushes Diego several times a day, often over the tablet or TV remote, and that he had a bruise on his upper arm the week before the interview. Across 6 hours of home and community observation, the BCBA recorded 6 episodes of physical aggression. On 10/07/2026, the BCBA saw Sofía push Diego to the floor and kick his leg after he picked up her train book; he cried, but there was no visible injury. At the park on 10/10/2026, the BCBA saw Sofía push Diego off a swing. At home on 10/14/2026, when dinner was 10 minutes later than usual, the BCBA saw Sofía hit Carmen’s arm twice. At school, the 04/17/2026 IEP documents pushing or kicking peers about 2 times per week, mostly at lunch and recess. Carmen reported a 1-day suspension in May 2026 after Sofía kicked a classmate. During the summer program observation on 07/22/2026, Dr. Marta Supuesta saw Sofía shove a peer who sat in her preferred seat.\n\nVerbal outbursts are of particular concern when Sofía threatens someone within reach. The BCBA recorded 6 outbursts in 6 hours, lasting 6 to 15 minutes (mean 9.7 minutes), including a 15-minute bedtime episode during which Sofía said, “I’ll run away.” Carmen reported outbursts nearly every day after school and at bedtime, sometimes lasting half an hour; the IEP describes almost daily outbursts when tasks change or Sofía loses a game. On 10/28/2026, Carmen described an August incident in which Sofía picked up a butter knife during an argument with Diego and told him, “I’ll kill you.” According to Carmen, Sofía put the knife down when her grandmother asked, and no one was hurt. Carmen reported that kitchen knives have since been stored in a high cabinet and that there are no firearms in the home. She said that during outbursts she or the grandmother sends Diego to his room, moves breakable objects out of reach and waits for Sofía to become quiet.\n\nProperty destruction also puts people nearby at risk when Sofía throws or kicks objects. The BCBA recorded 3 episodes in 6 hours, all at home. During homework on 10/07/2026, Sofía tore her worksheet and threw her pencil case across the room; during the delayed dinner on 10/14/2026, she kicked a chair over. Carmen reported that Sofía tears homework about half the time it is assigned, broke the TV remote on 10/01/2026 and tore a school library book in September. At school, the teacher’s account in the IEP documents that Sofía threw a chair on 03/12/2026 when asked to move from the computer to a writing assignment. The class was evacuated to the hallway while Sofía calmed down, which took about 25 minutes.\n\nFor hand biting (self-injury), the BCBA recorded 3 episodes in 6 hours: Sofía bit the back of her left hand twice during a second homework attempt on 10/07/2026, leaving red marks without breaking the skin, and bit her right wrist once when the tablet was removed at bedtime on 10/14/2026. Separately from the hand-biting baseline, Carmen reported that on 09/14/2026 Sofía struck her head against the bedroom wall during an outburst. According to Carmen, the grandmother took Sofía to urgent care for a cut above her eyebrow that was cleaned and closed with skin glue. The BCBA did not have the urgent care record. At follow-up on 10/28/2026, Carmen reported no subsequent injuries requiring medical care.\n\nFor leaving the area and school refusal, the most immediate danger the BCBA observed was at a street crossing. On the way to the park on 10/10/2026, Sofía pulled her wrist free of Carmen’s hand and ran across the street without looking. The BCBA recorded 1 such episode; no cars were present at that moment. Carmen reported that Sofía runs across streets without looking when excited and that she holds Sofía’s wrist in parking lots. At school, the IEP documents that Sofía leaves the classroom without permission 2 to 4 times per week, usually during writing or group work, and is found in the hallway or media center. Dr. Supuesta observed Sofía leave the group twice during the 2-hour summer program observation; she was found in the hallway. The BCBA did not observe at school because district approval was pending. School refusal presents a separate risk to attendance: Carmen reported that Sofía cried, locked herself in the bathroom or refused to board the bus on 6 of 20 school days in October [CHECK: the 10/05/2026 interview notes give this October count; verify the attendance period with Carmen or school records]. According to Carmen, on those mornings she arrived late to work or Sofía stayed home with her grandmother.",
+          "words": 796,
+          "paragraphs": 5,
+          "markers": [
+            {
+              "kind": "check",
+              "note": "the 10/05/2026 interview notes give this October count; verify the attendance period with Carmen or school records"
+            }
+          ],
+          "generation": null,
+          "consistency": {
+            "status": "none",
+            "items": []
+          },
+          "draftError": null,
+          "findings": [
+            {
+              "check": "shape",
+              "section": "risk-assessment",
+              "severity": "minor",
+              "message": "5 paragraphs; her range is 3 to 4."
+            },
+            {
+              "check": "shape",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "796 words; her range is 300 to 400."
+            },
+            {
+              "check": "names",
+              "section": "risk-assessment",
+              "severity": "major",
+              "provisional": true,
+              "message": "The mother is called by her or his given name (15 times): provisional, pending her answer, not scored."
+            },
+            {
+              "check": "data-density",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "6 numbers and no clause of meaning.",
+              "excerpt": "The BCBA recorded 6 outbursts in 6 hours, lasting 6 to 15 minutes (mean 9.7 minutes), including a 15-minute bedtime episode during which Sofía said, “I’ll run …"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "several times a day often over the tablet or tv remote and"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "the bcba saw sofía push diego to the floor and kick his"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "on 09 14 2026 sofía struck her head against the bedroom wall"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with background-information.",
+              "excerpt": "the iep documents that sofía leaves the classroom without permission 2 to"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "sofía pulled her wrist free of carmen's hand and ran across the"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "without permission 2 to 4 times per week usually during writing or"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with medical-necessity.",
+              "excerpt": "found in the hallway the bcba did not observe at school because"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with strengths-and-weaknesses.",
+              "excerpt": "the iep documents that sofía leaves the classroom without permission 2 to"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with environmental-changes.",
+              "excerpt": "sofía cried locked herself in the bathroom or refused to board the"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with discharge-and-service-fading-plan.",
+              "excerpt": "across 6 hours of home and community observation the bcba recorded 6"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with crisis-plan.",
+              "excerpt": "she or the grandmother sends diego to his room moves breakable objects"
+            },
+            {
+              "check": "repetition",
+              "section": "risk-assessment",
+              "severity": "major",
+              "message": "Shares 12+ words with crisis-plan.",
+              "excerpt": "carmen reported that on 09 14 2026 sofía struck her head against"
+            }
+          ],
+          "scores": {
+            "markers": 2,
+            "shape": 0,
+            "numbers-sourced": 2,
+            "names": 2,
+            "repetition": 0,
+            "data-density": 1,
+            "banned-patterns": 2,
+            "examples-not-copied": 2,
+            "payer-readiness": 2,
+            "data-explained": 1,
+            "thread": 1,
+            "ownership": 1,
+            "attribution": 1,
+            "structure": 0,
+            "style": 2,
+            "nothing-invented": 2,
+            "key-facts": 2
+          },
+          "judge": {
+            "format": "json-schema",
+            "repaired": false,
+            "answers": [
+              {
+                "section": "risk-assessment",
+                "items": [
+                  {
+                    "id": "data-explained",
+                    "score": 1,
+                    "reason": "The bruise, suspension and classroom evacuation show what the behaviors cost Sofía and others. Parts of the section still read as an incident list, and the outburst count, range and mean do not explain why duration matters or which episodes involved danger to someone else.",
+                    "evidence": [
+                      "he had a bruise on his upper arm the week before the interview",
+                      "6 outbursts in 6 hours, lasting 6 to 15 minutes (mean 9.7 minutes)",
+                      "broke the TV remote on 10/01/2026 and tore a school library book in September"
+                    ]
+                  },
+                  {
+                    "id": "thread",
+                    "score": 1,
+                    "reason": "The five target behaviors and their baselines match the other sections, including the distinction between unsafe crossing and school refusal. The section does not connect the plan’s reliance on consistent cues and fading prompts, described in Generalization and Maintenance, to the risks of carrying it out.",
+                    "evidence": [
+                      "For hand biting (self-injury), the BCBA recorded 3 episodes in 6 hours",
+                      "the most immediate danger the BCBA observed was at a street crossing",
+                      "School refusal presents a separate risk to attendance"
+                    ]
+                  },
+                  {
+                    "id": "ownership",
+                    "score": 1,
+                    "reason": "The knife incident belongs here as evidence of the threat to Diego. The passage then shifts from documenting danger to retelling the family’s crisis responses, which the Crisis Plan owns.",
+                    "evidence": [
+                      "kitchen knives have since been stored in a high cabinet",
+                      "sends Diego to his room, moves breakable objects out of reach and waits for Sofía to become quiet"
+                    ]
+                  },
+                  {
+                    "id": "attribution",
+                    "score": 1,
+                    "reason": "Most sentences distinguish caregiver report, IEP documentation and direct observation. The homework and dinner incidents, classroom evacuation and street-crossing description rely on adjacent sentences to identify their sources.",
+                    "evidence": [
+                      "During homework on 10/07/2026, Sofía tore her worksheet and threw her pencil case across the room",
+                      "The class was evacuated to the hallway while Sofía calmed down",
+                      "On the way to the park on 10/10/2026, Sofía pulled her wrist free of Carmen’s hand and ran across the street without looking."
+                    ]
+                  },
+                  {
+                    "id": "structure",
+                    "score": 0,
+                    "reason": "The five behavior-by-behavior paragraphs omit the opening implementation risks and place the immediate street danger last rather than ordering risks by danger. There is no least-restrictive, function-based rationale, exclusion of restraint and seclusion, reference to the Crisis Plan, or closing discussion of training, fidelity checks and adjustment.",
+                    "evidence": [
+                      "Physical aggression places Sofía’s 6-year-old brother Diego at risk of repeated injury.",
+                      "For leaving the area and school refusal, the most immediate danger the BCBA observed was at a street crossing."
+                    ]
+                  },
+                  {
+                    "id": "style",
+                    "score": 2,
+                    "reason": "The section uses Sofía’s first name and refers to the BCBA in the third person. It describes current risks in the present tense and observed incidents in the past, without blame or promised outcomes.",
+                    "evidence": [
+                      "Verbal outbursts are of particular concern when Sofía threatens someone within reach.",
+                      "At the park on 10/10/2026, the BCBA saw Sofía push Diego off a swing."
+                    ]
+                  },
+                  {
+                    "id": "nothing-invented",
+                    "score": 2,
+                    "reason": "The incidents and counts are supported by the records. The section preserves the limits of the evidence for urgent care and school observation, and flags the questionable attendance period instead of resolving it by assumption.",
+                    "evidence": [
+                      "The BCBA did not have the urgent care record.",
+                      "The BCBA did not observe at school because district approval was pending.",
+                      "[CHECK: the 10/05/2026 interview notes give this October count; verify the attendance period with Carmen or school records]"
+                    ]
+                  }
+                ],
+                "keyFacts": [
+                  {
+                    "id": "ra-aggression",
+                    "status": "present",
+                    "quote": "Sofía hits, kicks or pushes Diego several times a day, often over the tablet or TV remote, and that he had a bruise on his upper arm the week before the interview. … Carmen reported a 1-day suspension in May 2026 after Sofía kicked a classmate."
+                  },
+                  {
+                    "id": "ra-threats",
+                    "status": "present",
+                    "quote": "On 10/28/2026, Carmen described an August incident in which Sofía picked up a butter knife during an argument with Diego and told him, “I’ll kill you.”"
+                  },
+                  {
+                    "id": "ra-street",
+                    "status": "present",
+                    "quote": "On the way to the park on 10/10/2026, Sofía pulled her wrist free of Carmen’s hand and ran across the street without looking. The BCBA recorded 1 such episode; no cars were present at that moment. … At school, the IEP documents that Sofía leaves the classroom without permission 2 to 4 times per week"
+                  },
+                  {
+                    "id": "ra-self-injury",
+                    "status": "present",
+                    "quote": "Sofía bit the back of her left hand twice during a second homework attempt on 10/07/2026, leaving red marks without breaking the skin … Carmen reported that on 09/14/2026 Sofía struck her head against the bedroom wall during an outburst. According to Carmen, the grandmother took Sofía to urgent care for a cut above her eyebrow that was cleaned and closed with skin glue."
+                  },
+                  {
+                    "id": "ra-property",
+                    "status": "present",
+                    "quote": "At school, the teacher’s account in the IEP documents that Sofía threw a chair on 03/12/2026 when asked to move from the computer to a writing assignment. The class was evacuated to the hallway while Sofía calmed down, which took about 25 minutes."
+                  }
+                ]
+              }
+            ],
+            "error": null,
+            "requests": 1,
+            "seconds": 41.32859999999404,
+            "usage": {
+              "uncachedInputTokens": 22376,
+              "cacheWriteTokens": 0,
+              "cacheReadTokens": 0,
+              "outputTokens": 1759,
+              "reasoningTokens": 357
+            },
+            "fingerprint": "8181143fd5afd6a91bcc3f08d26bc46c"
+          }
+        },
+        {
+          "id": "crisis-plan",
+          "version": 1,
+          "text": "Carmen Inventada identified the hours after school (3:30 to 6:00 p.m.), homework, bedtime and school mornings as times when Sofía is most likely to have difficulty. An early sign during homework on 10/07/2026 was a spoken refusal: the BCBA heard Sofía say, “No, I’m done with school,” before she tore her worksheet, threw her pencil case and screamed. There is not always a warning that gives the caregiver time to respond. On 10/14/2026, when dinner was 10 minutes late, the BCBA observed Sofía scream, kick over a chair and hit Carmen’s arm twice. Before predictable transitions, the BCBA will coach Carmen and the grandmother to use the visual schedule, give advance notice before tablet time ends and prompt Sofía to request help, a break or a turn. These supports are intended for use before anyone is in danger.\n\nFor physical aggression, verbal outbursts that include threats and property destruction, the first concern at home is protecting Diego and others nearby. During the 10/28/2026 call, Carmen described the family’s current response: she or the grandmother sends Diego to his room, moves breakable objects out of reach, stops talking to Sofía and waits until she is quiet. Carmen reported that kitchen knives have been kept in a high cabinet since August, when Sofía picked up a butter knife and threatened Diego during an argument. Sofía put it down when her grandmother asked, and no one was hurt. The BCBA will rehearse with both caregivers how to move Diego away and reduce access to objects that could cause injury. [MISSING: BCBA-approved response if physical aggression continues, thrown objects endanger others or Sofía threatens someone while holding an object that could cause injury.]\n\nFor hand biting (self-injury), the BCBA observed Sofía bite her hand during homework and her wrist when the tablet was removed at bedtime. The bites during homework left red marks without breaking the skin. Separately, Carmen reported that on 09/14/2026 Sofía struck her head against a wall and sustained a cut above her eyebrow that required treatment at urgent care; the urgent care record was unavailable. [MISSING: individualized caregiver and staff response to active hand biting or head banging, including how to respond to injury.]\n\nFor leaving the area and school refusal, the immediate safety concern is Sofía leaving an adult’s side near traffic, rather than refusal to board the school bus. On 10/10/2026, the BCBA saw Sofía pull free of Carmen’s hand and run across a street without looking. During outings, caregivers will maintain adult supervision at crossings and practice prompting Sofía to stop, look and wait with an adult. This practice does not specify what to do once Sofía has left the adult’s side. [MISSING: immediate response if Sofía runs toward traffic or her location is unknown.]\n\nCarmen reported on 10/28/2026 that the family had never called 911. [MISSING: individualized criteria for seeking urgent medical care or calling 911 during a threat, ongoing aggression, self-injury or unsafe departure, including who makes the call during a session.] Carmen and the grandmother must follow the agreed crisis protocol and report incidents to the BCBA. The BCBA will review and rehearse the protocol with Carmen in English and make training accessible in Spanish for the grandmother. [MISSING: agency requirement for caregiver presence or reachability during home and community sessions, and required incident-reporting method and timeframe.]\n\nFor each crisis, the BCBA will review the incident record with the caregiver or staff member who witnessed it, distinguishing direct observation from information reported by others. The record will identify the setting, what happened immediately beforehand, the behavior, who was at risk, the response used and the outcome, including any injury or medical care. The BCBA will review episode counts and verbal outburst duration alongside these details so that a brief but dangerous event, such as running into a street, is not overlooked. Following each crisis, the BCBA will use the review to revise the plan and rehearse any changed steps with the caregivers and treatment team.",
+          "words": 661,
+          "paragraphs": 6,
+          "markers": [
+            {
+              "kind": "missing",
+              "note": "BCBA-approved response if physical aggression continues, thrown objects endanger others or Sofía threatens someone while holding an object that could cause injury."
+            },
+            {
+              "kind": "missing",
+              "note": "individualized caregiver and staff response to active hand biting or head banging, including how to respond to injury."
+            },
+            {
+              "kind": "missing",
+              "note": "immediate response if Sofía runs toward traffic or her location is unknown."
+            },
+            {
+              "kind": "missing",
+              "note": "individualized criteria for seeking urgent medical care or calling 911 during a threat, ongoing aggression, self-injury or unsafe departure, including who makes the call during a session."
+            },
+            {
+              "kind": "missing",
+              "note": "agency requirement for caregiver presence or reachability during home and community sessions, and required incident-reporting method and timeframe."
+            }
+          ],
+          "generation": null,
+          "consistency": {
+            "status": "none",
+            "items": []
+          },
+          "draftError": null,
+          "findings": [
+            {
+              "check": "names",
+              "section": "crisis-plan",
+              "severity": "major",
+              "provisional": true,
+              "message": "The mother is called by her or his given name (10 times): provisional, pending her answer, not scored."
+            },
+            {
+              "check": "repetition",
+              "section": "crisis-plan",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "sofía put it down when her grandmother asked and no one was"
+            },
+            {
+              "check": "repetition",
+              "section": "crisis-plan",
+              "severity": "major",
+              "message": "Shares 12+ words with family-caregiver-involvement.",
+              "excerpt": "pull free of carmen's hand and run across a street without looking"
+            },
+            {
+              "check": "repetition",
+              "section": "crisis-plan",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "she or the grandmother sends diego to his room moves breakable objects"
+            },
+            {
+              "check": "repetition",
+              "section": "crisis-plan",
+              "severity": "major",
+              "message": "Shares 12+ words with risk-assessment.",
+              "excerpt": "carmen reported that on 09 14 2026 sofía struck her head against"
+            },
+            {
+              "check": "repetition",
+              "section": "crisis-plan",
+              "severity": "major",
+              "message": "Retells \"the 09/14 head-banging episode and urgent care\", whose home is risk-assessment (provisional home): 4 sections outside it tell it (background-information, medical-necessity, family-caregiver-involvement, crisis-plan), 2 allowed."
+            },
+            {
+              "check": "repetition",
+              "section": "crisis-plan",
+              "severity": "major",
+              "message": "Retells \"the butter knife and the threat to Diego\", whose home is risk-assessment (provisional home): 2 sections outside it tell it (family-caregiver-involvement, crisis-plan), 1 allowed."
+            }
+          ],
+          "scores": {
+            "markers": 2,
+            "shape": 2,
+            "numbers-sourced": 2,
+            "names": 2,
+            "repetition": 0,
+            "data-density": 2,
+            "banned-patterns": 2,
+            "examples-not-copied": 2,
+            "payer-readiness": 2,
+            "data-explained": 2,
+            "thread": 2,
+            "ownership": 0,
+            "attribution": 1,
+            "structure": 1,
+            "style": 2,
+            "nothing-invented": 0,
+            "key-facts": 1
+          },
+          "judge": {
+            "format": "json-schema",
+            "repaired": false,
+            "answers": [
+              {
+                "section": "crisis-plan",
+                "items": [
+                  {
+                    "id": "data-explained",
+                    "score": 2,
+                    "reason": "The after-school time window identifies when caregivers can anticipate difficulty, and the delayed-dinner example shows why a routine change matters for safety. The section does not repeat a list of baseline counts.",
+                    "evidence": [
+                      "the hours after school (3:30 to 6:00 p.m.), homework, bedtime and school mornings",
+                      "when dinner was 10 minutes late, the BCBA observed Sofía scream, kick over a chair and hit Carmen’s arm twice"
+                    ]
+                  },
+                  {
+                    "id": "thread",
+                    "score": 2,
+                    "reason": "The section uses the established target names and connects them to the same people and safety concerns as the Risk Assessment. It distinguishes unsafe departure near traffic from school refusal and keeps head banging separate from the hand-biting observations.",
+                    "evidence": [
+                      "the first concern at home is protecting Diego and others nearby",
+                      "For hand biting (self-injury)",
+                      "Sofía leaving an adult’s side near traffic, rather than refusal to board the school bus"
+                    ]
+                  },
+                  {
+                    "id": "ownership",
+                    "score": 0,
+                    "reason": "Several passages retell evidence owned by the Risk Assessment, including how the knife incident ended, the urgent-care injury and the observed street crossing. Reporting the family’s current precautions belongs here; repeating the incidents in detail does not.",
+                    "evidence": [
+                      "Sofía put it down when her grandmother asked, and no one was hurt.",
+                      "sustained a cut above her eyebrow that required treatment at urgent care; the urgent care record was unavailable",
+                      "On 10/10/2026, the BCBA saw Sofía pull free of Carmen’s hand and run across a street without looking."
+                    ]
+                  },
+                  {
+                    "id": "attribution",
+                    "score": 1,
+                    "reason": "Most incidents clearly distinguish Carmen’s reports from the BCBA’s observations. The knife outcome and the observed bite marks rely on attribution in a preceding sentence, and the general claim about warning time has no stated source.",
+                    "evidence": [
+                      "There is not always a warning that gives the caregiver time to respond.",
+                      "Sofía put it down when her grandmother asked, and no one was hurt.",
+                      "The bites during homework left red marks without breaking the skin."
+                    ]
+                  },
+                  {
+                    "id": "structure",
+                    "score": 1,
+                    "reason": "The section covers the family’s responses, marks gaps in emergency procedures and includes incident follow-up, but it lacks a numbered highest-risk protocol or a complete scope statement covering suspension of teaching and supervision distance. It also omits the prohibition on restraint and seclusion and the required weekly data review, RBT and caregiver fidelity observations, caregiver practicality check and response to slow progress.",
+                    "evidence": [
+                      "During the 10/28/2026 call, Carmen described the family’s current response",
+                      "[MISSING: immediate response if Sofía runs toward traffic or her location is unknown.]",
+                      "For each crisis, the BCBA will review the incident record"
+                    ]
+                  },
+                  {
+                    "id": "style",
+                    "score": 2,
+                    "reason": "The section uses Sofía’s first name and “the BCBA,” describes observations in the past tense and uses direct, nonblaming language for planned actions without promising outcomes.",
+                    "evidence": [
+                      "the BCBA heard Sofía say, “No, I’m done with school,”",
+                      "The BCBA will rehearse with both caregivers how to move Diego away"
+                    ]
+                  },
+                  {
+                    "id": "nothing-invented",
+                    "score": 0,
+                    "reason": "The observations do not establish the general claim about insufficient warning time. The draft also makes reporting to the BCBA mandatory and commits to revising the plan after every crisis, although neither the reporting recipient nor automatic revision is specified in the sources or instructions.",
+                    "evidence": [
+                      "There is not always a warning that gives the caregiver time to respond.",
+                      "Carmen and the grandmother must follow the agreed crisis protocol and report incidents to the BCBA.",
+                      "Following each crisis, the BCBA will use the review to revise the plan"
+                    ]
+                  }
+                ],
+                "keyFacts": [
+                  {
+                    "id": "cp-times",
+                    "status": "present",
+                    "quote": "Carmen Inventada identified the hours after school (3:30 to 6:00 p.m.), homework, bedtime and school mornings as times when Sofía is most likely to have difficulty."
+                  },
+                  {
+                    "id": "cp-early-signs",
+                    "status": "present",
+                    "quote": "the BCBA heard Sofía say, “No, I’m done with school,” before she tore her worksheet, threw her pencil case and screamed. […] the BCBA observed Sofía scream, kick over a chair and hit Carmen’s arm twice."
+                  },
+                  {
+                    "id": "cp-family-responses",
+                    "status": "present",
+                    "quote": "she or the grandmother sends Diego to his room, moves breakable objects out of reach, stops talking to Sofía and waits until she is quiet. […] Carmen reported on 10/28/2026 that the family had never called 911."
+                  },
+                  {
+                    "id": "cp-knives",
+                    "status": "present",
+                    "quote": "Carmen reported that kitchen knives have been kept in a high cabinet since August"
+                  },
+                  {
+                    "id": "cp-missing",
+                    "status": "present",
+                    "quote": "[MISSING: BCBA-approved response if physical aggression continues, thrown objects endanger others or Sofía threatens someone while holding an object that could cause injury.] […] [MISSING: individualized criteria for seeking urgent medical care or calling 911 during a threat, ongoing aggression, self-injury or unsafe departure, including who makes the call during a session.] […] [MISSING: agency requirement for caregiver presence or reachability during home and community sessions, and required incident-reporting method and timeframe.]"
+                  },
+                  {
+                    "id": "cp-firearms",
+                    "status": "absent",
+                    "quote": ""
+                  }
+                ]
+              }
+            ],
+            "error": null,
+            "requests": 1,
+            "seconds": 38.6345,
+            "usage": {
+              "uncachedInputTokens": 22450,
+              "cacheWriteTokens": 0,
+              "cacheReadTokens": 0,
+              "outputTokens": 1539,
+              "reasoningTokens": 173
+            },
+            "fingerprint": "837f717a72b488b9672e3abaa3bd719a"
+          }
+        }
+      ]
+    }
+  ]
+}

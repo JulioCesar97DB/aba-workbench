@@ -490,6 +490,13 @@ export interface AbaApi {
   setModel(provider: DraftingProvider, model: string): Promise<AiPreferences>;
   /** Puts a version on the clipboard the way ABA Matrix takes it; says how many markers are left. */
   copySection(caseId: string, sectionId: ReportSectionId, version: number): Promise<CopySectionResult>;
+  /**
+   * Development only, for pnpm eval (docs/evaluation.md): the evaluation's judge scores one
+   * section against the rubric. The main process answers it only in a development build
+   * started with --hidden; anywhere else the call is refused. `input` is a JudgeInput
+   * (src/lib/judge.ts). The answer streams as generation updates ("text", then "done"); nothing is saved.
+   */
+  judgeSection(caseId: string, sectionId: ReportSectionId, generationId: string, provider: DraftingProvider, input: unknown): Promise<StartSectionResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -543,6 +550,7 @@ export const IPC_CHANNELS = {
   saveSessionNotes: "sections:save-notes",
   startNewSession: "sections:new-session",
   copySection: "sections:copy",
+  judgeSection: "eval:judge-section",
   getAiPreferences: "settings:get-ai",
   setModel: "settings:set-model",
 } as const;

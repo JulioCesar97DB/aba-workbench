@@ -46,6 +46,14 @@ export function resolveHiddenMode(options: { isPackaged: boolean; requested: boo
 }
 
 /**
+ * Whether the evaluation's judge can be asked for (pnpm eval, docs/evaluation.md): only in a
+ * development build started hidden, where a script drives the app. Never in a packaged app.
+ */
+export function resolveJudgeEnabled(options: { isPackaged: boolean; hidden: boolean }): boolean {
+  return !options.isPackaged && options.hidden;
+}
+
+/**
  * Maps the path of an app:// URL to a file inside `root` (the built interface), or null
  * when the path is malformed or would leave `root`. "/" means index.html.
  */
