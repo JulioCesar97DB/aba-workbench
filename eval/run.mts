@@ -333,12 +333,18 @@ async function closeApp(app: ElectronApplication, role: LaunchCheck["role"], sto
   // The window is closed first, while the dialogs are still stubbed: its close guard may ask
   // about unsaved changes, and that question must be recorded before the app quits.
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((window) => window.close())).catch(() => undefined);
+  // On Linux and Windows the app quits when its last window closes, so the dialogs are read on
+  // every pass and the last successful read is kept (review round 2, m3).
+  let dialogs: string[] = [];
   for (let waited = 0; waited < 10_000; waited += 200) {
-    const open = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length).catch(() => 0);
-    if (open === 0) break;
+    const seen = await app
+      .evaluate(({ BrowserWindow }) => ({ open: BrowserWindow.getAllWindows().length, dialogs: [...((globalThis as unknown as { evalDialogs?: string[] }).evalDialogs ?? [])] }))
+      .catch(() => null);
+    if (seen === null) break;
+    dialogs = seen.dialogs;
+    if (seen.open === 0) break;
     await pause(200);
   }
-  const dialogs = await app.evaluate(() => [...((globalThis as unknown as { evalDialogs?: string[] }).evalDialogs ?? [])]).catch(() => [] as string[]);
   if (state) {
     const end = { ...state, dialogs };
     launches.push(end);
