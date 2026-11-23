@@ -8,7 +8,8 @@
  * the app's environment, and an out-of-memory ends only the child. It also runs the built
  * de-identification thread (out/main/deidentify-worker.js) on a text at the 2 MB cap and checks
  * that the main process stays free and the state reads "preparing" while it works.
- * Run with: pnpm check:pdf-reader (builds the app and this script first). No window opens.
+ * Run with: pnpm check:pdf-reader (builds the app and this script first). No window opens, and
+ * on macOS it shows no dock icon and never takes focus.
  */
 import { app } from "electron";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -78,6 +79,9 @@ function onePage(content: Buffer): Uint8Array {
   parts.push(Buffer.from(`xref\n0 6\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${length}\n%%EOF\n`));
   return new Uint8Array(Buffer.concat(parts));
 }
+
+// Never on anyone's screen: no window opens, and on macOS no dock icon and never the active app.
+if (process.platform === "darwin") app.setActivationPolicy("prohibited");
 
 // Never hang: any error, or two minutes, ends the check as failed.
 const deadline = setTimeout(() => {
