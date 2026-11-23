@@ -1,7 +1,13 @@
-# Packaging, minimal for now: `pnpm package` builds an unpacked app for the current
-# platform in dist/ (dist/mac-arm64/ABA Workbench.app, dist/win-unpacked/ABA Workbench.exe).
-# No installers, no signing, no automatic updates yet: those are later decisions.
-appId: com.aba-workbench.app
+# Packaging. `pnpm package` builds an unpacked app for the current platform in dist/
+# (dist/mac-arm64/ABA Workbench.app, dist/win-unpacked/ABA Workbench.exe).
+# `pnpm package:windows` builds the Windows installer (below, nsis); the release workflow
+# (.github/workflows/release.yml) builds it on Windows and attaches it to a GitHub
+# pre-release. Nothing is signed and nothing updates itself (owner's decisions, 2026-11-23).
+#
+# The app's permanent identity (owner's decision, 2026-11-23). On Windows the installer
+# derives the uninstall entry and the taskbar ID from it (src/main/index.ts sets the same
+# ID), so changing it would make the next version install beside this one.
+appId: io.github.juliocesar97db.aba-workbench
 directories:
   output: dist
 # Only the build output goes into the app archive (package.json is always added).
@@ -25,6 +31,9 @@ extraResources:
       - "*.txt"
 # No native modules to rebuild.
 npmRebuild: false
+# Nothing is published or checked for updates by electron-builder: no update feed
+# (latest.yml) is written, and the release workflow uploads the installer itself.
+publish: null
 mac:
   # No code signing yet, even if a signing identity is in the keychain.
   identity: null
@@ -51,3 +60,40 @@ linux:
   # Stated rather than left to the default (the lowercased package name): the packaged
   # window tests look for this file (e2e/app.ts).
   executableName: aba-workbench
+win:
+  # x64 only (owner's decision, 2026-11-23); Windows on ARM runs it through emulation.
+  target:
+    - target: nsis
+      arch: x64
+  # Drawn by scripts/render-app-icon.mts; used for the .exe, its shortcuts and the installer.
+  icon: packaging/windows/icon.ico
+  # Unsigned (owner's decision, 2026-11-23): Windows SmartScreen warns once and the user
+  # chooses "Run anyway". No certificate is configured here or in the release workflow, so
+  # electron-builder skips signing ("no code signing certificate configured").
+nsis:
+  # One click (owner's decision, 2026-11-23): no wizard. Opening the installer installs the
+  # app for the current user only, with no administrator rights, in
+  # %LOCALAPPDATA%\Programs\aba-workbench, then starts it.
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  createStartMenuShortcut: true
+  createDesktopShortcut: true
+  shortcutName: ABA Workbench
+  uninstallDisplayName: ABA Workbench
+  # Uninstalling never deletes what the user made: the app's data folder
+  # (%APPDATA%\ABA Workbench: settings, credentials, her standing instructions) stays, and
+  # the cases folder is outside the install folder (in the home folder, or a folder Settings
+  # refuses if it is inside the install folder: src/main/cases-folder.ts). The uninstaller
+  # removes only the install folder, the shortcuts and its own registry entry.
+  deleteAppDataOnUninstall: false
+  # The installer's and the uninstaller's few words (the progress bar, "ABA Workbench is
+  # running", the uninstall question) follow Windows' language: Spanish or English.
+  multiLanguageInstaller: true
+  installerLanguages:
+    - en_US
+    - es_ES
+  # The name says what it is, without spaces (GitHub turns them into dots).
+  artifactName: ABA-Workbench-Setup-${version}-windows-${arch}.${ext}
+  # No differential update file (.blockmap): nothing updates itself.
+  differentialPackage: false

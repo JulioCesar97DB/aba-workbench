@@ -48,6 +48,8 @@ export function registerIpc(options: {
   connections: ConnectionService;
   sections: SectionService;
   isTrustedSender: (event: IpcMainInvokeEvent) => boolean;
+  /** Whether a folder is inside the app's own install folder (src/main/cases-folder.ts, isInsideOnDisk). */
+  insideApp: (folder: string) => Promise<boolean>;
   /**
    * The evaluation's judge (pnpm eval): only in a development build started with --hidden
    * (src/main/index.ts). Otherwise its channel is never registered, so the call is refused.
@@ -134,6 +136,8 @@ export function registerIpc(options: {
     const result = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions);
     const chosen = result.filePaths[0];
     if (result.canceled || !chosen) return { outcome: "cancelled" };
+    // Never inside the app's own folder, by any name: an update or uninstalling deletes it whole (owner's decision, 2026-11-23).
+    if (await options.insideApp(chosen)) return { outcome: "inside-app" };
     const state = await inspectCasesFolder(chosen, false).catch(() => "not-allowed" as const);
     if (state !== "ready") return { outcome: "unusable", problem: state === "not-created-yet" ? "missing" : state };
     try {

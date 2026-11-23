@@ -2,3 +2,4 @@
 # parse the same on Windows as on macOS.
 * text=auto eol=lf
 *.pdf binary
+*.ico binary

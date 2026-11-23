@@ -85,3 +85,8 @@ export async function describeAccess(file: string): Promise<string> {
   const { stdout } = await run(system32("icacls.exe"), [file], { windowsHide: true });
   return stdout;
 }
+
+/** The access entries in describeAccess's answer: one per "name:(rights)". */
+export function accessEntries(icaclsOutput: string): string[] {
+  return icaclsOutput.split(/\r?\n/).filter((line) => /:\([A-Z,()]+\)\s*$/.test(line.trim()) || /:\(F\)/.test(line));
+}

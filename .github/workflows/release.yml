@@ -1,0 +1,230 @@
+# Builds the Windows installer on Windows, checks it the way she will use it, and, for a
+# version tag only, attaches it with its SHA-256 to a GitHub pre-release (owner's
+# decisions, 2026-11-23). It uses no secrets and calls no AI provider: the window tests
+# fake the providers inside the app, and the only token is GitHub's own, which can write
+# releases in the publish job only.
+#
+#   A pull request, or a manual run on a branch: build and check; nothing is published.
+#   A version tag (vX.Y.Z, the same as package.json's version), pushed or chosen in a
+#   manual run: build and check, then publish the pre-release. Publishing never replaces a
+#   release that exists already. (A manual run needs this file on the default branch.)
+name: Release
+
+on:
+  pull_request:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+# The token only reads the repository, except in the publish job.
+permissions:
+  contents: read
+
+# One run per pull request (a new push cancels the one it supersedes); a tag or a manual
+# run has a group of its own and is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  installer:
+    name: Windows installer (build, install, test, uninstall)
+    # Pinned image, as in ci.yml.
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      installer: ${{ steps.name.outputs.installer }}
+    steps:
+      # Actions are pinned to a full commit SHA; the comment names the release.
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # A tag run needs dev's and main's history for the check below.
+          fetch-depth: ${{ github.ref_type == 'tag' && '0' || '1' }}
+
+      # Only a commit already on dev or main is published, so a tag pushed on any other
+      # commit (a branch, a fork's commit) is refused before anything is built. ci.yml has
+      # passed on dev and main's commits; see docs/windows.md.
+      - name: Check a tag's commit is on dev or main (tags only)
+        if: github.ref_type == 'tag'
+        run: |
+          for branch in dev main; do
+            if git merge-base --is-ancestor "$GITHUB_SHA" "origin/$branch"; then
+              echo "$GITHUB_SHA is on $branch."
+              exit 0
+            fi
+          done
+          echo "::error::The tagged commit $GITHUB_SHA is on neither dev nor main; nothing is published from it."
+          exit 1
+
+      # pnpm from package.json's packageManager, Node.js from .nvmrc, then
+      # `pnpm install --frozen-lockfile`. The store is restored on pull requests and branch
+      # runs, never on a tag run, which builds what is published from a fresh download
+      # (no cache another run wrote); ci.yml saves it.
+      - name: Set up pnpm and Node.js, install dependencies
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
+        with:
+          require-lockfile: true
+          cache: ${{ github.ref_type != 'tag' }}
+          save-cache: false
+
+      - name: Show Node.js and pnpm versions
+        run: |
+          command -v node
+          node --version
+          pnpm --version
+
+      # The installer's name and version come from package.json: a tag that says another
+      # version is refused before anything is built.
+      - name: Name the installer, and check the tag matches package.json
+        id: name
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$REF_TYPE" = "tag" ] && [ "$REF_NAME" != "v$version" ]; then
+            echo "::error::The tag $REF_NAME does not match package.json's version $version (expected v$version)."
+            exit 1
+          fi
+          echo "installer=ABA-Workbench-Setup-$version-windows-x64.exe" >> "$GITHUB_OUTPUT"
+
+      # The same checks as ci.yml, in this run, before anything is published.
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Phase 0 end-to-end run (mock provider)
+        run: pnpm phase0 --mock
+
+      # electron-vite builds the app, electron-builder packages it and makes the NSIS
+      # installer (electron-builder.yml). Unsigned: no certificate exists in this workflow,
+      # and none is looked for in the runner's certificate store.
+      - name: Build the installer (unsigned)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          INSTALLER: ${{ steps.name.outputs.installer }}
+        run: |
+          pnpm package:windows
+          ls -l dist
+          test -f "dist/$INSTALLER"
+
+      # As on a laptop where OneDrive backs up Documents and Desktop, before the install.
+      - name: Move Documents and Desktop into OneDrive (as OneDrive's folder backup does)
+        shell: powershell
+        run: ./scripts/windows-installer-check.ps1 -Step onedrive
+
+      # Silent, per user; sets ABA_PACKAGED_EXECUTABLE to the installed app for the tests.
+      - name: Install the app, as the current user
+        shell: powershell
+        env:
+          INSTALLER: ${{ steps.name.outputs.installer }}
+        run: ./scripts/windows-installer-check.ps1 -Step install -Installer "dist\$env:INSTALLER"
+
+      # The packaged window tests, on the installed app, each with its own temporary profile
+      # and cases folder (Playwright drives it; it shows its window on this runner).
+      - name: Window tests on the installed app
+        run: |
+          # The install step named the installed app; without it the tests would quietly use dist/win-unpacked.
+          test -n "$ABA_PACKAGED_EXECUTABLE"
+          echo "Testing $ABA_PACKAGED_EXECUTABLE"
+          pnpm test:e2e:packaged
+
+      - name: Put Spanish first in Windows' languages
+        shell: powershell
+        run: ./scripts/windows-installer-check.ps1 -Step spanish
+
+      # Her first start, with the app's real folders on this throwaway runner
+      # (e2e/windows-installed.e2e.ts).
+      - name: First start of the installed app (Spanish, OneDrive, home folder, credentials)
+        env:
+          ABA_INSTALLED_APP_CHECK: "1"
+        run: pnpm exec playwright test --project=packaged windows-installed.e2e.ts
+
+      # The update path: the same installer again over the installed app, which first runs
+      # the installed app's own uninstaller, as every later version's installer will.
+      - name: Install again over it (an update), keeping every file she made
+        shell: powershell
+        env:
+          INSTALLER: ${{ steps.name.outputs.installer }}
+        run: ./scripts/windows-installer-check.ps1 -Step reinstall -Installer "dist\$env:INSTALLER"
+
+      - name: Uninstall, keeping every file she made
+        shell: powershell
+        run: ./scripts/windows-installer-check.ps1 -Step uninstall
+
+      - name: SHA-256 of the installer
+        working-directory: dist
+        env:
+          INSTALLER: ${{ steps.name.outputs.installer }}
+        run: |
+          sha256sum "$INSTALLER" > "$INSTALLER.sha256"
+          cat "$INSTALLER.sha256"
+
+      - name: Keep the installer and its SHA-256 with this run
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-installer
+          path: |
+            dist/${{ steps.name.outputs.installer }}
+            dist/${{ steps.name.outputs.installer }}.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish the GitHub pre-release
+    needs: installer
+    # Only a version tag publishes (pushed, or chosen in a manual run); the installer job
+    # has already refused a tag that differs from package.json's version.
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Get the checked installer
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-installer
+          path: release
+
+      - name: Check the SHA-256
+        working-directory: release
+        run: sha256sum --check --strict -- *.sha256
+
+      # gh is preinstalled on the runner. --verify-tag: the tag must already be on GitHub;
+      # gh never creates one. An existing release is never replaced: create fails instead.
+      - name: Create the pre-release with the installer and its SHA-256
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          INSTALLER: ${{ needs.installer.outputs.installer }}
+        run: |
+          sum=$(cut -d ' ' -f 1 "$INSTALLER.sha256")
+          {
+            echo "ABA Workbench ${TAG#v} for Windows (x64), for a demo. Not ready for real client data."
+            echo
+            echo "Download **$INSTALLER** and open it. It installs for your Windows user only, with no administrator rights, and adds ABA Workbench to the Start menu and the Desktop."
+            echo
+            echo "The installer is not signed, so Windows SmartScreen warns the first time: choose **More info**, then **Run anyway**."
+            echo
+            echo "Uninstalling (Settings, Apps) removes the app only: your cases folder and the app's data folder stay."
+            echo
+            echo "SHA-256 of the installer: \`$sum\`"
+          } > notes.md
+          gh release create "$TAG" "$INSTALLER" "$INSTALLER.sha256" \
+            --verify-tag \
+            --prerelease \
+            --title "ABA Workbench ${TAG#v} (Windows, pre-release)" \
+            --notes-file notes.md

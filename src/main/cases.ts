@@ -73,6 +73,12 @@ export interface CaseLibraryOptions {
   newId?: () => string;
   log?: (message: string) => void;
   platform?: NodeJS.Platform;
+  /**
+   * Whether a folder is inside the app's own install folder (the packaged app's check,
+   * isInsideOnDisk). Such a cases folder, even one saved in the settings before, is
+   * reported as "inside-app" and never listed, read or written.
+   */
+  insideApp?: (folder: string) => Promise<boolean>;
   /** How a data file is saved; tests replace it to make a save fail. */
   writeFile?: (file: string, text: string) => Promise<void>;
 }
@@ -266,6 +272,7 @@ export class CaseLibrary {
       newId: () => randomUUID(),
       log: (message) => console.warn(message),
       platform: process.platform,
+      insideApp: async () => false,
       writeFile: writeFileDurably,
       ...options,
     };
@@ -281,7 +288,7 @@ export class CaseLibrary {
     const { folder, isDefault } = await this.options.location();
     let state: CasesFolderInfo["state"];
     try {
-      state = await inspectCasesFolder(folder, isDefault, this.options.platform, { probeWrite });
+      state = (await this.options.insideApp(folder)) ? "inside-app" : await inspectCasesFolder(folder, isDefault, this.options.platform, { probeWrite });
     } catch (error) {
       this.options.log(`The cases folder could not be checked (${(error as Error).message}).`);
       state = "not-allowed";
