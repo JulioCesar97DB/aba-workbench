@@ -79,7 +79,10 @@ mac:
         - "*.lproj/InfoPlist.strings"
 dmg:
   # electron-builder's default window (owner's decision, 2026-11-23): the app and a shortcut
-  # to Applications to drag it onto; the volume is named "ABA Workbench <version>".
+  # to Applications to drag it onto. The volume is named "ABA Workbench <version>" (the
+  # owner's decision too): stated, because electron-builder's default name adds the
+  # architecture ("ABA Workbench 0.1.1-universal").
+  title: ${productName} ${version}
   # The name says what it is, without spaces, like the Windows installer's.
   artifactName: ABA-Workbench-${version}-macos-${arch}.${ext}
   # No .blockmap: nothing updates itself.

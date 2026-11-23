@@ -39,8 +39,10 @@ test("mac: one universal disk image, named like the Windows installer, with no u
   const dmg = section("dmg");
   assert.match(dmg, /^\s+artifactName: ABA-Workbench-\$\{version\}-macos-\$\{arch\}\.\$\{ext\}$/m);
   assert.match(dmg, /^\s+writeUpdateInfo: false$/m);
-  // electron-builder's default window: no background, layout or volume name of our own.
-  for (const key of ["background:", "contents:", "window:", "title:"]) assert.ok(!dmg.includes(key), key);
+  // electron-builder's default window: no background or layout of our own; the volume's name
+  // is stated, as electron-builder's default adds the architecture.
+  for (const key of ["background:", "contents:", "window:"]) assert.ok(!dmg.includes(key), key);
+  assert.match(dmg, /^\s+title: \$\{productName\} \$\{version\}$/m);
 });
 
 test("mac: an ad-hoc signature only, without the hardened runtime, notarization or a minimum of our own", () => {

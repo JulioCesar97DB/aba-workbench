@@ -43,9 +43,10 @@ fail() {
   exit 1
 }
 
-# The PIDs of every process whose command line contains $1 (a fixed string, not a pattern).
+# The PIDs of every process whose executable's path contains $1 (a fixed string, not a
+# pattern). The executable (comm), not the command line, so awk's own arguments never match.
 pids_with() {
-  ps -axo pid=,command= | awk -v s="$1" 'index($0, s) && !/awk -v s=/ { print $1 }'
+  ps -axo pid=,comm= | awk -v s="$1" 'index($0, s) { print $1 }'
 }
 
 # Stops every process of the copied app, if any.
