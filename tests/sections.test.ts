@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -584,6 +584,8 @@ test("B3 round 2: a save that does not contain a kept text never forgets it, unt
   let n = 0;
   const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => "Invented case", newId: () => `id-${++n}` });
   assert.equal((await failed.save(caseId, { kind: "notes", text: "Saved note. What the mother told me." })).outcome, "not-saved");
+  // The page reloads: no box shows the kept text until one says so.
+  failed.newPage();
   const [kept] = failed.list();
   assert.equal(kept.text, "Saved note. What the mother told me.");
   failing = false;
@@ -596,6 +598,7 @@ test("B3 round 2: a save that does not contain a kept text never forgets it, unt
   // Once its box has shown it, the box's next save replaces it, whatever she did with the text.
   failing = true;
   await failed.save(caseId, { kind: "notes", text: "Another kept note." });
+  failed.newPage();
   failed.markShown(failed.list()[0].id);
   failing = false;
   assert.equal((await failed.save(caseId, { kind: "notes", text: "She rewrote it." })).outcome, "saved");
@@ -610,6 +613,7 @@ test("B3 round 2: a kept section text a later save does not contain is saved as 
   assert.equal((await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "Hers v1.", editing: null })).outcome, "saved");
   failing = true;
   await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "Hers v1. A long correction typed before the reload.", editing: null });
+  failed.newPage();
   assert.deepEqual(failed.list().map(({ text, editing }) => ({ text, editing })), [{ text: "Hers v1. A long correction typed before the reload.", editing: null }]);
   failing = false;
   // After the reload she edits the text on disk, not the kept one: the kept one is saved first, as its own version.
@@ -625,7 +629,87 @@ test("B3 round 2: a later failed text that does not hold the kept one is kept be
   failing = true;
   const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => null });
   await failed.save(caseId, { kind: "notes", text: "First kept." });
+  // After a reload, before any box shows it, a save typed over the older text on disk fails too.
+  failed.newPage();
   await failed.save(caseId, { kind: "notes", text: "Typed over the old text" });
   await failed.save(caseId, { kind: "notes", text: "Typed over the old text, growing" });
   assert.deepEqual(failed.list().map((item) => item.text).sort(), ["First kept.", "Typed over the old text, growing"]);
+});
+
+/* Review round 3: R3-1 */
+
+test("R3-1: typing and deleting in one box during an outage keeps only her latest text, and nothing older comes back", async () => {
+  let failing = false;
+  const { service, caseId, caseFile, cases } = await setup({}, { failWrites: () => failing });
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => null });
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "Start." })).outcome, "saved");
+  failing = true;
+  await failed.save(caseId, { kind: "notes", text: "Mother said A. Teacher said C." });
+  await failed.save(caseId, { kind: "notes", text: "Mother said A." });
+  assert.deepEqual(failed.list().map((item) => item.text), ["Mother said A."], "one entry: the latest, in front of her");
+  failing = false;
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "Mother said A. Grandmother said D." })).outcome, "saved");
+  assert.equal(failed.size, 0, "nothing older is left to put back");
+  assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).sessionNotes.text, "Mother said A. Grandmother said D.");
+});
+
+test("R3-1: with a reload in between, the box shows the newest kept text and older snapshots can never come back over it", async () => {
+  let failing = false;
+  const { service, caseId, caseFile, cases } = await setup({}, { failWrites: () => failing });
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => null });
+  failing = true;
+  await failed.save(caseId, { kind: "notes", text: "Mother said A. Teacher said C." });
+  failed.newPage();
+  // After the reload, before the box shows it, she deletes in a box still on the old text: kept beside.
+  await failed.save(caseId, { kind: "notes", text: "Mother said A." });
+  assert.deepEqual(failed.list().map((item) => item.text), ["Mother said A. Teacher said C.", "Mother said A."]);
+  // The box shows the newest; the older one counts as shown too.
+  failed.markShown(failed.list().at(-1)!.id);
+  failing = false;
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "Mother said A. Grandmother said D." })).outcome, "saved");
+  assert.equal(failed.size, 0);
+  assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).sessionNotes.text, "Mother said A. Grandmother said D.");
+});
+
+test("R3-1: the same sequence on her instructions keeps the latest text", async () => {
+  const { caseId, cases } = await setup();
+  const folder = tempFolder();
+  const file = path.join(folder, "instructions.json");
+  const service = new SectionService({
+    cases,
+    instructions: new InstructionsStore(file, { log: () => undefined }),
+    rulesDir: path.join(process.cwd(), "rules"),
+    provider: () => mockProvider,
+    credential: async () => null,
+    chosenModel: async () => null,
+    rememberProvider: async () => undefined,
+    writeClipboard: async () => undefined,
+  });
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => null });
+  const op = (text: string) => ({ kind: "instructions" as const, sectionId: "medical-necessity", text });
+  assert.equal((await failed.save(caseId, op("Start."))).outcome, "saved");
+  // The outage: a folder where the file goes, so it can be neither read nor written.
+  rmSync(file);
+  mkdirSync(file);
+  await failed.save(caseId, op("Score per area. Example from school."));
+  await failed.save(caseId, op("Score per area."));
+  assert.deepEqual(failed.list().map((item) => item.text), ["Score per area."]);
+  rmSync(file, { recursive: true });
+  assert.equal((await failed.save(caseId, op("Score per area. Example from home."))).outcome, "saved");
+  assert.equal(failed.size, 0);
+  assert.equal(JSON.parse(readFileSync(file, "utf8")).sections["medical-necessity"].text, "Score per area. Example from home.");
+});
+
+test("R3-1, L-a: deleting text in the section editor during an outage adds no version of the deleted text", async () => {
+  let failing = false;
+  const { service, caseId, caseFile, cases } = await setup({}, { failWrites: () => failing });
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => null });
+  await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "P1.", editing: null });
+  failing = true;
+  await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "P1. Wrong sentence.", editing: 1 });
+  await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "P1.", editing: 1 });
+  failing = false;
+  await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "P1. Right sentence.", editing: 1 });
+  const texts = JSON.parse(readFileSync(caseFile, "utf8")).sections["crisis-plan"].versions.map((v: { text: string }) => v.text);
+  assert.deepEqual(texts, ["P1. Right sentence."]);
 });

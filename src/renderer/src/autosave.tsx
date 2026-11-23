@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FailedSave } from "../../shared/sources.ts";
-import { onRetried, registerFlusher, trackSave, useFailedSaveList } from "./case-saves.tsx";
+import { onRetried, registerFlusher, trackSave, useFailedSaveList, useFailedSavesLoaded } from "./case-saves.tsx";
 
 /*
  * Text saved as she types, with no Save button: when typing pauses, when the field loses
@@ -70,7 +70,10 @@ export function useAutosave({ caseId, initial, savedValue = initial, save }: { c
     setStatus("idle");
   }, []);
 
-  /** "Try again" saved this text: it is what the disk holds now. */
+  /**
+   * "Try again" saved this text: it is what the disk holds now. What the box shows is not
+   * changed: when it differs, the box's next save writes what she sees.
+   */
   const markSaved = useCallback((text: string) => {
     saved.current = text;
     if (latest.current === text) setStatus("saved");
@@ -90,23 +93,26 @@ export function useAutosave({ caseId, initial, savedValue = initial, save }: { c
  */
 export function useKeptText(box: ReturnType<typeof useAutosave>, match: (item: FailedSave) => boolean, onRestored?: (item: FailedSave) => void): void {
   const failed = useFailedSaveList();
-  const restored = useRef<string | null>(null);
-  const kept = failed.find((item) => match(item) && item.text !== null);
+  const loaded = useFailedSavesLoaded();
+  // Decided once, when the box mounts and the list is known (review round 3, R3-1): never
+  // later, when the box becomes "untouched" after a save, which could put back a text
+  // older than the one she just saved.
+  const decided = useRef(false);
+  // The newest kept text of this box: the list is oldest first.
+  const kept = failed.filter((item) => match(item) && item.text !== null).at(-1);
   useEffect(() => {
-    if (!kept || kept.text === null || restored.current === kept.id) return;
-    // Something she typed after the reload is not replaced: that save keeps the kept text beside it.
-    if (!box.untouched()) return;
-    restored.current = kept.id;
+    if (decided.current || !loaded) return;
+    decided.current = true;
+    // Something she typed before the list arrived is not replaced: the kept text stays kept, with Try again.
+    if (!kept || kept.text === null || !box.untouched()) return;
     box.restore(kept.text);
     void window.aba.failedSaveShown(kept.id).catch(() => undefined);
     onRestored?.(kept);
-  }, [kept, box, onRestored]);
+  }, [loaded, kept, box, onRestored]);
   useEffect(
     () =>
       onRetried((item) => {
-        if (!match(item) || item.text === null) return;
-        if (box.untouched() && restored.current !== item.id) box.restore(item.text);
-        box.markSaved(item.text);
+        if (match(item) && item.text !== null) box.markSaved(item.text);
       }),
     [box, match],
   );

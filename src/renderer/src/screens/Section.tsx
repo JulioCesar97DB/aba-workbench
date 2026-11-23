@@ -132,7 +132,8 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   const [copied, setCopied] = useState<Copied | "failed" | null>(null);
   const failures = useSectionFailures(caseId);
   // Her text for this section that could not be saved: after a reload it goes back in the editor it came from (review round 2, B3).
-  const keptText = failures.find((item) => item.about === "section" && item.sectionId === section.id && item.text !== null) ?? null;
+  // The newest of them (the list is oldest first): never an older text over a newer one (review round 3, R3-1).
+  const keptText = failures.filter((item) => item.about === "section" && item.sectionId === section.id && item.text !== null).at(-1) ?? null;
   const [keptOpen, setKeptOpen] = useState<FailedSave | null>(null);
   const setSources = useSetCaseSources();
   const providers = useProviders();

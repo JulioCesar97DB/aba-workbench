@@ -368,3 +368,75 @@ test("B3 round 2, instructions: after a reload the kept instructions are back in
     rmSync(instructionsFile, { recursive: true, force: true });
   }
 });
+
+/* Review round 3: R3-1 */
+
+test("R3-1: deleting text while saves fail never brings the older text back over what she saved (no reload)", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const { page, caseFile } = await openSection(launch, home, "crisis-plan");
+  const caseFolder = path.dirname(caseFile);
+  const notes = page.getByTestId("session-notes");
+  await notes.fill("Start.");
+  await notes.blur();
+  await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("Start.");
+  chmodSync(caseFolder, 0o555);
+  try {
+    await notes.fill("Mother said A. Teacher said C.");
+    await notes.blur();
+    await expect(page.getByText("Your notes for this session could not be saved. They are kept")).toBeVisible();
+    await notes.fill("Mother said A.");
+    await notes.blur();
+    await expect.poll(() => page.evaluate(() => (globalThis as unknown as { aba: AbaApi }).aba.listFailedSaves().then((list) => list.map((item) => item.text)))).toEqual(["Mother said A."]);
+    chmodSync(caseFolder, 0o755);
+    await notes.fill("Mother said A. Grandmother said D.");
+    await notes.blur();
+    await expect.poll(() => caseJson(caseFile).sessionNotes.text).toBe("Mother said A. Grandmother said D.");
+    // The box keeps what she saved: no older snapshot comes back.
+    await page.waitForTimeout(300);
+    await expect(notes).toHaveValue("Mother said A. Grandmother said D.");
+    await caretAtEnd(notes);
+    await notes.pressSequentially("!");
+    await notes.blur();
+    await expect.poll(() => caseJson(caseFile).sessionNotes.text).toBe("Mother said A. Grandmother said D.!");
+    expect(await page.evaluate(() => (globalThis as unknown as { aba: AbaApi }).aba.listFailedSaves())).toEqual([]);
+  } finally {
+    chmodSync(caseFolder, 0o755);
+  }
+});
+
+test("R3-1: deleting text while saves fail, then a reload: the box shows her newest text and builds on it", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
+  const caseFolder = path.dirname(caseFile);
+  const notes = page.getByTestId("session-notes");
+  await notes.fill("Start.");
+  await notes.blur();
+  await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("Start.");
+  chmodSync(caseFolder, 0o555);
+  try {
+    await notes.fill("Mother said A. Teacher said C.");
+    await notes.blur();
+    await notes.fill("Mother said A.");
+    await notes.blur();
+    const alert = page.getByText("Your notes for this session could not be saved. They are kept");
+    await expect(alert).toBeVisible();
+    await reloadWindow(app, page);
+    const box = page.getByTestId("session-notes");
+    await expect(box).toHaveValue("Mother said A.");
+    chmodSync(caseFolder, 0o755);
+    await caretAtEnd(box);
+    await box.pressSequentially(" Grandmother said D.");
+    await box.blur();
+    await expect.poll(() => caseJson(caseFile).sessionNotes.text).toBe("Mother said A. Grandmother said D.");
+    await expect(alert).toBeHidden();
+    await page.waitForTimeout(300);
+    await expect(box).toHaveValue("Mother said A. Grandmother said D.");
+    await caretAtEnd(box);
+    await box.pressSequentially("!");
+    await box.blur();
+    await expect.poll(() => caseJson(caseFile).sessionNotes.text).toBe("Mother said A. Grandmother said D.!");
+    expect(await page.evaluate(() => (globalThis as unknown as { aba: AbaApi }).aba.listFailedSaves())).toEqual([]);
+  } finally {
+    chmodSync(caseFolder, 0o755);
+  }
+});

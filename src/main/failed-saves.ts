@@ -91,7 +91,11 @@ interface Entry {
   op: SaveOp;
   failure: Failure;
   at: number;
-  /** The interface put the kept text back in its box (review round 2, B3): the box's next save is built on it. */
+  /**
+   * The text is in its box on the page as it is now: it failed from that box's own save
+   * (review round 3, R3-1), or the box put it back after a reload (review round 2, B3).
+   * The box's next save is built on it. A page that reloads clears it (newPage).
+   */
   shown: boolean;
 }
 
@@ -137,20 +141,29 @@ export class FailedSaves {
   }
 
   /** Runs a change and remembers it if it could not be saved; a saved one clears a failed one with the same key. */
-  async save<R extends SaveResult = SourceSaveResult>(caseId: unknown, op: SaveOp): Promise<R> {
+  /**
+   * `fromBox` (the default): the change comes from the box she is typing in, so a failure
+   * of it is already shown there; false for "Try again" of a kept change.
+   */
+  async save<R extends SaveResult = SourceSaveResult>(caseId: unknown, op: SaveOp, { fromBox = true }: { fromBox?: boolean } = {}): Promise<R> {
     let result: SaveResult;
     if (typeof caseId === "string") await this.keepSectionText(caseId, op);
     try {
       result = await this.options.run(caseId, op);
     } catch (error) {
       // A refusal is the interface's mistake, not a change to keep; anything else is.
-      if (!(error instanceof Error && error.message.startsWith("Refused:")) && typeof caseId === "string") this.record(caseId, op, "error");
+      if (!(error instanceof Error && error.message.startsWith("Refused:")) && typeof caseId === "string") this.record(caseId, op, "error", fromBox);
       throw error;
     }
     const id = caseId as string;
     if (result.outcome === "saved") this.forget(id, op);
-    else this.record(id, op, failureOf(result.outcome));
+    else this.record(id, op, failureOf(result.outcome), fromBox);
     return result as R;
+  }
+
+  /** The page reloaded (or its renderer was replaced): no box shows a kept text until it says so again. */
+  newPage(): void {
+    for (const entry of this.entries.values()) entry.shown = false;
   }
 
   /**
@@ -173,9 +186,16 @@ export class FailedSaves {
     }
   }
 
-  /** The interface put a kept text back in its box: from now on, that box's saves are built on it. */
+  /**
+   * The interface put a kept text back in its box: from now on, that box's saves are built
+   * on it. The box shows the newest kept text of that thing; older ones kept beside it are
+   * older than what she now sees, so they count as shown too: nothing can put them back over it.
+   */
   markShown(id: unknown): void {
-    for (const entry of this.entries.values()) if (entry.id === id) entry.shown = true;
+    const found = [...this.entries].find(([, entry]) => entry.id === id);
+    if (!found) return;
+    const group = found[0].split("#")[0];
+    for (const [entryKey, entry] of this.entries) if (sameThing(entryKey, group)) entry.shown = true;
   }
 
   /** Every change not saved, oldest first. */
@@ -198,7 +218,7 @@ export class FailedSaves {
   async retry(id: unknown): Promise<SaveResult> {
     const entry = [...this.entries.values()].find((item) => item.id === id);
     if (!entry) return { outcome: "source-not-found" };
-    return this.save<SaveResult>(entry.caseId, entry.op);
+    return this.save<SaveResult>(entry.caseId, entry.op, { fromBox: entry.shown });
   }
 
   /** Forgets the failed changes a saved one replaces. */
@@ -221,26 +241,30 @@ export class FailedSaves {
     for (const [key, entry] of this.entries) if (entry.caseId === caseId && sameDraft(entry.op, op)) this.entries.delete(key);
   }
 
-  private record(caseId: string, op: SaveOp, failure: Failure): void {
+  private record(caseId: string, op: SaveOp, failure: Failure, fromBox = true): void {
     const typed = typedText(op);
     if (typed !== null) {
       const key = saveKey(caseId, op);
       const earlier = this.entries.get(key);
-      // A later failed text that does not hold the kept one is kept beside it, never over it.
+      // A failure of the box's own save replaces what that box failed to save before: she
+      // typed or deleted on top of it, in front of her (review round 3, R3-1). Only a kept
+      // text no box on this page has shown is kept beside a later one, never under it.
       if (earlier && !earlier.shown && !contains(typed, typedText(earlier.op))) {
         const id = this.options.newId();
-        this.entries.set(`${key}#${id}`, { ...earlier, shown: false });
+        this.entries.set(`${key}#${id}`, earlier);
         this.entries.delete(key);
-        this.entries.set(key, { id: this.options.newId(), caseId, op, failure, at: this.options.now(), shown: false });
+        this.entries.set(key, { id: this.options.newId(), caseId, op, failure, at: this.options.now(), shown: fromBox });
         return;
       }
-      this.entries.set(key, { id: earlier?.id ?? this.options.newId(), caseId, op, failure, at: earlier?.at ?? this.options.now(), shown: false });
+      // Newest last: the entry moves to the end, so the newest of a box's kept texts is always the last one listed.
+      this.entries.delete(key);
+      this.entries.set(key, { id: earlier?.id ?? this.options.newId(), caseId, op, failure, at: this.options.now(), shown: fromBox || (earlier?.shown ?? false) });
       return;
     }
     // A new text failing again as it grows is one entry, not one per try.
     if (op.kind === "add-text") this.forget(caseId, op);
     const id = op.kind === "add-text" ? this.options.newId() : (this.entries.get(saveKey(caseId, op))?.id ?? this.options.newId());
-    this.entries.set(saveKey(caseId, op, op.kind === "add-text" ? id : ""), { id, caseId, op, failure, at: this.options.now(), shown: false });
+    this.entries.set(saveKey(caseId, op, op.kind === "add-text" ? id : ""), { id, caseId, op, failure, at: this.options.now(), shown: fromBox });
   }
 }
 

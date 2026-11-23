@@ -32,6 +32,8 @@ export type SaveAnswer<T> = { ok: true; sources: CaseSources | null; value: T } 
 const pending = new Map<string, number>();
 const savedOnce = new Set<string>();
 let failed: FailedSave[] = [];
+/** True once the list has been read from the main process at least once on this page. */
+let failedLoaded = false;
 const inFlight = new Set<Promise<unknown>>();
 const flushers = new Set<() => Promise<void>>();
 const listeners = new Set<() => void>();
@@ -46,6 +48,7 @@ function changed() {
 export async function refreshFailedSaves(): Promise<void> {
   try {
     failed = await window.aba.listFailedSaves();
+    failedLoaded = true;
   } catch {
     // Kept as it was: the next save reads it again.
   }
@@ -114,6 +117,13 @@ export function retry(item: FailedSave, onSaved: (sources: CaseSources) => void)
  */
 export function trackSave(caseId: string, work: Promise<boolean>): Promise<boolean> {
   return track(caseId, work.catch(() => false));
+}
+
+/** Whether the list of changes not saved has been read on this page yet. */
+export function useFailedSavesLoaded(): boolean {
+  // The page reads it when it starts (main.tsx) and after every save.
+  useVersion();
+  return failedLoaded;
 }
 
 /** Every change not saved, as the main process keeps it. */

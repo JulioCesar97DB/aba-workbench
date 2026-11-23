@@ -218,6 +218,10 @@ function createWindow(): void {
    * failedSaves, so the reloaded page shows it again. Not calling preventDefault keeps the page.
    */
   let reloading = false;
+  // A page that reloads starts with no box showing a kept text: each box tells again when it shows one (review round 3, R3-1).
+  window.webContents.on("did-navigate", () => failedSaves.newPage());
+  window.webContents.on("render-process-gone", () => failedSaves.newPage());
+
   window.webContents.on("will-prevent-unload", (event) => {
     if (closing) {
       // The window is closing (its guard already saved): the saves still running finish here, without the page.
