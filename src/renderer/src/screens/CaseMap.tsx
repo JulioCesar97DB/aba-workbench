@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router";
@@ -329,7 +330,7 @@ export function CaseMapScreen() {
 const STATUS_TONES: Record<MapPartView["status"], StatusTone> = { empty: "neutral", draft: "neutral", corrected: "accent", approved: "success" };
 
 /** A part's status in words. A part she typed with no AI version is "typed by you". */
-function statusText(t: ReturnType<typeof useTranslation>["t"], view: MapPartView): string {
+function statusText(t: TFunction, view: MapPartView): string {
   if (view.status === "corrected" && !view.versions.some((version) => version.kind !== "edited")) return t("caseMap.status.typed");
   return t(`caseMap.status.${view.status}`);
 }

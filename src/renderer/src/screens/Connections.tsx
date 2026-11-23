@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatGptConnection, ChatGptSignInResult, CheckConnectionResult, ClaudeConnection, CredentialsProblem, SaveClaudeKeyResult } from "../../../shared/api.ts";
@@ -125,7 +126,7 @@ function CredentialsProblemNotice({ problem }: { problem: CredentialsProblem }) 
   );
 }
 
-function checkMessage(t: ReturnType<typeof useTranslation>["t"], provider: "chatgpt" | "claude", result: CheckConnectionResult | null): Message {
+function checkMessage(t: TFunction, provider: "chatgpt" | "claude", result: CheckConnectionResult | null): Message {
   if (result === null) return { text: t("connections.failed"), problem: true };
   switch (result.outcome) {
     case "working":
