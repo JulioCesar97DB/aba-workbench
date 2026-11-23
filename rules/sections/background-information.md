@@ -1,8 +1,8 @@
 ---
 id: section-background-information
-version: 1
-updated: 2026-11-22
-sources: The ABA Matrix template as exported by her agency (section 3, read 2026-11-21) and the BCBA's answers of 2026-11-21 on where other therapies go.
+version: 2
+updated: 2026-11-23
+sources: The ABA Matrix template as exported by her agency (section 3, read 2026-11-21), the BCBA's answers of 2026-11-21 on where other therapies go, and the quality runs on an invented case (2026-11-23: a background that retold the behaviors and the environmental changes later sections give).
 confirmed: no, pending review by the BCBA
 ---
 
@@ -27,6 +27,16 @@ In the agency's assessments this section is a narrative that covers, as far as t
 
 Cite the source inside the sentence: the CDE, the IEP, the parent interview, the FBA questionnaires. Write it as connected paragraphs, not as one sentence per item.
 
+## What it owns, and what it leaves to other sections
+
+This section owns the child's history and circumstances: the referral and who made it, the family and the languages, the diagnosis as the CDE states it (who and when), the medications, the developmental and medical history, the school and its plan, and every other service the child receives. Other sections refer to these facts; they do not retell them, so state them fully and once here.
+
+It does not own the behaviors, the scores or the current changes:
+
+- The behaviors and concerns that led to the referral are named in one or two sentences, in the caregivers' and the evaluator's terms. Their counts, incidents, functions and risks belong to Medical Necessity, the behavior sections and Risk Assessment. An incident is told here only when it is the reason for the referral, and then briefly.
+- Vineland-3 and BASC-3 PRQ results belong to Medical Necessity. The results of the tests the CDE used to diagnose (for example the ADOS-2 or an intelligence test) are given here, briefly and as the CDE reports them, next to the diagnosis, since no other section owns them; whether she wants them here is pending her answer.
+- Changes happening now or coming (a new school, a move, a change of caregiver) belong to Environmental Changes. Mention a change here only when it is part of the child's history.
+
 ## Gaps in this section
 
 - Leave out a topic the sources say nothing about, unless the payer facts make it expected (the diagnosis and who made it, other services the child receives); then mark it [MISSING: ...].
@@ -34,4 +44,4 @@ Cite the source inside the sentence: the CDE, the IEP, the parent interview, the
 
 ## Not yet settled with the BCBA
 
-The decisions file lists what this section covers but gives no example of hers, no preferred order and no length. The order above is the template's list as exported; the BCBA has not confirmed it, nor how much developmental history she wants.
+The decisions file lists what this section covers but gives no example of hers, no preferred order and no length. The order above is the template's list as exported; the BCBA has not confirmed it, nor how much developmental history she wants, nor whether the CDE's test results go here.

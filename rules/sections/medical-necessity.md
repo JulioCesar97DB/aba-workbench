@@ -1,6 +1,6 @@
 ---
 id: section-medical-necessity
-version: 3
+version: 4
 updated: 2026-11-23
 paragraphs: 6-9
 words: 900-1500
@@ -22,7 +22,21 @@ This structure is the BCBA's own and it is not optional. Follow it in this order
 
 2. Vineland-3 paragraph. Give the deficits with the specific scores: the Adaptive Behavior Composite and each domain's standard score with its percentile and adaptive level; the lowest subdomain v-scale scores and what they cover; and, when reported, the Maladaptive Behavior Index with the Internalizing and Externalizing v-scale scores and their levels. Say what the numbers mean, in plain terms, compared with same-age peers. Use exactly the numbers on the score report.
 
-3. One paragraph per deficit area named in the opening paragraph, in the same order. Argue each deficit with what the CDE, the parents' report and the BCBA's direct observation say about it, plus the IEP or teacher reports when available. Build each paragraph from: the score or finding; a concrete incident or observation from this child's life, with its numbers (frequency, duration, setting, who was present); why it limits the child's independence, safety or participation at home, at school or in the community; and what ABA will target for it, naming the skill or the procedure (for example, differential reinforcement of an alternative behavior to replace grabbing a peer's materials). The maladaptive behaviors, with their baselines and hypothesized functions as the sources give them, belong in the safety or behavior paragraph. Bring in the BASC-3 PRQ where it bears on an area, usually how behavior affects the caregivers.
+3. One paragraph per deficit area named in the opening paragraph, in the same order. Argue each deficit with what the CDE, the parents' report and the BCBA's direct observation say about it, plus the IEP or teacher reports when available. Build each paragraph from: the score or finding; a concrete incident or observation from this child's life, with its numbers (frequency, duration, setting, who was present); why it limits the child's independence, safety or participation at home, at school or in the community; and what ABA will target for it, naming the skill or the procedure (for example, differential reinforcement of an alternative behavior to replace grabbing a peer's materials). Bring in the BASC-3 PRQ where it bears on an area, usually how behavior affects the caregivers, not only in the closing.
+
+## Arguing the behaviors
+
+The maladaptive behaviors belong in the safety or behavior paragraph, argued rather than inventoried. A paragraph that runs through every behavior with its counts and questionnaire scores reads as a list, and the reviewer learns nothing from it that the behavior sections do not already give.
+
+- Lead with the behaviors that most limit this child's safety or participation, usually two or three. For each, give one concrete incident from the sources, then the baseline and the function evidence that show its size and why it continues, and then what that means: who is at risk, what the child misses or cannot do, where.
+- A threat, an injury, a near miss or a lost day of school in the sources weighs more than another count. Use it.
+- Name each other targeted behavior in one clause with its baseline, so the paragraph covers them all without arguing each.
+- Give each questionnaire score once, where it supports the function you are explaining. Do not list FAST or MAS scores for every behavior: the complete baselines, functions and questionnaire results belong to the behavior sections and the assessments conducted.
+- When the behaviors are many or of different kinds (aggression toward others, leaving the area, self-injury), two paragraphs read better than one long one. Each still follows the order above.
+
+## Explaining a number
+
+Every score, count or duration is followed by what it means for this child: compared with same-age peers in plain words, or as what the child does or cannot yet do, where and with whom. "A Daily Living Skills standard score of 70" says nothing to a reviewer until the sentence goes on to what that looks like in this child's day. Explain each number once; do not restate the same score in two paragraphs.
 
 4. Closing paragraph. State that these findings together support the medical necessity of ABA services. Explain how ABA strategies will improve these specific deficits (name the main strategies and the skills they build), in which settings and why there (where the impairment shows up), the role of caregiver training (tied to the BASC-3 PRQ results and what the parents reported), and how progress will be measured (direct data on target behaviors and skills, and the Vineland-3 and BASC-3 PRQ at reassessment). Do not state hours or units; they belong to the Summary and Recommendations section.
 
@@ -32,8 +46,14 @@ Be very specific throughout. Each deficit paragraph should be impossible to reus
 
 Usually 6 to 9 paragraphs and 900 to 1,500 words, depending on how many deficit areas there are. Aim for density, not length: every sentence should carry a fact, its source, or what the fact means for the child.
 
+When she asks for a shorter version, cut restated numbers, repeated points and general sentences first; keep the concrete incidents, which carry the argument.
+
 ## Gaps in this section
 
 - A missing score, percentile or level on the Vineland-3 or BASC-3 PRQ report stays visible as [MISSING: ...]. These instruments are required by the payer, so the BCBA needs to see the gap before submitting.
 - If a setting is described only second-hand (a parent's account of school), say whose account it is. If a setting the argument needs is not documented at all, mark it rather than filling it in.
 - If the CDE lacks something the payers expect of it (see the payer facts), do not supply it; mark it.
+
+## Not yet settled with the BCBA
+
+Her structure is settled. Not yet: whether the behavior paragraph should argue every targeted behavior with its data or, as written above, the most impairing ones with the others named briefly; and whether there is a length she does not want exceeded.
