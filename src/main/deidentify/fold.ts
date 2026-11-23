@@ -7,7 +7,8 @@
  * joiner, a word joiner) and stray combining marks fold to nothing; an HTML character
  * reference pasted with a text ("Luc&iacute;a", "&#237;") and a percent-encoded URL
  * character ("Mat%C3%A9o") fold to their letter; a Cyrillic or Greek letter that looks
- * Latin ("Valeriа" with a Cyrillic а) folds to the Latin one.
+ * Latin ("Valeriа" with a Cyrillic а) folds to the Latin one; a decimal digit of another script
+ * ("٣") folds to its ASCII digit.
  */
 
 export interface Folded {
@@ -63,7 +64,13 @@ export function foldChar(ch: string): string {
   return folded;
 }
 
+/** The zero of each Unicode block of decimal digits NFKC leaves alone (Arabic-Indic, Devanagari, Bengali, Thai...). */
+const DIGIT_ZEROS = [0x0660, 0x06f0, 0x07c0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0b66, 0x0be6, 0x0c66, 0x0ce6, 0x0d66, 0x0de6, 0x0e50, 0x0ed0, 0x0f20, 0x1040, 0x17e0, 0x1810];
+
 function foldUncached(ch: string): string {
+  // A decimal digit of another script reads as its ASCII digit: "٠٣/١٤/٢٠٢٠".
+  const code = ch.codePointAt(0)!;
+  for (const zero of DIGIT_ZEROS) if (code >= zero && code <= zero + 9) return String(code - zero);
   if (APOSTROPHES.test(ch)) return "'";
   if (DASHES.test(ch)) return "-";
   if (SPACES.test(ch)) return " ";

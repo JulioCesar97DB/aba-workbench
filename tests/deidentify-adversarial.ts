@@ -192,6 +192,14 @@ export const SPLIT_SHEET: ClientSheet = {
 export const SPLIT_CLINICAL = ["They built a dam in the park.", "No el niño no quiere.", "He said in es ok.", "To mas allá.", "A dam was drawn."];
 
 /** Another invented sheet with a compound given name and a surname with particles (review round 3: H2, H3, H4). */
+/** Round 4's Spanish sheet: the compound name with an address, a school and an ID. */
+export const SPANISH_SHEET: ClientSheet = {
+  client: { firstName: "María José", lastName: "del Río de la Fuente", dateOfBirth: "2019-07-02" },
+  schools: ["Escuela San Juan Bosco"],
+  addresses: ["15 Calle del Mar, Apto 2, Hialeah, FL 33010"],
+  ids: ["A12345678"],
+};
+
 export const COMPOUND_SHEET: ClientSheet = { client: { firstName: "María José", lastName: "del Río de la Fuente", dateOfBirth: "2019-07-02" } };
 export const RESTORE_COMPOUND: Array<[string, string, string]> = [
   // [the text, what the model writes, what must come back]
@@ -275,4 +283,45 @@ export const REIDENTIFY_CASES: Array<[string, string, boolean]> = [
   ["[CLIENT INITIALS].", "M.F.", false],
   ["[DOB]", "03/14/2020", false],
   ["See [the notes](notes.md) [sic]", "See [the notes](notes.md) [sic]", false],
+];
+
+// ---------------------------------------------------------------- review round 4
+
+/** Round 4's leaks on the main sheet (B1 to B4): separators the matcher did not accept, the ZIP alone, OCR digits, page breaks. */
+export const R4_PROBES: Probe[] = [
+  ...["03\\14\\2020", "03,14,2020", "03;14;2020", "03 , 14 , 2020", "03~14~2020", "03+14+2020", "03=14=2020", "03>14>2020"].map((d) => ({ group: "B1 separators", text: `DOB ${d}.`, hide: [d, "14"] })),
+  ...["305\\555\\0142", "305,555,0142", "305; 555; 0142", "305~555~0142", "305+555+0142", "305=555=0142"].map((p) => ({ group: "B1 separators", text: `Call ${p} today.`, hide: [p, "0142"] })),
+  { group: "B1 separators", text: "Medicaid FL 123,456,789 and FL~123~456~789; other ID 98,765,432,10.", hide: ["123,456,789", "123~456~789", "98,765,432,10"] },
+  { group: "B2 ZIP", text: "33135-0000; ZIP+4 33135-4471; Hialeah,FL,33135; FL,33135.", hide: ["33135"] },
+  { group: "B3 OCR digits", text: "DOB O3/I4/2O2O, phone 3O5-555-O142 and 305-555-0l42.", hide: ["O3/I4/2O2O", "3O5-555-O142", "0l42"] },
+  { group: "B3 OCR digits", text: "DOB 0\u{0417}/14/2020 and \u{0660}\u{0663}/\u{0661}\u{0664}/\u{0662}\u{0660}\u{0662}\u{0660}.", hide: ["14/2020", "\u{0661}\u{0664}"] },
+  { group: "B4 page break", text: "Phone: (305) 555-\n\n--- Page 2 of 3 ---\n0142 (continued). DOB 03/14/\n\n--- Page 2 of 3 ---\n2020.", hide: ["305", "555", "0142", "03/14"] },
+  { group: "B4 page break", text: "DOB 03/14/\n\n--- Page 1 of 2 ---\n", hide: ["03/14"] },
+];
+
+/** Round 4's Spanish-sheet leaks (B1, B2, B5). */
+export const R4_SPANISH_PROBES: Probe[] = [
+  { group: "B1 separators", text: "ID A12,345,678.", hide: ["12,345,678"] },
+  { group: "B2 ZIP", text: "33010-1234; Hialeah,FL,33010.", hide: ["33010", "Hialeah"] },
+  { group: "B5 street", text: "15 Cll. del Mar; 15 Cal. del Mar; 15 Clle. del Mar.", hide: ["Cll. del Mar", "Cal. del Mar", "Clle. del Mar"] },
+  { group: "B5 school", text: "Va a S.J.B., a S J B, a E.S.J.B. y a escuela sanjuanbosco; la escuela Juan Bosco.", hide: ["S.J.B", "S J B", "E.S.J.B", "sanjuanbosco", "Juan Bosco"] },
+];
+
+/** H2: no span across a sentence end, labels stay, nothing re-split: [text, what is sent]. The date of birth restores as MM/DD/YYYY. */
+export const R4_SPANS: Array<[string, string, string]> = [
+  ["Born: 3 14 2020. 03 14 20.", "Born: [DOB]. [DOB].", "Born: 03/14/2020. 03/14/2020."],
+  ["Birth month: March; birth day: 14; birth year: 2020.", "Birth month: [DOB MONTH]; birth day: [DOB DAY]; birth year: 2020.", "Birth month: March; birth day: 14; birth year: 2020."],
+  ["In 2020. 03 14 kids came.", "In 2020. 03 14 kids came.", "In 2020. 03 14 kids came."],
+];
+
+/** H1: score rows with numbers that equal a short sheet value: sent as they are, and listed for review. [sheet change, the row]. */
+export const R4_SCORE_ROWS: Array<[{ dateOfBirth?: string; address?: string }, string]> = [
+  [{ dateOfBirth: "2013-06-22" }, "Communication | Expressive | 22 | 6 | 1:3 | Low"],
+  [{ dateOfBirth: "2014-03-19" }, "Raw scores | 21 | 7 | 19 | 3 | 14 | 20"],
+  [{ dateOfBirth: "2012-01-10" }, "Item 4 | 1 | 1 | 0 | 2 | 0 | 1 | 2 | 1 | 0 | 2 | 0 | 1"],
+  [{ dateOfBirth: "2012-01-02" }, "Item 2 | 1 | 2 | 0 | 1 | 2 | 1 | 2 | 0 | 1 | 2 | 1 | 2"],
+  [{ dateOfBirth: "2019-11-05" }, "11 5 19 trials and 5 11 19 correct."],
+  [{ address: "102 NW 5th St, Miami, FL 33128" }, "Receptive | 1 | 0 | 2 | 2 | 1 | 0"],
+  [{ address: "102 NW 5th St, Miami, FL 33128" }, "Raw 1 0 2; score 1 0 2; Trials 1-0-2 and 1:0:2; Tact 1 | 0 | 2."],
+  [{ address: "102 NW 5th St, Miami, FL 33128" }, "CPT 97151 x 1 0 2 units."],
 ];

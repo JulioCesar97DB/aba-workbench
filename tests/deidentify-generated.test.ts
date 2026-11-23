@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { foldString } from "../src/main/deidentify/fold.ts";
+import { readdirSync, readFileSync } from "node:fs";
 import { Deidentifier, reidentify } from "../src/main/deidentify/index.ts";
 import { REVIEW_SHEET, REVIEW_TODAY } from "./deidentify-adversarial.ts";
 
@@ -289,4 +290,141 @@ test("generated: each sheet value with any separator between every pair of its c
   }
   t.diagnostic(`${count} written forms of ${SEQUENCES.length} sheet values, ${failures.length} survived`);
   assert.deepEqual(failures.slice(0, 20), []);
+});
+
+// ---------------------------------------------------------------- review round 4: every separator, OCR digits, page breaks
+
+/** Every printable ASCII character that is not a letter or a digit, and the other separators text and PDFs carry. */
+const ALL_SEPARATORS = [
+  ...[...Array(95).keys()].map((k) => String.fromCharCode(32 + k)).filter((c) => !/[A-Za-z0-9]/u.test(c)),
+  "  ", " | ", " - ", " / ", " , ", " ; ", "\n", "\r\n", "\t", "\u{00A0}", "\u{2013}", "\u{2014}", "\u{2022}", "\u{00B7}", "\u{3000}", "\u{FF0F}", "\u{200B}", "\u{200F}", "\u{2066}",
+];
+
+test("generated: every non-alphanumeric separator between every pair of characters of each sheet value never lets it survive", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  for (const [value, label] of SEQUENCES) {
+    const chars = [...value];
+    const layouts = ALL_SEPARATORS.map((sep) => chars.join(sep));
+    // Mixed: a different separator between each pair (for the values long enough not to be a score: see the short-value rule).
+    if (value.length > 5) for (let k = 0; k < 30; k++) layouts.push(chars.map((c, i) => (i === 0 ? c : pick(ALL_SEPARATORS) + c)).join(""));
+    for (const written of layouts) {
+      for (const template of [`${label}: {X}.`, `${label} | {X} | ok`, `| ${label} | {X} |`]) {
+        const text = template.replace("{X}", written);
+        const { result } = hide(text);
+        count++;
+        if (residue(result.text).includes(foldString(value).replace(/[^\p{L}\p{N}]/gu, ""))) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
+      }
+    }
+  }
+  t.diagnostic(`${count} written forms of ${SEQUENCES.length} sheet values with ${ALL_SEPARATORS.length} separators, ${failures.length} survived`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+/** OCR's usual misreadings of each digit. */
+const OCR_LETTERS: Record<string, string[]> = { "0": ["O", "o", "D", "Q"], "1": ["I", "l", "i", "!"], "2": ["Z"], "5": ["S"], "8": ["B"] };
+const ocrBack = (s: string) => s.replace(/[OoDQ]/gu, "0").replace(/[Ili!]/gu, "1").replace(/Z/gu, "2").replace(/S/gu, "5").replace(/B/gu, "8");
+const NUMBERS: Array<[string, string, string]> = [
+  ["03/14/2020", "03142020", "DOB"], ["3/14/2020", "3142020", "DOB"], ["(305) 555-0142", "3055550142", "Phone"], ["305-555-0142", "3055550142", "Phone"],
+  ["FL123456789", "123456789", "Medicaid"], ["9876543210", "9876543210", "ID"], ["33135", "33135", "ZIP"],
+];
+
+test("generated: sheet numbers with OCR's misread digits (each one, and every 0 and 1 at once) never survive", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  for (const [written, digits, label] of NUMBERS) {
+    const forms: string[] = [];
+    [...written].forEach((c, i) => {
+      for (const letter of OCR_LETTERS[c] ?? []) forms.push(written.slice(0, i) + letter + written.slice(i + 1));
+    });
+    // Every 0 and 1 at once ("O3/I4/2O2O"), in each of their misreadings.
+    for (let k = 0; k < 4; k++) forms.push([...written].map((c) => (c === "0" || c === "1" ? OCR_LETTERS[c][k] : c)).join(""));
+    for (const form of forms) {
+      const text = `${label}: ${form}. Seen today.`;
+      const { result } = hide(text);
+      count++;
+      const left = ocrBack(result.text.replace(PLACEHOLDER, " ")).replace(/[^0-9]/gu, "");
+      if (left.includes(digits)) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
+    }
+  }
+  t.diagnostic(`${count} OCR-misread sheet numbers, ${failures.length} survived`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test("generated: a PDF page break at every position inside a sheet value never lets a part of it survive", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  const parts: Array<[string, RegExp]> = [
+    ["03/14/2020", /0314|1420|314/u], ["3/14/2020", /314|1420/u], ["(305) 555-0142", /5550142|3055|0142/u], ["FL123456789", /123456789|1234|6789/u], ["9876543210", /98765|43210/u],
+  ];
+  for (const [value, leak] of parts) {
+    for (let i = 1; i < value.length; i++) {
+      for (const marker of ["\n\n--- Page 2 of 3 ---\n", "\n--- Page 1 of 12 ---\n\n"]) {
+        const text = `Record: ${value.slice(0, i)}${marker}${value.slice(i)} (continued).`;
+        const { result, engine } = hide(text);
+        count++;
+        const left = result.text.replace(PLACEHOLDER, " ").replace(/--- Page \d+ of \d+ ---/gu, " ").replace(/[^0-9]/gu, "");
+        if (leak.test(left) || reidentify(result.text, engine.map).unrestored.length) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
+      }
+    }
+  }
+  t.diagnostic(`${count} page-break splits, ${failures.length} let a part survive`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+// ---------------------------------------------------------------- review round 4, H1: score tables stay as they are
+
+/** The fixtures' score lines (numbers, no date), and an item-score table of 0, 1 and 2, raw scores and trials. */
+const SCORE_LINES: string[] = (() => {
+  const dir = new URL("../fixtures/pdf-text/expected/", import.meta.url);
+  const lines = readdirSync(dir)
+    .flatMap((f) => readFileSync(new URL(f, dir), "utf8").split("\n"))
+    .filter((l) => /\d/u.test(l) && !/\d{1,4}[/.-]\d{1,2}[/.-]\d{2,4}|birth|dob|phone|\d{5}/iu.test(l));
+  const local = random(4749);
+  for (let r = 0; r < 40; r++) {
+    lines.push(`Item ${r + 1} | ${Array.from({ length: 12 }, () => String(Math.floor(local() * 3))).join(" | ")}`);
+    lines.push(`Raw scores | ${Array.from({ length: 8 }, () => String(Math.floor(local() * 31))).join(" | ")}`);
+    lines.push(`Trials ${Array.from({ length: 6 }, () => String(Math.floor(local() * 25))).join(" ")} correct`);
+    lines.push(`Receptive ${Array.from({ length: 6 }, () => String(Math.floor(local() * 3))).join(" ")}`);
+  }
+  return [...new Set(lines)];
+})();
+
+test("generated: every birth date from 2012 to 2024 (4,749) leaves the fixtures' score lines and an item-score table unchanged", (t) => {
+  const text = SCORE_LINES.join("\n");
+  const changed: string[] = [];
+  let dates = 0;
+  let reported = 0;
+  for (let day = Date.UTC(2012, 0, 1); day <= Date.UTC(2024, 11, 31); day += 86_400_000) {
+    const dob = new Date(day).toISOString().slice(0, 10);
+    dates++;
+    const result = new Deidentifier({ client: { firstName: "Zorvan", lastName: "Quillfeather", dateOfBirth: dob } }, { today: REVIEW_TODAY }).deidentify(text);
+    reported += result.possible.filter((p) => p.reason === "possible-sheet-value").length;
+    if (result.text !== text) {
+      const outLines = result.text.split("\n");
+      SCORE_LINES.forEach((line, i) => {
+        if (outLines[i] !== line) changed.push(`${dob}: ${line} -> ${outLines[i]}`);
+      });
+    }
+  }
+  t.diagnostic(`${dates} birth dates x ${SCORE_LINES.length} score lines: ${changed.length} lines changed, ${reported} possible sheet values listed for review`);
+  assert.deepEqual(changed.slice(0, 20), []);
+});
+
+test("generated: every 3-digit house number leaves the score lines unchanged", (t) => {
+  const text = SCORE_LINES.join("\n");
+  const changed: string[] = [];
+  let reported = 0;
+  for (let n = 100; n <= 999; n++) {
+    const result = new Deidentifier({ client: { firstName: "Zorvan", lastName: "Quillfeather" }, addresses: [`${n} NW 5th St, Miami, FL 33128`] }, { today: REVIEW_TODAY }).deidentify(text);
+    reported += result.possible.filter((p) => p.reason === "possible-sheet-value").length;
+    if (result.text !== text) {
+      const outLines = result.text.split("\n");
+      SCORE_LINES.forEach((line, i) => {
+        if (outLines[i] !== line) changed.push(`${n}: ${line} -> ${outLines[i]}`);
+      });
+    }
+  }
+  t.diagnostic(`900 house numbers x ${SCORE_LINES.length} score lines: ${changed.length} lines changed, ${reported} possible sheet values listed for review`);
+  assert.deepEqual(changed.slice(0, 20), []);
 });

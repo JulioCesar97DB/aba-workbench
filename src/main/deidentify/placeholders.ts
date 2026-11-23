@@ -39,8 +39,8 @@ export function numberedPlaceholder(kind: NumberedKind, n: number): string {
   return `[${KIND_LABELS[kind]} ${n}]`;
 }
 
-export type BirthDateForm = "full" | "month-year" | "month-day";
-const BIRTH_LABELS: Record<BirthDateForm, string> = { full: "[DOB]", "month-year": "[DOB MONTH AND YEAR]", "month-day": "[DOB MONTH AND DAY]" };
+export type BirthDateForm = "full" | "month-year" | "month-day" | "month" | "day";
+const BIRTH_LABELS: Record<BirthDateForm, string> = { full: "[DOB]", "month-year": "[DOB MONTH AND YEAR]", "month-day": "[DOB MONTH AND DAY]", month: "[DOB MONTH]", day: "[DOB DAY]" };
 
 export function birthDatePlaceholder(form: BirthDateForm): string {
   return BIRTH_LABELS[form];

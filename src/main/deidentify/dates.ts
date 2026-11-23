@@ -39,6 +39,8 @@ export interface DateMatch {
   loose?: boolean;
   /** A date label ("DOB", "date of birth", "fecha", "born") stands just before it. */
   labelled?: boolean;
+  /** Labelled fields ("Month: 03 Day: 14 Year: 2020"): where each value is, so only the values are hidden, never the labels. */
+  fields?: { month: [number, number]; day: [number, number]; year: [number, number] };
 }
 
 const MONTHS: Record<string, number> = {
@@ -252,6 +254,9 @@ export function findDates(folded: Folded, today: Date): DateMatch[] {
                 const readings = middleRoman ? [{ year: year.year, month: ROMAN[b], day: +tok.text }] : [{ year: year.year, month: +tok.text, day: +b }, { year: year.year, month: +b, day: +tok.text }];
                 push(i, year.last, readings, "full");
               }
+            } else if (!year && !middleRoman && tok.text.length <= 2 && b.length <= 2 && (s1 === "/" || s1 === "-") && /\n/u.test(folded.text.slice(t[i + 3].end, t[i + 4]?.start ?? folded.text.length) + (i + 4 >= n ? "\n" : ""))) {
+              // "03/14/" at a line or page end, its year somewhere after: the month and day.
+              push(i, i + 3, [{ year: 2000, month: +tok.text, day: +b }, { year: 2000, month: +b, day: +tok.text }], "month-day", { pair: true });
             }
           } else if (!middleRoman && tok.text.length <= 2 && b.length <= 2 && (s1 === "/" || s1 === "-") && freeAfter(i + 2)) {
             push(i, i + 2, [{ year: 2000, month: +tok.text, day: +b }, { year: 2000, month: +b, day: +tok.text }], "month-day", { pair: true });
@@ -305,12 +310,13 @@ export function findDates(folded: Folded, today: Date): DateMatch[] {
   }
 
   // Labelled fields on one line: "Month: 03 Day: 14 Year: 2020", "Birth month: March; birth day: 14; birth year: 2020".
-  const fields = /\b(?:month|mes)\b[ \t]*[:=|-]?[ \t]*(\d{1,2}|\p{L}+)\b[^\n]{0,40}?\b(?:day|dia)\b[ \t]*[:=|-]?[ \t]*(\d{1,2})\b[^\n]{0,40}?\b(?:year|ano)\b[ \t]*[:=|-]?[ \t]*(\d{4}|\d{2})\b/gu;
+  const fields = /\b(?:month|mes)\b[ \t]*[:=|-]?[ \t]*(\d{1,2}|\p{L}+)\b[^\n]{0,40}?\b(?:day|dia)\b[ \t]*[:=|-]?[ \t]*(\d{1,2})\b[^\n]{0,40}?\b(?:year|ano)\b[ \t]*[:=|-]?[ \t]*(\d{4}|\d{2})\b/dgu;
   for (const m of folded.text.matchAll(fields)) {
     const month = /^\d+$/u.test(m[1]) ? Number(m[1]) : MONTHS[m[1]];
-    if (!month) continue;
+    if (!month || !m.indices) continue;
     const reading = { year: fullYear(m[3], thisYear), month, day: Number(m[2]) };
-    if (valid(reading)) found.push({ start: m.index, end: m.index + m[0].length, readings: [reading], precision: "full", labelled: true });
+    const [mi, di, yi] = [m.indices[1], m.indices[2], m.indices[3]];
+    if (valid(reading)) found.push({ start: m.index, end: m.index + m[0].length, readings: [reading], precision: "full", labelled: true, fields: { month: [mi[0], mi[1]], day: [di[0], di[1]], year: [yi[0], yi[1]] } });
   }
 
   // The longest reading of any stretch wins; equal ones prefer full dates.

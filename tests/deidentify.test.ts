@@ -256,17 +256,17 @@ test("reidentify: puts back what models do to placeholders and reports what it c
   assert.deepEqual(restored.restored.find((r) => r.placeholder === "[CLIENT FULL NAME]"), { placeholder: "[CLIENT FULL NAME]", count: 1, repaired: 0 });
 });
 
-test("each part of a surname has its own placeholder and restores as the text wrote it, in the sheet's spelling", () => {
+test("each part of a surname has its own placeholder and restores exactly as the text wrote it", () => {
   const sheet: ClientSheet = { client: { firstName: "Ana", lastName: "Ejemplar de la Fuente" }, caregivers: [{ firstName: "Rita", lastName: "Rodríguez-Peña" }] };
   const hidden = hide("Ms. de la fuente and MS. DE LA FUENTE, then Ejemplar once; Mrs. Rodriguez; Mrs. Rodríguez; Ejemplar de la Fuente.", sheet);
   assert.equal(
     hidden.text,
-    "Ms. [CLIENT LAST NAME 1] and MS. [CLIENT LAST NAME 2], then [CLIENT LAST NAME 3] once; Mrs. [CAREGIVER 1 LAST NAME 1]; Mrs. [CAREGIVER 1 LAST NAME 1]; [CLIENT LAST NAME].",
+    "Ms. [CLIENT LAST NAME 1] and MS. [CLIENT LAST NAME 2], then [CLIENT LAST NAME 3] once; Mrs. [CAREGIVER 1 LAST NAME 1]; Mrs. [CAREGIVER 1 LAST NAME 2]; [CLIENT LAST NAME].",
   );
-  // Each written form comes back as written, in the sheet's spelling for the name words, particles as written.
+  // Each written form comes back exactly as written: accents, case and particles.
   assert.equal(
     reidentify("Ms. [CLIENT LAST NAME 1], MS. [CLIENT LAST NAME 2], [CLIENT LAST NAME 3], [CLIENT LAST NAME] and Mrs. [CAREGIVER 1 LAST NAME 1].", hidden.map).text,
-    "Ms. de la Fuente, MS. DE LA Fuente, Ejemplar, Ejemplar de la Fuente and Mrs. Rodríguez.",
+    "Ms. de la fuente, MS. DE LA FUENTE, Ejemplar, Ejemplar de la Fuente and Mrs. Rodriguez.",
   );
 });
 

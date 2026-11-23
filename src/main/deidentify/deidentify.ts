@@ -71,13 +71,16 @@ export interface Finding {
  *   a shortened sheet name ("possible-nickname", "Vale" for Valeria);
  * - hidden, but she should check who it is: a name two people on the sheet share
  *   ("shared-name"), or a sheet name split by a space next to a short word that may be two
- *   ordinary words ("split-name", "mate o"), sent as [NAME n] and restored as written.
+ *   ordinary words ("split-name", "mate o"), sent as [NAME n] and restored as written;
+ * - left as it is, to check: a short sheet value (a date of birth with a two-digit year, a
+ *   house number, a ZIP code with separators) met where it may be a score ("possible-sheet-value",
+ *   "Raw scores | 19 | 3 | 14"): hidden only next to a label or written as a date.
  */
 export interface Possible {
   text: string;
   start: number;
   end: number;
-  reason: "common-word-name" | "name-inside-word" | "school-word" | "possible-nickname" | "shared-name" | "split-name";
+  reason: "common-word-name" | "name-inside-word" | "school-word" | "possible-nickname" | "shared-name" | "split-name" | "possible-sheet-value";
   /** The placeholder it has (hidden) or would get if she chooses to hide it. */
   placeholder: string;
   kind: FoundKind;
@@ -279,6 +282,54 @@ function parseAddress(address: string): SheetAddress {
 /** A URL, a query string, an email address or a file name. */
 const LINKS = /(?:https?:\/\/|www\.)[^\s<>"'()[\]]+|mailto:[^\s<>"']+|[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|[^\s/\\<>"'|]+\.(?:pdf|docx?|xlsx?|csv|txt|rtf|jpe?g|png|heic|gif|mp4|mov|m4a|zip)\b|\?[^\s?]*=[^\s]*|[^\s]*%[0-9A-Fa-f]{2}[^\s]*/gu;
 
+/**
+ * Whether a sheet sequence could be scores rather than the value: a short one (a two-digit
+ * year, a house number, a ZIP code written apart), one spread over table cells, and a date of
+ * birth not written as a date ("2 | 0 | 1 | 2 | 1 | 2" in an item-score row is not 2012-01-02).
+ */
+function needsContext(match: { tag: string; short: boolean; whole: boolean; dateLike: boolean; gaps: string[]; pieces: number[] }): boolean {
+  // A date of birth written as a date ("3/14/20"): the value. A house number written so ("1-0-2") is still a score's form.
+  if (match.tag === "dob" && match.dateLike) return false;
+  if (match.short) return !(match.whole && match.tag === "zip");
+  if (match.whole) return false;
+  if (match.tag !== "dob" && match.tag !== "address" && match.tag !== "zip") return false;
+  if (match.gaps.some((g) => g.includes("|"))) return true;
+  if (match.tag !== "dob") return false;
+  // Written as a date: month, day and year apart ("03 14 2020", "2020 3 14"), or in two pieces ("0314 2020").
+  const p = match.pieces;
+  const asDate = (p.length === 3 && ((p[2] === 4 && p[0] <= 2 && p[1] <= 2) || (p[0] === 4 && p[1] <= 2 && p[2] <= 2))) || p.length === 2;
+  return !asDate;
+}
+
+/** A counting word right before a number: "Room 33135" is a room. */
+const COUNT_BEFORE = /(?<![\p{L}])(?:room|page|pages|total|code|item|items|score|scores|raw|trials?|session|cpt|claim|invoice|units?\s+of|count|n)[ \t]*[:=#]?[ \t]*$/iu;
+
+/** Labels that make a short number on their line or in their cell a sheet value, not a score. */
+const VALUE_LABEL = /(?<![\p{L}])(?:sw|nw|ne|se|street|st|avenue|ave|av|terrace|terr|ter|road|rd|drive|dr|lane|ln|court|ct|boulevard|blvd|apt|apto|suite|unit|calle|cll|dob|d\.o\.b|birth\w*|born|bday|cumple\w*|nacimiento|naci[oó]|fecha\s+de\s+nac\w*|f\.?\s?nac\w*|address\w*|addr|street|calle|direcci[oó]n|domicilio|zip|zip\s*code|postal|c[oó]digo\s+postal|phone|tel\w*|cell\w*|cel|mobile|celular|m[oó]vil|medicaid|member|mrn|policy|ssn|record|id)(?![\p{L}])/iu;
+
+/**
+ * Whether a short sheet value found at [start, end) is in its context: written with one date
+ * separator throughout ("03/14/20"), or next to a label on its line (prose) or in its row's first
+ * cell or its own cell (a table). A table row whose first cell is not such a label is a score row.
+ */
+function shortInContext(text: string, start: number, end: number, match: { dateLike: boolean }): boolean {
+  if (match.dateLike) return true;
+  // The line around it, at most 200 characters each way (a text without line breaks stays linear).
+  const from = Math.max(0, start - 200);
+  const lineStart = from + text.slice(from, start).lastIndexOf("\n") + 1;
+  const after = text.slice(end, end + 200);
+  const lineEnd = after.includes("\n") ? end + after.indexOf("\n") : end + after.length;
+  const line = text.slice(lineStart, lineEnd);
+  // A label alone on the line before ("Date of birth" over its boxes).
+  const before = text.slice(Math.max(0, lineStart - 60), Math.max(0, lineStart - 1));
+  const previous = before.slice(before.lastIndexOf("\n") + 1);
+  if (lineStart > 0 && previous.length <= 40 && !/\d/u.test(previous) && VALUE_LABEL.test(previous)) return true;
+  if (!line.includes("|")) return VALUE_LABEL.test(line);
+  const first = line.split("|").find((c) => c.trim() !== "") ?? "";
+  const own = text.slice(lineStart + text.slice(lineStart, start).lastIndexOf("|") + 1, start);
+  return VALUE_LABEL.test(first) || (VALUE_LABEL.test(own) && !/\d/u.test(own));
+}
+
 /** An age label right before a number: "Age", "CA =", "Chronological age |", "Edad:". */
 const AGE_BEFORE = /(?:\bages?|\baged|\bchronological\s+age|\bc\.?a\.?|\bedad(?:\s+cronol[oó]gica)?)\s*(?:at\s+testing|al\s+evaluar)?\s*(?:\([^)\n]{0,15}\))?\s*[:=|]?\s*$/iu;
 
@@ -367,16 +418,17 @@ export class Deidentifier {
     const literal = (regex: RegExp | null, kind: NumberedKind, capitalizedOnly = false) => {
       if (regex) this.#literals.push({ regex, kind, capitalizedOnly });
     };
-    const sequence = (chars: string, tag: string, minGaps = 0, uniform = false) => {
+    const sequence = (chars: string, tag: string, minGaps = 0, uniform = false, more: { short?: boolean; capitals?: boolean; sentences?: boolean } = {}) => {
       const clean = foldString(chars).replace(/[^\p{L}\p{N}]/gu, "");
-      if (clean.length >= 3 && !this.#sequences.some((s) => s.chars === clean && s.tag === tag)) this.#sequences.push({ chars: clean, minGaps, uniform, tag });
+      if (clean.length >= 3 && !this.#sequences.some((s) => s.chars === clean && s.tag === tag)) this.#sequences.push({ chars: clean, minGaps, uniform, tag, ...more });
     };
     const dob = this.#dob;
     if (dob) {
       const p = (n: number) => String(n).padStart(2, "0");
       const [y4, y2, mm, dd, m1, d1] = [String(dob.year), String(dob.year).slice(2), p(dob.month), p(dob.day!), String(dob.month), String(dob.day)];
-      for (const s of [mm + dd + y4, m1 + d1 + y4, dd + mm + y4, d1 + m1 + y4, y4 + mm + dd, y4 + m1 + d1, mm + dd + y2, dd + mm + y2]) sequence(s, "dob");
-      for (const s of [m1 + d1 + y2, d1 + m1 + y2]) sequence(s, "dob", 2);
+      for (const s of [mm + dd + y4, m1 + d1 + y4, dd + mm + y4, d1 + m1 + y4, y4 + mm + dd, y4 + m1 + d1]) sequence(s, "dob", 0, false, { sentences: true });
+      // With a two-digit year the digits are few enough to occur by chance in a score row: hidden in a date's or a label's context only.
+      for (const s of [mm + dd + y2, dd + mm + y2, m1 + d1 + y2, d1 + m1 + y2]) sequence(s, "dob", 0, false, { short: true, sentences: true });
     }
     for (const phone of sheet.phones ?? []) {
       const digits = phoneKey(phone);
@@ -391,10 +443,22 @@ export class Deidentifier {
     for (const address of sheet.addresses ?? []) {
       const line = address.split(",")[0];
       sequence(line, "address", 3);
-      for (const n of address.match(/\b\d{3,}\b/gu) ?? []) sequence(n, "address", 2, true);
+      // The ZIP code: whole anywhere ("33135", "FL,33135", "33135-0000"); with separators, in context only.
+      const zips: string[] = address.match(/\b\d{5}\b/gu) ?? [];
+      for (const zip of zips) sequence(zip, "zip", 0, false, { short: true });
+      // The house number: with separators and in context only ("4 4 7 1 SW…").
+      for (const n of address.match(/\b\d{3,}\b/gu) ?? []) if (!zips.includes(n)) sequence(n, "address", 2, true, { short: true });
       for (const place of address.split(",").slice(1)) for (const word of tokensOf(place).filter((w) => /^\p{L}{4,}$/u.test(w))) sequence(word, "city", 2, true);
     }
-    for (const school of sheet.schools ?? []) for (const word of tokensOf(school).filter((w) => w.length >= 4 && !SCHOOL_GENERIC.has(w))) sequence(word, "school", 2, true);
+    for (const school of sheet.schools ?? []) {
+      const tokens = tokensOf(school);
+      const core = tokens.filter((w) => !SCHOOL_GENERIC.has(w));
+      for (const word of core.filter((w) => w.length >= 4)) sequence(word, "school", 2, true);
+      // The distinctive words written as one ("sanjuanbosco"), and the initials, with dots or spaces, in capitals ("S.J.B.", "E S J B").
+      if (core.length >= 2) sequence(core.join(""), "school");
+      const initials = (words: string[]) => words.filter((w) => !ARTICLES.has(w)).map((w) => w[0]).join("");
+      for (const acronym of [initials(tokens), initials(core), initials(tokens.slice(0, -1))]) if (acronym.length >= 3) sequence(acronym, "school", 0, false, { capitals: true });
+    }
     const genericWords = [...SCHOOL_GENERIC].filter((w) => !ARTICLES.has(w)).map(brokenWord).join("|");
     (sheet.schools ?? []).forEach((school) => {
       const tokens = tokensOf(school);
@@ -403,6 +467,13 @@ export class Deidentifier {
       if (core.length && core.length < tokens.length) {
         // The distinctive words alone ("José Martí"), with any generic words after them ("José Martí Elementary").
         literal(new RegExp(`${B}${core.map(brokenWord).join(SEPARATOR)}(?:${SEPARATOR}(?:${genericWords}))*${E}`, "gu"), "school", true);
+        // Two or more distinctive words in a row ("Juan Bosco", "San Juan"): hidden; one alone: reported.
+        for (let a = 0; a < core.length; a++) {
+          for (let b = a + 2; b <= core.length; b++) {
+            if (b - a === core.length) continue;
+            literal(new RegExp(`${B}${core.slice(a, b).map(brokenWord).join(SEPARATOR)}(?:${SEPARATOR}(?:${genericWords}))*${E}`, "gu"), "school", true);
+          }
+        }
         for (const word of core.filter((w) => w.length >= 4)) {
           // One distinctive word with a generic word after it ("Martí Elementary"): hidden. Alone ("Martí."): possible.
           literal(new RegExp(`${B}${brokenWord(word)}(?:${SEPARATOR}(?:${genericWords}))+${E}`, "gu"), "school", true);
@@ -507,13 +578,15 @@ export class Deidentifier {
 
   #nameCandidate(person: Person, form: NameForm, start: number, end: number, original: string, words: string[], asWritten: boolean): Candidate {
     const spelled = inSheetSpelling(person, original).replace(/\s+/gu, " ");
-    const written = this.#baseWritten(person, form);
-    if (!asWritten && this.#isBase(person, form, words) && (written === undefined || spelled === written)) {
+    const sheetForm = this.#baseWritten(person, form);
+    if (!asWritten && this.#isBase(person, form, words) && (sheetForm === undefined || spelled === sheetForm)) {
       return { start, end, key: personKey(person, form), kind: person.group, source: "sheet", rank: 0, create: () => this.#baseSlot(person, form) };
     }
     // Written otherwise: restored as those words in the sheet's spelling; inside a file name, a URL, a broken or misread word: byte for byte.
-    const value = asWritten ? original : spelled;
-    const key = asWritten ? `person:${person.priority}:${form}:w:${original}` : `person:${person.priority}:${form}:v:${spelled}`;
+    // Restored exactly as written (only line breaks become spaces): "Del Rio de la Fuente" never comes back respelled.
+    const written = original.replace(/\s+/gu, " ");
+    const value = asWritten ? original : written;
+    const key = asWritten ? `person:${person.priority}:${form}:w:${original}` : `person:${person.priority}:${form}:v:${written}`;
     return { start, end, key, kind: person.group, source: "sheet", rank: 0, create: () => this.#variantSlot(person, form, key, value) };
   }
 
@@ -541,7 +614,17 @@ export class Deidentifier {
     // One canonical English form for each, as the report is written in English: never the first form met ("el 14 de marzo").
     const dob = this.#dob;
     const month = dob ? MONTH_NAMES[dob.month - 1] : "";
-    const value = !dob ? original : form === "full" ? canonicalDate(dob) : form === "month-year" ? `${month} ${dob.year}` : `${month} ${dob.day}`;
+    const value = !dob
+      ? original
+      : form === "full"
+        ? canonicalDate(dob)
+        : form === "month-year"
+          ? `${month} ${dob.year}`
+          : form === "month"
+            ? month
+            : form === "day"
+              ? String(dob.day)
+              : `${month} ${dob.day}`;
     this.#slots.set(key, { placeholder: birthDatePlaceholder(form), value, kind: "dob" });
   }
 
@@ -604,20 +687,34 @@ export class Deidentifier {
         candidates.push({ start: from, end, key, kind: literal.kind, source: "sheet", rank: 1, create: () => this.#numberedSlot(key, literal.kind, original) });
       }
     }
-    for (const match of findSequences(folded, text, this.#sequences)) {
-      const [found, end] = range(match.start, match.end);
+    // Where a possible sheet value is already listed: one report for overlapping matches.
+    const reportedValue = new Uint8Array(text.length);
+    for (const match of findSequences(folded, text, this.#sequences).sort((a, b) => b.end - b.start - (a.end - a.start))) {
+      const [found, foundEnd] = range(match.start, match.end);
       // "(305)555-0142": the opening bracket goes with the number, so the text keeps no lone "(".
-      const start = match.tag === "phone" && text[found - 1] === "(" && text.slice(found, end).includes(")") ? found - 1 : found;
+      const start = match.tag === "phone" && text[found - 1] === "(" && text.slice(found, foundEnd).includes(")") ? found - 1 : found;
+      // A ZIP code takes its +4: "33135-0000".
+      const plus4 = match.tag === "zip" ? /^[-\u{2013}]\d{4}(?!\d)/u.exec(text.slice(foundEnd, foundEnd + 6)) : null;
+      const end = plus4 ? foundEnd + plus4[0].length : foundEnd;
       const original = text.slice(start, end);
+      // A value that can occur by chance in a score row: hidden in a date's or a label's context only, otherwise listed for review.
+      // A whole ZIP code after a counting word ("Room 33135", "Total 33135") is that count; anywhere else it is the ZIP.
+      const counted = match.tag === "zip" && match.whole && !plus4 && COUNT_BEFORE.test(text.slice(Math.max(0, start - 20), start));
+      if (counted || (needsContext(match) && !shortInContext(text, start, end, { dateLike: match.tag === "dob" && match.dateLike }))) {
+        if (reportedValue.subarray(start, end).some((v) => v === 1)) continue;
+        reportedValue.fill(1, start, end);
+        possible.push({ text: original, start, end, reason: "possible-sheet-value", placeholder: match.tag === "dob" ? "[DOB]" : numberedPlaceholder("address", (this.#counters.get("address") ?? 0) + 1), kind: match.tag === "dob" ? "dob" : "address", hidden: false });
+        continue;
+      }
       if (match.tag === "dob") {
         candidates.push({ start, end, key: "dob:full", kind: "dob", source: "sheet", rank: 1, create: () => this.#birthSlot("dob:full", "full", original) });
         continue;
       }
-      const kind = match.tag as NumberedKind;
+      const kind = (match.tag === "zip" ? "address" : match.tag) as NumberedKind;
       const key = valueKey(kind, original);
       candidates.push({ start, end, key, kind, source: "sheet", rank: 1, create: () => this.#numberedSlot(key, kind, original) });
     }
-    this.#dateCandidates(text, folded, candidates);
+    this.#dateCandidates(text, folded, candidates, possible);
     for (const match of findPatterns(text)) candidates.push(this.#patternCandidate(text, match));
     for (const { start, end } of findAgeDays(text)) {
       candidates.push({ start, end, key: "", kind: "date", source: "pattern", rank: -1, create: () => {}, drop: true });
@@ -660,7 +757,15 @@ export class Deidentifier {
     }
     out += text.slice(at);
     const reported = possible.filter((p) => p.hidden || accepted.overlapping(p.start, p.end).length === 0);
-    const unique = reported.filter((p, i) => reported.findIndex((o) => o.start === p.start && o.end === p.end) === i).sort((a, b) => a.start - b.start);
+    const seen = new Set<string>();
+    const unique = reported
+      .filter((p) => {
+        const at = `${p.start}:${p.end}`;
+        if (seen.has(at)) return false;
+        seen.add(at);
+        return true;
+      })
+      .sort((a, b) => a.start - b.start);
     return { text: out, found: [...found.values()], possible: unique, dropped, map: this.map };
   }
 
@@ -683,7 +788,7 @@ export class Deidentifier {
     }
   }
 
-  #dateCandidates(text: string, folded: Folded, candidates: Candidate[]): void {
+  #dateCandidates(text: string, folded: Folded, candidates: Candidate[], possible: Possible[]): void {
     const dob = this.#dob;
     if (dob) {
       // The date of birth as a day of the year: "the 74th day of 2020", "2020-074", "día 74 de 2020".
@@ -717,6 +822,26 @@ export class Deidentifier {
       // Six or eight bare digits, or "3/14": only when they are the date of birth. Numbers apart only by spaces: also after a date label.
       if ((date.compact || date.pair) && !isBirthDate) continue;
       if (date.loose && !isBirthDate && !date.labelled) continue;
+      // Three numbers apart only by spaces or bars that read as the date of birth: in a label's context only ("DOB 03 14 2020"), never in a
+      // score row ("Raw scores | 21 | 7 | 19 | 3 | 14 | 20"), where it is listed for review.
+      if (date.loose && isBirthDate && !shortInContext(text, start, end, { dateLike: false })) {
+        possible.push({ text: original, start, end, reason: "possible-sheet-value", placeholder: "[DOB]", kind: "dob", hidden: false });
+        continue;
+      }
+      // Labelled fields: only the values are hidden, the labels stay ("Birth month: [DOB MONTH]; birth day: [DOB DAY]; birth year: 2020").
+      if (date.fields) {
+        const parts: Array<[[number, number], BirthDateForm]> = [[date.fields.month, "month"], [date.fields.day, "day"]];
+        for (const [[a, b], form] of parts) {
+          const [s, e] = originalRange(folded, a, b);
+          const written = text.slice(s, e);
+          if (isBirthDate) candidates.push({ start: s, end: e, key: `dob:${form}`, kind: "dob", source: "sheet", rank: 0, create: () => this.#birthSlot(`dob:${form}`, form, written) });
+          else {
+            const key = `date:${ymdKey(date.readings[0])}:${form}:${written}`;
+            candidates.push({ start: s, end: e, key, kind: "date", source: "pattern", rank: 2, create: () => this.#numberedSlot(key, "date", written) });
+          }
+        }
+        continue;
+      }
       // "CA = 6-08-08" after an age label is an age (its days are dropped), not a date, unless it is the date of birth.
       if (!isBirthDate && AGE_BEFORE.test(text.slice(Math.max(0, start - 40), start))) continue;
       if (isBirthDate) {
@@ -770,7 +895,8 @@ function resolve(text: string, candidates: Candidate[]): Spans<Candidate> {
       accepted.add(candidate);
       continue;
     }
-    if (candidate.drop) continue;
+    // A losing date is dropped, never cut into new dates ("2020. 03 14" against "3 14 2020"): what it covered is someone else's.
+    if (candidate.drop || candidate.kind === "date" || candidate.kind === "dob") continue;
     // Keep only the uncovered pieces that still hold a letter or a digit.
     let pieces: Array<[number, number]> = [[candidate.start, candidate.end]];
     for (const s of overlaps) {

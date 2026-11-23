@@ -14,6 +14,11 @@ import {
   RESTORE_NAMES,
   REVIEW_SHEET,
   REVIEW_TODAY,
+  R4_PROBES,
+  R4_SCORE_ROWS,
+  R4_SPANISH_PROBES,
+  R4_SPANS,
+  SPANISH_SHEET,
   SPLIT_CLINICAL,
   SPLIT_SHEET,
 } from "./deidentify-adversarial.ts";
@@ -106,4 +111,48 @@ test("a bare label followed by a number or more label words is reported, never r
   const back = reidentify("CLIENT LAST NAME 2 and CLIENT LAST NAME and [CLIENT LAST NAME 3]", engine.map);
   assert.equal(back.text, "CLIENT LAST NAME 2 and Ficticio Gómez and [CLIENT LAST NAME 3]");
   assert.deepEqual(back.unrestored.map((u) => u.text), ["CLIENT LAST NAME 2", "[CLIENT LAST NAME 3]"]);
+});
+
+test("review round 4: separators, the ZIP alone, OCR digits, page breaks, Spanish streets and school initials never survive", (t) => {
+  const leaks: string[] = [];
+  let strings = 0;
+  for (const [sheet, probes] of [[REVIEW_SHEET, R4_PROBES], [SPANISH_SHEET, R4_SPANISH_PROBES]] as const) {
+    for (const probe of probes) {
+      const engine = new Deidentifier(sheet, { today: REVIEW_TODAY });
+      const result = engine.deidentify(probe.text);
+      for (const value of probe.hide) {
+        strings++;
+        if (survives(result.text, value)) leaks.push(`${probe.group}: ${JSON.stringify(probe.text)} -> ${JSON.stringify(result.text)} (${value})`);
+      }
+      const back = reidentify(result.text, engine.map);
+      assert.deepEqual(back.unrestored, [], probe.text);
+    }
+  }
+  t.diagnostic(`${R4_PROBES.length + R4_SPANISH_PROBES.length} probes, ${strings} identifying strings, ${leaks.length} slipped through`);
+  assert.deepEqual(leaks, []);
+});
+
+test("review round 4: no span across a sentence end, labels stay, nothing re-split", () => {
+  for (const [text, sent, back] of R4_SPANS) {
+    const engine = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY });
+    const result = engine.deidentify(text);
+    assert.equal(result.text, sent, text);
+    assert.equal(reidentify(result.text, engine.map).text, back, text);
+  }
+});
+
+test("review round 4: score rows whose numbers equal a short sheet value are sent as they are, and listed for review", () => {
+  for (const [change, row] of R4_SCORE_ROWS) {
+    const sheet = {
+      ...REVIEW_SHEET,
+      client: { ...REVIEW_SHEET.client, dateOfBirth: change.dateOfBirth ?? REVIEW_SHEET.client.dateOfBirth },
+      addresses: change.address ? [change.address] : REVIEW_SHEET.addresses,
+    };
+    const result = new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(row);
+    assert.equal(result.text, row, row);
+    assert.ok(result.possible.some((p) => p.reason === "possible-sheet-value"), `${row}: not listed for review`);
+  }
+  // With a label the same numbers are the value.
+  const labelled = new Deidentifier({ ...REVIEW_SHEET, client: { ...REVIEW_SHEET.client, dateOfBirth: "2014-03-19" } }, { today: REVIEW_TODAY }).deidentify("DOB | 3 | 19 | 14");
+  assert.equal(labelled.text, "DOB | [DOB]");
 });

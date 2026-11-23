@@ -57,7 +57,7 @@ const STREET_TYPES = either([
   "Plaza", "Plz", "Square", "Sq", "Loop", "Path", "Row", "Pike", "Alley", "Crescent", "Point", "Str", "Blv", "Crt", "Calle", "Avenida", "Camino",
 ]);
 /** Spanish-style streets name their type first: "22 Calle Ocho", "1500 Avenida Ponce de León". */
-const TYPE_FIRST = "(?:Calle|C/|[Cc]\\.|Cl\\.|Avenida|Av\\.|Ave\\.|Camino|Carrera|Cra\\.|Paseo|Callej[oó]n|Diagonal|Transversal)";
+const TYPE_FIRST = "(?:Calle|C/|[Cc]\\.|Cl\\.|Cll\\.?|Cal\\.|Clle\\.?|Avenida|Av\\.|Ave\\.|Camino|Carrera|Cra\\.|Paseo|Callej[oó]n|Diagonal|Transversal)";
 const DIRECTION = "(?:N|S|E|W|NE|NW|SE|SW|North|South|East|West|Northeast|Northwest|Southeast|Southwest)\\.?";
 const STATES =
   "(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|PR|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|Florida|Georgia|Texas|New\\s+York|California|Puerto\\s+Rico)";
@@ -74,7 +74,7 @@ const STREET = new RegExp(
   "gu",
 );
 const STREET_TYPE_FIRST = new RegExp(
-  `(?<![\\p{L}\\p{N}])${UNIT_FIRST}\\d{1,6}[A-Za-z]?\\s+${TYPE_FIRST}(?:\\s+(?:${PLACE_WORD}|\\d+(?:st|nd|rd|th)?|de|del|la|los|las)){1,4}${UNIT}(?:${CITY_STATE_ZIP}|${CITY_ONLY})`,
+  `(?<![\\p{L}\\p{N}])${UNIT_FIRST}\\d{1,6}[A-Za-z]?\\s+${TYPE_FIRST}(?:\\s+(?:${PLACE_WORD}|\\d+(?:st|nd|rd|th)?|del|de|las|la|los)(?![\\p{L}])){1,4}${UNIT}(?:${CITY_STATE_ZIP}|${CITY_ONLY})`,
   "gu",
 );
 /** A Florida ZIP code after a city, with no state: "Doral 33172". The words before must look like a place, not a label ("Code 33533"). */
@@ -162,7 +162,7 @@ export function phoneKey(text: string): string {
 export const ADDRESS_WORDS: Record<string, string> = {
   street: "st", str: "st", avenue: "ave", av: "ave", avenida: "ave", road: "rd", boulevard: "blvd", blv: "blvd", drive: "dr",
   lane: "ln", court: "ct", crt: "ct", place: "pl", terrace: "ter", terr: "ter", trce: "ter", circle: "cir", highway: "hwy",
-  parkway: "pkwy", trail: "trl", plaza: "plz", square: "sq", calle: "cl", cl: "cl", c: "cl",
+  parkway: "pkwy", trail: "trl", plaza: "plz", square: "sq", calle: "cl", cl: "cl", c: "cl", cll: "cl", cal: "cl", clle: "cl", cle: "cl",
   apartment: "apt", apto: "apt", apartamento: "apt", unit: "apt", suite: "apt", ste: "apt",
   north: "n", south: "s", east: "e", west: "w", northeast: "ne", northwest: "nw", southeast: "se", southwest: "sw", florida: "fl",
   first: "1", second: "2", third: "3", fourth: "4", fifth: "5", sixth: "6", seventh: "7", eighth: "8", ninth: "9", tenth: "10",
