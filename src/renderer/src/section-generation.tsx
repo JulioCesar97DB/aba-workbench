@@ -12,6 +12,12 @@ import type { SectionRequestInput } from "../../shared/sections.ts";
 
 export type GenerationOutcome =
   | { kind: "saved" }
+  /** A check run again ended (its result is in the version). */
+  | { kind: "checked" }
+  /** A paragraph change answered with more than the paragraph: nothing was saved. */
+  | { kind: "not-one-paragraph" }
+  /** The answer was longer than a section can be: nothing was saved. */
+  | { kind: "too-long" }
   | { kind: "stopped" }
   | { kind: "failed"; message: string }
   | { kind: "incomplete" }
@@ -22,7 +28,8 @@ export interface SectionGeneration {
   id: string;
   caseId: string;
   sectionId: ReportSectionId;
-  request: SectionRequestInput;
+  /** Null for a check run again ("Check again"). */
+  request: SectionRequestInput | null;
   phase: "starting" | "thinking" | "writing" | "checking" | "done";
   text: string;
   outcome: GenerationOutcome | null;
@@ -54,7 +61,8 @@ function apply(update: GenerationUpdate) {
   const event = update.event;
   switch (event.type) {
     case "status":
-      set({ ...current, phase: event.phase });
+      // A check run again stays "checking" whatever the model is doing.
+      if (current.request !== null) set({ ...current, phase: event.phase });
       return;
     case "text":
       set({ ...current, phase: "writing", text: current.text + event.delta });
@@ -75,7 +83,8 @@ function apply(update: GenerationUpdate) {
         for (const listener of savedListeners) listener(current.caseId, saved, "version");
         set({ ...current, phase: "checking", outcome: { kind: "saved" } });
       } else {
-        set({ ...current, outcome: { kind: "not-saved" } });
+        const outcome = event.result.outcome;
+        set({ ...current, outcome: outcome === "not-one-paragraph" || outcome === "too-long" ? { kind: outcome } : { kind: "not-saved" } });
       }
       return;
     case "checked":
@@ -83,9 +92,10 @@ function apply(update: GenerationUpdate) {
         const saved = event.result;
         for (const listener of savedListeners) listener(current.caseId, saved, "check");
       }
+      if (current.request === null) set({ ...current, outcome: { kind: "checked" } });
       return;
     case "finished":
-      set({ ...current, phase: "done", outcome: current.outcome ?? (event.cancelled ? { kind: "stopped" } : { kind: "incomplete" }) });
+      set({ ...current, phase: "done", outcome: current.outcome ?? (current.request === null ? { kind: "checked" } : event.cancelled ? { kind: "stopped" } : { kind: "incomplete" }) });
       return;
     default:
       return;
@@ -123,6 +133,21 @@ export async function startSectionGeneration(caseId: string, sectionId: ReportSe
     return result.outcome;
   } catch {
     set({ id, caseId, sectionId, request, phase: "done", text: "", outcome: { kind: "failed", message: "" } });
+    return "error";
+  }
+}
+
+/** "Check again": runs only the consistency check on one version. */
+export async function startSectionCheck(caseId: string, sectionId: ReportSectionId, provider: DraftingProvider, version: number): Promise<StartSectionResult["outcome"] | "error"> {
+  ensureSubscribed();
+  const id = crypto.randomUUID();
+  set({ id, caseId, sectionId, request: null, phase: "checking", text: "", outcome: null });
+  try {
+    const result = await window.aba.checkSection(caseId, sectionId, id, provider, version);
+    if (result.outcome !== "started") set({ id, caseId, sectionId, request: null, phase: "done", text: "", outcome: { kind: "checked" } });
+    return result.outcome;
+  } catch {
+    set({ id, caseId, sectionId, request: null, phase: "done", text: "", outcome: { kind: "checked" } });
     return "error";
   }
 }

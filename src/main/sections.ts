@@ -14,7 +14,7 @@ import type {
 } from "../shared/api.ts";
 import { defaultModel } from "../shared/models.ts";
 import type { ReportSectionId } from "../shared/report-sections.ts";
-import { abaMatrixClipboard, findMarkers, replaceParagraph, tidySectionText } from "../shared/section-text.ts";
+import { abaMatrixClipboard, findMarkers, isParagraphAnswer, MAX_SECTION_TEXT_LENGTH, replaceParagraph, tidySectionText } from "../shared/section-text.ts";
 import type { SectionRequestInput, VersionKind } from "../shared/sections.ts";
 import type { CaseData, GenerationRecord } from "./case-file.ts";
 import {
@@ -201,6 +201,43 @@ export class SectionService {
     return { outcome: "ready", run: (signal) => this.run({ caseId: caseId as string, id, providerId, credential, model, request, data, folder: read.folder, baseText, signal }) };
   }
 
+  /**
+   * "Check again" (review M5): runs only the consistency check on a version, through the
+   * same preparation as every request, and saves its result with it. A check that failed,
+   * was stopped, or no longer holds because her sections changed can always be run again.
+   */
+  async prepareCheck(
+    caseId: unknown,
+    sectionId: unknown,
+    providerId: unknown,
+    version: unknown,
+  ): Promise<{ outcome: Exclude<StartSectionResult["outcome"], "started" | "busy"> } | { outcome: "ready"; run: (signal: AbortSignal) => AsyncIterable<Exclude<GenerationUpdateEvent, { type: "finished" }>> }> {
+    const id = parse(SectionIdSchema, sectionId, "not a section.");
+    if (providerId !== "anthropic" && providerId !== "openai") refuse("unknown provider.");
+    const number = parse(VersionSchema, version, "not a version.");
+    const credential = await this.options.credential(providerId);
+    if (!credential) return { outcome: "not-connected" };
+    const read = await this.options.cases.changeCase(caseId, () => ({ save: null, value: null }));
+    if (read.kind !== "unchanged" && read.kind !== "saved") return { outcome: "case-unavailable" };
+    if (versionText(read.data, id, number) === null) return { outcome: "version-not-found" };
+    const model = (await this.options.chosenModel(providerId)) ?? defaultModel(providerId);
+    const data = read.data;
+    const folder = read.folder;
+    const check = (signal: AbortSignal) => this.checkAgain({ caseId: caseId as string, id, providerId, credential, model, folder, signal }, data, number);
+    return { outcome: "ready", run: check };
+  }
+
+  private async *checkAgain(
+    args: { caseId: string; id: ReportSectionId; providerId: DraftingProvider; credential: ProviderCredential; model: string; folder: string; signal: AbortSignal },
+    data: CaseData,
+    number: number,
+  ): AsyncGenerator<Exclude<GenerationUpdateEvent, { type: "finished" }>> {
+    yield { type: "status", phase: "thinking" };
+    const instructions = await this.options.instructions.get(args.id);
+    const result = await this.checkConsistency(args, data, number, instructions);
+    if (!args.signal.aborted) yield { type: "checked", result };
+  }
+
   private async prepare(data: CaseData, folder: string, id: ReportSectionId, request: SectionRequest, instructions: string): Promise<{ prepared: PreparedRequest; context: Array<{ id: string; version: number }> }> {
     const context = contextSections(data, id);
     const prepared = await prepareOutgoingRequest({
@@ -248,8 +285,9 @@ export class SectionService {
     const provider = this.options.provider(args.providerId);
     const record = (done: { servedModel: string; usage: TokenUsage; attempts: Parameters<typeof generationCostUsd>[2] }): GenerationRecord => ({
       provider: provider.id,
-      requestedModel: args.model,
-      servedModel: done.servedModel,
+      requestedModel: args.model.slice(0, 200),
+      // Clamped to what the data file reads back (review B1): a provider's answer never makes a case unreadable.
+      servedModel: done.servedModel.slice(0, 200),
       effort: EFFORT[request.kind],
       rulesVersions: built.prepared.rulesVersions,
       sourcesUsed: built.prepared.sourcesUsed.map(({ id: sourceId, title }) => ({ id: sourceId, title })),
@@ -278,8 +316,10 @@ export class SectionService {
       section: id,
       signal,
       save: async ({ text, done }) => {
+        if (request.kind === "paragraph" && !isParagraphAnswer(baseText ?? "", request.paragraphIndex, text)) return { outcome: "not-one-paragraph" };
         const finalText = request.kind === "paragraph" ? replaceParagraph(baseText ?? "", request.paragraphIndex, text) : tidySectionText(text);
         if (finalText === null) return { outcome: "not-saved" };
+        if (finalText.length > MAX_SECTION_TEXT_LENGTH) return { outcome: "too-long" };
         const result = await this.options.cases.changeCase(args.caseId, (data, _folder, now) => {
           const added = addAiVersion(data, id, {
             kind: request.kind as Exclude<VersionKind, "hers" | "edited">,
@@ -341,7 +381,7 @@ export class SectionService {
           signal: args.signal,
           save: async ({ text: checked, done }) => {
             answer = checked;
-            consistency.model = done.servedModel;
+            consistency.model = done.servedModel.slice(0, 200);
             consistency.costUsd = args.credential.kind === "chatgpt" ? null : generationCostUsd(done.servedModel, done.usage, done.attempts);
             return null;
           },

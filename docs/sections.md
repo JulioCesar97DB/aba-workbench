@@ -8,18 +8,21 @@ Each section of the report (`src/shared/report-sections.ts`, in ABA Matrix's ord
 
 - **Start it** in one of two ways. "I already wrote it": she pastes what she already has in ABA Matrix; it is kept exactly as she wrote it (only line endings are made `\n`), used as context for the other sections and never contradicted. "Draft it with the AI": from the case's sources, her other sections, her standing instructions and her session notes.
 - **Watch it stream** as it is written, with Stop always in view. A stopped, refused, failed or cut-short answer is never saved: the screen says nothing was saved and her versions are unchanged.
-- **Correct it, both ways.** "Ask for changes in your own words" rewrites the whole text. Selecting a paragraph (click, or Enter/Space) opens "Change this paragraph": the model returns only that paragraph and the app puts it in place, so every other paragraph stays byte for byte. "Edit the text" lets her edit by hand. "Improve it with the AI" (on her own text) adds a version beside hers.
+- **Correct it, both ways.** "Ask for changes in your own words" rewrites the whole text. Selecting a paragraph (click, or Enter/Space) opens "Change this paragraph": the model returns only that paragraph and the app puts it in place by character offsets, so everything outside that paragraph (the other paragraphs and the spaces and blank lines between them) stays exactly as it was. An answer that is not one paragraph (more than two paragraphs, another paragraph of the section repeated in it, or far longer than the paragraph) is not saved, and the screen says the AI returned more than the paragraph. "Edit the text" lets her edit by hand. "Improve it with the AI" (on her own text) adds a version beside hers.
 - **Versions.** Every change is a new version (v1, v2, v3 beside the title, with what made it: "v3: “shorter, and mention the school” · Written by Claude Fable 5.2 · $0.18"). Going back to a version only moves the current pointer; nothing is ever removed.
 - **Approve** a version. A newer version takes the approval away until she approves again; the approval of an earlier one is kept in the history.
-- **Copy for ABA Matrix**, in one click: see "Copy for ABA Matrix" below. The message says how many `[MISSING]`/`[CHECK]` markers are still to resolve.
+- **Copy for ABA Matrix**, in one click: see "Copy for ABA Matrix" below. The message names the version copied, says how many `[MISSING]`/`[CHECK]` markers are still to resolve, and says which version is approved when she copied another one.
+- **Lines that are not paragraphs.** Text pasted with single line breaks reads as one paragraph (many text boxes copy that way). The paste editor and the reading view say so and offer "Treat each line as a paragraph", which makes a new version; her text stays as she pasted it.
 - **Her standing instructions** for each section (the rail), remembered for all her cases.
 - **Her notes for this session** (the sidebar, under the sections), used in every request about this case until she presses "Start a new session", which archives them.
 - **Checks** beside the text: structure, missing data and consistency with her sections (below).
-- The sidebar and the Report step show each section's state: not started (hollow dot), "Yours" (green), "v3" (amber: an AI draft waiting), "Approved" (green).
+- The sidebar counts the sections that are hers or approved ("Sections · 3 of 9"), and the sidebar and the Report step show each section's state: not started (hollow dot), "Yours" (green), "v3" (amber: an AI draft waiting), "Approved" (green).
 - **Which AI.** The connected provider; with both connected, a "Write with" choice, defaulting to the one she used last. The model is the most capable one unless she chooses the other in Settings ("AI model").
 - **Not ready for real client data.** Until de-identification is plugged in, every section screen says so plainly ("Not ready for real client data yet"), above anything that can send a request.
 
 ## Section states
+
+What the other sections build on (`finalVersion` in `src/main/case-sections.ts`): the approved version; otherwise her newest text that has no AI version in its lineage: what she pasted, or her edit of it (`edited` based on her own text), never an AI version she edited.
 
 `sectionState` in `src/shared/sections.ts`: `not-started` (no version), `hers` (the current version is her own text, pasted or edited before any AI version), `drafted` (the current version was written by the AI, or edited after one), `approved` (she approved a version).
 
@@ -51,7 +54,7 @@ Each section of the report (`src/shared/report-sections.ts`, in ABA Matrix's ord
             "requestedModel": "claude-fable-5-2",
             "servedModel": "claude-fable-5-2",
             "effort": "high",
-            "rulesVersions": { "assessment": "3", "requests": "1", "section-medical-necessity": "2", "…": "…" },
+            "rulesVersions": { "assessment": "3", "requests": "1", "section-medical-necessity": "3", "…": "…" },
             "sourcesUsed": [{ "id": "…", "title": "CDE (2026-10-02)" }],
             "sectionsUsed": [{ "id": "background-information", "version": 1 }],
             "instructions": "Each area with its score…",
@@ -76,7 +79,9 @@ Each section of the report (`src/shared/report-sections.ts`, in ABA Matrix's ord
 ```
 
 - `kind`: `hers`, `draft`, `change`, `paragraph`, `improve`, `edited`. A kind or a section id a newer app writes is kept as it is (shown as an edit).
-- Version numbers are never reused. AI versions never change. Her own text (`hers`, `edited`) is updated in place while she types in that same editing pass and it is still the newest version; any later pass starts a new version.
+- Version numbers are never reused. AI versions never change. Her own text (`hers`, `edited`) is updated in place while she types in that same editing pass and it is still the newest version and not approved; any later pass, or an edit of an approved version, starts a new version (approved text never changes).
+- **Nothing the app writes can make a case unreadable.** Every write of `aba-case.json` is first read back with the same rules it is read with (`readableCaseFileText` in `src/main/case-file.ts`); a change that would not read back whole is refused (`not-saved`, logged) and the file stays as it was. What a model returns is clamped to those limits before it is saved (a check keeps at most 20 items of at most 2,000 characters; model names at most 200); an answer longer than a section can be (100,000 characters) is not saved and says so. `instructions.json` follows the same rule.
+- **What she types is never lost on a reload.** A section's text (with its editing pass), her instructions and her notes are saved through the main process's store of changes that could not be saved (`src/main/failed-saves.ts`), as the sources are: when a save fails, the change itself is kept there while the app runs, the section screen shows it (and Home lists the case) after a reload, and "Try again" saves what was typed. Closing or quitting asks first while any is left.
 - `generation` records what made each AI version: who answered, the rules versions, the sources, her sections, the instructions and notes as they were sent, whether the client's details were hidden (`deidentified`, false until de-identification is plugged in), the tokens and the cost (null with ChatGPT sign-in, which spends her plan).
 - `consistency`: the check run right after an AI version is saved (below).
 - About 10 KB per version: hundreds of versions stay far under the file's 50 MB cap.
@@ -123,6 +128,8 @@ Text she typed cannot open or close one of these tags (`quoteForPrompt`).
 
 **Caching.** Claude: two breakpoints (after the system, after the sources) with the one-hour cache (`ttl: "1h"`, writing costs twice the input price instead of 1.25 times; she reads and corrects for longer than five minutes between requests). OpenAI with an API key: 30 minutes, as before; with ChatGPT sign-in, the plan's own cache.
 
+The effort is part of what the cache is keyed on: requests at effort high (drafts, changes, improvements) and at effort medium (paragraph changes and consistency checks) do not share a cache entry. So the first medium-effort request of each hour writes the prefix again (about $0.54 on Fable 5.2, $0.27 on Opus 5.5) instead of reading the one the draft just wrote. Whether to keep the split is the owner's decision, pending; the cost below includes it.
+
 **Effort and output room** (`src/main/sections.ts`): drafts, changes and improvements at effort high with 32,000 output tokens; paragraph changes and consistency checks at effort medium with 8,000.
 
 **Expected cost** (Claude with an API key; prices in `src/lib/pricing.ts`, checked 2026-11-21; a real case of about 30,000 tokens of sources, rules about 4,000, the task with her sections about 7,500, a draft about 8,000 output tokens with its thinking):
@@ -132,8 +139,9 @@ Text she typed cannot open or close one of these tags (`quoteForPrompt`).
 | First request of the hour (cache written) | about $0.90 | about $0.45 |
 | A draft or whole-text change within the hour | about $0.40 | about $0.20 |
 | A paragraph change | about $0.15 | about $0.07 |
-| A consistency check | about $0.10 | about $0.05 |
-| A whole assessment (9 sections, about 3 corrections each, the checks) | about $16 | about $8 |
+| A consistency check (after the first medium-effort request of the hour) | about $0.10 | about $0.05 |
+| The first medium-effort request of the hour (paragraph change or check: its own cache write) | add about $0.54 | add about $0.27 |
+| A whole assessment (9 sections, about 3 corrections each, the checks, over 3 to 4 hours) | about $18 | about $9 |
 
 ChatGPT sign-in spends her ChatGPT plan, not money. The real cost of each version is recorded with it (`costUsd`) and shown beside its number.
 
@@ -143,7 +151,9 @@ ChatGPT sign-in spends her ChatGPT plan, not money. The real cost of each versio
 
 - **Structure** (local, free): plain paragraphs only (no headings, lists, bold or tables, which ABA Matrix does not take), and as many paragraphs and words as the section's rules ask when they say so (`paragraphs: 6-9`, `words: 900-1500` in the rules file's front matter; only Medical Necessity has them today).
 - **Missing data** (local, free): every `[MISSING: …]` and `[CHECK: …]` marker, with what it says; markers are highlighted in the text.
-- **Consistency with her sections** (AI): after each new AI version, a second request (same provider and model, effort medium, reusing the cached prefix) checks it against her sections that are hers or approved, and the answer (`NO CONTRADICTIONS`, or one line per contradiction) is saved with the version. With none of her sections yet, nothing is sent ("Nothing to compare yet"). A failed check leaves the version as it is ("Could not be checked").
+- **Consistency with her sections** (AI): after each new AI version, a second request (same provider and model, effort medium, so it has its own cache entry; see "Caching") checks it against her sections that are hers or approved, and the answer (`NO CONTRADICTIONS`, or one line per contradiction) is saved with the version, with what it cost. With none of her sections yet, nothing is sent ("Nothing to compare yet"). While only the check runs, the button says "Skip the check": the version is already saved. A check that failed, was skipped, or no longer holds because her sections changed since ("Your other sections changed since this check") can be run again with "Check again", which goes through the same preparation as every request (`checkSection`).
+- At a narrow window, where the rail falls below the text, a line near the top ("Checks: 2 to look at") leads to them.
+- **Cost.** Each version shows what it cost, each check its own ("Check: $0.10"), and the Report step what the AI cost for the case so far.
 
 ## Copy for ABA Matrix
 
@@ -151,7 +161,7 @@ ChatGPT sign-in spends her ChatGPT plan, not money. The real cost of each versio
 
 ## Writing rules for each section
 
-`rules/sections/`. Medical Necessity has the BCBA's own structure. The other eight were written from the decisions file (`aba-assessment-template.md`): who reads it, what it covers, what to write, its gaps. Where the decisions file says too little to write a section's rules well, the file says so under "Not yet settled with the BCBA" instead of inventing clinical guidance (Background Information, Strengths and Weaknesses, Environmental Changes, Family/Caregiver Involvement, Discharge and Service Fading Plan, Risk Assessment, Crisis Plan). Generalization and Maintenance follows her two-paragraph description exactly. All are marked `confirmed: no` until she reviews them.
+`rules/sections/`. Medical Necessity has the BCBA's own structure. The other eight were written from the decisions file (`aba-assessment-template.md`): who reads it, what it covers, what to write, its gaps. Where the decisions file says too little to write a section's rules well, the file says so under "Not yet settled with the BCBA" instead of inventing clinical guidance (Background Information, Strengths and Weaknesses, Environmental Changes, Family/Caregiver Involvement, Discharge and Service Fading Plan, Risk Assessment, Crisis Plan). Generalization and Maintenance follows her two-paragraph description exactly. Crisis Plan gives no de-escalation techniques of its own (the decisions file does not give hers); Discharge tells the model not to describe the three phases. All are marked `confirmed: no` until she reviews them.
 
 ## Tests
 

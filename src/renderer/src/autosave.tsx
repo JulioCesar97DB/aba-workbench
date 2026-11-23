@@ -13,7 +13,7 @@ export const TYPING_PAUSE_MS = 600;
 
 export type AutosaveStatus = "idle" | "saving" | "saved" | "failed";
 
-export function useAutosave({ key, initial, save }: { key: string; initial: string; save: (text: string) => Promise<boolean> }) {
+export function useAutosave({ caseId, initial, save }: { caseId: string; initial: string; save: (text: string) => Promise<boolean> }) {
   const [value, setValueState] = useState(initial);
   const [status, setStatus] = useState<AutosaveStatus>("idle");
   const latest = useRef(initial);
@@ -25,20 +25,22 @@ export function useAutosave({ key, initial, save }: { key: string; initial: stri
     saveRef.current = save;
   }, [save]);
 
-  const flush = useCallback((): Promise<void> => {
+  /** Saves what is waiting; resolves whether everything typed is saved now. */
+  const flush = useCallback((): Promise<boolean> => {
     window.clearTimeout(timer.current);
     timer.current = undefined;
     const run = queue.current.then(async () => {
       const text = latest.current;
-      if (text === saved.current) return;
+      if (text === saved.current) return true;
       setStatus("saving");
-      const ok = await trackSave(key, saveRef.current(text).catch(() => false));
+      const ok = await trackSave(caseId, saveRef.current(text));
       if (ok) saved.current = text;
       setStatus(ok ? (latest.current === saved.current ? "saved" : "saving") : "failed");
+      return ok;
     });
-    queue.current = run;
+    queue.current = run.then(() => undefined);
     return run;
-  }, [key]);
+  }, [caseId]);
 
   const setValue = useCallback(
     (text: string) => {
@@ -50,7 +52,7 @@ export function useAutosave({ key, initial, save }: { key: string; initial: stri
     [flush],
   );
 
-  useEffect(() => registerFlusher(flush), [flush]);
+  useEffect(() => registerFlusher(async () => void (await flush())), [flush]);
   // Leaving the screen saves what is still waiting.
   useEffect(() => () => void flush(), [flush]);
 

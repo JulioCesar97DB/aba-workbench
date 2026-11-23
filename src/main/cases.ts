@@ -16,7 +16,7 @@ import {
   type UnreadableReason,
 } from "../shared/api.ts";
 import { guessPdfType, MAX_SOURCES, type AddPdfsResult, type CaseSources, type PdfProblem, type ReadSourceTextResult, type SourceSaveResult } from "../shared/sources.ts";
-import { CASE_FILE_NAME, ClientAgeSchema, MAX_CASE_FILE_BYTES, MAX_LISTED_FILES, newCaseData, nextUpdatedAt, readCaseFile, serializeCaseFile, type CaseData } from "./case-file.ts";
+import { CASE_FILE_NAME, ClientAgeSchema, MAX_CASE_FILE_BYTES, MAX_LISTED_FILES, newCaseData, nextUpdatedAt, readableCaseFileText, readCaseFile, type CaseData } from "./case-file.ts";
 import { checkDroppedPdf, copyPdfIntoFolder, findSamePdf, isPdfFile, readChosenPdf, type LoadedPdf } from "./case-pdfs.ts";
 import {
   addPdfSource,
@@ -404,7 +404,9 @@ export class CaseLibrary {
 
     const data = newCaseData({ id: this.options.newId(), label: label.label, clientAge: parsed.data.clientAge ?? null, now: this.options.now() });
     try {
-      await this.options.writeFile(path.join(caseFolder, CASE_FILE_NAME), serializeCaseFile(data));
+      const text = readableCaseFileText(data);
+      if (text === null) throw new Error("the new case would not read back whole");
+      await this.options.writeFile(path.join(caseFolder, CASE_FILE_NAME), text);
     } catch (error) {
       this.options.log(`The case's data file could not be written (${(error as Error).message}).`);
       // The folder is new and empty: remove it, so no half-made case is left. rmdir never removes a folder with files in it.
@@ -732,7 +734,12 @@ export class CaseLibrary {
           files: files.map((file) => ({ ...byName.get(file.name), ...file })),
           updatedAt: nextUpdatedAt(read.data.updatedAt, this.options.now()),
         };
-        const text = serializeCaseFile(next);
+        const text = readableCaseFileText(next);
+        if (text === null) {
+          // Never write what would make the case unreadable (review B1): refuse the save, keep the file as it is.
+          this.options.log("A case was not saved: the change would not read back whole.");
+          return { kind: "failed", outcome: "not-saved", sources: caseSources(read.data, files) };
+        }
         if (Buffer.byteLength(text, "utf8") > MAX_CASE_FILE_BYTES) return { kind: "failed", outcome: "case-full", sources: caseSources(read.data, files) };
         try {
           await this.options.writeFile(path.join(folder, CASE_FILE_NAME), text);
@@ -795,7 +802,9 @@ export class CaseLibrary {
   private async write(folder: string, data: CaseData, { strict = false } = {}): Promise<CaseData> {
     const next = { ...data, updatedAt: nextUpdatedAt(data.updatedAt, this.options.now()) };
     try {
-      await this.options.writeFile(path.join(folder, CASE_FILE_NAME), serializeCaseFile(next));
+      const text = readableCaseFileText(next);
+      if (text === null) throw new Error("the change would not read back whole");
+      await this.options.writeFile(path.join(folder, CASE_FILE_NAME), text);
       return next;
     } catch (error) {
       this.options.log(`A case could not be saved (${(error as Error).message}).`);

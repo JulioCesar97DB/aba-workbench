@@ -36,16 +36,76 @@ export function tidySectionText(text: string): string {
 }
 
 /**
- * The text with one paragraph replaced by `replacement` (which may come back as more than
- * one paragraph, or with spaces around it). Every other paragraph is kept exactly.
- * Null when there is no paragraph at that index.
+ * Where each paragraph is in the text: its start and end, without the spaces around it.
+ * The same paragraphs as splitParagraphs, in the text as it is (line endings made "\n").
+ */
+export function paragraphSpans(text: string): Array<{ start: number; end: number }> {
+  const normalized = normalizeLineEndings(text);
+  const spans: Array<{ start: number; end: number }> = [];
+  const separator = /\n[ \t]*\n/g;
+  let from = 0;
+  const push = (start: number, end: number) => {
+    while (start < end && /\s/u.test(normalized[start])) start++;
+    while (end > start && /\s/u.test(normalized[end - 1])) end--;
+    if (end > start) spans.push({ start, end });
+  };
+  for (let match = separator.exec(normalized); match !== null; match = separator.exec(normalized)) {
+    push(from, match.index);
+    from = match.index + match[0].length;
+    // A run of blank lines: the next search starts on the last line break of this one.
+    separator.lastIndex = from - 1;
+    from = separator.lastIndex;
+  }
+  push(from, normalized.length);
+  return spans;
+}
+
+/**
+ * The text with one paragraph replaced by `replacement` (trimmed). Everything else is
+ * kept exactly as it was, character for character: the other paragraphs and the spaces
+ * and blank lines between them (review M2). Null when there is no paragraph at that
+ * index or the replacement is empty.
  */
 export function replaceParagraph(text: string, index: number, replacement: string): string | null {
-  const paragraphs = splitParagraphs(text);
-  if (!Number.isInteger(index) || index < 0 || index >= paragraphs.length) return null;
-  const next = splitParagraphs(replacement);
-  if (next.length === 0) return null;
-  return joinParagraphs([...paragraphs.slice(0, index), ...next, ...paragraphs.slice(index + 1)]);
+  const normalized = normalizeLineEndings(text);
+  const spans = paragraphSpans(normalized);
+  if (!Number.isInteger(index) || index < 0 || index >= spans.length) return null;
+  const next = joinParagraphs(splitParagraphs(replacement));
+  if (next === "") return null;
+  const { start, end } = spans[index];
+  return normalized.slice(0, start) + next + normalized.slice(end);
+}
+
+/**
+ * Whether a paragraph change's answer is that paragraph and not more (review M1): at most
+ * two paragraphs, none of the section's other paragraphs repeated in it, and not much
+ * longer than the paragraph it replaces. A model that returns the whole section anyway
+ * would otherwise make a version that repeats the text around it.
+ */
+export function isParagraphAnswer(currentText: string, index: number, answer: string): boolean {
+  const current = splitParagraphs(currentText);
+  const marked = current[index];
+  const answered = splitParagraphs(answer);
+  if (marked === undefined || answered.length === 0 || answered.length > 2) return false;
+  const others = current.filter((paragraph, at) => at !== index && paragraph.length >= 40);
+  if (others.some((paragraph) => answer.includes(paragraph))) return false;
+  const length = answered.join("\n\n").length;
+  return length <= Math.max(4 * marked.length, marked.length + 1500);
+}
+
+/** Text whose paragraphs are separated by single line breaks, as many text boxes copy it: one paragraph with lines inside. */
+export function hasLinesInParagraphs(text: string): boolean {
+  return splitParagraphs(text).some((paragraph) => paragraph.includes("\n"));
+}
+
+/** Each non-empty line as its own paragraph ("Treat each line as a paragraph", review M3). */
+export function linesAsParagraphs(text: string): string {
+  return joinParagraphs(
+    normalizeLineEndings(text)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== ""),
+  );
 }
 
 export interface SectionMarker {

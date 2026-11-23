@@ -125,9 +125,15 @@ export class InstructionsStore {
       if (!read.ok) return false;
       const next = changeInstructions(read.file, id, text, this.now());
       if (!next) return true;
+      const serialized = serializeInstructionsFile(next);
+      // Never write what this version would not read back whole (review B1).
+      if (!readInstructionsFile(serialized).ok) {
+        this.log("The instructions were not saved: they would not read back whole.");
+        return false;
+      }
       try {
         await mkdir(path.dirname(this.file), { recursive: true });
-        await writeFileDurably(this.file, serializeInstructionsFile(next));
+        await writeFileDurably(this.file, serialized);
         return true;
       } catch (error) {
         this.log(`The instructions could not be saved (${(error as Error).message}).`);

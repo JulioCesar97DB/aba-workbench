@@ -1,6 +1,6 @@
 ---
 id: section-crisis-plan
-version: 1
+version: 2
 updated: 2026-11-22
 sources: The ABA Matrix template as exported by her agency (section 20, read 2026-11-21) and the payer facts (Florida Medicaid policy 5.2).
 confirmed: no, pending review by the BCBA
@@ -16,7 +16,7 @@ In the agency's assessments this section holds the protocol the team and the car
 
 The narrative parts only (the risk-factor checklist is a form in ABA Matrix).
 
-- The protocol for this child's dangerous behaviors, named as the rest of the assessment names them: the early signs the sources describe, the de-escalation steps (removing demands or bystanders, offering the replacement response, keeping the environment safe), and when emergency services are called.
+- The protocol for this child's dangerous behaviors, named as the rest of the assessment names them: the early signs the sources describe, and the de-escalation steps and the point at which emergency services are called only as the sources or her instructions for this section give them. Do not supply de-escalation techniques of your own; where the protocol needs a step the sources do not give, mark it [MISSING: ...].
 - What caregivers must do: be present or reachable during sessions as the agency requires, follow the protocol, and report incidents.
 - How crises are monitored: incidents recorded and reviewed by the BCBA, and the plan revised when they occur.
 - Never propose seclusion or manual, mechanical or chemical restraint: they are not covered services, and nothing in the sources authorizes them.

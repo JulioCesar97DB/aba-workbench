@@ -48,6 +48,8 @@ export interface SectionVersion {
   sourcesUsed: Array<{ id: string; title: string }>;
   /** For an AI version: whether it contradicts her sections, checked by the AI right after it was written. */
   consistency: ConsistencyResult | null;
+  /** What that check cost, when known. */
+  checkCostUsd: number | null;
   text: string;
 }
 
@@ -61,6 +63,8 @@ export interface SectionVersion {
 export interface ConsistencyResult {
   status: "none" | "found" | "nothing-to-compare" | "failed";
   items: string[];
+  /** Her sections changed since the check (another version approved or written): it may no longer hold. */
+  stale: boolean;
 }
 
 export interface SectionSummary {
@@ -71,6 +75,8 @@ export interface SectionSummary {
   /** The version she approved, or null. */
   approvedVersion: number | null;
   versionCount: number;
+  /** What the AI cost for this section so far, in USD (versions and checks whose price is known; ChatGPT sign-in adds nothing). */
+  costUsd: number;
 }
 
 export interface SectionDetail extends SectionSummary {

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { FailedSave, SourceSaveResult } from "../shared/sources.ts";
+import type { InstructionsSaveResult, NotesSaveResult, SectionSaveResult } from "../shared/api.ts";
+import type { FailedSave, FailedSaveFailure, SourceSaveResult } from "../shared/sources.ts";
 import type { CaseLibrary } from "./cases.ts";
+import type { SectionService } from "./sections.ts";
 
 /*
  * The changes to a case's sources that could not be saved, kept in the main process for
@@ -9,8 +11,13 @@ import type { CaseLibrary } from "./cases.ts";
  * The interface lists them (Home, the Sources step) and "Try again" runs the same change
  * again (retry). Closing or quitting asks first while any is left (src/main/close-guard.ts).
  *
+ * The same holds for what she types in the report's sections (review B3, the owner's
+ * decision of item 60): a section's text with its editing pass, her standing
+ * instructions for a section, and her session notes.
+ *
  * Each change has a key: the thing it changes ("text:<source id>", "title:<source id>",
- * "removed:<source id>", "text:new-<case id>" for a new text). A later change with the same
+ * "removed:<source id>", "text:new-<case id>" for a new text, "section-text:<section id>",
+ * "notes", and "instructions:<section id>", which is the same in every case). A later change with the same
  * key that is saved replaces a failed one: trying the older one again would undo the newer.
  * Nothing here imports Electron, so it is unit-tested.
  */
@@ -18,15 +25,34 @@ import type { CaseLibrary } from "./cases.ts";
 export type SaveOp =
   | { kind: "add-text"; input: unknown }
   | { kind: "change"; sourceId: string; change: Record<string, unknown> }
-  | { kind: "removed"; sourceId: string; removed: boolean };
+  | { kind: "removed"; sourceId: string; removed: boolean }
+  | { kind: "section-text"; sectionId: unknown; text: unknown; editing: unknown }
+  | { kind: "instructions"; sectionId: unknown; text: unknown }
+  | { kind: "notes"; text: unknown };
 
-/** Runs a change through the case library. */
-export function runOnCases(cases: Pick<CaseLibrary, "addTextSource" | "changeSource" | "setSourceRemoved">): FailedSavesOptions["run"] {
+/** What any of those changes answers. */
+export type SaveResult = SourceSaveResult | SectionSaveResult | NotesSaveResult | InstructionsSaveResult;
+
+/** Runs a change through the case library, or the section service for what is typed in the report's sections. */
+export function runSaves(
+  cases: Pick<CaseLibrary, "addTextSource" | "changeSource" | "setSourceRemoved">,
+  sections: () => Pick<SectionService, "saveText" | "saveInstructions" | "saveNotes">,
+): FailedSavesOptions["run"] {
   return (caseId, op) => {
     if (op.kind === "add-text") return cases.addTextSource(caseId, op.input);
     if (op.kind === "change") return cases.changeSource(caseId, op.sourceId, op.change);
-    return cases.setSourceRemoved(caseId, op.sourceId, op.removed);
+    if (op.kind === "removed") return cases.setSourceRemoved(caseId, op.sourceId, op.removed);
+    if (op.kind === "section-text") return sections().saveText(caseId, op.sectionId, op.text, op.editing);
+    if (op.kind === "instructions") return sections().saveInstructions(op.sectionId, op.text);
+    return sections().saveNotes(caseId, op.text);
   };
+}
+
+/** Sources only: what the tests of sources use. */
+export function runOnCases(cases: Pick<CaseLibrary, "addTextSource" | "changeSource" | "setSourceRemoved">): FailedSavesOptions["run"] {
+  return runSaves(cases, () => {
+    throw new Error("No section service.");
+  });
 }
 
 /**
@@ -37,10 +63,27 @@ export function runOnCases(cases: Pick<CaseLibrary, "addTextSource" | "changeSou
 export function saveKey(caseId: string, op: SaveOp, entryId = ""): string {
   if (op.kind === "add-text") return `${caseId}/text:new:${entryId}`;
   if (op.kind === "removed") return `${caseId}/removed:${op.sourceId}`;
+  if (op.kind === "section-text") return `${caseId}/section-text:${String(op.sectionId)}`;
+  // Her instructions are the same in every case: a later save from any case replaces a failed one.
+  if (op.kind === "instructions") return `*/instructions:${String(op.sectionId)}`;
+  if (op.kind === "notes") return `${caseId}/notes`;
   return `${caseId}/${Object.keys(op.change).sort().join("+")}:${op.sourceId}`;
 }
 
-type Failure = Exclude<SourceSaveResult["outcome"], "saved"> | "error";
+type Failure = FailedSaveFailure;
+
+/** What the interface is told of a failure: the reasons it explains, any other as "not-saved". */
+function failureOf(outcome: string): Failure {
+  return outcome === "case-full" || outcome === "case-unavailable" || outcome === "source-not-found" || outcome === "error" ? outcome : "not-saved";
+}
+
+/** What a change is about, for the interface: a source, a section's text, her instructions or her notes. */
+function aboutOf(op: SaveOp): Pick<FailedSave, "about" | "sectionId"> {
+  if (op.kind === "section-text") return { about: "section", sectionId: typeof op.sectionId === "string" ? op.sectionId : null };
+  if (op.kind === "instructions") return { about: "instructions", sectionId: typeof op.sectionId === "string" ? op.sectionId : null };
+  if (op.kind === "notes") return { about: "notes", sectionId: null };
+  return { about: "source", sectionId: null };
+}
 
 interface Entry {
   id: string;
@@ -52,7 +95,7 @@ interface Entry {
 
 export interface FailedSavesOptions {
   /** Runs a change (CaseLibrary). It throws "Refused: ..." for input it refuses. */
-  run: (caseId: unknown, op: SaveOp) => Promise<SourceSaveResult>;
+  run: (caseId: unknown, op: SaveOp) => Promise<SaveResult>;
   /** A case's label, as last listed or opened; null if the app has not seen it. */
   labelOf: (caseId: string) => string | null;
   newId?: () => string;
@@ -73,8 +116,8 @@ export class FailedSaves {
   }
 
   /** Runs a change and remembers it if it could not be saved; a saved one clears a failed one with the same key. */
-  async save(caseId: unknown, op: SaveOp): Promise<SourceSaveResult> {
-    let result: SourceSaveResult;
+  async save<R extends SaveResult = SourceSaveResult>(caseId: unknown, op: SaveOp): Promise<R> {
+    let result: SaveResult;
     try {
       result = await this.options.run(caseId, op);
     } catch (error) {
@@ -84,22 +127,22 @@ export class FailedSaves {
     }
     const id = caseId as string;
     if (result.outcome === "saved") this.forget(id, op);
-    else this.record(id, op, result.outcome);
-    return result;
+    else this.record(id, op, failureOf(result.outcome));
+    return result as R;
   }
 
   /** Every change not saved, oldest first. */
   list(): FailedSave[] {
     return [...this.entries.values()]
       .sort((a, b) => a.at - b.at)
-      .map(({ id, caseId, failure }) => ({ id, caseId, label: this.options.labelOf(caseId), failure }));
+      .map(({ id, caseId, failure, op }) => ({ id, caseId, label: this.options.labelOf(caseId), failure, ...aboutOf(op) }));
   }
 
   /** Runs a failed change again. */
-  async retry(id: unknown): Promise<SourceSaveResult> {
+  async retry(id: unknown): Promise<SaveResult> {
     const entry = [...this.entries.values()].find((item) => item.id === id);
     if (!entry) return { outcome: "source-not-found" };
-    return this.save(entry.caseId, entry.op);
+    return this.save<SaveResult>(entry.caseId, entry.op);
   }
 
   /** Forgets the failed changes a saved one replaces. */

@@ -7,6 +7,8 @@ import { mockProvider } from "../src/lib/providers/mock.ts";
 import type { GenerateEvent, GenerateOptions, Provider } from "../src/lib/providers/types.ts";
 import { CASE_FILE_NAME, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
 import { contextSections, saveOwnText, startNewSession, setNotes } from "../src/main/case-sections.ts";
+import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
+import { hasLinesInParagraphs, isParagraphAnswer, linesAsParagraphs, paragraphSpans, replaceParagraph, splitParagraphs } from "../src/shared/section-text.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
 import { changeInstructions, EDITING_PASS_MS, INSTRUCTIONS_FILE_NAME, InstructionsStore, readInstructionsFile } from "../src/main/instructions.ts";
 import { SectionService } from "../src/main/sections.ts";
@@ -26,7 +28,7 @@ function tempFolder(): string {
 const usage = { uncachedInputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500, reasoningTokens: null };
 
 /** A provider that answers each kind of request the way a model would, with invented text, and records what it was sent. */
-function fakeModel(answers: { consistency?: string } = {}) {
+function fakeModel(answers: { consistency?: string; paragraph?: string } = {}) {
   const prompts: GenerateOptions["prompt"][] = [];
   const provider: Provider = {
     ...mockProvider,
@@ -37,7 +39,7 @@ function fakeModel(answers: { consistency?: string } = {}) {
       const text = task.includes("Consistency check")
         ? (answers.consistency ?? "NO CONTRADICTIONS")
         : task.includes("Paragraph change request")
-          ? "A new second paragraph, with a [MISSING: date of the IEP]."
+          ? (answers.paragraph ?? "A new second paragraph, with a [MISSING: date of the IEP].")
           : "First paragraph of an invented draft.\n\nSecond paragraph.\n\nThird paragraph.";
       yield { type: "status", phase: "writing" };
       for (const piece of text.match(/.{1,7}/gsu) ?? []) yield { type: "text", delta: piece };
@@ -47,13 +49,22 @@ function fakeModel(answers: { consistency?: string } = {}) {
   return { provider, prompts };
 }
 
-async function setup(answers: { consistency?: string } = {}) {
+async function setup(answers: { consistency?: string; paragraph?: string } = {}, options: { failWrites?: () => boolean; provider?: Provider } = {}) {
   const folder = tempFolder();
   let ids = 0;
   const cases = new CaseLibrary({
     location: async () => ({ folder, isDefault: false }),
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
     log: () => undefined,
+    ...(options.failWrites
+      ? {
+          writeFile: async (file: string, text: string) => {
+            if (options.failWrites!()) throw new Error("EACCES: the disk refused (test)");
+            const { writeFileDurably } = await import("../src/main/durable-write.ts");
+            await writeFileDurably(file, text);
+          },
+        }
+      : {}),
   });
   const created = await cases.create({ label: "Invented case" });
   assert.ok(created.outcome === "created");
@@ -66,7 +77,7 @@ async function setup(answers: { consistency?: string } = {}) {
     cases,
     instructions: new InstructionsStore(path.join(userData, INSTRUCTIONS_FILE_NAME), { log: () => undefined }),
     rulesDir: path.join(process.cwd(), "rules"),
-    provider: () => model.provider,
+    provider: () => options.provider ?? model.provider,
     credential: async () => ({ kind: "api-key", apiKey: "test-key-not-real" }),
     chosenModel: async () => null,
     rememberProvider: async () => undefined,
@@ -74,7 +85,7 @@ async function setup(answers: { consistency?: string } = {}) {
     log: () => undefined,
   });
   const caseFile = path.join(folder, "Invented case", CASE_FILE_NAME);
-  return { service, caseId, model, clipboard, caseFile, userData };
+  return { service, caseId, model, clipboard, caseFile, userData, cases };
 }
 
 async function generate(service: SectionService, caseId: string, sectionId: string, request: unknown, signal = new AbortController().signal) {
@@ -121,7 +132,7 @@ test("a draft streams in and becomes a version with what made it; nothing to com
   assert.deepEqual(version.sourcesUsed.map((source) => source.title), ["CDE"]);
   const checked = events.at(-1);
   assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
-  assert.deepEqual(checked.result.section.versions[0].consistency, { status: "nothing-to-compare", items: [] });
+  assert.deepEqual(checked.result.section.versions[0].consistency, { status: "nothing-to-compare", items: [], stale: false });
   const stored = JSON.parse(readFileSync(caseFile, "utf8"));
   assert.equal(stored.schemaVersion, 3);
   const record = stored.sections["medical-necessity"].versions[0].generation;
@@ -146,7 +157,7 @@ test("her sections and approved ones are context, labeled final; unapproved draf
   assert.match(model.prompts.at(-1)!.task, /Consistency check/);
   const checked = events.at(-1);
   assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
-  assert.deepEqual(checked.result.section.versions.at(-1)!.consistency, { status: "none", items: [] });
+  assert.deepEqual(checked.result.section.versions.at(-1)!.consistency, { status: "none", items: [], stale: false });
   // Once approved, the Strengths draft is context too.
   saved(await service.approve(caseId, "strengths-and-weaknesses", 1));
   await generate(service, caseId, "crisis-plan", { kind: "draft" });
@@ -159,7 +170,7 @@ test("contradictions the check finds are kept with the version", async () => {
   const events = await generate(service, caseId, "medical-necessity", { kind: "draft" });
   const checked = events.at(-1);
   assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
-  assert.deepEqual(checked.result.section.versions.at(-1)!.consistency, { status: "found", items: ["Background Information says 4 years old; this says 5.", "Another one."] });
+  assert.deepEqual(checked.result.section.versions.at(-1)!.consistency, { status: "found", items: ["Background Information says 4 years old; this says 5.", "Another one."], stale: false });
 });
 
 test("a paragraph change keeps every other paragraph byte for byte, and takes the approval away", async () => {
@@ -304,4 +315,181 @@ test("standing instructions: one history entry per editing pass; a damaged file 
   assert.equal(await store.save("crisis-plan", "x"), false);
   assert.equal(readFileSync(file, "utf8"), "{ damaged");
   assert.equal(await store.get("crisis-plan"), "");
+});
+
+/* Review round 1 */
+
+test("B1: a check line longer than the data file allows is cut, and the case stays readable", async () => {
+  const long = "x".repeat(2500);
+  const { service, caseId, caseFile } = await setup({ consistency: `- ${long}` });
+  saved(await service.saveText(caseId, "background-information", "Her own background text.", null));
+  const events = await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  const checked = events.at(-1);
+  assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
+  const item = checked.result.section.versions.at(-1)!.consistency!.items[0];
+  assert.equal(item.length, 2000);
+  assert.ok(readCaseFile(readFileSync(caseFile)).ok, "the case reads back");
+  assert.equal((await service.get(caseId, "medical-necessity")).outcome, "read");
+});
+
+test("B1: a change that would not read back whole is refused, and the file is left as it was", async () => {
+  const { caseId, caseFile, cases } = await setup();
+  const before = readFileSync(caseFile, "utf8");
+  const result = await cases.changeCase(caseId, (data) => ({
+    save: { ...data, sections: { "crisis-plan": { currentVersion: 1, approvedVersion: null, versions: [{ number: 1, kind: "draft", createdAt: data.createdAt, text: "x", consistency: { status: "found", items: ["y".repeat(2001)], checkedAt: data.createdAt, model: null, costUsd: null, sectionsCompared: [] } }] } } },
+    value: null,
+  }));
+  assert.deepEqual(result, { kind: "failed", outcome: "not-saved" });
+  assert.equal(readFileSync(caseFile, "utf8"), before);
+});
+
+test("B2: her edit of her own text is what the other sections are built on, not the text she corrected", async () => {
+  const { service, caseId, model } = await setup();
+  saved(await service.saveText(caseId, "background-information", "Seen on 10/02/2026 (wrong date).", null));
+  saved(await service.saveText(caseId, "background-information", "Seen on 10/12/2026 (her correction).", null));
+  await generate(service, caseId, "background-information", { kind: "improve", fromVersion: 2 });
+  await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  const draft = model.prompts.find((prompt) => prompt.task.includes("Draft request") && prompt.task.includes("Medical Necessity"))!;
+  assert.match(draft.task, /her correction/);
+  assert.doesNotMatch(draft.task, /wrong date/);
+  // Her edit of the AI's version is not hers all the way down: her own text stays the context.
+  const view = await service.get(caseId, "background-information");
+  assert.ok(view.outcome === "read");
+  assert.deepEqual(view.section.versions.map((v) => v.kind), ["hers", "edited", "improve"]);
+  saved(await service.saveText(caseId, "background-information", "An edit of the AI's text.", null));
+  await generate(service, caseId, "crisis-plan", { kind: "draft" });
+  const crisis = model.prompts.find((prompt) => prompt.task.includes('"Crisis Plan"') && prompt.task.includes("Draft request"))!;
+  assert.match(crisis.task, /her correction/);
+});
+
+test("B3: section text, instructions and notes that cannot be saved are kept in the main process with what was typed, and Try again saves them", async () => {
+  let failing = false;
+  const { service, caseId, caseFile, cases } = await setup({}, { failWrites: () => failing });
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => "Invented case", newId: (() => { let n = 0; return () => `id-${++n}`; })() });
+  failing = true;
+  assert.equal((await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "Typed while the disk refused.", editing: null })).outcome, "not-saved");
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "Notes typed then." })).outcome, "not-saved");
+  assert.deepEqual(
+    failed.list().map(({ about, sectionId, failure }) => ({ about, sectionId, failure })),
+    [
+      { about: "section", sectionId: "crisis-plan", failure: "not-saved" },
+      { about: "notes", sectionId: null, failure: "not-saved" },
+    ],
+  );
+  failing = false;
+  for (const item of failed.list()) assert.equal((await failed.retry(item.id)).outcome, "saved");
+  assert.equal(failed.size, 0);
+  const stored = JSON.parse(readFileSync(caseFile, "utf8"));
+  assert.equal(stored.sections["crisis-plan"].versions[0].text, "Typed while the disk refused.");
+  assert.equal(stored.sessionNotes.text, "Notes typed then.");
+});
+
+test("B3: instructions that cannot be saved are kept too, under the case they were typed in", async () => {
+  const { caseId, cases } = await setup();
+  const folder = tempFolder();
+  const file = path.join(folder, "instructions.json");
+  writeFileSync(file, "{ damaged");
+  const service = new SectionService({
+    cases,
+    instructions: new InstructionsStore(file, { log: () => undefined }),
+    rulesDir: path.join(process.cwd(), "rules"),
+    provider: () => mockProvider,
+    credential: async () => null,
+    chosenModel: async () => null,
+    rememberProvider: async () => undefined,
+    writeClipboard: async () => undefined,
+  });
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => null });
+  assert.equal((await failed.save(caseId, { kind: "instructions", sectionId: "crisis-plan", text: "Mine." })).outcome, "not-saved");
+  assert.deepEqual(failed.list().map(({ caseId: inCase, about, sectionId }) => ({ inCase, about, sectionId })), [{ inCase: caseId, about: "instructions", sectionId: "crisis-plan" }]);
+});
+
+test("M1: a paragraph change that answers with the whole section is not saved", async () => {
+  const { service, caseId } = await setup({ paragraph: "First paragraph of an invented draft.\n\nA new second paragraph.\n\nThird paragraph." });
+  await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  const events = await generate(service, caseId, "medical-necessity", { kind: "paragraph", fromVersion: 1, paragraphIndex: 1, request: "x" });
+  assert.deepEqual(events.find((e) => e.type === "saved"), { type: "saved", result: { outcome: "not-one-paragraph" } });
+  const read = await service.get(caseId, "medical-necessity");
+  assert.ok(read.outcome === "read");
+  assert.equal(read.section.versions.length, 1);
+});
+
+test("M1: what counts as one paragraph's answer", () => {
+  const text = "A first paragraph that is long enough to be recognised.\n\nShort second.\n\nA third paragraph that is long enough to be recognised.";
+  assert.equal(isParagraphAnswer(text, 1, "A better second."), true);
+  assert.equal(isParagraphAnswer(text, 1, "Second, part one.\n\nSecond, part two."), true);
+  assert.equal(isParagraphAnswer(text, 1, "One.\n\nTwo.\n\nThree."), false, "more than two paragraphs");
+  assert.equal(isParagraphAnswer(text, 1, "A first paragraph that is long enough to be recognised. Short second, better."), false, "repeats another paragraph");
+  assert.equal(isParagraphAnswer(text, 1, "y".repeat(2000)), false, "much longer than the paragraph");
+});
+
+test("M2: a paragraph change on her irregular text keeps everything else byte for byte", async () => {
+  const pasted = "  Indented first.  \n\n\n\nSecond.\n \nThird line one\nline two  ";
+  assert.equal(replaceParagraph(pasted, 1, "  New P2. "), "  Indented first.  \n\n\n\nNew P2.\n \nThird line one\nline two  ");
+  const { service, caseId } = await setup({ paragraph: "New P2." });
+  saved(await service.saveText(caseId, "crisis-plan", pasted, null));
+  const events = await generate(service, caseId, "crisis-plan", { kind: "paragraph", fromVersion: 1, paragraphIndex: 1, request: "x" });
+  const savedEvent = events.find((e) => e.type === "saved");
+  assert.ok(savedEvent?.type === "saved" && savedEvent.result.outcome === "saved");
+  assert.equal(savedEvent.result.section.versions[1].text, "  Indented first.  \n\n\n\nNew P2.\n \nThird line one\nline two  ");
+  assert.equal(savedEvent.result.section.versions[0].text, pasted);
+});
+
+test("M2: paragraph spans and splitParagraphs agree on any text", () => {
+  const pieces = ["A", "b c", " ", "\n", "\n\n", "\n \n", "\t", "\n\n\n"];
+  let seed = 7;
+  const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  for (let round = 0; round < 500; round++) {
+    const text = Array.from({ length: 1 + Math.floor(random() * 12) }, () => pieces[Math.floor(random() * pieces.length)]).join("");
+    assert.deepEqual(paragraphSpans(text).map(({ start, end }) => text.slice(start, end)), splitParagraphs(text), JSON.stringify(text));
+  }
+});
+
+test("M3: lines with no blank lines between them are one paragraph, and can be made each a paragraph", () => {
+  assert.equal(hasLinesInParagraphs("Para one.\nPara two.\nPara three."), true);
+  assert.equal(hasLinesInParagraphs("Para one.\n\nPara two."), false);
+  assert.equal(linesAsParagraphs("Para one.\r\n Para two. \n\nPara three."), "Para one.\n\nPara two.\n\nPara three.");
+});
+
+test("M5: a check that failed can be run again, and a check is marked stale when her sections change", async () => {
+  const { service, caseId } = await setup({ consistency: "Maybe." });
+  saved(await service.saveText(caseId, "background-information", "Her own background text.", null));
+  const events = await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  const checked = events.at(-1);
+  assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
+  assert.equal(checked.result.section.versions[0].consistency?.status, "failed");
+  // Run again (here the model still answers the same way, but the request goes through and is saved again).
+  const again = await service.prepareCheck(caseId, "medical-necessity", "anthropic", 1);
+  assert.ok(again.outcome === "ready");
+  const out = [];
+  for await (const event of again.run(new AbortController().signal)) out.push(event);
+  assert.deepEqual(out.map((e) => e.type), ["status", "checked"]);
+  // Her section changes: the check no longer holds.
+  saved(await service.saveText(caseId, "background-information", "Her corrected background.", null));
+  const read = await service.get(caseId, "medical-necessity");
+  assert.ok(read.outcome === "read");
+  assert.equal(read.section.versions[0].consistency?.stale, true);
+  assert.deepEqual(await service.prepareCheck(caseId, "medical-necessity", "anthropic", 9), { outcome: "version-not-found" });
+});
+
+test("low 1: her text that is approved is never changed in place; the edit becomes a new version", async () => {
+  const { service, caseId } = await setup();
+  saved(await service.saveText(caseId, "crisis-plan", "Approved text.", null));
+  saved(await service.approve(caseId, "crisis-plan", 1));
+  const edit = saved(await service.saveText(caseId, "crisis-plan", "Changed.", 1));
+  assert.deepEqual(edit.section.versions.map((v) => [v.number, v.text]), [[1, "Approved text."], [2, "Changed."]]);
+  assert.equal(edit.section.approvedVersion, null);
+});
+
+test("nit: an answer longer than a section can be is not saved, with its own reason", async () => {
+  const huge: Provider = {
+    ...mockProvider,
+    async *generate(options) {
+      yield { type: "text", delta: "y ".repeat(60_000) };
+      yield { type: "done", complete: true, stopReason: "end_turn", servedModel: options.model, usage, attempts: null };
+    },
+  };
+  const { service, caseId } = await setup({}, { provider: huge });
+  const events = await generate(service, caseId, "crisis-plan", { kind: "draft" });
+  assert.deepEqual(events.find((e) => e.type === "saved"), { type: "saved", result: { outcome: "too-long" } });
 });

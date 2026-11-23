@@ -112,11 +112,11 @@ export function CaseSidebar({ caseId, caseName, caseDetail, sections, notes }: {
       </nav>
       <nav aria-labelledby={sectionsHeadingId} className="flex flex-col gap-1">
         <Eyebrow id={sectionsHeadingId} className="px-2 text-fg-on-nav-muted">
-          {t("nav.sectionsHeading")}
+          {t("nav.sectionsHeading")} · {t("section.reportReady", { done: sections.filter((section) => section.state === "hers" || section.state === "approved").length, total: REPORT_SECTIONS.length })}
         </Eyebrow>
         <ul className="flex flex-col">
           {REPORT_SECTIONS.map((section) => {
-            const summary = states.get(section.id) ?? { id: section.id, state: "not-started" as const, currentVersion: null, approvedVersion: null, versionCount: 0 };
+            const summary = states.get(section.id) ?? { id: section.id, state: "not-started" as const, currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0 };
             const text = sectionStateText(t, summary);
             return (
               <li key={section.id}>
@@ -229,8 +229,12 @@ function SessionNotes({ caseId, initial }: { caseId: string; initial: string }) 
   const [round, setRound] = useState(0);
   const [startFailed, setStartFailed] = useState(false);
 
-  async function newSession(flush: () => Promise<void>) {
-    await flush();
+  async function newSession(flush: () => Promise<boolean>) {
+    // Never start a new session over notes that are not saved (review, low 6): they would be left out of the archive.
+    if (!(await flush())) {
+      setStartFailed(true);
+      return;
+    }
     const result = await window.aba.startNewSession(caseId).catch(() => null);
     setStartFailed(result?.outcome !== "saved");
     if (result?.outcome === "saved") {
@@ -268,12 +272,12 @@ function NotesBox({
   initial: string;
   labelledBy: string;
   describedBy: string;
-  onNewSession: (flush: () => Promise<void>) => Promise<void>;
+  onNewSession: (flush: () => Promise<boolean>) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const patch = usePatchOpenedCase();
   const notes = useAutosave({
-    key: `notes:${caseId}`,
+    caseId,
     initial,
     save: async (text) => {
       const result = await window.aba.saveSessionNotes(caseId, text);
@@ -302,7 +306,7 @@ function NotesBox({
           </button>
         </p>
       ) : null}
-      {notes.value.trim() !== "" ? (
+      {notes.value.trim() !== "" && notes.status !== "failed" ? (
         <Tooltip content={t("section.newSessionHint")}>
           <Button variant="nav" size="sm" className="self-start" onClick={() => void onNewSession(notes.flush)}>
             {t("section.newSession")}

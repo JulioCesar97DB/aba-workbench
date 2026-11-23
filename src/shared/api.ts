@@ -134,7 +134,15 @@ export interface CaseDetail extends CaseSummary {
 /* A case's report sections (src/shared/sections.ts). */
 
 /** Why a change to a section could not be saved: the case is gone or unreadable, the disk refused, or the file would be too large. */
-export type SectionSaveFailure = { outcome: "case-unavailable" } | { outcome: "not-saved" } | { outcome: "case-full" } | { outcome: "version-not-found" };
+export type SectionSaveFailure =
+  | { outcome: "case-unavailable" }
+  | { outcome: "not-saved" }
+  | { outcome: "case-full" }
+  | { outcome: "version-not-found" }
+  /** The AI's answer is longer than a section can be (MAX_SECTION_TEXT_LENGTH): nothing was saved. */
+  | { outcome: "too-long" }
+  /** A paragraph change answered with more than the paragraph (the whole section, say): nothing was saved. */
+  | { outcome: "not-one-paragraph" };
 
 /** A change to a section, saved: the section as saved, and every section's summary for the sidebar. */
 export type SectionSaveResult = { outcome: "saved"; section: SectionDetail; sections: SectionSummary[] } | SectionSaveFailure;
@@ -436,8 +444,8 @@ export interface AbaApi {
   onFlushSaves(listener: () => Promise<{ ok: boolean }>): () => void;
   /** The changes to sources that could not be saved, kept by the main process while the app runs (a reload does not forget them). */
   listFailedSaves(): Promise<FailedSave[]>;
-  /** Runs a change that could not be saved again. */
-  retryFailedSave(id: string): Promise<SourceSaveResult>;
+  /** Runs a change that could not be saved again (a source's, or what was typed in a section, its instructions or the notes). */
+  retryFailedSave(id: string): Promise<SourceSaveResult | SectionSaveResult | NotesSaveResult | InstructionsSaveResult>;
 
   /*
    * A case's report sections (src/shared/sections.ts). Nothing is ever deleted: every
@@ -459,8 +467,10 @@ export interface AbaApi {
    * streams in as generation updates; the new version arrives in the "saved" update.
    */
   startSectionGeneration(caseId: string, sectionId: ReportSectionId, generationId: string, provider: DraftingProvider, request: SectionRequestInput): Promise<StartSectionResult>;
-  /** Saves her standing instructions for a section, for all her cases. */
-  saveSectionInstructions(sectionId: ReportSectionId, text: string): Promise<InstructionsSaveResult>;
+  /** Runs the consistency check again on one version (it failed, was stopped, or her sections changed since). Updates arrive like a request's; the result in "checked". */
+  checkSection(caseId: string, sectionId: ReportSectionId, generationId: string, provider: DraftingProvider, version: number): Promise<StartSectionResult>;
+  /** Saves her standing instructions for a section, for all her cases. `caseId` is the case she typed them in: where a save that failed is shown again. */
+  saveSectionInstructions(caseId: string, sectionId: ReportSectionId, text: string): Promise<InstructionsSaveResult>;
   /** Saves her notes for this session, in the case. */
   saveSessionNotes(caseId: string, text: string): Promise<NotesSaveResult>;
   /** "Start a new session": archives the notes (kept in the case, never sent again) and empties the box. */
@@ -518,6 +528,7 @@ export const IPC_CHANNELS = {
   setCurrentVersion: "sections:set-current",
   approveSection: "sections:approve",
   startSectionGeneration: "sections:generate",
+  checkSection: "sections:check",
   saveSectionInstructions: "sections:save-instructions",
   saveSessionNotes: "sections:save-notes",
   startNewSession: "sections:new-session",

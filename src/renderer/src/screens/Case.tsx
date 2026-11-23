@@ -15,6 +15,8 @@ import { useOpenCaseState, useOpenedCase } from "../open-case.tsx";
 import { sourceName, sourceNameLang } from "../source-labels.tsx";
 import { Placeholder } from "./Placeholder.tsx";
 import { sectionStateText } from "../shell/Sidebar.tsx";
+import { formatUsd } from "./Section.tsx";
+import { useLanguage } from "../language.tsx";
 import type { SectionSummary } from "../../../shared/sections.ts";
 
 /*
@@ -91,10 +93,14 @@ export function ReportScreen() {
   const caseId = opened.id;
   const meta = useStepMeta("report");
   const states = new Map(opened.sections.map((section) => [section.id, section]));
+  const { language } = useLanguage();
+  // What the AI cost for this case: every version and check whose price is known (review, low 2).
+  const spent = opened.sections.reduce((sum, section) => sum + section.costUsd, 0);
   return (
     <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />}>
       <div className="flex max-w-measure flex-col gap-5">
         <p className="text-md">{t("workspace.reportBody")}</p>
+        {spent > 0 ? <p className="text-sm text-fg-muted">{t("section.caseCost", { cost: formatUsd(language, spent) })}</p> : null}
         <Table>
           <TableHead>
             <TableRow>

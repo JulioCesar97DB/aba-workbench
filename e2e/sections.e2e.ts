@@ -1,5 +1,5 @@
 import type { ElectronApplication, Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { chmodSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { AbaApi } from "../src/shared/api.ts";
 import { defaultCasesFolder, draftingStubLog, expect, goTo, SAMPLE_CASE, seedCase, setDraftingSpeed, stubDrafting, test } from "./app.ts";
@@ -102,7 +102,7 @@ test("draft a section, change one paragraph, ask for changes, go back, approve a
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(sidebarItem(page, "Medical Necessity Criteria")).toContainText("Approved");
   await page.getByRole("button", { name: "Copy for ABA Matrix" }).click();
-  await expect(page.getByText("Copied. 1 marker is still to resolve before you paste.")).toBeVisible();
+  await expect(page.getByText("Copied version 3. 1 marker is still to resolve before you paste.")).toBeVisible();
   const copied = await app.evaluate(async ({ clipboard }) => clipboard.readText());
   expect(copied).toContain("The school reports that his communication plan is now in place.");
   expect(copied.split("\n\n")).toHaveLength(3);
@@ -203,4 +203,56 @@ test("her edits, instructions and notes survive a restart; the file keeps every 
   await expect(page2.getByTestId("section-instructions")).toHaveValue("Two paragraphs, examples from this child's goals.");
   await expect(page2.getByTestId("session-notes")).toHaveValue("Invented note.");
   expect(sectionData(caseFile, "generalization-and-maintenance").versions.map((v: { kind: string }) => v.kind)).toEqual(["hers", "edited"]);
+});
+
+/* Review round 1 */
+
+async function reloadWindow(app: ElectronApplication, page: Page) {
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.reload());
+  await page.waitForEvent("load");
+  await expect(heading(page)).toBeVisible();
+}
+
+test("B3: what she typed in a section that could not be saved is still there after a reload, and Try again saves it", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
+  const caseFolder = path.dirname(caseFile);
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  chmodSync(caseFolder, 0o555);
+  try {
+    await page.getByTestId("section-text").fill("Typed while the folder refused.");
+    await page.getByTestId("section-text").blur();
+    const notice = page.getByText("What you typed in this section could not be saved. It is kept");
+    await expect(notice).toBeVisible();
+    await reloadWindow(app, page);
+    // The page starts again with nothing in memory: the main process still has the text and the failure.
+    await expect(notice).toBeVisible();
+    chmodSync(caseFolder, 0o755);
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(notice).toBeHidden();
+    await expect(page.getByTestId("section-view")).toContainText("Typed while the folder refused.");
+    expect(sectionData(caseFile, "crisis-plan").versions[0].text).toBe("Typed while the folder refused.");
+  } finally {
+    chmodSync(caseFolder, 0o755);
+  }
+});
+
+test("M3 and M6: lines pasted with single line breaks can become paragraphs; the copy says which version it copied", async ({ launch, home }) => {
+  const { app, page, caseFile } = await openSection(launch, home, "environmental-changes");
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
+  await expect(page.getByTestId("lines-notice")).toBeVisible();
+  await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+  await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("section-view").getByRole("button")).toHaveCount(3);
+  const versions = sectionData(caseFile, "environmental-changes").versions;
+  expect(versions.map((v: { text: string }) => v.text)).toEqual(["Para one.\nPara two.\nPara three.", "Para one.\n\nPara two.\n\nPara three."]);
+
+  // Approve version 2, look back at version 1, copy: the message says so plainly.
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await page.getByRole("button", { name: "Copy for ABA Matrix" }).click();
+  await expect(page.getByText("Copied version 1. Paste it into ABA Matrix. Version 2 is the approved one.")).toBeVisible();
+  expect(await app.evaluate(async ({ clipboard }) => clipboard.readText())).toBe("Para one.\nPara two.\nPara three.");
+  await expect(page.getByRole("button", { name: "Version 2, approved" })).toBeVisible();
 });

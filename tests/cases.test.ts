@@ -362,7 +362,7 @@ test("cases: create a case, list it, open it; the folder holds only its data fil
       ...created.case,
       files: [],
       sources: { sources: [], files: [], totalPdfWarning: null, pdfLimits: { chatgpt: 37_500_000, claude: 96_000_000 }, updatedAt: created.case.updatedAt },
-      sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", currentVersion: null, approvedVersion: null, versionCount: 0 })),
+      sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0 })),
       notes: "",
     },
   });

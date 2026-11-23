@@ -4,9 +4,10 @@ import { Navigate, useParams } from "react-router";
 import type { DraftingProvider } from "../../../shared/api.ts";
 import { modelLabel } from "../../../shared/models.ts";
 import { findReportSection, REPORT_SECTIONS, type ReportSection } from "../../../shared/report-sections.ts";
-import { checkStructure, findMarkers, MAX_REQUEST_LENGTH, splitParagraphs, type StructureIssue } from "../../../shared/section-text.ts";
+import { checkStructure, findMarkers, hasLinesInParagraphs, linesAsParagraphs, MAX_REQUEST_LENGTH, splitParagraphs, type StructureIssue } from "../../../shared/section-text.ts";
 import type { SectionDetail, SectionRequestInput, SectionSummary, SectionVersion } from "../../../shared/sections.ts";
 import { useAutosave } from "../autosave.tsx";
+import { onRetried, retry, useSectionFailures } from "../case-saves.tsx";
 import { casePath } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { cn } from "../components/cn.ts";
@@ -15,10 +16,11 @@ import { Select } from "../components/Select.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
 import { useConnections } from "../connections.tsx";
 import { useLanguage } from "../language.tsx";
-import { useOpenedCase, usePatchOpenedCase } from "../open-case.tsx";
+import { useOpenedCase, usePatchOpenedCase, useSetCaseSources } from "../open-case.tsx";
 import {
   dismissSectionGeneration,
   isRunning,
+  startSectionCheck,
   startSectionGeneration,
   stopSectionGeneration,
   useOnSectionSaved,
@@ -126,7 +128,9 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   const [mode, setMode] = useState<Mode>(initial.versions.length === 0 ? "choose" : "view");
   const [viewed, setViewed] = useState<number | null>(initial.currentVersion);
   const [actionFailed, setActionFailed] = useState(false);
-  const [copied, setCopied] = useState<{ markers: number } | "failed" | null>(null);
+  const [copied, setCopied] = useState<Copied | "failed" | null>(null);
+  const failures = useSectionFailures(caseId);
+  const setSources = useSetCaseSources();
   const providers = useProviders();
   /** The version her pasted text made, once saved. */
   const editingSaved = useRef<number | null>(null);
@@ -135,6 +139,8 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     (next: SectionDetail, sections?: SectionSummary[]) => {
       setDetail(next);
       setViewed(next.currentVersion);
+      // A version saved from elsewhere (Try again after a reload) shows the text instead of the two ways to start.
+      setMode((current) => (current === "choose" && next.versions.length > 0 ? "view" : current));
       if (sections) patch(caseId, { sections });
     },
     [caseId, patch],
@@ -178,10 +184,36 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     await act(() => window.aba.setCurrentVersion(caseId, section.id, version));
   }
 
+  // Read the section again when "Try again" saved what she had typed in it (review B3).
+  useEffect(
+    () =>
+      onRetried((item) => {
+        if (item.caseId !== caseId) return;
+        if (item.about === "notes") return;
+        void window.aba.getSection(caseId, section.id).then((result) => {
+          if (result.outcome === "read") accept(result.section);
+        });
+      }),
+    [caseId, section.id, accept],
+  );
+
   async function copy() {
     if (!current) return;
     const result = await window.aba.copySection(caseId, section.id, current.number).catch(() => null);
-    setCopied(result?.outcome === "copied" ? { markers: result.markers } : "failed");
+    // The message names the version copied, and the approved one when it is another (review M6).
+    setCopied(result?.outcome === "copied" ? { markers: result.markers, number: current.number, approved: detail.approvedVersion !== current.number ? detail.approvedVersion : null } : "failed");
+  }
+
+  /** "Treat each line as a paragraph" (review M3): a new version, hers kept as she pasted it. */
+  async function linesToParagraphs(text: string) {
+    setMode("view");
+    await act(() => window.aba.saveSectionText(caseId, section.id, linesAsParagraphs(text), null));
+  }
+
+  async function recheck(version: number) {
+    if (!providers.provider) return;
+    dismissSectionGeneration(caseId, section.id);
+    await startSectionCheck(caseId, section.id, providers.provider, version);
   }
 
   const approvedHere = current !== null && detail.approvedVersion === current.number;
@@ -211,9 +243,31 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   );
 
   return (
-    <WorkArea header={header} rail={<SectionRail section={section} detail={detail} current={mode === "view" ? current : null} checking={generation?.phase === "checking"} />}>
+    <WorkArea
+      header={header}
+      rail={
+        <SectionRail
+          caseId={caseId}
+          section={section}
+          detail={detail}
+          current={mode === "view" ? current : null}
+          checking={generation?.phase === "checking"}
+          canCheck={providers.provider !== null && !running}
+          onRecheck={(version) => void recheck(version)}
+        />
+      }
+    >
       <div className="flex max-w-measure flex-col gap-4">
         <NotReadyNotice />
+        {failures.map((item) => (
+          <div key={item.id} role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-danger px-3.5 py-2 text-md font-medium text-danger">
+            <span>{t(`section.failedSave.${item.about === "source" ? "section" : item.about}`)}</span>
+            <Button size="sm" onClick={() => retry(item, (sources) => setSources(caseId, sources))}>
+              {t("sources.tryAgain")}
+            </Button>
+          </div>
+        ))}
+        {mode === "view" && current ? <ChecksSummary detail={detail} version={current} /> : null}
         {actionFailed ? (
           <p role="alert" className="text-sm font-medium text-danger">
             {t("section.actionFailed")}
@@ -242,6 +296,9 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
             onSaved={(next, sections) => {
               editingSaved.current = next.currentVersion;
               accept(next, sections);
+            }}
+            onTreatLines={async (text, flush) => {
+              if (await flush()) await linesToParagraphs(text);
             }}
             footer={(saved, flush) => (
               <>
@@ -279,6 +336,9 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
             label={t("section.herTextLabel")}
             hint={t("section.editHint")}
             onSaved={accept}
+            onTreatLines={async (text, flush) => {
+              if (await flush()) await linesToParagraphs(text);
+            }}
             footer={(_saved, flush) => (
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -293,6 +353,9 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
               </div>
             )}
           />
+        ) : null}
+        {mode === "view" && current && !writing && hasLinesInParagraphs(current.text) ? (
+          <LinesNotice onTreat={() => void linesToParagraphs(current.text)} />
         ) : null}
         {(mode === "view" && detail.versions.length > 0) || running ? (
           <SectionView
@@ -322,12 +385,43 @@ function NotReadyNotice() {
   );
 }
 
-function CopiedMessage({ copied }: { copied: { markers: number } | "failed" | null }) {
+interface Copied {
+  markers: number;
+  number: number;
+  /** The approved version, when it is not the one copied. */
+  approved: number | null;
+}
+
+function CopiedMessage({ copied }: { copied: Copied | "failed" | null }) {
+  const { t } = useTranslation();
+  const text =
+    copied === null
+      ? null
+      : copied === "failed"
+        ? t("section.copyFailed")
+        : [
+            copied.markers > 0 ? t("section.copiedMarkers", { count: copied.markers, number: copied.number }) : t("section.copied", { number: copied.number }),
+            copied.approved !== null ? t("section.copiedNotApproved", { number: copied.approved }) : null,
+          ]
+            .filter(Boolean)
+            .join(" ");
+  return (
+    <p role="status" className={cn("text-sm font-medium", copied === "failed" || (copied !== null && copied.approved !== null) ? "text-warning" : "text-success", copied === "failed" && "text-danger")}>
+      {text}
+    </p>
+  );
+}
+
+/** Text with single line breaks reads as one paragraph (review M3): say so, and offer each line as a paragraph. */
+function LinesNotice({ onTreat }: { onTreat: () => void }) {
   const { t } = useTranslation();
   return (
-    <p role="status" className={cn("text-sm font-medium", copied === "failed" ? "text-danger" : "text-success")}>
-      {copied === null ? null : copied === "failed" ? t("section.copyFailed") : copied.markers > 0 ? t("section.copiedMarkers", { count: copied.markers }) : t("section.copied")}
-    </p>
+    <div data-testid="lines-notice" className="flex flex-col items-start gap-2 rounded-md border border-border-control bg-surface-muted px-3.5 py-2.5 text-sm">
+      <p>{t("section.linesNotice")}</p>
+      <Button size="sm" onClick={onTreat}>
+        {t("section.treatLines")}
+      </Button>
+    </div>
   );
 }
 
@@ -398,6 +492,7 @@ function OwnTextEditor({
   label,
   hint,
   onSaved,
+  onTreatLines,
   footer,
 }: {
   caseId: string;
@@ -407,7 +502,8 @@ function OwnTextEditor({
   label: string;
   hint: string;
   onSaved: (detail: SectionDetail, sections: ReturnType<typeof useOpenedCase>["sections"]) => void;
-  footer: (saved: number | null, flush: () => Promise<void>) => ReactNode;
+  onTreatLines: (text: string, flush: () => Promise<boolean>) => Promise<void>;
+  footer: (saved: number | null, flush: () => Promise<boolean>) => ReactNode;
 }) {
   const { t } = useTranslation();
   const fieldId = useId();
@@ -415,7 +511,7 @@ function OwnTextEditor({
   const editing = useRef<number | null>(initialEditing);
   const [saved, setSaved] = useState<number | null>(initialEditing);
   const text = useAutosave({
-    key: `section:${caseId}:${sectionId}`,
+    caseId,
     initial: initialText,
     save: async (value) => {
       const result = await window.aba.saveSectionText(caseId, sectionId, value, editing.current);
@@ -455,6 +551,7 @@ function OwnTextEditor({
           </p>
         ) : null}
       </div>
+      {hasLinesInParagraphs(text.value) ? <LinesNotice onTreat={() => void onTreatLines(text.value, text.flush)} /> : null}
       {footer(saved, text.flush)}
     </div>
   );
@@ -470,7 +567,13 @@ function VersionBar({ detail, current, disabled, onShow }: { detail: SectionDeta
         <Button
           key={version.number}
           size="sm"
-          aria-label={t("section.versionButton", { number: version.number })}
+          aria-label={
+            detail.approvedVersion === version.number
+              ? t("section.versionButtonApproved", { number: version.number })
+              : version.kind === "hers"
+                ? t("section.versionButtonHers", { number: version.number })
+                : t("section.versionButton", { number: version.number })
+          }
           aria-pressed={current?.number === version.number}
           disabled={disabled}
           onClick={() => onShow(version.number)}
@@ -505,12 +608,16 @@ function shorten(text: string, length = 60): string {
   return line.length <= length ? line : `${line.slice(0, length - 1).trimEnd()}…`;
 }
 
+/** An amount in dollars, as the screen's language writes it: "$0.18", "0,18 US$". */
+export function formatUsd(language: string, amount: number): string {
+  return new Intl.NumberFormat(language, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: amount > 0 && amount < 0.1 ? 3 : 2 }).format(amount);
+}
+
 /** "v3: “shorter, and mention the school”", who wrote it and what it cost. */
 function VersionLine({ version }: { version: SectionVersion }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
-  const cost =
-    version.costUsd === null ? null : new Intl.NumberFormat(language, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: version.costUsd < 0.1 ? 3 : 2 }).format(version.costUsd);
+  const cost = version.costUsd === null ? null : formatUsd(language, version.costUsd);
   return (
     <span>
       {t("section.versionMeta", { number: version.number, label: versionLabel(t, version) })}
@@ -549,19 +656,34 @@ function SectionView({
   const askHintId = useId();
   const paragraphs = useMemo(() => splitParagraphs(version?.text ?? ""), [version?.text]);
   const markedRef = useRef<HTMLDivElement>(null);
+  const paragraphRefs = useRef<Array<HTMLParagraphElement | null>>([]);
+  const describedBy = useId();
 
   useEffect(() => {
     if (marked !== null) markedRef.current?.querySelector("input")?.focus();
   }, [marked]);
 
+  // A new version replaced the text she was in: the focus goes to its first paragraph rather than nowhere.
+  useEffect(() => {
+    if (document.activeElement === document.body || document.activeElement === null) paragraphRefs.current[0]?.focus();
+  }, []);
+
+  /** Closes the paragraph form and puts the focus back on its paragraph (review, low 3). */
+  function closeMarked(index: number) {
+    setMarked(null);
+    window.requestAnimationFrame(() => paragraphRefs.current[index]?.focus());
+  }
+
   if (streaming && generation) {
-    const streamed = generation.request.kind === "paragraph" ? null : splitParagraphs(generation.text);
+    const asked = generation.request;
+    const markedIndex = asked?.kind === "paragraph" ? asked.paragraphIndex : null;
+    const streamed = markedIndex !== null ? null : splitParagraphs(generation.text);
     return (
       <div className="flex flex-col gap-4">
         <GenerationStatus generation={generation} />
         <div lang="en" aria-busy="true" data-testid="streaming-text" className="flex flex-col gap-4 text-md">
           {(streamed ?? paragraphs).map((paragraph, index) =>
-            generation.request.kind === "paragraph" && index === generation.request.paragraphIndex ? (
+            index === markedIndex ? (
               <p key={index} className="rounded-md border border-accent bg-mark px-2.5 py-1.5 whitespace-pre-line">
                 {generation.text || paragraph}
               </p>
@@ -586,10 +708,13 @@ function SectionView({
             {paragraphs.map((paragraph, index) => (
               <div key={index} ref={marked === index ? markedRef : undefined} className="flex flex-col gap-2">
                 <p
+                  ref={(element) => {
+                    paragraphRefs.current[index] = element;
+                  }}
                   role="button"
                   tabIndex={0}
                   aria-pressed={marked === index}
-                  aria-label={undefined}
+                  aria-describedby={`${describedBy}-${index}`}
                   title={t("section.selectParagraph", { number: index + 1 })}
                   onClick={() => setMarked(marked === index ? null : index)}
                   onKeyDown={(event) => {
@@ -615,6 +740,7 @@ function SectionView({
                       onRequest({ kind: "paragraph", fromVersion: version.number, paragraphIndex: index, request: asked });
                       setParagraphRequest("");
                       setMarked(null);
+                      // The text is replaced while the AI writes: the focus goes to Stop (GenerationStatus).
                     }}
                   >
                     <label htmlFor={`paragraph-${index}`} className="text-sm font-semibold">
@@ -627,16 +753,19 @@ function SectionView({
                       placeholder={t("section.changeParagraphPlaceholder")}
                       onChange={(event) => setParagraphRequest(event.target.value)}
                       onKeyDown={(event) => {
-                        if (event.key === "Escape") setMarked(null);
+                        if (event.key === "Escape") closeMarked(index);
                       }}
                       className="min-h-control min-w-48 flex-1 rounded-md border border-border-control bg-surface px-3 text-base"
                     />
                     <Button type="submit" variant="primary" disabled={!canGenerate || paragraphRequest.trim() === ""} className="bg-fg hover:bg-fg">
                       {t("section.changeButton")}
                     </Button>
-                    <Button onClick={() => setMarked(null)}>{t("section.cancel")}</Button>
+                    <Button onClick={() => closeMarked(index)}>{t("section.cancel")}</Button>
                   </form>
                 ) : null}
+                <span id={`${describedBy}-${index}`} className="sr-only">
+                  {t("section.selectParagraph", { number: index + 1 })}
+                </span>
               </div>
             ))}
           </div>
@@ -704,14 +833,21 @@ function Highlighted({ text }: { text: string }) {
 /** "The AI is writing…" and Stop. */
 function GenerationStatus({ generation }: { generation: SectionGeneration }) {
   const { t } = useTranslation();
-  const text = generation.phase === "checking" ? t("section.checking") : generation.phase === "writing" ? t("section.writing") : t("section.thinking");
+  const stop = useRef<HTMLButtonElement>(null);
+  const checking = generation.phase === "checking";
+  // The paragraph or the request box that had the focus is gone while the AI writes: Stop takes it (review, low 3).
+  useEffect(() => {
+    if (document.activeElement === document.body || document.activeElement === null) stop.current?.focus();
+  }, []);
+  const text = checking ? t("section.checking") : generation.phase === "writing" ? t("section.writing") : t("section.thinking");
   return (
     <div className="flex flex-wrap items-center gap-3">
       <p role="status" className="text-sm font-medium">
         {text}
       </p>
-      <Button size="sm" onClick={() => stopSectionGeneration(generation)}>
-        {t("section.stop")}
+      {/* While only the check runs, the version is already saved: stopping skips the check (review M5). */}
+      <Button ref={stop} size="sm" onClick={() => stopSectionGeneration(generation)}>
+        {checking ? t("section.skipCheck") : t("section.stop")}
       </Button>
     </div>
   );
@@ -720,7 +856,7 @@ function GenerationStatus({ generation }: { generation: SectionGeneration }) {
 function GenerationOutcomeMessage({ generation }: { generation: SectionGeneration }) {
   const { t } = useTranslation();
   const outcome = generation.outcome;
-  if (!outcome || outcome.kind === "saved") return null;
+  if (!outcome || outcome.kind === "saved" || outcome.kind === "checked") return null;
   const message =
     outcome.kind === "stopped"
       ? t("section.stopped")
@@ -730,7 +866,11 @@ function GenerationOutcomeMessage({ generation }: { generation: SectionGeneratio
           ? t("section.incomplete")
           : outcome.kind === "not-saved"
             ? t("section.saveFailed")
-            : t("section.failed", { message: outcome.message || t("section.unknownError") });
+            : outcome.kind === "not-one-paragraph"
+              ? t("section.notOneParagraph")
+              : outcome.kind === "too-long"
+                ? t("section.tooLong")
+                : t("section.failed", { message: outcome.message || t("section.unknownError") });
   return (
     <p role="alert" className={cn("rounded-md border px-3.5 py-2 text-sm font-medium", outcome.kind === "stopped" ? "border-border text-fg" : "border-danger text-danger")}>
       {message}
@@ -739,7 +879,23 @@ function GenerationOutcomeMessage({ generation }: { generation: SectionGeneratio
 }
 
 /** The rail: her standing instructions for the section, the sources used, and the checks. */
-function SectionRail({ section, detail, current, checking }: { section: ReportSection; detail: SectionDetail; current: SectionVersion | null; checking: boolean }) {
+function SectionRail({
+  caseId,
+  section,
+  detail,
+  current,
+  checking,
+  canCheck,
+  onRecheck,
+}: {
+  caseId: string;
+  section: ReportSection;
+  detail: SectionDetail;
+  current: SectionVersion | null;
+  checking: boolean;
+  canCheck: boolean;
+  onRecheck: (version: number) => void;
+}) {
   const { t } = useTranslation();
   const opened = useOpenedCase();
   const instructionsId = useId();
@@ -747,9 +903,9 @@ function SectionRail({ section, detail, current, checking }: { section: ReportSe
   const sourcesId = useId();
   const checksId = useId();
   const instructions = useAutosave({
-    key: `instructions:${section.id}`,
+    caseId,
     initial: detail.instructions,
-    save: async (text) => (await window.aba.saveSectionInstructions(section.id, text)).outcome === "saved",
+    save: async (text) => (await window.aba.saveSectionInstructions(caseId, section.id, text)).outcome === "saved",
   });
   const caseSources = opened.sources.sources.filter((source) => !source.removedAt);
   const used = current && current.sourcesUsed.length > 0 ? current.sourcesUsed : null;
@@ -809,11 +965,11 @@ function SectionRail({ section, detail, current, checking }: { section: ReportSe
           <p className="text-sm text-fg-muted">{t("rail.noSources")}</p>
         )}
       </section>
-      <section aria-labelledby={checksId} className="flex flex-col gap-1.5">
+      <section id="section-checks" aria-labelledby={checksId} className="flex scroll-mt-20 flex-col gap-1.5">
         <Eyebrow id={checksId} className="text-fg-muted">
           {t("section.checksHeading")}
         </Eyebrow>
-        <SectionChecks detail={detail} version={current} checking={checking} />
+        <SectionChecks detail={detail} version={current} checking={checking} canCheck={canCheck} onRecheck={onRecheck} />
       </section>
     </>
   );
@@ -831,8 +987,28 @@ function CheckRow({ name, value, tone, children }: { name: string; value: string
   );
 }
 
-function SectionChecks({ detail, version, checking }: { detail: SectionDetail; version: SectionVersion | null; checking: boolean }) {
+/** Whether a version is the AI's (or her edit of one): the versions the consistency check is for. */
+function checkable(version: SectionVersion): boolean {
+  return version.kind !== "hers" && (version.kind !== "edited" || version.consistency !== null || version.model !== null);
+}
+
+/**
+ * At a narrow window the rail falls below the text and its request box (review, low 5): a
+ * line near the top says how the checks stand and leads to them.
+ */
+function ChecksSummary({ detail, version }: { detail: SectionDetail; version: SectionVersion }) {
   const { t } = useTranslation();
+  const count = checkStructure(version.text, detail.shape).length + findMarkers(version.text).length + (version.consistency?.status === "found" ? version.consistency.items.length : 0);
+  return (
+    <a href="#section-checks" onClick={(event) => { event.preventDefault(); document.getElementById("section-checks")?.scrollIntoView(); }} className="text-sm font-medium text-accent underline underline-offset-2 @split:hidden">
+      {count === 0 ? t("section.checksSummaryClear") : t("section.checksSummary", { count })}
+    </a>
+  );
+}
+
+function SectionChecks({ detail, version, checking, canCheck, onRecheck }: { detail: SectionDetail; version: SectionVersion | null; checking: boolean; canCheck: boolean; onRecheck: (version: number) => void }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   if (!version) {
     return <p className="text-sm text-fg-muted">{t("section.nothingToCheck")}</p>;
   }
@@ -884,6 +1060,15 @@ function SectionChecks({ detail, version, checking }: { detail: SectionDetail; v
               <li key={index}>{item}</li>
             ))}
           </ul>
+        ) : null}
+        {consistency?.stale && !checking ? <p className="text-xs text-warning">{t("section.consistencyStale")}</p> : null}
+        {version.checkCostUsd !== null && !checking ? (
+          <p className="text-xs text-fg-muted">{t("section.checkCost", { cost: formatUsd(language, version.checkCostUsd) })}</p>
+        ) : null}
+        {!checking && checkable(version) && (!consistency || consistency.status === "failed" || consistency.stale) ? (
+          <Button size="sm" className="self-start" disabled={!canCheck} onClick={() => onRecheck(version.number)}>
+            {t("section.checkAgain")}
+          </Button>
         ) : null}
       </CheckRow>
     </div>

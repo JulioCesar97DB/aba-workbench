@@ -81,14 +81,20 @@ export function sectionSummary(data: CaseData, id: ReportSectionId): SectionSumm
     currentVersion: currentOf(section)?.number ?? null,
     approvedVersion: findVersion(section, section.approvedVersion)?.number ?? null,
     versionCount: section.versions.length,
+    costUsd: sectionCost(section),
   };
+}
+
+/** What the AI cost for this section so far: every version and every check whose price is known (review, low 2). */
+function sectionCost(section: StoredSection): number {
+  return section.versions.reduce((sum, version) => sum + (version.generation?.costUsd ?? 0) + (version.consistency?.costUsd ?? 0), 0);
 }
 
 export function sectionSummaries(data: CaseData): SectionSummary[] {
   return REPORT_SECTIONS.map((section) => sectionSummary(data, section.id));
 }
 
-function versionView(version: StoredVersion): SectionVersion {
+function versionView(version: StoredVersion, context: ReadonlyArray<{ id: string; version: number }>): SectionVersion {
   const generation = version.generation;
   const provider = generation?.provider;
   return {
@@ -102,14 +108,21 @@ function versionView(version: StoredVersion): SectionVersion {
     provider: provider === "anthropic" || provider === "openai" || provider === "mock" ? provider : null,
     costUsd: generation?.costUsd ?? null,
     sourcesUsed: generation?.sourcesUsed.map(({ id, title }) => ({ id, title })) ?? [],
-    consistency: version.consistency ? consistencyView(version.consistency) : null,
+    consistency: version.consistency ? consistencyView(version.consistency, context) : null,
+    checkCostUsd: version.consistency?.costUsd ?? null,
     text: version.text,
   };
 }
 
-function consistencyView(stored: NonNullable<StoredVersion["consistency"]>): ConsistencyResult {
+function consistencyView(stored: NonNullable<StoredVersion["consistency"]>, context: ReadonlyArray<{ id: string; version: number }>): ConsistencyResult {
   const status = stored.status === "none" || stored.status === "found" || stored.status === "nothing-to-compare" ? stored.status : "failed";
-  return { status, items: stored.items };
+  const key = (list: ReadonlyArray<{ id: string; version: number }>) =>
+    list
+      .map((entry) => `${entry.id}@${entry.version}`)
+      .sort()
+      .join(",");
+  // Her sections changed since the check: what it said may no longer hold (review M5).
+  return { status, items: stored.items, stale: key(stored.sectionsCompared) !== key(context) };
 }
 
 /** Saves the consistency check's result on a version. Null when the version is gone. */
@@ -123,7 +136,8 @@ export function setConsistency(data: CaseData, id: ReportSectionId, number: numb
 }
 
 export function sectionDetail(data: CaseData, id: ReportSectionId, instructions: string, shape: SectionShape = { paragraphs: null, words: null }): SectionDetail {
-  return { ...sectionSummary(data, id), versions: storedSection(data, id).versions.map(versionView), instructions, shape };
+  const context = contextSections(data, id).map(({ id: sectionId, version }) => ({ id: sectionId, version }));
+  return { ...sectionSummary(data, id), versions: storedSection(data, id).versions.map((version) => versionView(version, context)), instructions, shape };
 }
 
 function nextNumber(section: StoredSection): number {
@@ -146,7 +160,9 @@ export function saveOwnText(data: CaseData, id: ReportSectionId, raw: string, ed
   const text = checkedText(raw);
   const section = storedSection(data, id);
   const newest = section.versions.at(-1);
-  if (editing !== null && newest && newest.number === editing && (newest.kind === "hers" || newest.kind === "edited") && !newest.generation) {
+  // Her editing pass updates its own version in place, unless that version is approved:
+  // approved text never changes (review, low 1); the edit then becomes a new version.
+  if (editing !== null && newest && newest.number === editing && (newest.kind === "hers" || newest.kind === "edited") && !newest.generation && section.approvedVersion !== newest.number) {
     if (newest.text === text) return null;
     const versions = [...section.versions.slice(0, -1), { ...newest, text, updatedAt: now }];
     return { data: withSection(data, id, { ...section, versions, currentVersion: newest.number }), version: newest.number };
@@ -227,9 +243,33 @@ export function finalVersion(data: CaseData, id: ReportSectionId): StoredVersion
   const section = storedSection(data, id);
   const approved = findVersion(section, section.approvedVersion);
   if (approved) return approved;
-  const current = currentOf(section);
-  if (current && stateOf(section) === "hers") return current;
-  return [...section.versions].reverse().find((version) => version.kind === "hers") ?? null;
+  // Her newest text with no AI version in its lineage: what she pasted, and every edit
+  // she made of it (review B2), not an AI version she edited.
+  const own = ownVersions(section);
+  for (let index = section.versions.length - 1; index >= 0; index--) {
+    if (own.has(section.versions[index].number)) return section.versions[index];
+  }
+  return null;
+}
+
+/** The numbers of the versions that are hers all the way down: "hers", or her edit of one of those. */
+function ownVersions(section: StoredSection): Set<number> {
+  const byNumber = new Map(section.versions.map((version) => [version.number, version]));
+  const known = new Map<number, boolean>();
+  const isOwn = (version: StoredVersion, depth = 0): boolean => {
+    const cached = known.get(version.number);
+    if (cached !== undefined) return cached;
+    let own = false;
+    if (version.generation || depth > section.versions.length) own = false;
+    else if (version.kind === "hers") own = true;
+    else if (version.kind === "edited") {
+      const base = version.basedOn === undefined ? undefined : byNumber.get(version.basedOn);
+      own = base === undefined ? true : isOwn(base, depth + 1);
+    }
+    known.set(version.number, own);
+    return own;
+  };
+  return new Set(section.versions.filter((version) => isOwn(version)).map((version) => version.number));
 }
 
 /** Her other sections that are hers or approved, in the report's order, for a request about `id`. */

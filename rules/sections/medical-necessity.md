@@ -1,7 +1,7 @@
 ---
 id: section-medical-necessity
-version: 2
-updated: 2026-11-22
+version: 3
+updated: 2026-11-23
 paragraphs: 6-9
 words: 900-1500
 ---

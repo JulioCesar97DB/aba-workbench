@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CaseLibrary } from "./cases.ts";
-import { FailedSaves, runOnCases } from "./failed-saves.ts";
+import { FailedSaves, runSaves } from "./failed-saves.ts";
 import { createCloseGuard, createQuitWait, SAVE_WAIT_MS, UNSAVED_DIALOG, withTimeout, type UnsavedProblem } from "./close-guard.ts";
 import { ChatGptSession } from "./chatgpt-session.ts";
 import { ConnectionService } from "./connections.ts";
@@ -73,7 +73,8 @@ const cases = new CaseLibrary({
 });
 
 // Changes to sources that could not be saved, kept while the app runs (a reload does not forget them).
-const failedSaves = new FailedSaves({ run: runOnCases(cases), labelOf: (caseId) => cases.labelOf(caseId) });
+// Section text, instructions and notes go through it too (made below; used only once a save runs).
+const failedSaves = new FailedSaves({ run: runSaves(cases, () => sections), labelOf: (caseId) => cases.labelOf(caseId) });
 
 // The AI connections: the Claude key and the ChatGPT sign-in, in credentials.json in the
 // app's own data folder, owner-only (src/main/credentials.ts). The interface is told each

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { checkCaseLabel, isCaseId, MAX_CLIENT_AGE_YEARS, type CaseFile, type ClientAge } from "../shared/api.ts";
 import { checkSourceTitle, isSourceDate, MAX_SOURCE_TEXT_LENGTH, MAX_SOURCES } from "../shared/sources.ts";
 import { MAX_NOTES_LENGTH, MAX_REQUEST_LENGTH, MAX_SECTION_TEXT_LENGTH } from "../shared/section-text.ts";
+import { MAX_CONSISTENCY_ITEM_LENGTH } from "../lib/rules.ts";
 
 /*
  * A case's data file: aba-case.json, inside the case's folder, next to its PDFs (which
@@ -164,7 +165,7 @@ const StoredVersionSchema = z.looseObject({
   consistency: z
     .looseObject({
       status: z.string().max(32),
-      items: z.array(z.string().max(2000)).max(100),
+      items: z.array(z.string().max(MAX_CONSISTENCY_ITEM_LENGTH)).max(100),
       checkedAt: TimestampSchema,
       model: z.string().max(200).nullable(),
       costUsd: z.number().min(0).nullable(),
@@ -404,6 +405,19 @@ export function serializeCaseFile(data: CaseData): string {
     ...rest,
   };
   return `${JSON.stringify(ordered, null, 2)}\n`;
+}
+
+/**
+ * The file's text, only when it reads back whole under the same rules it is read with
+ * (readCaseFile: UTF-8, lossless JSON, the schema and every limit in it); null otherwise.
+ * Every write of a data file goes through it, so nothing the app writes can make a case
+ * unreadable: a value past a limit (a model's answer longer than the schema allows, say)
+ * refuses the save instead of locking the clinician out of the whole case.
+ */
+export function readableCaseFileText(data: CaseData): string | null {
+  const text = serializeCaseFile(data);
+  const read = readCaseFile(text);
+  return read.ok && read.migratedFrom === null ? text : null;
 }
 
 /** A new case's data. */

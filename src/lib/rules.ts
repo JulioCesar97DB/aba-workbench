@@ -139,6 +139,9 @@ export type SectionRequest =
 
 /** The answer of a consistency check that found nothing. */
 export const CONSISTENCY_NONE = "NO CONTRADICTIONS";
+/** What a check's result keeps: as the case's data file reads it back (src/main/case-file.ts). */
+export const MAX_CONSISTENCY_ITEMS = 20;
+export const MAX_CONSISTENCY_ITEM_LENGTH = 2000;
 
 /** A consistency check's answer as a list of contradictions (empty: none). Null when the answer is not in the expected shape. */
 export function parseConsistencyAnswer(answer: string): string[] | null {
@@ -150,7 +153,8 @@ export function parseConsistencyAnswer(answer: string): string[] | null {
     .filter((line) => line.startsWith("- "))
     .map((line) => line.slice(2).trim())
     .filter((line) => line !== "");
-  return items.length > 0 ? items.slice(0, 20) : null;
+  // Clamped to what the data file accepts: a longer line is cut, never allowed to make the case unreadable.
+  return items.length > 0 ? items.slice(0, MAX_CONSISTENCY_ITEMS).map((item) => (item.length > MAX_CONSISTENCY_ITEM_LENGTH ? `${item.slice(0, MAX_CONSISTENCY_ITEM_LENGTH - 1)}…` : item)) : null;
 }
 
 export interface SectionPromptInput {
