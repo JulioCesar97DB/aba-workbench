@@ -8,6 +8,41 @@ Requirements: Node.js 24 or later; pnpm comes from the `packageManager` field in
 
 License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the interface ships are under the SIL Open Font License 1.1 ([licenses/IBM-Plex-OFL.txt](licenses/IBM-Plex-OFL.txt)).
 
+## Download
+
+ABA Workbench 0.1.1 is a pre-release for a demo. It is **not ready for real client data**. Both installers are on the release page, [v0.1.1](https://github.com/JulioCesar97DB/aba-workbench/releases/tag/v0.1.1):
+
+| System | File |
+| --- | --- |
+| Windows, x64 | [ABA-Workbench-Setup-0.1.1-windows-x64.exe](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.1.1/ABA-Workbench-Setup-0.1.1-windows-x64.exe) ([SHA-256](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.1.1/ABA-Workbench-Setup-0.1.1-windows-x64.exe.sha256)) |
+| Mac, Apple Silicon or Intel, macOS 13 Ventura or later | [ABA-Workbench-0.1.1-macos-universal.dmg](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.1.1/ABA-Workbench-0.1.1-macos-universal.dmg) ([SHA-256](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.1.1/ABA-Workbench-0.1.1-macos-universal.dmg.sha256)) |
+
+The links name the v0.1.1 release (the first with the Mac disk image; v0.1.0 had the Windows installer only), because GitHub's "latest release" link skips pre-releases. A later version gets new links here.
+
+### Check the download (optional)
+
+Each file has a `.sha256` beside it, with the file's SHA-256; the release notes show it too. Compute the SHA-256 of the file you downloaded and check that the two are the same.
+
+- Windows, in PowerShell: `(Get-FileHash "$HOME\Downloads\ABA-Workbench-Setup-0.1.1-windows-x64.exe" -Algorithm SHA256).Hash.ToLower()` (lower case, as in the `.sha256` file)
+- Mac, in Terminal: `shasum -a 256 ~/Downloads/ABA-Workbench-0.1.1-macos-universal.dmg`
+
+### Install on Windows
+
+1. Open `ABA-Workbench-Setup-0.1.1-windows-x64.exe`.
+2. The installer is not signed, so Windows SmartScreen says "Windows protected your PC". Click **More info**, then **Run anyway**.
+3. It installs for your Windows user only, with no administrator rights, adds ABA Workbench to the Start menu and the Desktop, and starts it.
+
+To uninstall: Settings, Apps, ABA Workbench, Uninstall. Your cases folder and the app's data folder stay.
+
+### Install on a Mac
+
+1. Open `ABA-Workbench-0.1.1-macos-universal.dmg` and drag **ABA Workbench** onto **Applications**. Then eject the disk image (the eject button beside it in Finder).
+2. Open ABA Workbench from Applications. The app is not signed with an Apple certificate or notarized, so the first time macOS blocks it. Close the message: on macOS 15 and later it says "Apple could not verify…", click **Done**; on macOS 13 and 14 it says Apple cannot check it for malicious software, click **OK** (or **Cancel**).
+3. Open **System Settings**, then **Privacy & Security**. Scroll down to the message that ABA Workbench was blocked, and click **Open Anyway**. When macOS asks again, click **Open Anyway** (on macOS 13 and 14, **Open**), and enter your Mac's password if it asks.
+4. ABA Workbench opens. From now on it opens like any other app; this is needed only once (and again for each new version).
+
+To uninstall: drag ABA Workbench from Applications to the Trash. Your cases folder and the app's data folder (`~/Library/Application Support/ABA Workbench`) stay.
+
 ## Commands
 
 | Command | What it does |
@@ -16,8 +51,9 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the int
 | `pnpm dev` | Opens the desktop window, with the interface reloading on save. `pnpm dev --watch` also rebuilds and restarts the app when the main process or the preload changes. |
 | `pnpm build` | Builds the main process, the preload and the interface into `out/`. |
 | `pnpm preview` | Starts the built app from `out/`. |
-| `pnpm package` | Builds, then packages an unpacked app for the current platform into `dist/` (`dist/mac-arm64/ABA Workbench.app`, `dist/win-unpacked/ABA Workbench.exe`). Unsigned. |
+| `pnpm package` | Builds, then packages an unpacked app for the current platform into `dist/` (`dist/mac-arm64/ABA Workbench.app`, `dist/win-unpacked/ABA Workbench.exe`). No certificate: unsigned on Windows, an ad-hoc signature on macOS. |
 | `pnpm package:windows` | Builds the Windows installer, `dist/ABA-Workbench-Setup-<version>-windows-x64.exe`: one click, for the current user, unsigned ([docs/windows.md](docs/windows.md)). The release workflow builds it on Windows, installs it, tests it, uninstalls it, and attaches it to a GitHub pre-release for a version tag. |
+| `pnpm package:mac` | Builds the Mac disk image, `dist/ABA-Workbench-<version>-macos-universal.dmg`: one universal app for Apple Silicon and Intel, with an ad-hoc signature only, no certificate and no notarization ([docs/macos.md](docs/macos.md)). The release workflow builds it on macOS, mounts it, starts the app from it on both architectures, cleans up, and attaches it to the same pre-release. |
 | `pnpm test:e2e` | Builds the app and drives its window with Playwright: it opens on Home, a case is created, listed, and opened again after a restart, unreadable folders show as such, the cases folder changes in Settings, a case's sources are pasted, added from the dialog and by dropping PDFs, edited, removed and restored, a section is drafted, corrected by paragraph and in her words, approved and copied, or picked up from her own text, against a faked Claude, the navigation reaches every screen, the language changes and survives a restart, the keyboard and a narrow window work, ChatGPT sign-in and the Claude key work on the AI connection screen with both providers faked, and the development check's mock generation streams to completion. Every test uses a temporary home folder or cases folder, never the real ones. Needs a display (`xvfb-run` on a Linux machine without one). `pnpm test:e2e:packaged` runs the same tests on the app from `pnpm package`. |
 | `pnpm lint` / `pnpm typecheck` | ESLint; TypeScript for the Node side and for the interface, separately. |
 | `pnpm test` | Unit tests (`node:test`): the provider layer, the rules, the spending cap, the main process's logic (the settings file, the case data file, folder names, durable writes, the cases folder, a case's sources, the credentials file and the ChatGPT sign-in included), both languages having the same strings, macOS's permission texts, and the design tokens' contrast. No keys, no network, no window. |
@@ -36,7 +72,7 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the int
 | `rules/` | The writing rules sent to the model, versioned Markdown ([rules/README.md](rules/README.md)). Shipped next to the packaged app. |
 | `fixtures/cases/` | Two invented cases, each with a key for the evaluation (`key.json`). |
 | `eval/` | The evaluation set: the rubric ([eval/RUBRIC.md](eval/RUBRIC.md)), the automatic checks, the run (`pnpm eval`) and the accepted baselines ([docs/evaluation.md](docs/evaluation.md)). |
-| `packaging/macos/` | What macOS shows when the app first asks to open a protected folder the user chose (Documents, Desktop, Downloads, a drive, a cloud storage folder), in each language (`<language>.lproj/InfoPlist.strings`). |
+| `packaging/macos/` | The Mac app's icon (`icon.icns`, drawn by `scripts/render-app-icon.mts`), and what macOS shows when the app first asks to open a protected folder the user chose (Documents, Desktop, Downloads, a drive, a cloud storage folder), in each language (`<language>.lproj/InfoPlist.strings`). |
 | `licenses/` | Licenses of what ships inside the app: the IBM Plex fonts' SIL Open Font License ([licenses/README.md](licenses/README.md)). Copied into the packaged app. |
 | `scripts/` | `phase0.mts` and its spending cap, the fixture PDF renderer, and the dev server's style nonce (`dev-style-nonce.ts`). |
 | `tests/` | Unit tests. |
@@ -106,7 +142,7 @@ A source removed from the case keeps its entry, with `"removedAt"`, and its PDF 
 
 ChatGPT connects with **Sign in with ChatGPT**: the user signs in in the system browser and allows ABA Workbench to use their own ChatGPT plan, with no API key, through OpenAI's flow for open-source apps that run on the user's computer. Claude connects with an **API key** the user pastes (Anthropic does not let other apps offer Claude.ai sign-in); it is checked with Anthropic before it is saved. Both live in `credentials.json` in the app's own data folder, readable by the user only, never sent to the interface, never logged. How each connection works step by step, the file's format, and exactly what goes to each provider and what never does: [docs/connections.md](docs/connections.md).
 
-How the processes fit together, what the interface may call and how the app is hardened: [docs/desktop.md](docs/desktop.md). The Windows installer, how a release is published, and what was checked for Windows: [docs/windows.md](docs/windows.md). How the interface is organized, where the design tokens and components live, and how to add a string in both languages: [docs/interface.md](docs/interface.md).
+How the processes fit together, what the interface may call and how the app is hardened: [docs/desktop.md](docs/desktop.md). The Windows installer, how a release is published, and what was checked for Windows: [docs/windows.md](docs/windows.md); the Mac disk image: [docs/macos.md](docs/macos.md). How the interface is organized, where the design tokens and components live, and how to add a string in both languages: [docs/interface.md](docs/interface.md).
 
 ## Dependencies
 
