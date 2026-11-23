@@ -1,6 +1,6 @@
-# Builds the Windows installer on Windows, checks it the way she will use it, and, for a
-# version tag only, attaches it with its SHA-256 to a GitHub pre-release (owner's
-# decisions, 2026-11-23). It uses no secrets and calls no AI provider: the window tests
+# Builds the Windows installer on Windows and the universal Mac disk image on macOS, checks
+# each the way she will use it, and, for a version tag only, attaches both with their
+# SHA-256 to one GitHub pre-release (owner's decisions, 2026-11-23). It uses no secrets and calls no AI provider: the window tests
 # fake the providers inside the app, and the only token is GitHub's own, which can write
 # releases in the publish job only.
 #
@@ -180,21 +180,149 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  mac-installer:
+    name: Mac installer (build, mount, launch, clean up)
+    # Pinned image, as in ci.yml: Apple Silicon. The app's Intel code runs here under Rosetta.
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      dmg: ${{ steps.name.outputs.dmg }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: ${{ github.ref_type == 'tag' && '0' || '1' }}
+
+      # The same rule as the installer job: only a commit already on dev or main is published.
+      - name: Check a tag's commit is on dev or main (tags only)
+        if: github.ref_type == 'tag'
+        run: |
+          for branch in dev main; do
+            if git merge-base --is-ancestor "$GITHUB_SHA" "origin/$branch"; then
+              echo "$GITHUB_SHA is on $branch."
+              exit 0
+            fi
+          done
+          echo "::error::The tagged commit $GITHUB_SHA is on neither dev nor main; nothing is published from it."
+          exit 1
+
+      - name: Set up pnpm and Node.js, install dependencies
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
+        with:
+          require-lockfile: true
+          cache: ${{ github.ref_type != 'tag' }}
+          save-cache: false
+
+      - name: Show Node.js and pnpm versions
+        run: |
+          command -v node
+          node --version
+          pnpm --version
+
+      - name: Name the disk image, and check the tag matches package.json
+        id: name
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$REF_TYPE" = "tag" ] && [ "$REF_NAME" != "v$version" ]; then
+            echo "::error::The tag $REF_NAME does not match package.json's version $version (expected v$version)."
+            exit 1
+          fi
+          echo "dmg=ABA-Workbench-$version-macos-universal.dmg" >> "$GITHUB_OUTPUT"
+
+      # The same checks as ci.yml, on macOS, before anything is published.
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Phase 0 end-to-end run (mock provider)
+        run: pnpm phase0 --mock
+
+      # electron-vite builds the app; electron-builder packages it for arm64 and x64, merges
+      # the two into one universal app, signs it ad-hoc (mac.identity "-": no certificate, no
+      # notarization) and makes the disk image (electron-builder.yml, mac and dmg).
+      - name: Build the universal disk image (ad-hoc signed)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          DMG: ${{ steps.name.outputs.dmg }}
+        run: |
+          pnpm package:mac
+          ls -l dist
+          test -f "dist/$DMG"
+
+      # Hidden from Finder; checks the volume's name, the app and the Applications shortcut,
+      # then copies the app to /Applications, as she drags it there.
+      - name: Mount the disk image and copy the app to Applications
+        env:
+          DMG: ${{ steps.name.outputs.dmg }}
+        run: ./scripts/mac-installer-check.sh mount "dist/$DMG"
+
+      - name: Check the copied app (ad-hoc signature, identity, version, arm64 and x86_64)
+        run: ./scripts/mac-installer-check.sh verify
+
+      # open -g -j: in the background and hidden. A temporary profile; quits it after.
+      - name: Start the app hidden (Apple Silicon), check it runs, quit it
+        run: ./scripts/mac-installer-check.sh launch
+
+      # The x86_64 code, as an Intel Mac runs it; fails if Rosetta is missing.
+      - name: Start the app's Intel code under Rosetta, check it runs, quit it
+        run: ./scripts/mac-installer-check.sh launch-x64
+
+      - name: Remove the app and detach the disk image
+        run: ./scripts/mac-installer-check.sh cleanup
+
+      # macOS has shasum, not sha256sum; the line it writes is the same ("<sum>  <file>").
+      - name: SHA-256 of the disk image
+        working-directory: dist
+        env:
+          DMG: ${{ steps.name.outputs.dmg }}
+        run: |
+          shasum -a 256 "$DMG" > "$DMG.sha256"
+          cat "$DMG.sha256"
+
+      - name: Keep the disk image and its SHA-256 with this run
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mac-installer
+          path: |
+            dist/${{ steps.name.outputs.dmg }}
+            dist/${{ steps.name.outputs.dmg }}.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
     name: Publish the GitHub pre-release
-    needs: installer
-    # Only a version tag publishes (pushed, or chosen in a manual run); the installer job
-    # has already refused a tag that differs from package.json's version.
+    needs: [installer, mac-installer]
+    # Only a version tag publishes (pushed, or chosen in a manual run), and only once both
+    # installers passed; each job has already refused a tag that differs from package.json's
+    # version.
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - name: Get the checked installer
+      - name: Get the checked Windows installer
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-installer
+          path: release
+
+      - name: Get the checked Mac disk image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mac-installer
           path: release
 
       - name: Check the SHA-256
@@ -203,17 +331,21 @@ jobs:
 
       # gh is preinstalled on the runner. --verify-tag: the tag must already be on GitHub;
       # gh never creates one. An existing release is never replaced: create fails instead.
-      - name: Create the pre-release with the installer and its SHA-256
+      - name: Create the pre-release with both installers and their SHA-256
         working-directory: release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
           INSTALLER: ${{ needs.installer.outputs.installer }}
+          DMG: ${{ needs.mac-installer.outputs.dmg }}
         run: |
           sum=$(cut -d ' ' -f 1 "$INSTALLER.sha256")
+          dmg_sum=$(cut -d ' ' -f 1 "$DMG.sha256")
           {
-            echo "ABA Workbench ${TAG#v} for Windows (x64), for a demo. Not ready for real client data."
+            echo "ABA Workbench ${TAG#v} for Windows (x64) and Mac (Apple Silicon and Intel), for a demo. Not ready for real client data."
+            echo
+            echo "## Windows"
             echo
             echo "Download **$INSTALLER** and open it. It installs for your Windows user only, with no administrator rights, and adds ABA Workbench to the Start menu and the Desktop."
             echo
@@ -222,9 +354,19 @@ jobs:
             echo "Uninstalling (Settings, Apps) removes the app only: your cases folder and the app's data folder stay."
             echo
             echo "SHA-256 of the installer: \`$sum\`"
+            echo
+            echo "## Mac"
+            echo
+            echo "Download **$DMG**, open it, and drag ABA Workbench onto Applications. One file for Apple Silicon and Intel Macs, macOS 13 Ventura or later."
+            echo
+            echo "The app is not signed with an Apple certificate or notarized, so macOS blocks it the first time you open it. Click **Done** in that message, then open **System Settings**, **Privacy & Security**, scroll down to the message about ABA Workbench, click **Open Anyway** and confirm. This is needed once."
+            echo
+            echo "Deleting the app from Applications removes the app only: your cases folder and the app's data folder stay."
+            echo
+            echo "SHA-256 of the disk image: \`$dmg_sum\`"
           } > notes.md
-          gh release create "$TAG" "$INSTALLER" "$INSTALLER.sha256" \
+          gh release create "$TAG" "$INSTALLER" "$INSTALLER.sha256" "$DMG" "$DMG.sha256" \
             --verify-tag \
             --prerelease \
-            --title "ABA Workbench ${TAG#v} (Windows, pre-release)" \
+            --title "ABA Workbench ${TAG#v} (Windows and Mac, pre-release)" \
             --notes-file notes.md

@@ -101,9 +101,9 @@ jobs:
           fi
 
       # Assembles the unpacked app for this system with electron-builder (dist/): no
-      # installer, no signing (mac identity is null in electron-builder.yml; no signing
-      # certificate is configured for Windows), no secrets.
-      - name: Package the app (unpacked, unsigned)
+      # installer, no certificate (macOS gets an ad-hoc signature, mac identity "-" in
+      # electron-builder.yml; no signing certificate is configured for Windows), no secrets.
+      - name: Package the app (unpacked, no certificate)
         run: pnpm package
 
       # The same window tests, against the packaged app: it starts from dist/ and finds

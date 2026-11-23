@@ -1,8 +1,10 @@
 # Packaging. `pnpm package` builds an unpacked app for the current platform in dist/
 # (dist/mac-arm64/ABA Workbench.app, dist/win-unpacked/ABA Workbench.exe).
-# `pnpm package:windows` builds the Windows installer (below, nsis); the release workflow
-# (.github/workflows/release.yml) builds it on Windows and attaches it to a GitHub
-# pre-release. Nothing is signed and nothing updates itself (owner's decisions, 2026-11-23).
+# `pnpm package:windows` builds the Windows installer (below, nsis), `pnpm package:mac` the
+# universal Mac disk image (below, mac and dmg); the release workflow
+# (.github/workflows/release.yml) builds each on its own system and attaches both to the
+# same GitHub pre-release. Nothing is signed with a certificate and nothing updates itself
+# (owner's decisions, 2026-11-23); the Mac app has only an ad-hoc signature (below).
 #
 # The app's permanent identity (owner's decision, 2026-11-23). On Windows the installer
 # derives the uninstall entry and the taskbar ID from it (src/main/index.ts sets the same
@@ -35,8 +37,27 @@ npmRebuild: false
 # (latest.yml) is written, and the release workflow uploads the installer itself.
 publish: null
 mac:
-  # No code signing yet, even if a signing identity is in the keychain.
-  identity: null
+  # One universal disk image, for Apple Silicon and Intel in one file (owner's decision,
+  # 2026-11-23): electron-builder packages the app for arm64 and for x64 and merges them
+  # (@electron/universal; the two app archives are the same, as no native module ships).
+  # Only `pnpm package:mac` builds it; `pnpm package` (--dir) stays the runner's own arch.
+  target:
+    - target: dmg
+      arch: universal
+  # Drawn by scripts/render-app-icon.mts, the same drawing as the Windows icon.
+  icon: packaging/macos/icon.icns
+  # Ad-hoc signature only (owner's decision, 2026-11-23): no Apple Developer certificate and
+  # no notarization. Apple Silicon runs no app without a signature, so "-" signs every
+  # executable of the app with no identity (codesign --sign -), even if a signing identity
+  # is in the keychain. macOS still blocks the downloaded app the first time; the user
+  # allows it once in System Settings, Privacy & Security, "Open Anyway" (README.md).
+  identity: "-"
+  # Off (owner's decision, 2026-11-23): the hardened runtime is only needed for
+  # notarization, and with an ad-hoc signature its library validation can stop the app from
+  # loading its own Electron framework.
+  hardenedRuntime: false
+  # The minimum macOS is Electron's own, not overridden (owner's decision, 2026-11-23):
+  # macOS 13 Ventura for Electron 45 (the app's LSMinimumSystemVersion, 13.0).
   # macOS asks the user before an app opens Documents, the Desktop, Downloads, an external
   # or a network drive, or a folder a cloud storage app such as OneDrive, Dropbox or Google
   # Drive manages through a File Provider, showing this text. The default cases folder is in
@@ -56,6 +77,13 @@ mac:
       to: .
       filter:
         - "*.lproj/InfoPlist.strings"
+dmg:
+  # electron-builder's default window (owner's decision, 2026-11-23): the app and a shortcut
+  # to Applications to drag it onto; the volume is named "ABA Workbench <version>".
+  # The name says what it is, without spaces, like the Windows installer's.
+  artifactName: ABA-Workbench-${version}-macos-${arch}.${ext}
+  # No .blockmap: nothing updates itself.
+  writeUpdateInfo: false
 linux:
   # Stated rather than left to the default (the lowercased package name): the packaged
   # window tests look for this file (e2e/app.ts).

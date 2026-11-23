@@ -13,6 +13,7 @@
     "preview": "install-electron && electron-vite preview",
     "package": "electron-vite build && electron-builder --dir",
     "package:windows": "electron-vite build && electron-builder --win --publish never",
+    "package:mac": "electron-vite build && electron-builder --mac --publish never",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --composite false -p tsconfig.node.json && tsc --noEmit --composite false -p tsconfig.web.json",
     "test": "node --test \"tests/**/*.test.ts\"",

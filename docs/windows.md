@@ -45,11 +45,12 @@ A folder chosen in Settings or on Home is refused ("That folder is inside ABA Wo
    6. the update path: adds a file of hers to the case and to the app's data folder, records every file in both, runs the same installer again over the installed app (which first runs the installed app's own uninstaller, as every later version's installer does), and checks that this uninstaller ran (a file it put in the install folder is gone), that the app and its shortcuts are back and every file in both folders is still there, byte for byte;
    7. uninstalls silently, and checks that the app, its shortcuts and its registry entry are gone while every file in both folders is still there, byte for byte;
    8. writes the installer's SHA-256 and keeps both files with the run (14 days).
-2. **publish** (`ubuntu-24.04`), only for a version tag, after **installer** passed: the only job whose token can write (`contents: write`). It checks the SHA-256 and creates a **pre-release** for the existing tag with `gh release create --verify-tag --prerelease`, attaching the installer and its `.sha256`. It never creates a tag and never replaces a release that exists.
+2. **mac-installer** (`macos-26`, read-only token): the universal Mac disk image, built, mounted, started on both architectures and cleaned up ([docs/macos.md](macos.md#what-the-release-workflow-checks)).
+3. **publish** (`ubuntu-24.04`), only for a version tag, after **installer** and **mac-installer** passed: the only job whose token can write (`contents: write`). It checks both SHA-256 files and creates a **pre-release** for the existing tag with `gh release create --verify-tag --prerelease`, attaching the Windows installer, the Mac disk image and their `.sha256`. It never creates a tag and never replaces a release that exists.
 
 Third-party actions are pinned to full commit SHAs (`tests/windows-installer.test.ts` checks every workflow). No secret is used.
 
-What gates publishing: this workflow's own checks, on Windows, and the rule that the tagged commit is on `dev` or `main`, whose commits `ci.yml` has checked on Linux, Windows and macOS (a pull request merges only once it passes). This workflow does not wait for `ci.yml`, so tag a commit whose `ci.yml` run passed. Recommended for the owner, in the repository's settings: a tag ruleset (Settings, Rules, Rulesets, New tag ruleset, target `v*`) that lets only the owner create, update or delete version tags.
+What gates publishing: this workflow's own checks, on Windows and macOS, and the rule that the tagged commit is on `dev` or `main`, whose commits `ci.yml` has checked on Linux, Windows and macOS (a pull request merges only once it passes). This workflow does not wait for `ci.yml`, so tag a commit whose `ci.yml` run passed. Recommended for the owner, in the repository's settings: a tag ruleset (Settings, Rules, Rulesets, New tag ruleset, target `v*`) that lets only the owner create, update or delete version tags.
 
 If publishing fails halfway (a network error while `gh release create` uploads), a partial release can be left for the tag, and a re-run then fails because the release exists. Delete that release on its page (the tag stays), then re-run the failed jobs.
 
@@ -62,7 +63,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The release page then has `ABA-Workbench-Setup-0.1.0-windows-x64.exe` and `ABA-Workbench-Setup-0.1.0-windows-x64.exe.sha256`; the download link to give her is the `.exe`'s. For a later version, raise `version` in `package.json` first, then tag that.
+The release page then has `ABA-Workbench-Setup-0.1.0-windows-x64.exe`, `ABA-Workbench-0.1.0-macos-universal.dmg` and a `.sha256` for each; the download link to give her is her system's file, as in the README's [Download](../README.md#download) section. For a later version, raise `version` in `package.json` first, then tag that, and change the README's links to the new version.
 
 ## Windows readiness
 
