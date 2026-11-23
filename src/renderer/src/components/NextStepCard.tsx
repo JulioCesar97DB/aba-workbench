@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
+import { Button } from "./Button.tsx";
 import { cn } from "./cn.ts";
 import { Icon } from "./Icon.tsx";
 import { ButtonLink } from "./Link.tsx";
@@ -18,6 +19,7 @@ export function NextStepCard({
   to,
   action,
   primary = false,
+  disabledNote,
 }: {
   /** The next step's (or section's) name. */
   name: string;
@@ -31,9 +33,15 @@ export function NextStepCard({
   action?: string;
   /** True once the current step has its minimum: the button becomes the screen's primary. */
   primary?: boolean;
+  /**
+   * Before the step has its minimum, when moving on makes no sense yet (Documentos with no
+   * document): the button shows disabled, with this sentence under it saying when it turns on.
+   */
+  disabledNote?: string;
 }) {
   const { t } = useTranslation();
   const headingId = useId();
+  const noteId = useId();
   return (
     <section
       aria-labelledby={headingId}
@@ -48,7 +56,17 @@ export function NextStepCard({
         {name}
       </p>
       <p className="text-sm text-fg-muted">{body}</p>
-      {to && action ? (
+      {action && disabledNote ? (
+        <>
+          <Button size="sm" className="mt-1" disabled focusableWhenDisabled aria-describedby={noteId}>
+            {action}
+            <Icon name="arrow" />
+          </Button>
+          <p id={noteId} className="text-xs text-fg-muted">
+            {disabledNote}
+          </p>
+        </>
+      ) : to && action ? (
         <ButtonLink to={to} variant={primary ? "primary" : "secondary"} size="sm" className="mt-1">
           {action}
           <Icon name="arrow" />

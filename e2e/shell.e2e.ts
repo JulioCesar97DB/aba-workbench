@@ -129,9 +129,9 @@ test("the navigation reaches every screen", async ({ launch, home }) => {
 
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
   await expect(heading(page)).toHaveText("Documents");
-  await expect(page.getByText(`${SAMPLE_CASE.label} · Step 1 of 5`)).toBeVisible();
+  await expect(page.getByTestId("header-eyebrow")).toHaveText("Step 1 of 5");
   const rail = page.getByRole("complementary", { name: "Documents and checks" });
-  await expect(rail).toContainText("No documents yet.");
+  await expect(rail.getByTestId("next-step")).toContainText("Turns on when you add the first document.");
 
   const steps = page.getByRole("navigation", { name: "Steps of the case" });
   const expected: Array<[string, string]> = [

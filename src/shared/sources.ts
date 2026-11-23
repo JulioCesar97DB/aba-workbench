@@ -28,9 +28,6 @@ export const SOURCE_TYPE_NAMES: Record<Exclude<SourceType, "other">, string> = {
   "ablls-r": "ABLLS-R",
 };
 
-/** The types offered first for a pasted text, in this order; the rest follow. */
-export const TEXT_SOURCE_TYPES: readonly SourceType[] = ["cde", "parent-interview", "direct-observation", "fba-questionnaire", "iep", "other"];
-
 export function isSourceType(value: unknown): value is SourceType {
   return typeof value === "string" && (SOURCE_TYPES as readonly string[]).includes(value);
 }
@@ -203,7 +200,7 @@ export type AddPdfsResult =
   | { outcome: "cancelled" }
   /**
    * PDFs were copied into the case's folder but the data file could not be saved: they are
-   * not sources, and stay in the folder (nothing is deleted), under "Also in this case's folder".
+   * not sources, and stay in the folder (nothing is deleted), in the Documents step's card for the PDFs in the folder not added.
    */
   | { outcome: "copied-not-added"; files: string[]; sources: CaseSources }
   | SourceSaveFailure;

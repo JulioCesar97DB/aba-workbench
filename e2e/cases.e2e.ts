@@ -46,7 +46,7 @@ test("create a case, see it in the list, restart the app and open it again", asy
   await createCase(page, "R.T. initial assessment", { years: "5", months: "3" });
   // The new case opens on its first step, with its label and age in the sidebar.
   await expect(heading(page)).toHaveText("Documents");
-  await expect(page.getByText("R.T. initial assessment · Step 1 of 5")).toBeVisible();
+  await expect(page.getByTestId("header-eyebrow")).toHaveText("Step 1 of 5");
   const sidebar = page.getByRole("navigation", { name: "Steps of the case" }).locator("xpath=ancestor::div[@data-surface='nav'][1]");
   await expect(sidebar.getByText("R.T. initial assessment", { exact: true })).toBeVisible();
   await expect(sidebar.getByText("5 years 3 months")).toBeVisible();
@@ -78,7 +78,7 @@ test("create a case, see it in the list, restart the app and open it again", asy
   page = await openApp(app);
   await page.getByRole("link", { name: "R.T. initial assessment" }).click();
   await expect(heading(page)).toHaveText("Documents");
-  await expect(page.getByText("R.T. initial assessment · Step 1 of 5")).toBeVisible();
+  await expect(page.getByTestId("header-eyebrow")).toHaveText("Step 1 of 5");
   expect(page.url()).toContain(`#/cases/${data.id}/sources`);
 });
 
@@ -148,13 +148,15 @@ test("a PDF put into the case's folder shows when the case is opened again, and 
   const app = await launch();
   const page = await openApp(app);
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  const rail = page.getByRole("complementary", { name: "Documents and checks" });
-  await expect(rail).toContainText("None yet. PDFs you put in the case's folder show here.");
+  await expect(heading(page)).toHaveText("Documents");
+  const folderPdfs = page.getByRole("region", { name: /in the case's folder you have not added/ });
+  await expect(folderPdfs).toHaveCount(0);
 
   writeFileSync(path.join(caseFolder, "vineland-3.pdf"), "%PDF-1.4 invented test file");
   await page.getByRole("link", { name: "All cases" }).click();
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  await expect(rail.getByRole("listitem")).toHaveText(["vineland-3.pdf"]);
+  await expect(folderPdfs).toHaveAccessibleName("There is 1 PDF in the case's folder you have not added");
+  await expect(folderPdfs.getByRole("listitem")).toHaveText([/^vineland-3\.pdf · /]);
   const data = JSON.parse(readFileSync(path.join(caseFolder, "aba-case.json"), "utf8"));
   expect(data.files).toEqual([{ name: "vineland-3.pdf", bytes: 27, modifiedAt: statSync(path.join(caseFolder, "vineland-3.pdf")).mtime.toISOString() }]);
   expect(data.updatedAt > SAMPLE_CASE.updatedAt).toBe(true);

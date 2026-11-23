@@ -19,6 +19,14 @@ const PATHS = {
   upload: <path d="M8 10.5v-8 M4.5 6 8 2.5 11.5 6 M2.5 10.5v3h11v-3" />,
   stop: <rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor" stroke="none" />,
   panel: <path d="M2.5 3h11v10h-11z M10 3v10" />,
+  // "⋯": a row's other actions (layout rule 5).
+  more: (
+    <g fill="currentColor" stroke="none">
+      <circle cx="3.5" cy="8" r="1.25" />
+      <circle cx="8" cy="8" r="1.25" />
+      <circle cx="12.5" cy="8" r="1.25" />
+    </g>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;

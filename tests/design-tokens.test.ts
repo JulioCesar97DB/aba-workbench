@@ -50,6 +50,7 @@ const TEXT_PAIRS: Array<[text: string, background: string]> = [
   ["success", "surface"], // a section's copied line
   ["success", "surface-muted"], // the rail's checks: "None", "Complete"
   ["warning", "surface-muted"], // the rail's checks: "1 to look at"
+  ["danger", "surface-muted"], // Documentos' rail: the PDFs too large for the AI
 ];
 
 const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
@@ -68,6 +69,7 @@ const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
   ["fg-on-accent-subtle", "surface"], // the sparkle in the request box
   ["success", "surface-muted"], // a check passed, in the rail
   ["warning", "surface-muted"], // a point to look at, in the rail
+  ["border-control", "surface-muted"], // Documentos: the buttons of the card for the folder's PDFs
 ];
 
 function luminance(hex: string): number {
