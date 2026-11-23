@@ -73,6 +73,7 @@ const api: AbaApi = {
   getAiPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.getAiPreferences),
   setModel: (provider, model) => ipcRenderer.invoke(IPC_CHANNELS.setModel, provider, model),
   copySection: (caseId, sectionId, version) => ipcRenderer.invoke(IPC_CHANNELS.copySection, caseId, sectionId, version),
+  judgeSection: (caseId, sectionId, generationId, provider, input) => ipcRenderer.invoke(IPC_CHANNELS.judgeSection, caseId, sectionId, generationId, provider, input),
   onFlushSaves: (listener) => {
     flushListener = listener;
     return () => {

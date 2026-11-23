@@ -13,6 +13,9 @@ dist/
 .env.*
 !.env.phase0.example
 
+# evaluation runs (pnpm eval); accepted baselines are committed in eval/baselines/
+eval-results/
+
 # misc
 .DS_Store
 *.pem

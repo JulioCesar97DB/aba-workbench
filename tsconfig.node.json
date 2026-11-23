@@ -28,6 +28,7 @@
     "src/renderer/src/i18n/en.ts",
     "src/renderer/src/i18n/es.ts",
     "scripts/**/*",
+    "eval/**/*",
     "tests/**/*",
     "e2e/**/*"
   ]
