@@ -18,6 +18,9 @@ import {
   R4_SCORE_ROWS,
   R4_SPANISH_PROBES,
   R4_SPANS,
+  R5_PROBES,
+  R5_RATIOS,
+  R5_RESTORE,
   SPANISH_SHEET,
   SPLIT_CLINICAL,
   SPLIT_SHEET,
@@ -155,4 +158,50 @@ test("review round 4: score rows whose numbers equal a short sheet value are sen
   // With a label the same numbers are the value.
   const labelled = new Deidentifier({ ...REVIEW_SHEET, client: { ...REVIEW_SHEET.client, dateOfBirth: "2014-03-19" } }, { today: REVIEW_TODAY }).deidentify("DOB | 3 | 19 | 14");
   assert.equal(labelled.text, "DOB | [DOB]");
+});
+
+test("review round 5: the full date of birth in any layout, the short forms by the client's name, birthday words and the house number never survive", (t) => {
+  const leaks: string[] = [];
+  const lost: string[] = [];
+  let strings = 0;
+  for (const probe of R5_PROBES) {
+    const engine = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY });
+    const result = engine.deidentify(probe.text);
+    for (const value of probe.hide) {
+      strings++;
+      if (survives(result.text, value)) leaks.push(`${probe.group}: ${JSON.stringify(probe.text)} -> ${JSON.stringify(result.text)} (${value})`);
+    }
+    for (const value of probe.keep ?? []) if (!result.text.includes(value)) lost.push(`${JSON.stringify(result.text)} lost ${value}`);
+    assert.deepEqual(reidentify(result.text, engine.map).unrestored, [], probe.text);
+  }
+  t.diagnostic(`${R5_PROBES.length} probes, ${strings} identifying strings, ${leaks.length} slipped through`);
+  assert.deepEqual({ leaks, lost }, { leaks: [], lost: [] });
+});
+
+test("review round 5: ratios stay as written whatever the birthday, and a session date is read month first", () => {
+  for (const text of R5_RATIOS) {
+    for (const dateOfBirth of ["2020-03-14", "2020-08-10", "2020-10-08", "2020-09-10", "2019-10-09"]) {
+      const sheet = { ...REVIEW_SHEET, client: { ...REVIEW_SHEET.client, dateOfBirth } };
+      assert.equal(new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(text).text, text, `${dateOfBirth}: ${text}`);
+    }
+  }
+  const sheet = { ...REVIEW_SHEET, client: { ...REVIEW_SHEET.client, dateOfBirth: "2019-02-10" } };
+  const engine = new Deidentifier(sheet, { today: REVIEW_TODAY });
+  // October 2 this year: a session date. February 10 this year: the birthday, hidden.
+  assert.equal(engine.deidentify("Interview date | 10/02/2026").text, "Interview date | 10/02/2026");
+  assert.notEqual(engine.deidentify("Party | 02/10/2026").text, "Party | 02/10/2026");
+  // A header is not a name.
+  assert.equal(engine.deidentify("Name | DOB | Sex").text, "Name | DOB | Sex");
+});
+
+test("review round 5: names in another case or without accents, and bracketed phones, come back exactly as written", () => {
+  for (const text of R5_RESTORE) {
+    const engine = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY });
+    const hidden = engine.deidentify(text);
+    assert.notEqual(hidden.text, text);
+    assert.doesNotMatch(hidden.text, /\[\[|\{\[/u, text);
+    const back = reidentify(hidden.text, engine.map);
+    assert.deepEqual(back.unrestored, [], text);
+    assert.equal(back.text, text);
+  }
 });

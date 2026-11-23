@@ -224,7 +224,8 @@ export function findPatterns(text: string): PatternMatch[] {
     }
     if (all.length === 0) continue;
     // Stop at a word that starts the next field ("DOB", "Age", an acronym) or a test or form name, and drop trailing particles.
-    let n = all.findIndex((w, i) => (i > 0 && (FIELD_WORDS.has(w.toLowerCase()) || /^\p{Lu}{2,5}$/u.test(w))) || FORM_WORDS.has(w.toLowerCase().replace(/[^\p{L}]/gu, "")));
+    // The first word too: "Name | DOB | Sex" is a header, not a name.
+    let n = all.findIndex((w, i) => FIELD_WORDS.has(w.toLowerCase().replace(/[^\p{L}]/gu, "")) || (i > 0 && /^\p{Lu}{2,5}$/u.test(w)) || FORM_WORDS.has(w.toLowerCase().replace(/[^\p{L}]/gu, "")));
     if (n === -1) n = all.length;
     const words = all.slice(0, n);
     while (words.length > 1 && /^(?:de|del|la|y)$/iu.test(words.at(-1)!)) words.pop();

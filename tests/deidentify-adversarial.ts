@@ -225,8 +225,8 @@ export const CLINICAL_ROUND2 = [
  * fullwidth name word comes back clean; a first name or a nickname as the preferred name, the owner's rule).
  */
 export const RESTORE_NAMES: Array<[string, string]> = [
-  // A first name restores as the preferred name (the owner's rule); a broken or misread word as written.
-  ["Lucia Fic-ticio and Valeria Ficticio Go-mez; Ｍａｔｅｏ; Luc1a; Mar-tí Elementary.", "Lucía Fic-ticio and Valeria Ficticio Go-mez; Mateo; Luc1a; Mar-tí Elementary."],
+  // A name without its accents, fullwidth, broken or misread: as written.
+  ["Lucia Fic-ticio and Valeria Ficticio Go-mez; Ｍａｔｅｏ; Luc1a; Mar-tí Elementary.", "Lucia Fic-ticio and Valeria Ficticio Go-mez; Ｍａｔｅｏ; Luc1a; Mar-tí Elementary."],
   ["Valeria Ficticio and Valeria Ficticio Gómez; Ficticio, Mateo; Mateo F.", "Valeria Ficticio and Valeria Ficticio Gómez; Ficticio, Mateo; Mateo F."],
 ];
 
@@ -324,4 +324,37 @@ export const R4_SCORE_ROWS: Array<[{ dateOfBirth?: string; address?: string }, s
   [{ address: "102 NW 5th St, Miami, FL 33128" }, "Receptive | 1 | 0 | 2 | 2 | 1 | 0"],
   [{ address: "102 NW 5th St, Miami, FL 33128" }, "Raw 1 0 2; score 1 0 2; Trials 1-0-2 and 1:0:2; Tact 1 | 0 | 2."],
   [{ address: "102 NW 5th St, Miami, FL 33128" }, "CPT 97151 x 1 0 2 units."],
+];
+
+// ---------------------------------------------------------------- review round 5
+
+/** Round 5's leaks on the main sheet: the four-digit-year DOB in any layout, short forms by the client's name, birthday words, the house number alone. */
+export const R5_PROBES: Probe[] = [
+  { group: "B1 DOB in any layout", text: "Client: Mateo Ficticio | 03 | 14 | 2020 | M | 6:8", hide: ["03 | 14 | 2020", "Mateo"], keep: ["| M | 6:8"] },
+  { group: "B1 DOB in any layout", text: "Date of Birth:\n------------\n3 | 14 | 2020", hide: ["3 | 14 | 2020"] },
+  { group: "B1 DOB in any layout", text: "Intake | 3 14 2020 | referral", hide: ["3 14 2020"] },
+  { group: "B1 DOB in any layout", text: "Mateo, 3 14 20, ABA.", hide: ["3 14 20"] },
+  { group: "B1 DOB in any layout", text: "Mateo b. 3 14 20.", hide: ["3 14 20"] },
+  { group: "B1 DOB in any layout", text: "Date of Birth\n\n_____\n3 14 20", hide: ["3 14 20"] },
+  { group: "B2 birthday words", text: "Bday 3 14", hide: ["3 14"] },
+  { group: "B2 birthday words", text: "cumple 14 3", hide: ["14 3"] },
+  { group: "B2 birthday words", text: "Birthday | 3 | 14 |", hide: ["3 | 14"] },
+  { group: "B2 birthday words", text: "Su cumpleaños es el 14 3.", hide: ["14 3"] },
+  { group: "H3 house number", text: "dirección 4471; house number 4471; lives at # 4471.", hide: ["4471"] },
+];
+
+/** H1: ratios equal to the birthday read either way stay as written. */
+export const R5_RATIOS: string[] = [
+  "Rates: 3 per hour, 1.5 per minute, 12 of 20 opportunities, 8/10, 9/10, 7/10, 6/10",
+  "Tact: 3/14 correct; Mand: 14/3 trials.",
+  "Accuracy 3/14 on the first probe.",
+  "Trials | 3/14 | 8/10 | 9/10",
+];
+
+/** H2: names in another case or without their accents restore exactly as written. */
+export const R5_RESTORE: string[] = [
+  "Lucia Fic-ticio, LUCÍA, lucía and Lucia came.",
+  "MATEO and mateo; VALERIA FICTICIO GÓMEZ and Valeria Ficticio Gomez.",
+  "Andres and ANDRES; ficticio gómez.",
+  "Call [305] 555 0142 or {305}5550142.",
 ];

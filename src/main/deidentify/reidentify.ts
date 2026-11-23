@@ -91,14 +91,16 @@ export function reidentify(input: string, map: RestoreMap): ReidentifyResult {
 
   // 1. Every bracketed stretch: a known placeholder is restored; one that looks like a placeholder is reported.
   for (const m of input.matchAll(BRACKETED)) {
-    const start = m.index;
-    const end = start + m[0].length;
+    // "[[PHONE 1]" is a bracket of the text before a placeholder, not a doubled bracket: only "[[...]]" and "{{...}}" are doubled.
+    const unpaired = (/^\[\[/u.test(m[0]) && !m[0].endsWith("]]")) || (/^\{\{/u.test(m[0]) && !m[0].endsWith("}}"));
+    const start = m.index + (unpaired ? 1 : 0);
+    const end = m.index + m[0].length;
     const inner = m[1].trim();
     const possessive = POSSESSIVE.exec(inner);
     const label = possessive ? inner.slice(0, possessive.index) : inner;
     const entry = byKey.get(labelKey(label));
     if (entry && (!possessive || PERSON_KINDS.has(entry.kind))) {
-      restore(start, end, entry.value + (possessive ? possessive[0].trim().toLowerCase() : ""), entry.placeholder, m[0] === entry.placeholder);
+      restore(start, end, entry.value + (possessive ? possessive[0].trim().toLowerCase() : ""), entry.placeholder, input.slice(start, end) === entry.placeholder);
       continue;
     }
     const markdownLink = input[end] === "(" && m[0].startsWith("[");

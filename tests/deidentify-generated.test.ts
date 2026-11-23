@@ -381,6 +381,9 @@ const SCORE_LINES: string[] = (() => {
     .flatMap((f) => readFileSync(new URL(f, dir), "utf8").split("\n"))
     .filter((l) => /\d/u.test(l) && !/\d{1,4}[/.-]\d{1,2}[/.-]\d{2,4}|birth|dob|phone|\d{5}/iu.test(l));
   const local = random(4749);
+  // Trial data and rates: ratios, never a birthday.
+  lines.push("Rates: 3 per hour, 1.5 per minute, 12 of 20 opportunities, 8/10, 9/10, 7/10, 6/10");
+  for (let r = 1; r <= 12; r++) lines.push(`Target ${r}: ${r}/10 correct, ${(r % 5) + 1}/5 independent; IOA ${r}/12`, `Accuracy ${r}/${r + 2} on probe`);
   for (let r = 0; r < 40; r++) {
     lines.push(`Item ${r + 1} | ${Array.from({ length: 12 }, () => String(Math.floor(local() * 3))).join(" | ")}`);
     lines.push(`Raw scores | ${Array.from({ length: 8 }, () => String(Math.floor(local() * 31))).join(" | ")}`);
@@ -427,4 +430,84 @@ test("generated: every 3-digit house number leaves the score lines unchanged", (
   }
   t.diagnostic(`900 house numbers x ${SCORE_LINES.length} score lines: ${changed.length} lines changed, ${reported} possible sheet values listed for review`);
   assert.deepEqual(changed.slice(0, 20), []);
+});
+
+// ---------------------------------------------------------------- review round 5: the date of birth in any layout, birthday words, the house number
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+test("generated: a date of birth with its four-digit year in any row or line, labelled or not, and its short forms by the client's name, never survive", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  const local = random(5659);
+  const forms4 = (y: number, m: number, d: number) => [`${m} ${d} ${y}`, `${pad2(m)} | ${pad2(d)} | ${y}`, `${y} ${m} ${d}`, `${d} | ${m} | ${y}`, `${pad2(m)}  ${pad2(d)}  ${y}`];
+  const rows4 = [(x: string) => `Client: Zed Qux | ${x} | M | 6:8`, (x: string) => `Intake | ${x} | referral`, (x: string) => `${x}`, (x: string) => `Notes ${x} reviewed`, (x: string) => `Date of Birth:\n------------\n${x}`];
+  const forms2 = (y: number, m: number, d: number) => [`${m} ${d} ${String(y).slice(2)}`, `${pad2(m)} | ${pad2(d)} | ${String(y).slice(2)}`];
+  const rows2 = [(x: string) => `Zed, ${x}, ABA.`, (x: string) => `Zed b. ${x}.`, (x: string) => `Qux | ${x} | M`, (x: string) => `Date of Birth\n\n_____\n${x}`, (x: string) => `born ${x}`];
+  for (let k = 0; k < 150; k++) {
+    const day = Date.UTC(2012, 0, 1) + Math.floor(local() * 4749) * 86_400_000;
+    const date = new Date(day);
+    const [y, m, d] = [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()];
+    const sheet = { client: { firstName: "Zed", lastName: "Qux", dateOfBirth: date.toISOString().slice(0, 10) } };
+    const cases = [...forms4(y, m, d).flatMap((x) => rows4.map((row) => [x, row(x)])), ...forms2(y, m, d).flatMap((x) => rows2.map((row) => [x, row(x)]))];
+    for (const [written, text] of cases) {
+      count++;
+      const result = new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(text);
+      if (result.text.includes(written)) failures.push(`${sheet.client.dateOfBirth}: ${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
+    }
+  }
+  t.diagnostic(`${count} dates of birth in rows and lines with or without a label, ${failures.length} survived`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test("generated: the birthday's month and day after a birthday word, with any separator, in both languages, never survive", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  const words = ["Bday", "B-day", "Birthday", "birthday:", "DOB", "Born", "cumple", "Cumpleaños:", "cumple el", "nacido el", "Fecha de nacimiento"];
+  const separators = [" ", "  ", " | ", "\t", "|"];
+  for (const word of words) {
+    for (const sep of separators) {
+      for (const [a, b] of [["3", "14"], ["03", "14"], ["14", "3"], ["14", "03"]]) {
+        const written = `${a}${sep}${b}`;
+        const text = `${word} ${written}`;
+        const { result } = hide(text);
+        count++;
+        if (result.text.includes(written)) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
+      }
+    }
+  }
+  t.diagnostic(`${count} birthday sentences with a space or a bar, ${failures.length} survived`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test("generated: the house number written whole after an address word never survives", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  for (const word of ["dirección", "Dirección:", "house number", "House #", "lives at", "lives at #", "Address:", "casa", "vive en el", "street number"]) {
+    for (const tail of ["", ".", ", near the park", " | apt 3"]) {
+      const text = `${word} 4471${tail}`;
+      const { result } = hide(text);
+      count++;
+      if (/4471/u.test(result.text)) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
+    }
+  }
+  t.diagnostic(`${count} house numbers after an address word, ${failures.length} survived`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test("generated: sheet names in every case and without accents come back exactly as written", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  const forms = (w: string) => [w, w.toLowerCase(), w.toUpperCase(), w.normalize("NFD").replace(/\p{M}/gu, ""), w.normalize("NFD").replace(/\p{M}/gu, "").toUpperCase()];
+  for (const name of ["Mateo", "Lucía", "Andrés", "Valeria", "Mateo Ficticio Gómez", "Lucía Ficticio", "Valeria Ficticio Gómez", "Ficticio Gómez", "Gómez", "Teo"]) {
+    for (const form of forms(name)) {
+      const text = `Seen with ${form} today.`;
+      const { result, engine } = hide(text);
+      count++;
+      const back = reidentify(result.text, engine.map).text;
+      if (back !== text && !(form === "Teo" && back === "Seen with Mateo today.")) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)} -> ${JSON.stringify(back)}`);
+    }
+  }
+  t.diagnostic(`${count} names in another case or without accents, ${failures.length} not restored exactly`);
+  assert.deepEqual(failures.slice(0, 20), []);
 });

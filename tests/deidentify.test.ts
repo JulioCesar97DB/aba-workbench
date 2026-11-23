@@ -105,8 +105,9 @@ function hide(text: string, sheet: ClientSheet = MATEO, options = {}): Deidentif
 test("names: every form of the client and a caregiver", () => {
   const cases: Array<[string, string]> = [
     ["Mateo bit her.", "[CLIENT] bit her."],
-    ["mateo bit her.", "[CLIENT] bit her."],
-    ["MATEO FICTICIO GÓMEZ", "[CLIENT FULL NAME]"],
+    // In another case or without its accents: its own number, restored exactly as written.
+    ["mateo bit her.", "[CLIENT FIRST NAME 1] bit her."],
+    ["MATEO FICTICIO GÓMEZ", "[CLIENT FULL NAME 1]"],
     ["Mateo's tablet", "[CLIENT]'s tablet"],
     ["Mateo\u{2019}s tablet", "[CLIENT]\u{2019}s tablet"],
     ["Teo cried", "[CLIENT] cried"],
@@ -117,7 +118,7 @@ test("names: every form of the client and a caregiver", () => {
     ["Mateo F. and M. Ficticio and M.F.", "[CLIENT FULL NAME 1] and [CLIENT FULL NAME 2] and [CLIENT INITIALS]"],
     // Written otherwise than the sheet ("Ficticio-Gómez" for "Ficticio Gómez"): its own number, restored as written.
     ["Mateo Ficticio-Gómez", "[CLIENT FULL NAME 1]"],
-    ["Lucia Ficticio and Lucía", "[CAREGIVER 1 FULL NAME] and [CAREGIVER 1]"],
+    ["Lucia Ficticio and Lucía", "[CAREGIVER 1 FULL NAME 1] and [CAREGIVER 1]"],
     // One of the client's two surnames: its own placeholder, so it restores exactly.
     ["Mrs. Ficticio said", "Mrs. [CLIENT LAST NAME 1] said"],
     ["Mrs. Ficticio Gómez said", "Mrs. [CLIENT LAST NAME] said"],
@@ -132,7 +133,7 @@ test("names: a name that is also a word, capitalized only by default, every case
   const sheet: ClientSheet = { client: { firstName: "Will", lastName: "Ashcombe" }, caregivers: [{ firstName: "Hope", lastName: "Ashcombe" }] };
   const text = "Will will need help. Hope has hope. Will Ashcombe, will ashcombe.";
   const byDefault = hide(text, sheet);
-  assert.equal(byDefault.text, "[CLIENT] will need help. [CAREGIVER 1] has hope. [CLIENT FULL NAME], [CLIENT FULL NAME].");
+  assert.equal(byDefault.text, "[CLIENT] will need help. [CAREGIVER 1] has hope. [CLIENT FULL NAME], [CLIENT FULL NAME 1].");
   assert.deepEqual(
     byDefault.possible.map((p) => [p.text, p.placeholder]),
     [
@@ -140,7 +141,7 @@ test("names: a name that is also a word, capitalized only by default, every case
       ["hope", "[CAREGIVER 1]"],
     ],
   );
-  assert.equal(hide(text, sheet, { commonWordNames: "always" }).text, "[CLIENT] [CLIENT] need help. [CAREGIVER 1] has [CAREGIVER 1]. [CLIENT FULL NAME], [CLIENT FULL NAME].");
+  assert.equal(hide(text, sheet, { commonWordNames: "always" }).text, "[CLIENT] [CLIENT FIRST NAME 1] need help. [CAREGIVER 1] has [CAREGIVER 1 FIRST NAME 1]. [CLIENT FULL NAME], [CLIENT FULL NAME 1].");
 });
 
 test("dates: the date of birth in every format, other dates by the date rule", () => {
@@ -222,7 +223,8 @@ test("one Deidentifier keeps the same placeholders across texts, in reading orde
 test("findings: kind, source, count and each way it was written", () => {
   const result = hide("Mateo and MATEO and Teo. DOB 08/03/2022. Call 305-555-0142.");
   assert.deepEqual(result.found, [
-    { placeholder: "[CLIENT]", kind: "client", source: "sheet", count: 3, originals: ["Mateo", "MATEO", "Teo"] },
+    { placeholder: "[CLIENT]", kind: "client", source: "sheet", count: 2, originals: ["Mateo", "Teo"] },
+    { placeholder: "[CLIENT FIRST NAME 1]", kind: "client", source: "sheet", count: 1, originals: ["MATEO"] },
     { placeholder: "[DOB]", kind: "dob", source: "sheet", count: 1, originals: ["08/03/2022"] },
     { placeholder: "[PHONE 1]", kind: "phone", source: "pattern", count: 1, originals: ["305-555-0142"] },
   ]);
