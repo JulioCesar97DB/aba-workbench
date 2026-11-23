@@ -114,7 +114,7 @@ export function reidentify(input: string, map: RestoreMap): ReidentifyResult {
     const flexible = (key: string) => key.split(" ").map(escape).join("[ \\t_\\-#]*");
     const known = entries.map(flexible).join("|");
     // A known label followed by a number or more label words ("CLIENT LAST NAME 2" when only [CLIENT LAST NAME] was sent) is another placeholder: never restored.
-    const NOT_MORE = "(?![ \\t_\\-#]*\\d)(?![ \\t_\\-]+(?:name|last|full|first|initials|month|day|year)\\b)";
+    const NOT_MORE = "(?![ \\t_\\-#]*\\d)(?![ \\t_\\-]+(?:name|last|full|first|initials|nickname|month|day|year)\\b)";
     const add = (start: number, end: number, label: string) => {
       const entry = byKey.get(labelKey(label));
       if (entry && free(start, end)) restore(start, end, entry.value, entry.placeholder, false);
@@ -127,7 +127,7 @@ export function reidentify(input: string, map: RestoreMap): ReidentifyResult {
     // 3. Parentheses, capitals only.
     for (const m of input.matchAll(new RegExp(`\\((${known})\\)`, "gu"))) add(m.index, m.index + m[0].length, m[1]);
     // A bare label followed by a number or more label words: reported.
-    for (const m of input.matchAll(new RegExp(`(?<![\\p{L}\\p{N}\\[])(?:${known})(?:[ \\t_\\-#]*\\d+|[ \\t_\\-]+(?:NAME|LAST|FULL|FIRST|INITIALS|MONTH|DAY|YEAR)\\b)(?![\\p{L}\\p{N}\\]])`, "gu"))) {
+    for (const m of input.matchAll(new RegExp(`(?<![\\p{L}\\p{N}\\[])(?:${known})(?:[ \\t_\\-#]*\\d+|[ \\t_\\-]+(?:NAME|LAST|FULL|FIRST|INITIALS|NICKNAME|MONTH|DAY|YEAR)\\b)(?![\\p{L}\\p{N}\\]])`, "gu"))) {
       const start = m.index;
       const end = start + m[0].length;
       const key = labelKey(m[0]);

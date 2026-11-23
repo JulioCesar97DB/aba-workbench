@@ -110,7 +110,8 @@ test("names: every form of the client and a caregiver", () => {
     ["MATEO FICTICIO GÓMEZ", "[CLIENT FULL NAME 1]"],
     ["Mateo's tablet", "[CLIENT]'s tablet"],
     ["Mateo\u{2019}s tablet", "[CLIENT]\u{2019}s tablet"],
-    ["Teo cried", "[CLIENT] cried"],
+    // A sheet nickname: its own placeholder, restored as written ([CLIENT] is the preferred name).
+    ["Teo cried", "[CLIENT NICKNAME] cried"],
     // A full name with fewer words than the sheet's ("Mateo Ficticio" for "Mateo Ficticio Gómez") has a numbered placeholder of its own.
     ["Mateo\nFicticio left", "[CLIENT FULL NAME 1] left"],
     ["Mateo Fic-\nticio left", "[CLIENT FULL NAME 1] left"],
@@ -149,11 +150,11 @@ test("dates: the date of birth in every format, other dates by the date rule", (
   const result = hide(text);
   assert.equal(
     result.text,
-    "DOB [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB]; born in [DOB MONTH AND YEAR], birthday [DOB MONTH AND DAY]. Seen 10/02/2026; CDE [DATE 1] and [DATE 2]; next visit 01/15/2027.",
+    "DOB [DOB], [DOB 2], [DOB 3], [DOB 4], [DOB 5], [DOB 6], [DOB 7], [DOB 8], [DOB 9], [DOB 10]; born in [DOB MONTH AND YEAR], birthday [DOB MONTH AND DAY]. Seen 10/02/2026; CDE [DATE 1] and [DATE 2]; next visit 01/15/2027.",
   );
   assert.equal(
     hide(text, MATEO, { dates: "all" }).text,
-    "DOB [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB], [DOB]; born in [DOB MONTH AND YEAR], birthday [DOB MONTH AND DAY]. Seen [DATE 1]; CDE [DATE 2] and [DATE 3]; next visit [DATE 4].",
+    "DOB [DOB], [DOB 2], [DOB 3], [DOB 4], [DOB 5], [DOB 6], [DOB 7], [DOB 8], [DOB 9], [DOB 10]; born in [DOB MONTH AND YEAR], birthday [DOB MONTH AND DAY]. Seen [DATE 1]; CDE [DATE 2] and [DATE 3]; next visit [DATE 4].",
   );
   // The other order of day and month, and what is not a date.
   assert.equal(hide("03/08/2022 (day first)").text, "[DOB] (day first)");
@@ -223,8 +224,9 @@ test("one Deidentifier keeps the same placeholders across texts, in reading orde
 test("findings: kind, source, count and each way it was written", () => {
   const result = hide("Mateo and MATEO and Teo. DOB 08/03/2022. Call 305-555-0142.");
   assert.deepEqual(result.found, [
-    { placeholder: "[CLIENT]", kind: "client", source: "sheet", count: 2, originals: ["Mateo", "Teo"] },
+    { placeholder: "[CLIENT]", kind: "client", source: "sheet", count: 1, originals: ["Mateo"] },
     { placeholder: "[CLIENT FIRST NAME 1]", kind: "client", source: "sheet", count: 1, originals: ["MATEO"] },
+    { placeholder: "[CLIENT NICKNAME]", kind: "client", source: "sheet", count: 1, originals: ["Teo"] },
     { placeholder: "[DOB]", kind: "dob", source: "sheet", count: 1, originals: ["08/03/2022"] },
     { placeholder: "[PHONE 1]", kind: "phone", source: "pattern", count: 1, originals: ["305-555-0142"] },
   ]);

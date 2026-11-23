@@ -42,8 +42,15 @@ export function numberedPlaceholder(kind: NumberedKind, n: number): string {
 export type BirthDateForm = "full" | "month-year" | "month-day" | "month" | "day";
 const BIRTH_LABELS: Record<BirthDateForm, string> = { full: "[DOB]", "month-year": "[DOB MONTH AND YEAR]", "month-day": "[DOB MONTH AND DAY]", month: "[DOB MONTH]", day: "[DOB DAY]" };
 
-export function birthDatePlaceholder(form: BirthDateForm): string {
-  return BIRTH_LABELS[form];
+/** [DOB] for the first written form, [DOB 2], [DOB 3] for the others: each restores exactly as it was written. */
+export function birthDatePlaceholder(form: BirthDateForm, n = 1): string {
+  return n === 1 ? BIRTH_LABELS[form] : BIRTH_LABELS[form].replace("]", ` ${n}]`);
+}
+
+/** A sheet nickname as written: [CLIENT NICKNAME], [CAREGIVER 1 NICKNAME]; numbered when the sheet lists several ([CLIENT NICKNAME 2]). */
+export function nicknamePlaceholder(group: PersonGroup, index: number, nickname: number, of: number): string {
+  const base = group === "client" ? GROUP_LABELS.client : `${GROUP_LABELS[group]} ${index + 1}`;
+  return `[${base} NICKNAME${of > 1 ? ` ${nickname + 1}` : ""}]`;
 }
 
 /** Every word a placeholder can start with: reidentify reports an unknown placeholder that starts with one. */

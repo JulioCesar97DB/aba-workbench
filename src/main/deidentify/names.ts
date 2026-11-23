@@ -408,7 +408,31 @@ export function findBrokenNames(folded: Folded, original: string, people: Person
         const uncertain = !/[-|\n]/u.test(m[0]) && pieces.length === 2 && pieces.every((p) => isEverydayWord(p));
         out.push({ person, role, surnamePart: role === "surname" ? surnamePart(person, word) : "", word, start: m.index, end: m.index + m[0].length, joined: true, spaced: true, uncertain });
       }
+      // Spelled out with the same mark between every pair of letters ("M.A.T.E.O.", "M_A_T_E_O", "M/A/T/E/O", "M · A · T · E · O").
+      const letters = [...word].map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const spelled = new RegExp(`(?<![\\p{L}\\p{N}])${letters[0]}([ \\t]*[^\\p{L}\\p{N}\\s][ \\t]*)${letters.slice(1).join("\\1")}(?:\\1)?(?![\\p{L}\\p{N}])`, "gu");
+      for (const m of folded.text.matchAll(spelled)) {
+        out.push({ person, role, surnamePart: role === "surname" ? surnamePart(person, word) : "", word, start: m.index, end: m.index + m[0].length, joined: true, spaced: true });
+      }
     }
+  }
+  out.push(...findElongatedNames(folded, people));
+  return out;
+}
+
+/**
+ * Name words of the sheet written with a letter held ("Mateooo", "MATEOOO!", "Mmmateo",
+ * "Lucíaaa"): every run of three or more of one letter read as one or two of it.
+ */
+function findElongatedNames(folded: Folded, people: Person[]): PartMatch[] {
+  const words = new Map<string, { person: Person; word: string; role: "given" | "surname" }>();
+  for (const person of people) for (const { word, role } of person.longWords) if (word.length >= 3 && !words.has(word)) words.set(word, { person, word, role });
+  const out: PartMatch[] = [];
+  if (words.size === 0) return out;
+  for (const m of folded.text.matchAll(/(?<![\p{L}\p{N}])\p{L}*(\p{L})\1\1\p{L}*(?![\p{L}\p{N}])/gu)) {
+    const hit = words.get(m[0].replace(/(\p{L})\1{2,}/gu, "$1")) ?? words.get(m[0].replace(/(\p{L})\1{2,}/gu, "$1$1"));
+    if (!hit) continue;
+    out.push({ person: hit.person, role: hit.role, surnamePart: hit.role === "surname" ? surnamePart(hit.person, hit.word) : "", word: hit.word, start: m.index, end: m.index + m[0].length, joined: true, spaced: true });
   }
   return out;
 }

@@ -276,7 +276,7 @@ export function findDates(folded: Folded, today: Date): DateMatch[] {
     let shortYear = false;
     // After: [sep] [the|el] DAY. Before: [the|el] DAY [of|de] [sep].
     const j = skip(month.last + 1, ["the", "el"]);
-    const after = j - month.last <= 3 ? dayAt(j) : null;
+    let after = j - month.last <= 3 ? dayAt(j) : null;
     let k = i - 1;
     while (k >= 0 && t[k].kind === "sep" && t[k].text !== ".") k--;
     if (k >= 0 && t[k].kind === "word" && (t[k].text === "of" || t[k].text === "de")) k--;
@@ -287,6 +287,12 @@ export function findDates(folded: Folded, today: Date): DateMatch[] {
       const y = skip(last + 1, ["of", "de", "del", "ano", "in", "en"]);
       return y - last <= 4 ? yearAt(y, short) : null;
     };
+    // "In March, 14 sessions were held": after a comma, a number that a word follows is a count, not the day ("March, 14th" and "March, 14 2020" are dates).
+    if (after && t.slice(month.last + 1, j).some((x) => x.kind === "sep" && x.text.includes(",")) && !yearAfter(after.last, false)) {
+      const next = t[after.last + 1];
+      const word = next && next.kind === "sep" && /^[ \t]+$/u.test(next.text) ? t[after.last + 2] : next?.kind === "word" ? next : undefined;
+      if (word && word.kind === "word" && !monthAt(after.last + 2)) after = null;
+    }
     // "5 Jan 24", "14-mar-20": with a day before the month, two digits after it are the year, unless a year follows them.
     const afterIsYear = before && after && after.last === j && t[j].text.length === 2 && /^\d+$/u.test(t[j].text) && !yearAfter(after.last, false);
     if (after && !afterIsYear && (!before || yearAfter(after.last, true))) {

@@ -19,6 +19,9 @@ import {
   R4_SPANISH_PROBES,
   R4_SPANS,
   R5_PROBES,
+  R6_CLINICAL,
+  R6_HOUSE_KEEP,
+  R6_PROBES,
   R5_RATIOS,
   R5_RESTORE,
   SPANISH_SHEET,
@@ -204,4 +207,44 @@ test("review round 5: names in another case or without accents, and bracketed ph
     assert.deepEqual(back.unrestored, [], text);
     assert.equal(back.text, text);
   }
+});
+
+test("review round 6: overlapping date-of-birth readings, spelled and held names and school short forms never survive, and every one restores exactly", (t) => {
+  const leaks: string[] = [];
+  let strings = 0;
+  for (const probe of R6_PROBES) {
+    const engine = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY });
+    const result = engine.deidentify(probe.text);
+    for (const value of probe.hide) {
+      strings++;
+      if (survives(result.text, value)) leaks.push(`${probe.group}: ${JSON.stringify(probe.text)} -> ${JSON.stringify(result.text)} (${value})`);
+    }
+    const back = reidentify(result.text, engine.map);
+    assert.deepEqual(back.unrestored, [], probe.text);
+    assert.equal(back.text, probe.text);
+  }
+  t.diagnostic(`${R6_PROBES.length} probes, ${strings} identifying strings, ${leaks.length} slipped through`);
+  assert.deepEqual(leaks, []);
+});
+
+test("review round 6: norms, sessions, trials, item codes and CPT units stay as written", () => {
+  for (const [dateOfBirth, line] of R6_CLINICAL) {
+    const sheet = { ...REVIEW_SHEET, client: { ...REVIEW_SHEET.client, dateOfBirth } };
+    assert.equal(new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(line).text, line, `${dateOfBirth}: ${line}`);
+  }
+  const house = { client: { firstName: "Zed", lastName: "Qux", dateOfBirth: "2019-11-05" }, addresses: ["102 NW 5th St, Miami, FL 33128"] };
+  for (const line of R6_HOUSE_KEEP) assert.equal(new Deidentifier(house, { today: REVIEW_TODAY }).deidentify(line).text, line, line);
+  for (const line of ["dirección 102", "house number 102", "lives at # 102", "Address: 102", "102 NW 5th"]) {
+    assert.doesNotMatch(new Deidentifier(house, { today: REVIEW_TODAY }).deidentify(line).text, /102/u, line);
+  }
+});
+
+test("review round 6: every placeholder restores exactly the text it replaced", () => {
+  const text = "Teo (Mateo) was born 3/14/2020; DOB March 14, 2020; cumple el 14 de marzo; Bday 3 14. TEO and MATEO.";
+  const engine = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY });
+  const hidden = engine.deidentify(text);
+  assert.equal(hidden.text, "[CLIENT NICKNAME] ([CLIENT]) was born [DOB]; DOB [DOB 2]; cumple el [DOB MONTH AND DAY]; Bday [DOB MONTH AND DAY 2]. [CLIENT FIRST NAME 1] and [CLIENT FIRST NAME 2].");
+  assert.equal(reidentify(hidden.text, engine.map).text, text);
+  // What the model writes comes back as each form was written.
+  assert.equal(reidentify("[CLIENT], called [CLIENT NICKNAME], born [DOB].", engine.map).text, "Mateo, called Teo, born 3/14/2020.");
 });

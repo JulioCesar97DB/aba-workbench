@@ -34,7 +34,7 @@ test("thread: the same result as in-process, preparing while it works, the event
     assert.ok(ticks > 3, `only ${ticks} ticks while the thread worked`);
     // One set of placeholders across texts.
     const second = await thread.deidentify("Teo called (305) 555-0142.");
-    assert.equal(second.text, "[CLIENT] called [PHONE 1].");
+    assert.equal(second.text, "[CLIENT NICKNAME] called [PHONE 1].");
   } finally {
     await thread.close();
   }

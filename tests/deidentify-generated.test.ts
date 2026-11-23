@@ -380,7 +380,16 @@ const SCORE_LINES: string[] = (() => {
   const lines = readdirSync(dir)
     .flatMap((f) => readFileSync(new URL(f, dir), "utf8").split("\n"))
     .filter((l) => /\d/u.test(l) && !/\d{1,4}[/.-]\d{1,2}[/.-]\d{2,4}|birth|dob|phone|\d{5}/iu.test(l));
+  // (the generated lines below are added after this filter)
   const local = random(4749);
+  // Round 6: sessions by month, norms by age and edition, trials by year, raw-score rows with a norm year, item codes, CPT units.
+  const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  MONTHS.forEach((month, k) => lines.push(`In ${month}, ${(k % 28) + 1} sessions were held; ${((k * 7) % 28) + 1} targets mastered.`));
+  for (let a = 1; a <= 12; a++) {
+    lines.push(`Norms for ages ${a}-${a + 3}, ${2012 + a} edition`, `Ages ${a}–${a + 11} (${2012 + a} norms)`, `Trials by year: ${a} ${a + 2} ${2012 + a} ${2013 + a}`);
+    lines.push(`Raw ${a} | ${a + 5} | ${2012 + a} norm table | ${a + 9}`, `Score table: ${a} | ${a + 13} | ${2011 + a} | norms`, `ABLLS-R item C${a} and G${a + 10}; Grade ${a}, ${a + 13} students, ${2012 + a} cohort`);
+    lines.push(`CPT 97153 x ${a} units; 97155 x ${a + 2} units`, `Session ${a}: ${a + 4} trials, ${a + 1} prompts, ${a + 2} independent`);
+  }
   // Trial data and rates: ratios, never a birthday.
   lines.push("Rates: 3 per hour, 1.5 per minute, 12 of 20 opportunities, 8/10, 9/10, 7/10, 6/10");
   for (let r = 1; r <= 12; r++) lines.push(`Target ${r}: ${r}/10 correct, ${(r % 5) + 1}/5 independent; IOA ${r}/12`, `Accuracy ${r}/${r + 2} on probe`);
@@ -419,6 +428,10 @@ test("generated: every 3-digit house number leaves the score lines unchanged", (
   const changed: string[] = [];
   let reported = 0;
   for (let n = 100; n <= 999; n++) {
+    // Counts and codes with the house number itself, round 6.
+    const own = [`Street-crossing program: ${n} trials.`, `Lives nearby; ${n} correct responses.`, `Casa: ${n} ensayos.`, `ABLLS-R item C${n}. Seen at clinic suite ${n}.`, `CPT 97153 x ${n} units.`];
+    const ownResult = new Deidentifier({ client: { firstName: "Zorvan", lastName: "Quillfeather" }, addresses: [`${n} NW 5th St, Miami, FL 33128`] }, { today: REVIEW_TODAY }).deidentify(own.join("\n"));
+    if (ownResult.text !== own.join("\n")) changed.push(`${n}: ${ownResult.text}`);
     const result = new Deidentifier({ client: { firstName: "Zorvan", lastName: "Quillfeather" }, addresses: [`${n} NW 5th St, Miami, FL 33128`] }, { today: REVIEW_TODAY }).deidentify(text);
     reported += result.possible.filter((p) => p.reason === "possible-sheet-value").length;
     if (result.text !== text) {
@@ -428,7 +441,7 @@ test("generated: every 3-digit house number leaves the score lines unchanged", (
       });
     }
   }
-  t.diagnostic(`900 house numbers x ${SCORE_LINES.length} score lines: ${changed.length} lines changed, ${reported} possible sheet values listed for review`);
+  t.diagnostic(`900 house numbers x (${SCORE_LINES.length} score lines + 5 lines of counts and codes with that number): ${changed.length} lines changed, ${reported} possible sheet values listed for review`);
   assert.deepEqual(changed.slice(0, 20), []);
 });
 
@@ -505,9 +518,75 @@ test("generated: sheet names in every case and without accents come back exactly
       const { result, engine } = hide(text);
       count++;
       const back = reidentify(result.text, engine.map).text;
-      if (back !== text && !(form === "Teo" && back === "Seen with Mateo today.")) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)} -> ${JSON.stringify(back)}`);
+      if (back !== text) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)} -> ${JSON.stringify(back)}`);
     }
   }
   t.diagnostic(`${count} names in another case or without accents, ${failures.length} not restored exactly`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+// ---------------------------------------------------------------- review round 6: repeated and adjacent dates of birth, spelled and held names, school short forms
+
+test("generated: the date of birth repeated, or next to its own month and day, in every layout, never leaves a fragment and restores exactly", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  const forms = ["03 14 2020", "3 14 2020", "03 | 14 | 2020", "3/14/2020", "2020 3 14", "03-14-2020", "March 14, 2020"];
+  const pairs = ["3 14", "03 | 14", "3/14", "14 3"];
+  const joins = [" ", " | ", "  ", ", ", "; ", "\n", " and "];
+  for (const a of forms) {
+    for (const join of joins) {
+      const cases = [`${a}${join}${a}`, ...forms.map((b) => `${a}${join}${b}`), ...pairs.map((p) => `${a}${join}${p}`), ...pairs.map((p) => `${p}${join}${a}`)];
+      for (const body of cases) {
+        for (const text of [body, `Date of birth | ${body}`, `Child | ${body} | M`]) {
+          const { result, engine } = hide(text);
+          count++;
+          const left = result.text.replace(PLACEHOLDER, " ");
+          if (/\b0?3\D{1,3}14\b|\b14\D{1,3}0?3\b|2020/u.test(left) || reidentify(result.text, engine.map).text !== text) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
+        }
+      }
+    }
+  }
+  t.diagnostic(`${count} repeated or adjacent dates of birth, ${failures.length} left a fragment or did not restore exactly`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test("generated: sheet names spelled with any mark between their letters, or with a letter held, never survive", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  const marks = [".", ". ", "-", "_", "/", " / ", "*", "·", " · ", "•", ":", "|", "~", "+", ","];
+  for (const name of ["Mateo", "MATEO", "Lucía", "Lucia", "Ficticio", "Valeria", "Andrés", "Daniela"]) {
+    for (const mark of marks) {
+      for (const tail of ["", mark.trim()]) {
+        const written = [...name].join(mark) + tail;
+        const { result } = hide(`He wrote ${written} today.`);
+        count++;
+        if (residue(result.text).includes(foldString(name))) failures.push(`${JSON.stringify(written)} -> ${JSON.stringify(result.text)}`);
+      }
+    }
+    for (let i = 0; i < name.length; i++) {
+      for (const times of [3, 5]) {
+        const written = name.slice(0, i) + name[i].repeat(times) + name.slice(i + 1);
+        const { result } = hide(`She called ${written}!`);
+        count++;
+        if (residue(result.text).includes(foldString(written).replace(/[^\p{L}]/gu, ""))) failures.push(`${JSON.stringify(written)} -> ${JSON.stringify(result.text)}`);
+      }
+    }
+  }
+  t.diagnostic(`${count} names spelled letter by letter or with a held letter, ${failures.length} survived`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test("generated: short forms of the sheet school before a school word never survive", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  for (const head of ["Marti", "Martí", "MARTI", "JM", "J.M.", "J. M.", "Jose Marti", "José Martí"]) {
+    for (const word of ["ES", "MS", "HS", "K-8", "K8", "Elem.", "Elementary", "School", "Academy", "Escuela"]) {
+      const written = `${head} ${word}`;
+      const { result } = hide(`Attends ${written} this year.`);
+      count++;
+      if (/marti|\bj\.? ?m\b/iu.test(foldString(result.text.replace(PLACEHOLDER, " ")))) failures.push(`${JSON.stringify(written)} -> ${JSON.stringify(result.text)}`);
+    }
+  }
+  t.diagnostic(`${count} school short forms, ${failures.length} survived`);
   assert.deepEqual(failures.slice(0, 20), []);
 });

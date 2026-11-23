@@ -205,7 +205,7 @@ export const RESTORE_COMPOUND: Array<[string, string, string]> = [
   // [the text, what the model writes, what must come back]
   ["Mª José y Ma. José; José dijo hola; Señora María (otra persona).", "", "Mª José y Ma. José; José dijo hola; Señora María (otra persona)."],
   ["la Fuente y De La Fuente; Delrío; del Río, María José; la familia del Río-de la Fuente.", "", "la Fuente y De La Fuente; Delrío; del Río, María José; la familia del Río-de la Fuente."],
-  ["cumple el 2/7. born July 2nd.", "Her birthday is [DOB MONTH AND DAY].", "Her birthday is July 2."],
+  ["cumple el 2/7. born July 2nd.", "Her birthday is [DOB MONTH AND DAY 2].", "Her birthday is July 2nd."],
 ];
 
 /** Clinical text with title words, labels and places that must come through as written (review round 2, H1 and H2). */
@@ -309,7 +309,7 @@ export const R4_SPANISH_PROBES: Probe[] = [
 
 /** H2: no span across a sentence end, labels stay, nothing re-split: [text, what is sent]. The date of birth restores as MM/DD/YYYY. */
 export const R4_SPANS: Array<[string, string, string]> = [
-  ["Born: 3 14 2020. 03 14 20.", "Born: [DOB]. [DOB].", "Born: 03/14/2020. 03/14/2020."],
+  ["Born: 3 14 2020. 03 14 20.", "Born: [DOB]. [DOB 2].", "Born: 3 14 2020. 03 14 20."],
   ["Birth month: March; birth day: 14; birth year: 2020.", "Birth month: [DOB MONTH]; birth day: [DOB DAY]; birth year: 2020.", "Birth month: March; birth day: 14; birth year: 2020."],
   ["In 2020. 03 14 kids came.", "In 2020. 03 14 kids came.", "In 2020. 03 14 kids came."],
 ];
@@ -358,3 +358,30 @@ export const R5_RESTORE: string[] = [
   "Andres and ANDRES; ficticio gómez.",
   "Call [305] 555 0142 or {305}5550142.",
 ];
+
+// ---------------------------------------------------------------- review round 6
+
+/** Round 6's leaks on the main sheet: overlapping date-of-birth readings, names spelled with dots or held letters, school short forms. */
+export const R6_PROBES: Probe[] = [
+  { group: "B1 overlapping readings", text: "Date of birth | 03 14 2020 | 03 14 2020", hide: ["03 14", "2020"] },
+  { group: "B1 overlapping readings", text: "3 14 2020 3 14", hide: ["3 14", "2020"] },
+  { group: "B1 overlapping readings", text: "3 14 | 03 14 2020", hide: ["3 14", "2020"] },
+  { group: "B1 overlapping readings", text: "DOB 3 14 2020 3 14 2020 and Child | 03 | 14 | 2020 | 03 | 14 | 2020", hide: ["3 14", "2020", "03 | 14"] },
+  { group: "B2 spelled names", text: "He wrote M.A.T.E.O. on the board, then M_A_T_E_O and L.U.C.I.A.", hide: ["M.A.T.E.O", "M_A_T_E_O", "L.U.C.I.A"] },
+  { group: "B2 spelled names", text: "She called 'Mateooo!' and MATEOOO! and Mmmateo.", hide: ["Mateooo", "MATEOOO", "Mmmateo"] },
+  { group: "B3 school short forms", text: "Attends Marti ES; transferred from JM Elementary; JM ES PTA; Martí MS next year.", hide: ["Marti ES", "JM Elementary", "JM ES", "Martí MS"] },
+];
+
+/** Round 6's over-hiding: clinical lines that must come through unchanged, with the birth date that used to change them. */
+export const R6_CLINICAL: Array<[string, string]> = [
+  ["2012-03-14", "In March, 14 sessions were held; in April, 12 sessions; by May, 10 targets mastered."],
+  ["2019-02-05", "Norms for ages 2-5, 2019 edition; ages 6-11, 2020 edition."],
+  ["2020-03-14", "Ages 3–14 (2020 norms)"],
+  ["2018-02-07", "Trials by year: 12 | 2 7 2018 2019"],
+  ["2019-11-05", "Raw 11 | 5 | 2019 norm table | 14"],
+  ["2020-03-14", "Score table: 3 | 14 | 2020 | norms"],
+  ["2020-03-14", "Grade 3, 14 students, 2020 cohort"],
+];
+
+/** Round 6's house-number over-hiding (house number 102): counts and codes stay; the house number after its own word is hidden. */
+export const R6_HOUSE_KEEP = ["Street-crossing program: 102 trials.", "Lives nearby; 102 correct responses.", "Casa: 102 ensayos.", "ABLLS-R item C102. Seen at clinic suite 102.", "CPT 97153 x 102 units."];

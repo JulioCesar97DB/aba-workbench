@@ -19,7 +19,7 @@ import { findDates, parseIsoDate, ymdKey, type YMD } from "./dates.ts";
 import { fold, foldString, originalRange, type Folded } from "./fold.ts";
 import { findBrokenNames, findJoinedNames, findNames, findOcrNames, peopleOf, type NameForm, type Person } from "./names.ts";
 import { ADDRESS_WORDS, findAgeDays, findPatterns, phoneKey, type PatternMatch } from "./patterns.ts";
-import { birthDatePlaceholder, numberedPlaceholder, personPlaceholder, type BirthDateForm, type NumberedKind } from "./placeholders.ts";
+import { birthDatePlaceholder, nicknamePlaceholder, numberedPlaceholder, personPlaceholder, type BirthDateForm, type NumberedKind } from "./placeholders.ts";
 import type { ClientSheet, FoundKind } from "./sheet.ts";
 import { findSequences, type SequenceValue } from "./sequences.ts";
 import { Spans } from "./spans.ts";
@@ -268,11 +268,12 @@ function parseAddress(address: string): SheetAddress {
       const body = `${streetWord(typeFirst)}${ADDRESS_SEPARATOR}${nameBody}`;
       // "15 Calle del Mar", "C/ del Mar", and the number after the street: "c. del Mar #15", "Calle del Mar no. 15".
       const numberAfter = number ? `(?:${ADDRESS_SEPARATOR}(?:#|no\\.?|num\\.?|numero)?${ADDRESS_SEPARATOR}${escape(number)})?` : "";
-      regexes.push(new RegExp(`${B}${number ? `(?:${escape(number)}${ADDRESS_SEPARATOR})?` : ""}${body}${numberAfter}${tail}${E}`, "gu"));
+      regexes.push(new RegExp(`${B}${number ? `(?:${escape(number)}(?![\\p{N}])${ADDRESS_SEPARATOR})?` : ""}${body}${numberAfter}${tail}${E}`, "gu"));
     } else {
       const typePart = type ? `(?:${ADDRESS_SEPARATOR}${streetWord(type)})` : "";
       // With its number, the type may be left out ("4471 SW 12th"); without it, the type must be there ("SW 12th Terrace").
-      if (number) regexes.push(new RegExp(`${NUMBER_START}${escape(number)}${ADDRESS_SEPARATOR}${dirPart}${nameBody}${typePart}?${tail}${E}`, "gu"));
+      // The number ends before the street ("201 5th", never "2015").
+      if (number) regexes.push(new RegExp(`${NUMBER_START}${escape(number)}(?![\\p{N}])${ADDRESS_SEPARATOR}${dirPart}${nameBody}${typePart}?${tail}${E}`, "gu"));
       if (type) regexes.push(new RegExp(`${B}${dirPart}${nameBody}${typePart}${tail}${E}`, "gu"));
     }
   }
@@ -324,6 +325,43 @@ function ratioContext(text: string, start: number, end: number): boolean {
   return /(?:of|per|de|rate|rates|accuracy|score|ioa|trials?|ensayos?|aciertos|precisi[oó]n)[ \t]*[:=]?[ \t]*$/iu.test(text.slice(Math.max(0, start - 25), start));
 }
 
+/**
+ * Whether three numbers that read as the date of birth with its four-digit year belong to
+ * something else: an age range before a year ("ages 2-5, 2019 edition", "Ages 3–14 (2020
+ * norms)"), a list of numbers ("Trials by year: 3 14 2018 2019"), a score or norm word before
+ * or after them ("Raw 11 | 5 | 2019 norm table", "Score table: 3 | 14 | 2020 | norms"). Then
+ * they are hidden only in context, like the short forms. The birthday's own month and day
+ * after them ("3 14 2020 3 14") is no list.
+ */
+function numbersListContext(text: string, start: number, end: number, original: string, dob: YMD | null): boolean {
+  if (/^\d{1,2}[ \t]*[-\u{2013}\u{2014}][ \t]*\d{1,2}[ \t]*[,(]/u.test(original) || /[()[\]]/u.test(original)) return true;
+  const after = text.slice(end, end + 40);
+  const before = text.slice(Math.max(0, start - 40), start);
+  const pair = /^[ \t|,;]*(\d{1,2})[ \t|/.-]+(\d{1,2})(?!\d)/u.exec(after);
+  const birthday = pair && dob && ((+pair[1] === dob.month && +pair[2] === dob.day) || (+pair[2] === dob.month && +pair[1] === dob.day));
+  // Another reading of the date of birth right after ("03 14 2020 2020 3 14") is no list either.
+  const triple = /^[ \t|,;]*(\d{1,4})[ \t|/.-]+(\d{1,2})[ \t|/.-]+(\d{1,4})(?!\d)/u.exec(after);
+  const again = triple && dob && [[triple[1], triple[2], triple[3]], [triple[3], triple[1], triple[2]], [triple[3], triple[2], triple[1]]].some(([y, m, d]) => +y === dob.year && ((+m === dob.month && +d === dob.day) || (+d === dob.month && +m === dob.day)));
+  if (/^[ \t|,;]*\(?\d/u.test(after) && !birthday && !again) return true;
+  if (/^[ \t|,;)\]]*(?:norm|edition|ed\.|version|table|cohort|session|trial|item|student|point|score|standard|scaled|percentile|%|raw|ensayo|edici)/iu.test(after)) return true;
+  return /(?<![\p{L}])(?:ages?|edad(?:es)?|grades?|raw|scores?|tables?|norms?|items?|trials?|years?|percentiles?|standard|scaled|range|rango|puntuaci\p{L}*)(?![\p{L}])[^|\n\d]{0,12}[|:]?[ \t]*$/iu.test(before);
+}
+
+/** A house-number word right before a number ("dirección 4471", "house number 4471", "lives at # 4471"). */
+const HOUSE_BEFORE = /(?<![\p{L}])(?:address|addr\.?|direcci[oó]n|domicilio|house(?:[ \t]+(?:number|no\.?|#))?|casa|lives[ \t]+at|vive[ \t]+en(?:[ \t]+el)?|street[ \t]+number|n[uú]mero(?:[ \t]+de[ \t]+casa)?|calle)[ \t]*(?:[:#|]|no\.?|n[º°]\.?)?[ \t]*#?[ \t]*$/iu;
+/** A count noun right after a number: "102 trials", "102 correct responses", "102 ensayos". */
+const COUNT_AFTER = /^[ \t]*(?:%|x\b|trials?|responses?|correct|incorrect|ensayos?|times|minutes?|mins?|sessions?|items?|points?|opportunit\p{L}*|prompts?|units?|targets?|veces|respuestas|aciertos)/iu;
+/** A street direction or a street after a number: "4471 SW 12th", "102 NW 5th St", "4471 Main Street". */
+const STREET_AFTER = /^[ \t]+(?:(?:N|S|E|W|NE|NW|SE|SW|North|South|East|West)\.?(?=[ \t,]|$)|\S+[ \t]+(?:street|st|avenue|ave|av|terrace|terr|ter|road|rd|drive|dr|lane|ln|court|ct|boulevard|blvd|way|place|pl|circle|cir|highway|hwy|parkway|pkwy)\b\.?)/iu;
+
+/** Whether a house number written on its own is the house number: right after a house word or right before its street, never a count or part of a code. */
+function houseInContext(text: string, start: number, end: number): boolean {
+  if (/[\p{L}\p{N}]/u.test(text[start - 1] ?? "") || /[\p{L}\p{N}]/u.test(text[end] ?? "")) return false;
+  const after = text.slice(end, end + 40);
+  if (COUNT_AFTER.test(after)) return false;
+  return HOUSE_BEFORE.test(text.slice(Math.max(0, start - 40), start)) || STREET_AFTER.test(after);
+}
+
 /** A counting word right before a number: "Room 33135" is a room. */
 const COUNT_BEFORE = /(?<![\p{L}])(?:room|page|pages|total|code|item|items|score|scores|raw|trials?|session|cpt|claim|invoice|units?\s+of|count|n)[ \t]*[:=#]?[ \t]*$/iu;
 
@@ -373,13 +411,6 @@ function personKey(person: Person, form: NameForm): string {
   return `person:${person.priority}:${form}`;
 }
 
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-function canonicalDate({ year, month, day }: YMD): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(month)}/${pad(day ?? 1)}/${year}`;
-}
-
 interface Literal {
   regex: RegExp;
   kind: NumberedKind;
@@ -405,6 +436,8 @@ export class Deidentifier {
   readonly #literals: Literal[] = [];
   /** Sheet values read as a sequence of characters, whatever separates them. */
   readonly #sequences: SequenceValue[] = [];
+  /** How many written forms of each part of the date of birth have a placeholder. */
+  readonly #birthCounts = new Map<BirthDateForm, number>();
   /** The client's name words, folded: context for a short date of birth ("Mateo, 3 14 20"). */
   #clientNames: RegExp | null = null;
 
@@ -560,7 +593,7 @@ export class Deidentifier {
   /** How many numbered variants each person's forms have, for their numbers. */
   readonly #variantCounts = new Map<string, number>();
 
-  /** A base form: the sheet's first name (restored as the preferred name, the owner's rule), whole name, whole surname, initials. */
+  /** A base form: the sheet's preferred name (or first name), whole name, whole surname, initials. */
   #baseSlot(person: Person, form: NameForm): void {
     const key = personKey(person, form);
     if (this.#slots.has(key)) return;
@@ -590,13 +623,22 @@ export class Deidentifier {
     if (form === "initials") return true;
     const clean = (s: string | undefined) => (s ? s.normalize("NFC").trim().replace(/\s+/gu, " ") : undefined);
     const used = clean(original);
-    const { firstName, lastName, nicknames, preferredName } = person.sheet;
-    if (form === "first") return [firstName ?? preferredName, preferredName, ...(nicknames ?? [])].some((n) => n !== undefined && used === clean(n));
+    const { firstName, lastName, preferredName } = person.sheet;
+    // [CLIENT] is the preferred name the model writes in its own prose, restored as such: the base form is that name exactly.
+    if (form === "first") return used === clean(preferredName ?? firstName);
     if (form === "last") return used === clean(lastName);
     return used === clean([firstName ?? preferredName, lastName].filter(Boolean).join(" "));
   }
 
   #nameCandidate(person: Person, form: NameForm, start: number, end: number, original: string, _words: string[], asWritten: boolean): Candidate {
+    // A sheet nickname written exactly as the sheet writes it: [CLIENT NICKNAME], restored as written.
+    const nicknames = (person.sheet.nicknames ?? []).filter((n) => n.trim() !== person.sheet.preferredName?.trim());
+    const nickname = form === "first" && !asWritten ? nicknames.findIndex((n) => n.normalize("NFC").trim().replace(/\s+/gu, " ") === original.normalize("NFC").trim().replace(/\s+/gu, " ")) : -1;
+    if (nickname !== -1) {
+      const key = `person:${person.priority}:nickname:${nickname}`;
+      const value = nicknames[nickname].trim();
+      return { start, end, key, kind: person.group, source: "sheet", rank: 0, create: () => this.#slots.has(key) || this.#slots.set(key, { placeholder: nicknamePlaceholder(person.group, person.index, nickname, nicknames.length), value, kind: person.group }) };
+    }
     if (!asWritten && this.#isBase(person, form, original)) {
       return { start, end, key: personKey(person, form), kind: person.group, source: "sheet", rank: 0, create: () => this.#baseSlot(person, form) };
     }
@@ -616,23 +658,80 @@ export class Deidentifier {
     }
   }
 
+  /**
+   * Short forms of a sheet school: a distinctive word or the distinctive words' initials before
+   * a school word ("Marti ES", "Martí MS", "JM Elementary", "J.M. Elem.", "SJB Escuela"). "ES",
+   * "MS", "HS" and the initials count in capitals only ("Martí es" is Spanish for "Martí is").
+   */
+  #schoolShortForms(text: string, folded: Folded, candidates: Candidate[]): void {
+    const schools = this.#sheet.schools ?? [];
+    if (schools.length === 0) return;
+    const after = "(?:es|ms|hs|k-?8|elem\\.?|elementary|middle|high|school|academy|esc\\.?|escuela|colegio|prep|charter)";
+    for (const school of schools) {
+      const core = tokensOf(school).filter((t) => !SCHOOL_GENERIC.has(t) && !ARTICLES.has(t));
+      if (core.length === 0) continue;
+      const initials = core.length >= 2 ? core.map((t) => `${t[0]}\\.?[ \\t]?`).join("") : "";
+      const words = core.filter((w) => w.length >= 4);
+      const heads = [...words, ...(initials ? [initials] : [])];
+      if (heads.length === 0) continue;
+      const regex = new RegExp(`(?<![\\p{L}\\p{N}])(${heads.join("|")})[ \\t]+(${after})(?![\\p{L}\\p{N}])`, "gdu");
+      for (const m of folded.text.matchAll(regex)) {
+        if (!m.indices) continue;
+        const [start, end] = originalRange(folded, m.index, m.index + m[0].length);
+        const [hs, he] = originalRange(folded, m.indices[1][0], m.indices[1][1]);
+        const [gs, ge] = originalRange(folded, m.indices[2][0], m.indices[2][1]);
+        const head = text.slice(hs, he);
+        const generic = text.slice(gs, ge);
+        const isInitials = !words.includes(m[1]);
+        if (isInitials && head.replace(/[^\p{L}]/gu, "") !== head.replace(/[^\p{L}]/gu, "").toUpperCase()) continue;
+        if (!isInitials && !/^\p{Lu}/u.test(head)) continue;
+        if (/^(?:es|ms|hs)$/iu.test(generic) && generic !== generic.toUpperCase()) continue;
+        const original = text.slice(start, end);
+        const key = valueKey("school", original);
+        candidates.push({ start, end, key, kind: "school", source: "sheet", rank: 1, create: () => this.#numberedSlot(key, "school", original) });
+      }
+    }
+  }
+
+  /**
+   * The birthday's month and day written right next to a date of birth ("3 14 2020 3 14",
+   * "3 14 | 03 14 2020"): hidden as [DOB MONTH AND DAY], whatever reading of the numbers wins.
+   */
+  #adjacentBirthdays(text: string, candidates: Candidate[]): void {
+    const dob = this.#dob;
+    if (!dob) return;
+    const isBirthday = (a: string, b: string) => (+a === dob.month && +b === dob.day) || (+b === dob.month && +a === dob.day);
+    const extra: Candidate[] = [];
+    for (const c of candidates) {
+      if (c.kind !== "dob" || !c.key.startsWith("dob:full:")) continue;
+      const after = /^(?:[ \t|,;]|\r?\n|(?<![\p{L}])(?:and|y|or|o|then|also)(?![\p{L}])){1,6}(\d{1,2})[ \t|/.-]{1,3}(\d{1,2})(?![\d/.-]*\d)/iu.exec(text.slice(c.end, c.end + 20));
+      if (after && isBirthday(after[1], after[2])) {
+        const start = c.end + after[0].indexOf(after[1]);
+        const end = c.end + after[0].length;
+        extra.push(this.#dobCandidate(start, end, "month-day", text.slice(start, end), 0));
+      }
+      const before = /(?<![\d/.-])(\d{1,2})[ \t|/.-]{1,3}(\d{1,2})(?:[ \t|,;]|\r?\n|(?<![\p{L}])(?:and|y|or|o|then|also)(?![\p{L}])){1,6}$/u.exec(text.slice(Math.max(0, c.start - 20), c.start));
+      if (before && isBirthday(before[1], before[2])) {
+        const start = c.start - before[0].length;
+        const end = start + before[0].length - (before[0].length - before[0].lastIndexOf(before[2]) - before[2].length);
+        extra.push(this.#dobCandidate(start, end, "month-day", text.slice(start, end), 0));
+      }
+    }
+    candidates.push(...extra);
+  }
+
+  /** The date of birth, or a part of it, as written: each written form its own placeholder, restored exactly as written. */
+  #dobCandidate(start: number, end: number, form: BirthDateForm, original: string, rank: number): Candidate {
+    const key = `dob:${form}:${original}`;
+    return { start, end, key, kind: "dob", source: "sheet", rank, create: () => this.#birthSlot(key, form, original) };
+  }
+
+  /** [DOB] for the first written form met, [DOB 2], [DOB 3] for the others ("03/14/2020", then "March 14, 2020"); the same for each part. */
   #birthSlot(key: string, form: BirthDateForm, original: string): void {
     if (this.#slots.has(key)) return;
-    // One canonical English form for each, as the report is written in English: never the first form met ("el 14 de marzo").
-    const dob = this.#dob;
-    const month = dob ? MONTH_NAMES[dob.month - 1] : "";
-    const value = !dob
-      ? original
-      : form === "full"
-        ? canonicalDate(dob)
-        : form === "month-year"
-          ? `${month} ${dob.year}`
-          : form === "month"
-            ? month
-            : form === "day"
-              ? String(dob.day)
-              : `${month} ${dob.day}`;
-    this.#slots.set(key, { placeholder: birthDatePlaceholder(form), value, kind: "dob" });
+    const n = (this.#birthCounts.get(form) ?? 0) + 1;
+    this.#birthCounts.set(form, n);
+    this.#slots.set(key, { placeholder: birthDatePlaceholder(form, n), value: original, kind: "dob" });
   }
 
   deidentify(input: string): DeidentifyResult {
@@ -710,14 +809,17 @@ export class Deidentifier {
       // A value that can occur by chance in a score row: hidden in a date's or a label's context only, otherwise listed for review.
       // A whole ZIP code after a counting word ("Room 33135", "Total 33135") is that count; anywhere else it is the ZIP.
       const counted = (match.tag === "zip" || match.tag === "house") && match.whole && !plus4 && COUNT_BEFORE.test(text.slice(Math.max(0, start - 20), start));
-      if (counted || (needsContext(match) && !shortInContext(text, start, end, { dateLike: match.tag === "dob" && match.dateLike }, this.#clientNames))) {
+      const house = match.tag === "house" || (match.tag === "address" && match.short);
+      const listed = match.tag === "dob" && !match.dateLike && numbersListContext(text, start, end, original, this.#dob);
+      const inContext = house ? houseInContext(text, start, end) : shortInContext(text, start, end, { dateLike: match.tag === "dob" && match.dateLike }, this.#clientNames);
+      if (counted || ((needsContext(match) || listed) && !inContext)) {
         if (reportedValue.subarray(start, end).some((v) => v === 1)) continue;
         reportedValue.fill(1, start, end);
         possible.push({ text: original, start, end, reason: "possible-sheet-value", placeholder: match.tag === "dob" ? "[DOB]" : numberedPlaceholder("address", (this.#counters.get("address") ?? 0) + 1), kind: match.tag === "dob" ? "dob" : "address", hidden: false });
         continue;
       }
       if (match.tag === "dob") {
-        candidates.push({ start, end, key: "dob:full", kind: "dob", source: "sheet", rank: 1, create: () => this.#birthSlot("dob:full", "full", original) });
+        candidates.push(this.#dobCandidate(start, end, "full", original, 1));
         continue;
       }
       const kind = (match.tag === "zip" || match.tag === "house" ? "address" : match.tag) as NumberedKind;
@@ -730,7 +832,9 @@ export class Deidentifier {
       candidates.push({ start, end, key: "", kind: "date", source: "pattern", rank: -1, create: () => {}, drop: true });
     }
 
-    const accepted = resolve(text, candidates);
+    this.#schoolShortForms(text, folded, candidates);
+    this.#adjacentBirthdays(text, candidates);
+    const accepted = resolve(text, pickDates(candidates));
 
     let out = "";
     let at = 0;
@@ -811,7 +915,7 @@ export class Deidentifier {
       for (const m of folded.text.matchAll(dayOfYear)) {
         const [start, end] = originalRange(folded, m.index, m.index + m[0].length);
         const original = text.slice(start, end);
-        candidates.push({ start, end, key: "dob:full", kind: "dob", source: "sheet", rank: 0, create: () => this.#birthSlot("dob:full", "full", original) });
+        candidates.push(this.#dobCandidate(start, end, "full", original, 0));
       }
       // The month and day after a birthday word, with a space or a bar between them: "Bday 3 14", "cumple 14 3", "DOB | 3 | 14".
       const birthdayPair = /(?<![\p{L}])(?:dob|d\.o\.b\.?|b-?day|birthday|birthdate|born|b\.|cumple\p{L}*|nacid[oa]|nacimiento|f\.?\s?nac\.?)(?![\p{L}])[^.;!?\n\d]{0,25}?(?<!\d)(\d{1,2})(?:[ \t]+|[ \t]*\|[ \t]*)(\d{1,2})(?!\d)(?![ \t]*[|/.\-,]?[ \t]*\d)/dgu;
@@ -820,7 +924,7 @@ export class Deidentifier {
         if (!((a === dob.month && b === dob.day) || (b === dob.month && a === dob.day)) || !m.indices) continue;
         const [start, end] = originalRange(folded, m.indices[1][0], m.indices[2][1]);
         const original = text.slice(start, end);
-        candidates.push({ start, end, key: "dob:month-day", kind: "dob", source: "sheet", rank: 0, create: () => this.#birthSlot("dob:month-day", "month-day", original) });
+        candidates.push(this.#dobCandidate(start, end, "month-day", original, 0));
       }
     }
     const yearAgo = new Date(this.#today);
@@ -849,7 +953,7 @@ export class Deidentifier {
       if (date.loose && !isBirthDate && !date.labelled) continue;
       // Three numbers apart only by spaces or bars that read as the date of birth: in a label's context only ("DOB 03 14 2020"), never in a
       // score row ("Raw scores | 21 | 7 | 19 | 3 | 14 | 20"), where it is listed for review.
-      if (date.loose && isBirthDate && !/\d{4}/u.test(original) && !shortInContext(text, start, end, { dateLike: false }, this.#clientNames)) {
+      if (date.loose && isBirthDate && (!/\d{4}/u.test(original) || numbersListContext(text, start, end, original, dob)) && !shortInContext(text, start, end, { dateLike: false }, this.#clientNames)) {
         possible.push({ text: original, start, end, reason: "possible-sheet-value", placeholder: "[DOB]", kind: "dob", hidden: false });
         continue;
       }
@@ -859,7 +963,7 @@ export class Deidentifier {
         for (const [[a, b], form] of parts) {
           const [s, e] = originalRange(folded, a, b);
           const written = text.slice(s, e);
-          if (isBirthDate) candidates.push({ start: s, end: e, key: `dob:${form}`, kind: "dob", source: "sheet", rank: 0, create: () => this.#birthSlot(`dob:${form}`, form, written) });
+          if (isBirthDate) candidates.push(this.#dobCandidate(s, e, form, written, 0));
           else {
             const key = `date:${ymdKey(date.readings[0])}:${form}:${written}`;
             candidates.push({ start: s, end: e, key, kind: "date", source: "pattern", rank: 2, create: () => this.#numberedSlot(key, "date", written) });
@@ -870,8 +974,7 @@ export class Deidentifier {
       // "CA = 6-08-08" after an age label is an age (its days are dropped), not a date, unless it is the date of birth.
       if (!isBirthDate && AGE_BEFORE.test(text.slice(Math.max(0, start - 40), start))) continue;
       if (isBirthDate) {
-        const key = `dob:${date.precision}`;
-        candidates.push({ start, end, key, kind: "dob", source: "sheet", rank: 0, create: () => this.#birthSlot(key, date.precision, original) });
+        candidates.push(this.#dobCandidate(start, end, date.precision, original, 0));
         continue;
       }
       if (date.precision !== "full") continue;
@@ -944,6 +1047,30 @@ function resolve(text: string, candidates: Candidate[]): Spans<Candidate> {
     }
   }
   return accepted;
+}
+
+/**
+ * Overlapping readings of dates, the date of birth included, are settled left to right: the
+ * reading that starts first wins (at the same start, the longer one; one that holds the
+ * other whole wins over it), and the others are dropped, never cut into pieces. So
+ * "03 14 2020 | 03 14 2020" is two dates of birth, never "03 14 [DOB] 2020" through the
+ * year-first reading "2020 | 03 14" that straddles them.
+ */
+function pickDates(candidates: Candidate[]): Candidate[] {
+  const dates = candidates.filter((c) => c.kind === "dob" || c.kind === "date").sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start) || a.rank - b.rank);
+  const lost = new Set<Candidate>();
+  let last: Candidate | null = null;
+  for (const c of dates) {
+    if (last === null || c.start >= last.end) {
+      last = c;
+      continue;
+    }
+    if (c.start <= last.start && c.end >= last.end && c.end - c.start > last.end - last.start) {
+      lost.add(last);
+      last = c;
+    } else lost.add(c);
+  }
+  return lost.size ? candidates.filter((c) => !lost.has(c)) : candidates;
 }
 
 /** De-identifies one text. For several texts of one request, use one Deidentifier. */
