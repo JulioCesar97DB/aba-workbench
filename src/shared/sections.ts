@@ -44,8 +44,8 @@ export interface SectionVersion {
   provider: "anthropic" | "openai" | "mock" | null;
   /** What it cost in USD, when the price is known (null with ChatGPT sign-in, which spends the plan). */
   costUsd: number | null;
-  /** The sources it was written from, by title. */
-  sourcesUsed: string[];
+  /** The sources it was written from: their ids, and their titles as the model saw them. */
+  sourcesUsed: Array<{ id: string; title: string }>;
   /** For an AI version: whether it contradicts her sections, checked by the AI right after it was written. */
   consistency: ConsistencyResult | null;
   text: string;

@@ -101,7 +101,7 @@ function versionView(version: StoredVersion): SectionVersion {
     model: generation?.servedModel ?? null,
     provider: provider === "anthropic" || provider === "openai" || provider === "mock" ? provider : null,
     costUsd: generation?.costUsd ?? null,
-    sourcesUsed: generation?.sourcesUsed.map((source) => source.title) ?? [],
+    sourcesUsed: generation?.sourcesUsed.map(({ id, title }) => ({ id, title })) ?? [],
     consistency: version.consistency ? consistencyView(version.consistency) : null,
     text: version.text,
   };

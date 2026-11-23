@@ -594,8 +594,8 @@ function SectionView({
                     }
                   }}
                   className={cn(
-                    "-mx-2.5 cursor-pointer rounded-md border border-transparent px-2.5 py-1.5 whitespace-pre-line hover:bg-surface-muted",
-                    marked === index && "border-accent bg-mark hover:bg-mark",
+                    "-mx-2.5 cursor-pointer rounded-md border px-2.5 py-1.5 whitespace-pre-line",
+                    marked === index ? "border-accent bg-mark" : "border-transparent hover:bg-surface-muted",
                   )}
                 >
                   <Highlighted text={paragraph} />
@@ -747,7 +747,7 @@ function SectionRail({ section, detail, current, checking }: { section: ReportSe
     save: async (text) => (await window.aba.saveSectionInstructions(section.id, text)).outcome === "saved",
   });
   const caseSources = opened.sources.sources.filter((source) => !source.removedAt);
-  const usedTitles = current && current.sourcesUsed.length > 0 ? current.sourcesUsed : null;
+  const used = current && current.sourcesUsed.length > 0 ? current.sourcesUsed : null;
   return (
     <>
       <section aria-labelledby={instructionsId} className="flex flex-col gap-1.5">
@@ -778,14 +778,18 @@ function SectionRail({ section, detail, current, checking }: { section: ReportSe
         <Eyebrow id={sourcesId} className="text-fg-muted">
           {t("section.sourcesUsedHeading")}
         </Eyebrow>
-        {usedTitles ? (
+        {used ? (
           <ul className="flex flex-col gap-1 text-sm">
-            {usedTitles.map((title, index) => (
-              <li key={index} className="flex gap-1.5 break-words">
-                <span aria-hidden="true">☑</span>
-                <span lang="en">{title}</span>
-              </li>
-            ))}
+            {used.map((entry) => {
+              // Named as the Sources step names it; a source changed or gone since keeps the name it was sent with.
+              const source = opened.sources.sources.find((candidate) => candidate.id === entry.id);
+              return (
+                <li key={entry.id} className="flex gap-1.5 break-words">
+                  <span aria-hidden="true">☑</span>
+                  {source ? <span lang={sourceNameLang(source)}>{sourceName(t, source)}</span> : <span lang="en">{entry.title}</span>}
+                </li>
+              );
+            })}
           </ul>
         ) : caseSources.length > 0 ? (
           <ul className="flex flex-col gap-1 text-sm">

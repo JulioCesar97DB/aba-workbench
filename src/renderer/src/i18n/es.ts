@@ -41,7 +41,6 @@ export const es: Messages = {
   },
   status: {
     notStarted: "Sin empezar",
-    notRun: "No realizada",
   },
   steps: {
     sources: "Fuentes",
@@ -140,7 +139,7 @@ export const es: Messages = {
     placeholderBadge: "En preparación",
     behaviorsBody: "Aquí anotarás los <term>Behaviors</term> objetivo del cliente, sacados de las fuentes, y confirmarás cada uno antes de redactar el informe.",
     interventionsBody: "Aquí elegirás las <term>Interventions</term> para cada conducta y habilidad objetivo, que luego describe el informe.",
-    reportBody: "El informe se redacta sección por sección, en inglés, a partir de las fuentes del caso y de las reglas de redacción. Elige una sección para ver dónde irá su borrador.",
+    reportBody: "El informe se escribe sección por sección, en inglés. Empieza cada sección pegando lo que ya escribiste en ABA Matrix o redactándola con la IA a partir de las fuentes del caso.",
     reportSectionColumn: "Sección",
     reportStatusColumn: "Estado",
     reportNumberColumn: "Número",
@@ -240,11 +239,8 @@ export const es: Messages = {
     noSources: "Todavía no hay fuentes.",
     filesHeading: "PDF en la carpeta del caso",
     noFiles: "Todavía ninguno. Los PDF que pongas en la carpeta del caso aparecen aquí.",
-    checks: "Comprobaciones",
-    checkStructure: "Estructura de la sección",
-    checkMissing: "Datos faltantes",
-    checkContradictions: "Contradicciones",
-  },  /** The report's sections: the section screen, its versions, its rail and the sidebar's states. */
+  },
+  /** The report's sections: the section screen, its versions, its rail and the sidebar's states. */
   section: {
     stateHers: "Tuya",
     stateDraft: "v{{number}}",
@@ -344,6 +340,15 @@ export const es: Messages = {
   },
 
   settings: {
+    modelsHeading: "Modelo de IA",
+    modelsBody: "El modelo con el que escribe cada IA. Se usa el más capaz salvo que elijas el otro, que cuesta más o menos la mitad por borrador.",
+    modelClaude: "Claude",
+    modelChatgpt: "ChatGPT",
+    modelMostCapable: "{{model}} (el más capaz)",
+    modelLowerCost: "{{model}} (más o menos la mitad del costo)",
+    modelSaved: "Guardado. La próxima petición lo usa.",
+    modelNotSaved: "No se pudo guardar el modelo. Inténtalo de nuevo.",
+    modelsReadFailed: "No se pudieron leer los ajustes de IA.",
     title: "Ajustes",
     languageHeading: "Idioma de la pantalla",
     languageLabel: "Idioma",

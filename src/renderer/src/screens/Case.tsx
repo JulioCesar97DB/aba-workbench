@@ -127,15 +127,13 @@ export function ReportScreen() {
   );
 }
 
-/** The right rail: the case's sources, the PDFs in its folder, and the checks run on a draft. */
+/** The right rail: the case's sources and the PDFs in its folder. Each section's checks are on its own screen. */
 export function CaseRail() {
   const { t } = useTranslation();
   const { files, sources } = useOpenedCase();
   const active = sources.sources.filter((source) => !source.removedAt);
   const sourcesId = useId();
   const filesId = useId();
-  const checksId = useId();
-  const checks = [t("rail.checkStructure"), t("rail.checkMissing"), t("rail.checkContradictions")];
   return (
     <>
       <section aria-labelledby={sourcesId} className="flex flex-col gap-1.5">
@@ -169,23 +167,6 @@ export function CaseRail() {
         ) : (
           <p className="text-sm text-fg-muted">{t("rail.noFiles")}</p>
         )}
-      </section>
-      <section aria-labelledby={checksId} className="flex flex-col gap-1.5">
-        <Eyebrow id={checksId} className="text-fg-muted">
-          {t("rail.checks")}
-        </Eyebrow>
-        <Table>
-          <TableBody>
-            {checks.map((check) => (
-              <TableRow key={check}>
-                <TableRowHeader>{check}</TableRowHeader>
-                <TableCell className="text-right">
-                  <StatusBadge>{t("status.notRun")}</StatusBadge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
       </section>
     </>
   );

@@ -46,7 +46,6 @@ export const en = {
   },
   status: {
     notStarted: "Not started",
-    notRun: "Not run",
   },
   steps: {
     sources: "Sources",
@@ -148,7 +147,7 @@ export const en = {
     placeholderBadge: "Not built yet",
     behaviorsBody: "Here you will list the client's target <term>Behaviors</term>, taken from the sources, and confirm each one before the report is drafted.",
     interventionsBody: "Here you will choose the <term>Interventions</term> for each target behavior and skill, which the report then describes.",
-    reportBody: "The report is drafted one section at a time, in English, from the case's sources and the writing rules. Choose a section to see where its draft will go.",
+    reportBody: "The report is written one section at a time, in English. Start each section by pasting what you already wrote in ABA Matrix or by drafting it with the AI from the case's sources.",
     reportSectionColumn: "Section",
     reportStatusColumn: "Status",
     reportNumberColumn: "Number",
@@ -250,11 +249,8 @@ export const en = {
     noSources: "No sources yet.",
     filesHeading: "PDFs in the case's folder",
     noFiles: "None yet. PDFs you put in the case's folder show here.",
-    checks: "Checks",
-    checkStructure: "Section structure",
-    checkMissing: "Missing data",
-    checkContradictions: "Contradictions",
-  },  /** The report's sections: the section screen, its versions, its rail and the sidebar's states. */
+  },
+  /** The report's sections: the section screen, its versions, its rail and the sidebar's states. */
   section: {
     stateHers: "Yours",
     stateDraft: "v{{number}}",
@@ -354,6 +350,15 @@ export const en = {
   },
 
   settings: {
+    modelsHeading: "AI model",
+    modelsBody: "The model each AI writes with. The most capable one is used unless you choose the other, which costs about half as much per draft.",
+    modelClaude: "Claude",
+    modelChatgpt: "ChatGPT",
+    modelMostCapable: "{{model}} (most capable)",
+    modelLowerCost: "{{model}} (about half the cost)",
+    modelSaved: "Saved. The next request uses it.",
+    modelNotSaved: "The model could not be saved. Try again.",
+    modelsReadFailed: "The AI settings could not be read.",
     title: "Settings",
     languageHeading: "Screen language",
     languageLabel: "Language",

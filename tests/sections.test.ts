@@ -118,7 +118,7 @@ test("a draft streams in and becomes a version with what made it; nothing to com
   assert.equal(version.kind, "draft");
   assert.equal(version.model, "claude-fable-5-2", "the most capable model by default");
   assert.ok(version.costUsd !== null && version.costUsd > 0, "the real cost is recorded");
-  assert.deepEqual(version.sourcesUsed, ["CDE"]);
+  assert.deepEqual(version.sourcesUsed.map((source) => source.title), ["CDE"]);
   const checked = events.at(-1);
   assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
   assert.deepEqual(checked.result.section.versions[0].consistency, { status: "nothing-to-compare", items: [] });
