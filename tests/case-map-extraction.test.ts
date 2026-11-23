@@ -757,3 +757,38 @@ test("R3-M2: the note of an empty value names its item in words, never by a code
   assert.ok(texts.includes("Spitting on the floor: no threshold for the end of an episode was given"), texts.join(" | "));
   assert.ok(!texts.some((text) => /behaviors\[|\.offset/.test(text)));
 });
+
+/* Review check of 039ce31 */
+
+test("R4-M1: a repair that returns only the fixed observation keeps the observations that passed", () => {
+  const found = { obs: "o", interview: "i" };
+  const counts = "11/05/2026, home, 2 hours. 11/06/2026, home, 2 hours. Spitting counts: 3 on 11/04, 1 on 11/05, 2 on 11/06.";
+  const context = checkContext({ sources: [...checkContext().sources, { id: "q", title: "More observations", text: counts }] });
+  const observation = (date: string, value: string, quote: string) => ({ date: claim(date, [ref("q", `${date}, home, 2 hours`)]), setting: claim("Home", [ref("q", `${date}, home, 2 hours`)]), length: claim("2 hours", [ref("q", `${date}, home, 2 hours`)]), value: claim(value, [ref("q", quote)]) });
+  const withObservations = (observations: unknown[]) => {
+    const answer = behaviorsAnswer(found, []);
+    const behavior = (answer.behaviors as Array<{ baseline: { observations: unknown[] } }>)[0];
+    behavior.baseline.observations = observations;
+    return answer;
+  };
+  const fixture = (behaviorsAnswer(found, []).behaviors as Array<{ baseline: { observations: unknown[] } }>)[0].baseline.observations[0];
+  // The probe: 11/04=3, 11/05=9 and 11/06=2; only the 11/05 value fails ("9" is not in its quote).
+  const a = parsedBehaviors(withObservations([fixture, observation("11/05/2026", "9", "1 on 11/05"), observation("11/06/2026", "2", "2 on 11/06")]));
+  const checks = checkMapAnswer("map-behaviors", a, context);
+  const failedValues = a.behaviors[0].baseline.observations.map((entry) => checks.failedClaims.has(entry.value!));
+  assert.deepEqual(failedValues, [false, true, false], checks.problems.join(" | "));
+  // The repair returns only the fixed 11/05 observation.
+  const repaired = parsedBehaviors(withObservations([observation("11/05/2026", "1", "1 on 11/05")]));
+  const merged = mergeRepair("map-behaviors", a, repaired, checks.failing, false, checks.failedClaims) as BehaviorsAnswer;
+  const rows = (answer: BehaviorsAnswer) => answer.behaviors[0].baseline.observations.map((entry) => `${entry.date?.value}=${entry.value?.value}`);
+  assert.deepEqual(rows(merged), ["11/04/2026=3", "11/05/2026=1", "11/06/2026=2"], "the counts that passed stay; the failed one is replaced in place");
+  assert.ok(!checkMapAnswer("map-behaviors", merged, context).problems.some((problem) => /observations/.test(problem)));
+  // A repair that leaves the failed observation out drops it, as the repair was asked to fix it; the passed ones stay.
+  const other = parsedBehaviors(withObservations([observation("11/06/2026", "2", "2 on 11/06")]));
+  assert.deepEqual(rows(mergeRepair("map-behaviors", a, other, checks.failing, false, checks.failedClaims) as BehaviorsAnswer), ["11/04/2026=3", "11/06/2026=2"]);
+  // A function's evidence is merged by tool and respondent the same way: the mother's interview stays next to a new entry.
+  const teacher = parsedBehaviors(behaviorsAnswer(found, []));
+  teacher.behaviors[0].function.evidence = [{ ...teacher.behaviors[0].function.evidence[0], respondent: "Teacher" }];
+  const evidence = (mergeRepair("map-behaviors", a, teacher, checks.failing, false, checks.failedClaims) as BehaviorsAnswer).behaviors[0].function.evidence;
+  assert.deepEqual(evidence.map((entry) => entry.respondent), ["Mother", "Teacher"]);
+});

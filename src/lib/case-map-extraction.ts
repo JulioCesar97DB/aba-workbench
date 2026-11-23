@@ -651,6 +651,8 @@ function emptyClient(): Record<string, unknown> {
 }
 
 const isPlain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+/** A claim: a string value with its refs. An observation also has a field named value, which is a claim, so the shape decides. */
+const isClaim = (value: unknown): value is AnswerClaim => isPlain(value) && typeof value.value === "string" && Array.isArray(value.refs);
 const emptyValue = (value: unknown) => value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
 
 /**
@@ -661,18 +663,68 @@ const emptyValue = (value: unknown) => value === null || value === undefined || 
  * merged field by field too.
  */
 export function mergeFields<T>(first: T, repaired: T, failed: ReadonlySet<unknown> = new Set()): T {
-  if (!isPlain(first) || !isPlain(repaired) || "value" in repaired) return emptyValue(repaired) ? first : repaired;
+  if (!isPlain(first) || !isPlain(repaired) || isClaim(repaired)) return emptyValue(repaired) ? first : repaired;
   const out: Record<string, unknown> = { ...repaired };
   for (const [key, value] of Object.entries(first)) {
     const next = repaired[key];
     if (emptyValue(next)) out[key] = value;
-    else if (isPlain(value) && isPlain(next) && !("value" in next)) out[key] = mergeFields(value, next, failed);
+    else if (isPlain(value) && isPlain(next) && !isClaim(next)) out[key] = mergeFields(value, next, failed);
     else if (isClaimList(value) && isClaimList(next)) out[key] = mergeClaimList(value, next, failed);
+    else if (isObjectList(value) && isObjectList(next)) out[key] = mergeObjectList(value, next, failed);
   }
   return out as T;
 }
 
-const isClaimList = (value: unknown): value is AnswerClaim[] => Array.isArray(value) && value.length > 0 && value.every((entry) => isPlain(entry) && typeof entry.value === "string" && Array.isArray(entry.refs));
+/** A list of objects that are not claims (observations, scores, a function's evidence, other services). */
+const isObjectList = (value: unknown): value is Array<Record<string, unknown>> => Array.isArray(value) && value.length > 0 && value.every((entry) => isPlain(entry) && !isClaim(entry));
+
+/** The field that names an entry of an object list, in this order: an observation's date, a score's instrument, a service's name, an evidence's tool (with its respondent). */
+const ENTRY_ID_FIELDS = ["date", "instrument", "name", "tool"] as const;
+
+const textOf = (value: unknown): string => (typeof value === "string" ? value : isPlain(value) && typeof value.value === "string" ? value.value : "");
+
+/** The identifying value of an entry, or null when it has none. */
+function entryId(entry: Record<string, unknown>): string | null {
+  for (const key of ENTRY_ID_FIELDS) {
+    const text = normalizeForQuote(textOf(entry[key]));
+    if (!text) continue;
+    return key === "tool" ? `${key}:${text}|${normalizeForQuote(textOf(entry.respondent))}` : `${key}:${text}`;
+  }
+  return null;
+}
+
+/** An entry has failed when one of its own claims failed the checks. */
+const entryFailed = (entry: Record<string, unknown>, failed: ReadonlySet<unknown>) => Object.values(entry).some((value) => failed.has(value));
+
+/**
+ * A list of objects after a repair (review check of 039ce31, R4-M1), entry by entry, by its
+ * date, instrument, name or tool: a repair entry with the same identifying value as a first
+ * entry is merged into it field by field, in the first answer's order (a failed first entry
+ * is matched before a passed one with the same value); the repair's other entries follow.
+ * A first entry that passed stays when the repair leaves it out, so a repair that returns
+ * only the fixed observation keeps the counts that passed. A failed first entry the repair
+ * leaves out is dropped, as the repair was asked to fix it, as in a claim list.
+ */
+function mergeObjectList(first: Array<Record<string, unknown>>, repaired: Array<Record<string, unknown>>, failed: ReadonlySet<unknown>): Array<Record<string, unknown>> {
+  const matchOf = new Map<number, Record<string, unknown>>();
+  const extra: Array<Record<string, unknown>> = [];
+  for (const entry of repaired) {
+    const id = entryId(entry);
+    const candidates = id === null ? [] : first.map((item, index) => ({ item, index })).filter(({ item, index }) => !matchOf.has(index) && entryId(item) === id);
+    const match = candidates.find(({ item }) => entryFailed(item, failed)) ?? candidates[0];
+    if (match) matchOf.set(match.index, entry);
+    else extra.push(entry);
+  }
+  const out: Array<Record<string, unknown>> = [];
+  first.forEach((item, index) => {
+    const entry = matchOf.get(index);
+    if (entry) out.push(mergeFields(item, entry, failed));
+    else if (!entryFailed(item, failed)) out.push(item);
+  });
+  return [...out, ...extra];
+}
+
+const isClaimList = (value: unknown): value is AnswerClaim[] => Array.isArray(value) && value.length > 0 && value.every(isClaim);
 
 /**
  * A claim list after a repair (review scoped check, R3-M1): the first answer's claims that
