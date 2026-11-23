@@ -10,7 +10,9 @@
  * - fonts are not loaded and nothing is drawn; no file, URL or network is used.
  * - each page's text is read as a stream, and once it passes its character budget the
  *   whole document is destroyed (cancelling only the stream makes PDF.js 6.5 throw when
- *   its next piece arrives), so a page of millions of tiny text pieces stops early.
+ *   its next piece arrives). PDF.js parses a page's whole content before it hands out its
+ *   text, so this stops a long document early, not a single-page bomb: that one runs until
+ *   the reading process's time or memory limit (isolated.ts, electron-child.ts).
  * At first use PDF.js warns once that it cannot set up drawing (no canvas): expected.
  */
 import { getDocument, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";

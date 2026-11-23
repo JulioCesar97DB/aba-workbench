@@ -102,3 +102,16 @@ export function pagesLoop(): Uint8Array {
     stream("", Buffer.from("BT /F1 12 Tf 72 700 Td (Some text on this page here) Tj ET"), false),
   ]);
 }
+
+/** A paragraph hyphenated the way a word processor does, the hyphen at the end of a line: "Lucia Fic-" then "ticio". */
+export function hyphenatedParagraph(): Uint8Array {
+  const lines = [
+    "The client lives at home with his mother, Lucia Fic-",
+    "ticio, who works nights. His sister, Valeria Ficticio Go-",
+    "mez, attends the same school, Jose Marti Ele-",
+    "mentary, near their home in Mia-",
+    "mi. He was born on Mar-",
+    "ch 14, 2020, and is now six years old.",
+  ];
+  return onePage(lines.map((line, i) => `BT /F1 11 Tf 72 ${700 - i * 13} Td (${line}) Tj ET`).join("\n"));
+}

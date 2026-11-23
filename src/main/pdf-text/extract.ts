@@ -6,9 +6,10 @@
  * text is listed in `pagesNeedingReview`.
  *
  * In the app this runs in a separate process (isolated.ts), which the main process kills
- * at a hard time limit; the limits here (bytes, pages, characters) stop a hostile or
- * huge PDF early. The library that reads the PDF is behind PdfReader, so this logic is
- * tested without it.
+ * at a hard time limit or above a memory limit; the limits here (bytes, pages, characters)
+ * refuse a large PDF before or between pages, but a single page is parsed whole before
+ * its text can be counted, so a one-page bomb runs until the time or memory limit. The
+ * library that reads the PDF is behind PdfReader, so this logic is tested without it.
  */
 import { garbledShare, layoutPage, readableCharacters, type TextPiece } from "./layout.ts";
 
@@ -23,7 +24,7 @@ export interface PdfReadLimits {
   timeoutMs: number;
 }
 
-export const DEFAULT_LIMITS: PdfReadLimits = { maxBytes: 50 * 1024 * 1024, maxPages: 300, maxPageCharacters: 200_000, maxCharacters: 2_000_000, timeoutMs: 30_000 };
+export const DEFAULT_LIMITS: PdfReadLimits = { maxBytes: 20 * 1024 * 1024, maxPages: 300, maxPageCharacters: 200_000, maxCharacters: 2_000_000, timeoutMs: 30_000 };
 
 /** Opens a PDF and hands back each page's positioned text. Throws a PdfReadError when it cannot; stops when `signal` aborts. */
 export interface PdfReader {

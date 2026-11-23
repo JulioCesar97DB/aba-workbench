@@ -33,6 +33,22 @@ export default defineConfig([
     },
   },
   {
+    // PDF.js runs only in the PDF reading process (owner's decision, 2026-11-22): main-process code reads a PDF through
+    // extractPdfTextIsolated (src/main/pdf-text/isolated.ts), never PDF.js itself.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/main/pdf-text/child.ts", "src/main/pdf-text/pdfjs-reader.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["**/pdfjs-reader*", "pdfjs-dist", "pdfjs-dist/*"], message: "PDF.js runs only in the PDF reading process: use extractPdfTextIsolated." },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // The preload is sandboxed: Electron's renderer modules only, no Node.js modules.
     files: ["src/preload/**/*.ts"],
     rules: {

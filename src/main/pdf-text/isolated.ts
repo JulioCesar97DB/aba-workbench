@@ -1,8 +1,9 @@
 /*
  * Reads a PDF's text in a separate process (owner's decision, 2026-11-22): one process per
- * PDF, with its own heap cap, killed at a hard time limit. A crash, an out-of-memory or a
- * hang ends only that process, and the PDF is reported unreadable ("crashed",
- * "timed-out"); the main process and the window never freeze.
+ * PDF, with its own heap cap and a memory limit the parent enforces, killed at a hard time
+ * limit. A crash, an out-of-memory, too much memory or a hang ends only that process, and
+ * the PDF is reported unreadable ("crashed", "too-large", "timed-out"); the main process
+ * and the window never freeze.
  *
  * The process is started through SpawnChild: in the app an Electron utility process
  * (electron-child.ts), in the tests a Node.js child process running child.ts.
@@ -12,7 +13,8 @@ import { DEFAULT_LIMITS, looksLikePdf, type PdfReadLimits, type PdfTextResult, t
 export interface ChildHandle {
   postMessage(message: unknown): void;
   onMessage(listener: (message: unknown) => void): void;
-  onExit(listener: (code: number | null) => void): void;
+  /** `reason` when the process was ended on purpose ("too-large": it passed its memory limit). */
+  onExit(listener: (code: number | null, reason?: UnreadableReason) => void): void;
   kill(): void;
 }
 
@@ -20,6 +22,10 @@ export type SpawnChild = () => ChildHandle;
 
 /** The heap cap of the reading process, in MB. */
 export const CHILD_HEAP_MB = 1024;
+/** Its whole memory (heap, decompressed streams, everything), checked by the parent every 250 ms; above it the process is killed. */
+export const CHILD_MEMORY_LIMIT_MB = 1536;
+/** V8 flags of the reading process: its heap cap, and no code built from strings (PDF.js 6.5 needs none). */
+export const CHILD_JS_FLAGS = `--max-old-space-size=${CHILD_HEAP_MB} --disallow-code-generation-from-strings`;
 
 const REASONS: ReadonlySet<UnreadableReason> = new Set(["not-a-pdf", "password", "damaged", "too-many-pages", "too-large", "timed-out", "crashed"]);
 const pageList = (value: unknown) => Array.isArray(value) && value.every((n) => Number.isInteger(n) && n > 0);
@@ -57,7 +63,7 @@ export function extractPdfTextIsolated(bytes: Uint8Array, spawn: SpawnChild, lim
     // The hard limit: the process is killed, whatever it is doing.
     const timer = setTimeout(() => finish({ status: "unreadable", reason: "timed-out" }), limits.timeoutMs);
     child.onMessage((message) => finish(checked(message)));
-    child.onExit(() => finish({ status: "unreadable", reason: "crashed" }));
+    child.onExit((_code, reason) => finish({ status: "unreadable", reason: reason && REASONS.has(reason) ? reason : "crashed" }));
     // The child's own soft limit comes first, so a slow PDF it can stop gets its proper answer.
     child.postMessage({ bytes, limits: { ...limits, timeoutMs: Math.max(1, limits.timeoutMs - 2_000) } });
   });

@@ -6,7 +6,7 @@ import { Deidentifier, type ClientSheet } from "../src/main/deidentify/index.ts"
 import { DEFAULT_LIMITS, extractPdfText } from "../src/main/pdf-text/extract.ts";
 import { pdfjsReader } from "../src/main/pdf-text/pdfjs-reader.ts";
 import { REVIEW_SHEET, REVIEW_TODAY } from "./deidentify-adversarial.ts";
-import { deepNesting, manyPages, pagesLoop, selfDrawingForm, spacedNames, textBomb, whitespaceBomb } from "./hostile-pdfs.ts";
+import { deepNesting, hyphenatedParagraph, manyPages, pagesLoop, selfDrawingForm, spacedNames, textBomb, whitespaceBomb } from "./hostile-pdfs.ts";
 
 /*
  * The real reader (PDF.js) on the invented fixture PDFs: the score reports rendered from
@@ -149,4 +149,15 @@ test("letter-spaced PDF text: names come back as words, the page is flagged, and
   assert.ok(lines.includes("Lucia Ficticio is the mother of the child."), result.text);
   const hidden = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY }).deidentify(result.text).text;
   for (const name of ["Mateo", "Ficticio", "Lucia", "teo", "3/14/2020", "4471"]) assert.ok(!hidden.toLowerCase().includes(name.toLowerCase()), `${name} in ${hidden}`);
+});
+
+test("hyphenated PDF paragraph: names, the school, the city and the date of birth broken at a line end never survive", async () => {
+  const result = await extractPdfText(hyphenatedParagraph(), pdfjsReader);
+  assert.equal(result.status, "text");
+  if (result.status !== "text") return;
+  assert.ok(result.text.includes("Lucia Fic-ticio"), result.text);
+  const hidden = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY }).deidentify(result.text).text;
+  const plain = hidden.replace(/\[[A-Z0-9 ]+\]/gu, " ").toLowerCase().replace(/[-\s]/gu, "");
+  for (const value of ["lucia", "ficticio", "gomez", "valeria", "marti", "miami", "march14"]) assert.ok(!plain.includes(value), `${value} in ${hidden}`);
+  assert.ok(hidden.includes("six years old"), hidden);
 });

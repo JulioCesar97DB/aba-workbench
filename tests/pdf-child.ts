@@ -21,7 +21,7 @@ export function spawnNodeChild(script = CHILD, args: string[] = [], heapMb = 256
     return {
       postMessage: (message) => child.send(message as never),
       onMessage: (listener) => child.on("message", listener),
-      onExit: (listener) => child.on("exit", listener),
+      onExit: (listener) => child.on("exit", (code) => listener(code)),
       kill: () => void child.kill("SIGKILL"),
     };
   };
