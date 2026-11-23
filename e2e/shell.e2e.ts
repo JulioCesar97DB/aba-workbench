@@ -104,6 +104,9 @@ test("the interface loads under the content security policy as written, with its
     const pdfjs = readFileSync(path.join(resources, "licenses", "PDF.js-Apache-2.0.txt"), "utf8");
     expect(pdfjs).toContain("Apache License");
     expect(pdfjs).toContain("Version 2.0, January 2004");
+    // Every other bundled package's license (MIT, ISC, BSD, Apache: each asks to travel with the code).
+    const notices = readFileSync(path.join(resources, "licenses", "THIRD-PARTY-NOTICES.txt"), "utf8");
+    for (const name of ["react 19", "react-dom", "zod", "jose", "i18next", "openai", "@anthropic-ai/sdk", "@base-ui/react", "pdfjs-dist", "tailwindcss"]) expect(notices).toContain(name);
   }
 
   // The development check is linked in a development build only.

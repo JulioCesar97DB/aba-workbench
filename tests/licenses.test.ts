@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
+import { noticesText, packageRoot, readPackage } from "../scripts/third-party-notices.ts";
 
 /*
  * The IBM Plex fonts ship under the SIL Open Font License 1.1, whose condition 2 asks
@@ -50,4 +51,25 @@ test("PDF.js license: the repository carries the Apache License 2.0 exactly as t
 test("PDF.js license: electron-builder copies every .txt of licenses/ into the packaged app", () => {
   const config = read("electron-builder.yml");
   assert.match(config, /- from: licenses\n\s+to: licenses\n\s+filter:\n\s+- "\*\.txt"/);
+});
+
+test("third-party notices: a bundled module is traced to its package, and the package's license text is written out", () => {
+  assert.equal(packageRoot("/x/node_modules/.pnpm/react@19.3.0/node_modules/react/cjs/react.production.js"), "/x/node_modules/.pnpm/react@19.3.0/node_modules/react");
+  assert.equal(packageRoot("C:\\app\\node_modules\\@base-ui\\react\\esm\\index.js"), "C:/app/node_modules/@base-ui/react");
+  assert.equal(packageRoot("/x/src/main/index.ts"), null);
+  const packages = ["react", "zod", "pdfjs-dist"].map((name) => readPackage(path.join(root, "node_modules", name))!);
+  const text = noticesText(packages);
+  for (const p of packages) {
+    assert.ok(p.files.length > 0, p.name);
+    assert.ok(text.includes(`${p.name} ${p.version}\nLicense: ${p.license}`), p.name);
+    assert.ok(text.includes(p.files[0].text.split("\n")[0]), p.name);
+  }
+  assert.match(text, /MIT License/);
+  assert.match(text, /Apache License/);
+});
+
+test("third-party notices: every build writes them and electron-builder copies them into the app", () => {
+  const vite = read("electron.vite.config.ts");
+  assert.equal((vite.match(/thirdPartyNotices\(NOTICES/g) ?? []).length, 3);
+  assert.match(read("electron-builder.yml"), /- from: out\/licenses\n\s+to: licenses\n/);
 });
