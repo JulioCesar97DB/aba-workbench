@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { noticesText, packageRoot, readPackage } from "../scripts/third-party-notices.ts";
@@ -72,4 +72,11 @@ test("third-party notices: every build writes them and electron-builder copies t
   const vite = read("electron.vite.config.ts");
   assert.equal((vite.match(/thirdPartyNotices\(NOTICES/g) ?? []).length, 3);
   assert.match(read("electron-builder.yml"), /- from: out\/licenses\n\s+to: licenses\n/);
+});
+
+test("third-party notices: a package that ships no license file gets the text from its source repository", () => {
+  const dir = readdirSync(path.join(root, "node_modules", ".pnpm")).find((d) => d.startsWith("standardwebhooks@"))!;
+  const info = readPackage(path.join(root, "node_modules", ".pnpm", dir, "node_modules", "standardwebhooks"))!;
+  assert.equal(info.license, "MIT");
+  assert.match(info.files[0].text, /^The MIT License\n\nCopyright \(c\) 2023 Svix/);
 });

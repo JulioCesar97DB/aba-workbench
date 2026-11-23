@@ -33,6 +33,13 @@ export function packageRoot(moduleId: string): string | null {
   return `${file.slice(0, at)}/node_modules/${name}`;
 }
 
+/**
+ * License texts kept in the repository for packages that ship none in their npm package:
+ * licenses/fallback/<package name>.txt, copied from the package's source repository.
+ */
+// From the repository's root, where every build runs (electron-vite bundles its config elsewhere).
+const FALLBACK = path.resolve("licenses", "fallback");
+
 export function readPackage(root: string): BundledPackage | null {
   const manifest = path.join(root, "package.json");
   if (!existsSync(manifest)) return null;
@@ -42,7 +49,12 @@ export function readPackage(root: string): BundledPackage | null {
     .filter((f) => LICENSE_FILE.test(f))
     .sort()
     .map((f) => ({ name: f, text: readFileSync(path.join(root, f), "utf8").replace(/\r\n/gu, "\n").trimEnd() }));
-  return { name: json.name ?? path.basename(root), version: json.version ?? "", license, files };
+  const name = json.name ?? path.basename(root);
+  const fallback = path.join(FALLBACK, `${name.replace("/", "__")}.txt`);
+  if (files.length === 0 && existsSync(fallback)) {
+    files.push({ name: "LICENSE (from the package's source repository; the npm package ships none)", text: readFileSync(fallback, "utf8").replace(/\r\n/gu, "\n").trimEnd() });
+  }
+  return { name, version: json.version ?? "", license, files };
 }
 
 export function noticesText(packages: BundledPackage[]): string {
