@@ -86,6 +86,18 @@ export interface SectionDetail extends SectionSummary {
   instructions: string;
   /** What the section's rules ask of its shape, for the structure check. */
   shape: SectionShape;
+  /**
+   * The case's save time (updatedAt) this snapshot was read at. Every save of the case
+   * makes it later, so of two snapshots the later revision is the newer one: an answer
+   * that comes back late never replaces a newer one on screen.
+   */
+  revision: string;
+}
+
+/** Whether a snapshot of the section is older than the one shown (an answer that came back late). */
+export function isOlderRevision(next: string, shown: string): boolean {
+  const [a, b] = [Date.parse(next), Date.parse(shown)];
+  return Number.isFinite(a) && Number.isFinite(b) && a < b;
 }
 
 /** What she asks the AI from the section's screen. */

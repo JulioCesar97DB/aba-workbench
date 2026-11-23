@@ -2,7 +2,7 @@ import type { ElectronApplication, Page } from "@playwright/test";
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { defaultCasesFolder, expect, goTo, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
+import { defaultCasesFolder, expect, firstScreen, goTo, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
 
 /*
  * The Sources step as the clinician meets it: pasting texts, adding PDFs through the
@@ -35,8 +35,7 @@ async function openSources(launch: (options?: { language?: "en" | "es" }) => Pro
   const casesFolder = defaultCasesFolder(home);
   seedCase(casesFolder);
   const app = await launch({ language });
-  const page = await app.firstWindow();
-  await expect(heading(page)).toBeVisible();
+  const page = await firstScreen(app);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
   await expect(heading(page)).toHaveText(language === "en" ? "Sources" : "Fuentes");
   return { app, page, casesFolder, caseFolder: path.join(casesFolder, SAMPLE_CASE.label) };
@@ -126,8 +125,7 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
 
   await app.close();
   app = await launch();
-  page = await app.firstWindow();
-  await expect(heading(page)).toBeVisible();
+  page = await firstScreen(app);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
   await page.getByRole("link", { name: "Open" }).click();
   await expect(page.getByRole("textbox", { name: "Text" })).toHaveValue("Invented CDE notes.\nThe child is 4 years old and speaks about 20 single words. More notes.");
@@ -432,8 +430,7 @@ test("quitting right after typing keeps what was typed, in a text and in a title
   expect(caseData(casesFolder).sources[0].text).toBe("First part. Second part.");
 
   app = await launch();
-  page = await app.firstWindow();
-  await expect(heading(page)).toBeVisible();
+  page = await firstScreen(app);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
   await sourceRow(page, "CDE").getByRole("button", { name: "Name, type and date" }).click();
   await page.getByRole("dialog").getByRole("textbox", { name: "Title (optional)" }).fill("Psychologist's CDE");
@@ -502,8 +499,7 @@ test("opening a source never hands the system a file that is not a PDF of the ca
   writeFileSync(path.join(caseFolder, "report.command"), "#!/bin/sh\necho invented\n");
   writeFileSync(path.join(caseFolder, "fake.pdf"), "#!/bin/sh\necho invented\n");
   const app = await launch();
-  const page = await app.firstWindow();
-  await expect(heading(page)).toBeVisible();
+  const page = await firstScreen(app);
   await app.evaluate(({ shell }) => {
     const seen: string[] = [];
     (globalThis as unknown as { opened: string[] }).opened = seen;
@@ -581,8 +577,7 @@ test("a change that could not be saved is still reported after a reload, and Try
 });
 
 test("the packaged app's menu has no Reload or developer tools, its window cannot open them, and it keeps Edit (owner's decision)", async ({ app }, testInfo) => {
-  const page = await app.firstWindow();
-  await expect(heading(page)).toBeVisible();
+  await firstScreen(app);
   const menu = await app.evaluate(({ Menu }) => {
     const roles: string[] = [];
     const accelerators: string[] = [];

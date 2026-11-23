@@ -1,7 +1,7 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { defaultCasesFolder, expect, goTo, packagedExecutable, SAMPLE_CASE, seedCase, startSecondCopy, stubFileManager, stubFolderDialog, test } from "./app.ts";
+import { defaultCasesFolder, expect, firstScreen, goTo, packagedExecutable, SAMPLE_CASE, seedCase, startSecondCopy, stubFileManager, stubFolderDialog, test } from "./app.ts";
 
 /*
  * Cases as a user meets them: creating one, finding it in the list, opening it after a
@@ -14,9 +14,7 @@ import { defaultCasesFolder, expect, goTo, packagedExecutable, SAMPLE_CASE, seed
 const heading = (page: Page) => page.getByRole("heading", { level: 1 });
 
 async function openApp(app: ElectronApplication): Promise<Page> {
-  const page = await app.firstWindow();
-  await expect(heading(page)).toBeVisible();
-  return page;
+  return firstScreen(app);
 }
 
 async function createCase(page: Page, label: string, age?: { years?: string; months?: string }, words = { newCase: "New case", label: "Label", years: "Years", months: "Months", create: "Create case" }) {

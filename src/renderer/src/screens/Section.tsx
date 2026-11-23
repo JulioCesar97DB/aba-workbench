@@ -5,7 +5,7 @@ import type { DraftingProvider } from "../../../shared/api.ts";
 import { modelLabel } from "../../../shared/models.ts";
 import { findReportSection, REPORT_SECTIONS, type ReportSection } from "../../../shared/report-sections.ts";
 import { checkStructure, findMarkers, hasLinesInParagraphs, linesAsParagraphs, MAX_REQUEST_LENGTH, splitParagraphs, type StructureIssue } from "../../../shared/section-text.ts";
-import type { SectionDetail, SectionRequestInput, SectionSummary, SectionVersion } from "../../../shared/sections.ts";
+import { isOlderRevision, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion } from "../../../shared/sections.ts";
 import { useAutosave, useKeptText } from "../autosave.tsx";
 import type { FailedSave } from "../../../shared/sources.ts";
 import { onRetried, retry, useFailedSavesLoaded, useSectionFailures } from "../case-saves.tsx";
@@ -141,28 +141,57 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   /** The version her pasted text made, once saved. */
   const editingSaved = useRef<number | null>(null);
 
-  const accept = useCallback(
-    (next: SectionDetail, sections?: SectionSummary[]) => {
+  /*
+   * Every answer from the main process is a whole snapshot of the section. Answers can come
+   * back in another order than the changes were saved (a slow or busy disk), so a snapshot
+   * older than the one shown (its revision, the case's save time) is dropped: it would
+   * undo a newer change on screen, such as an approval she just made or a version just saved.
+   * (The revision is the case's save time, which each save makes later than the last; a
+   * case file replaced by an older copy while the clock is behind would hold the screen on
+   * what it shows until the section is opened again. Nothing on disk is affected.)
+   */
+  const shownRevision = useRef(initial.revision);
+  /** The snapshot shown: the newest taken. */
+  const shown = useRef(initial);
+  const take = useCallback(
+    (next: SectionDetail, sections?: SectionSummary[]): boolean => {
+      if (isOlderRevision(next.revision, shownRevision.current)) return false;
+      shownRevision.current = next.revision;
+      shown.current = next;
       setDetail(next);
-      setViewed(next.currentVersion);
-      // A version saved from elsewhere (Try again after a reload) shows the text instead of the two ways to start.
-      setMode((current) => (current === "choose" && next.versions.length > 0 ? "view" : current));
       if (sections) patch(caseId, { sections });
+      return true;
     },
     [caseId, patch],
+  );
+
+  /**
+   * The answer to what she just did (her newest action, her text, Try again): the version
+   * it holds as current is shown. When a newer snapshot is shown already (a check saved
+   * after her change, and its news came first), that one is kept, and its current version
+   * shown: it already holds her change, so what she just did is never hidden.
+   */
+  const accept = useCallback(
+    (next: SectionDetail, sections?: SectionSummary[]) => {
+      const newest = take(next, sections) ? next : shown.current;
+      setViewed(newest.currentVersion);
+      // A version saved from elsewhere (Try again after a reload) shows the text instead of the two ways to start.
+      setMode((current) => (current === "choose" && newest.versions.length > 0 ? "view" : current));
+    },
+    [take],
   );
 
   useOnSectionSaved(
     useCallback(
       (savedCase: string, result, kind) => {
         if (savedCase !== caseId || result.section.id !== section.id) return;
-        setDetail(result.section);
+        if (!take(result.section)) return;
         // A check only adds its result: she stays on the version and the mode she is in.
         if (kind === "check") return;
         setViewed(result.section.currentVersion);
         setMode("view");
       },
-      [caseId, section.id],
+      [caseId, section.id, take],
     ),
   );
 
@@ -183,11 +212,23 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     await startSectionGeneration(caseId, section.id, providers.provider, request);
   }
 
+  /** How many actions (approve, show a version, lines as paragraphs) she has started here. */
+  const actionsStarted = useRef(0);
+
   async function act(work: () => Promise<{ outcome: string } & Partial<{ section: SectionDetail; sections: SectionSummary[] }>>) {
+    const action = ++actionsStarted.current;
     setActionFailed(false);
     const result = await work().catch(() => null);
-    if (result?.outcome === "saved" && result.section) accept(result.section, result.sections);
-    else setActionFailed(true);
+    if (result?.outcome !== "saved" || !result.section) {
+      setActionFailed(true);
+      return;
+    }
+    // Only the newest action's answer moves the version shown: Approve, then version 1 at
+    // once, must not jump back to version 2 when the approval's answer comes back last (and
+    // Copy then copy version 2). An older action's answer only updates the data, and only
+    // when no newer snapshot is shown already (take).
+    if (action === actionsStarted.current) accept(result.section, result.sections);
+    else take(result.section, result.sections);
   }
 
   async function show(version: number) {
@@ -212,8 +253,9 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   async function copy() {
     if (!current) return;
     const result = await window.aba.copySection(caseId, section.id, current.number).catch(() => null);
-    // The message names the version copied, and the approved one when it is another (review M6).
-    setCopied(result?.outcome === "copied" ? { markers: result.markers, number: current.number, approved: detail.approvedVersion !== current.number ? detail.approvedVersion : null } : "failed");
+    // The message names the version copied, and the approved one when it is another (review M6):
+    // that one is read when the message shows (CopiedMessage), so an approval still being saved is named too.
+    setCopied(result?.outcome === "copied" ? { markers: result.markers, number: current.number } : "failed");
   }
 
   /** "Treat each line as a paragraph" (review M3): a new version, hers kept as she pasted it. */
@@ -285,7 +327,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
             {t("section.actionFailed")}
           </p>
         ) : null}
-        <CopiedMessage copied={copied} />
+        <CopiedMessage copied={copied} approvedVersion={detail.approvedVersion} />
         {approvedHere ? (
           <p className="flex items-center gap-2 text-sm">
             <StatusBadge tone="success">{t("section.approvedBadge")}</StatusBadge>
@@ -405,12 +447,12 @@ function NotReadyNotice() {
 interface Copied {
   markers: number;
   number: number;
-  /** The approved version, when it is not the one copied. */
-  approved: number | null;
 }
 
-function CopiedMessage({ copied }: { copied: Copied | "failed" | null }) {
+/** What was copied; the section's approved version as it is now, named when it is not the one copied. */
+function CopiedMessage({ copied, approvedVersion }: { copied: Copied | "failed" | null; approvedVersion: number | null }) {
   const { t } = useTranslation();
+  const approvedOther = copied !== null && copied !== "failed" && approvedVersion !== null && approvedVersion !== copied.number ? approvedVersion : null;
   const text =
     copied === null
       ? null
@@ -418,12 +460,12 @@ function CopiedMessage({ copied }: { copied: Copied | "failed" | null }) {
         ? t("section.copyFailed")
         : [
             copied.markers > 0 ? t("section.copiedMarkers", { count: copied.markers, number: copied.number }) : t("section.copied", { number: copied.number }),
-            copied.approved !== null ? t("section.copiedNotApproved", { number: copied.approved }) : null,
+            approvedOther !== null ? t("section.copiedNotApproved", { number: approvedOther }) : null,
           ]
             .filter(Boolean)
             .join(" ");
   return (
-    <p role="status" className={cn("text-sm font-medium", copied === "failed" || (copied !== null && copied.approved !== null) ? "text-warning" : "text-success", copied === "failed" && "text-danger")}>
+    <p role="status" className={cn("text-sm font-medium", copied === "failed" || approvedOther !== null ? "text-warning" : "text-success", copied === "failed" && "text-danger")}>
       {text}
     </p>
   );

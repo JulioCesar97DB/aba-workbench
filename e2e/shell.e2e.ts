@@ -2,7 +2,7 @@ import type { ConsoleMessage, ElectronApplication, Page } from "@playwright/test
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
-import { defaultCasesFolder, expect, goTo, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
+import { defaultCasesFolder, expect, firstScreen, goTo, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
 
 /*
  * The interface as a user meets it: the screens, the navigation, the language and the
@@ -32,9 +32,7 @@ function watchPolicy(page: Page): string[] {
 }
 
 async function openApp(app: ElectronApplication): Promise<Page> {
-  const page = await app.firstWindow();
-  await expect(heading(page)).toBeVisible();
-  return page;
+  return firstScreen(app);
 }
 
 test("the app opens on Home, the empty list of cases, with what to do next", async ({ app }) => {

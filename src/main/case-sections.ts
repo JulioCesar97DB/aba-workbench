@@ -167,7 +167,7 @@ export function setConsistency(data: CaseData, id: ReportSectionId, number: numb
 
 export function sectionDetail(data: CaseData, id: ReportSectionId, instructions: string, shape: SectionShape = { paragraphs: null, words: null }): SectionDetail {
   const context = contextSections(data, id).map(({ id: sectionId, version }) => ({ id: sectionId, version }));
-  return { ...sectionSummary(data, id), versions: storedSection(data, id).versions.map((version) => versionView(version, context)), instructions, shape };
+  return { ...sectionSummary(data, id), versions: storedSection(data, id).versions.map((version) => versionView(version, context)), instructions, shape, revision: data.updatedAt };
 }
 
 function nextNumber(section: StoredSection): number {

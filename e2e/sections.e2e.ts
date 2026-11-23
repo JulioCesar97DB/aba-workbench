@@ -2,7 +2,7 @@ import type { ElectronApplication, Page } from "@playwright/test";
 import { chmodSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { AbaApi } from "../src/shared/api.ts";
-import { defaultCasesFolder, draftingStubLog, expect, goTo, SAMPLE_CASE, seedCase, setDraftingFailures, setDraftingSpeed, stubDrafting, test } from "./app.ts";
+import { defaultCasesFolder, draftingStubLog, expect, firstScreen, goTo, holdAnswers, pauseDrafting, SAMPLE_CASE, seedCase, setDraftingFailures, setDraftingSpeed, stubDrafting, test } from "./app.ts";
 
 /*
  * The report's sections as the clinician meets them: drafting one with the AI, changing
@@ -37,8 +37,7 @@ async function openSection(launch: (options?: { language?: "en" | "es" }) => Pro
   seedCase(casesFolder, SAMPLE_CASE.label, { ...SAMPLE_CASE, sources: [SOURCE] });
   const app = await launch({ language });
   await stubDrafting(app, { claudeKey: CLAUDE_KEY, ...stub });
-  const page = await app.firstWindow();
-  await expect(heading(page)).toBeVisible();
+  const page = await firstScreen(app);
   const saved = await page.evaluate((key) => (globalThis as unknown as { aba: AbaApi }).aba.saveClaudeKey(key), CLAUDE_KEY);
   expect(saved).toEqual({ outcome: "saved" });
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/${sectionId}`);
@@ -213,8 +212,7 @@ test("her edits, instructions and notes survive a restart; the file keeps every 
   await app.close();
 
   const again = await launch();
-  const page2 = await again.firstWindow();
-  await expect(heading(page2)).toBeVisible();
+  const page2 = await firstScreen(again);
   await goTo(page2, `/cases/${SAMPLE_CASE.id}/report/generalization-and-maintenance`);
   await expect(page2.getByTestId("section-view")).toContainText("Generalization paragraph, edited.");
   await expect(page2.getByRole("button", { name: "Version 1" })).toBeVisible();
@@ -277,6 +275,202 @@ test("M3 and M6: lines pasted with single line breaks can become paragraphs; the
   await expect(page.getByText("Copied version 1. Paste it into ABA Matrix. Version 2 is the approved one.")).toBeVisible();
   expect(await app.evaluate(async ({ clipboard }) => clipboard.readText())).toBe("Para one.\nPara two.\nPara three.");
   await expect(page.getByRole("button", { name: "Version 2, approved" })).toBeVisible();
+});
+
+/*
+ * M6 on a slow disk (the Windows runner, dev run 45149934208): she approves version 2,
+ * then picks version 1 and copies it before the answers are back. The main process does
+ * each call in the order she made them; only the answers come back late: the approval's,
+ * or every one of them. The clipboard is recorded, never the system's.
+ */
+const SLOW_ANSWERS = {
+  "the approval's answer": ["sections:approve"],
+  "every answer": ["sections:approve", "sections:set-current", "sections:copy"],
+};
+for (const [late, channels] of Object.entries(SLOW_ANSWERS)) {
+  test(`M6 on a slow disk, ${late} late: approve, then version 1 at once; she stays on version 1, and the copy names the approved version`, async ({ launch, home }) => {
+    const { app, page, caseFile } = await openSection(launch, home, "environmental-changes");
+    await app.evaluate(({ clipboard }) => {
+      const g = globalThis as unknown as { copied: string[] };
+      g.copied = [];
+      clipboard.write = async (items) => {
+        g.copied.push(await (await items[0].getType("text/plain")).text());
+      };
+    });
+    await page.getByRole("button", { name: /I already wrote it/ }).click();
+    await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
+    await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+    await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+
+    const releases: Array<() => Promise<void>> = [];
+    for (const channel of channels) releases.push(await holdAnswers(app, channel));
+    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await page.getByRole("button", { name: "Version 1, yours" }).click();
+    await page.getByRole("button", { name: "Copy for ABA Matrix" }).click();
+    await expect.poll(() => app.evaluate(() => (globalThis as unknown as { copied: string[] }).copied)).toEqual(["Para one.\nPara two.\nPara three."]);
+
+    for (const release of releases) await release();
+    // One more call to the main process: its answer comes after the held ones, so the screen has had them.
+    await page.evaluate(([caseId, sectionId]) => (globalThis as unknown as { aba: AbaApi }).aba.getSection(caseId, sectionId as "environmental-changes"), [SAMPLE_CASE.id, "environmental-changes"]);
+    await expect(page.getByRole("button", { name: "Version 2, approved" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("Copied version 1. Paste it into ABA Matrix. Version 2 is the approved one.")).toBeVisible();
+    expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ approvedVersion: 2, currentVersion: 1 });
+  });
+}
+
+/*
+ * Answers that come back out of order (review of PR #15, B1 and N1): the main process
+ * saves each change in the order she made it, but the answers can come back in another
+ * order (each is read again after its save, outside the case's queue). An older snapshot
+ * that comes back last must change nothing on screen: not the approval, not the versions.
+ */
+
+/** The section with two versions: hers with single line breaks (1), and each line a paragraph (2, shown). */
+async function twoVersions(launch: Parameters<typeof openSection>[0], home: string) {
+  const opened = await openSection(launch, home, "environmental-changes");
+  const { page } = opened;
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
+  await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+  await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+  return opened;
+}
+
+/** One more call to the main process: its answer comes after every answer released before it, so the screen has had them. */
+async function settle(page: Page) {
+  await page.evaluate(([caseId, sectionId]) => (globalThis as unknown as { aba: AbaApi }).aba.getSection(caseId, sectionId as "environmental-changes"), [SAMPLE_CASE.id, "environmental-changes"]);
+}
+
+test("out of order: version 1, then Approve at once, the version's answer last; the approval stays shown", async ({ launch, home }) => {
+  const { app, page, caseFile } = await twoVersions(launch, home);
+  const release = await holdAnswers(app, "sections:set-current");
+  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Undo approval" })).toBeVisible();
+  expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ approvedVersion: 1, currentVersion: 1 });
+
+  await release();
+  await settle(page);
+  await expect(page.getByRole("button", { name: "Undo approval" })).toBeVisible();
+  // The badge beside the text, and the section's line in the sidebar.
+  await expect(page.locator("#content").getByText("Approved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Version 1, approved" })).toHaveAttribute("aria-pressed", "true");
+  await expect(sidebarItem(page, "Environmental Changes")).toContainText("Approved");
+});
+
+test("out of order: Approve version 1, then each line a paragraph at once, the approval's answer last; version 3 stays, unapproved", async ({ launch, home }) => {
+  const { app, page, caseFile } = await twoVersions(launch, home);
+  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
+  await settle(page);
+  const release = await holdAnswers(app, "sections:approve");
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true");
+  // The new version took the approval away (she approves again).
+  const stored = sectionData(caseFile, "environmental-changes");
+  expect(stored.versions).toHaveLength(3);
+  expect(stored.approvedVersion ?? null).toBeNull();
+
+  await release();
+  await settle(page);
+  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+  await expect(page.locator("#content").getByText("Approved", { exact: true })).toHaveCount(0);
+  await expect(sidebarItem(page, "Environmental Changes")).not.toContainText("Approved");
+});
+
+test("out of order: version 1, then ask for changes; the version's answer after the new version is saved never hides it", async ({ launch, home }) => {
+  const { app, page, caseFile } = await twoVersions(launch, home);
+  const release = await holdAnswers(app, "sections:set-current");
+  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await page.getByLabel("Ask for changes in your own words").fill("mention that the school started the communication plan");
+  await page.getByRole("button", { name: "Create version 3" }).click();
+  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true", { timeout: 20_000 });
+  expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ currentVersion: 3 });
+
+  await release();
+  await settle(page);
+  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(3);
+  await expect(page.getByTestId("section-view")).toContainText("The school reports that his communication plan is now in place.");
+});
+
+/*
+ * A check's save that overtakes her answer (review 2 of PR #15, R2-1): during "Check
+ * again" she picks version 1 and makes a new version from it; the check saves after her
+ * change, and its news comes back before her answer. Her answer is then older than the
+ * snapshot shown, yet what she just did must be shown: the new version, with her text.
+ */
+
+/**
+ * Environmental Changes with three versions, the third "Could not be checked" (her
+ * Background Information is there to compare), Check again held running (the faked
+ * Claude paused), and version 1 shown. Returns what lets the check finish.
+ */
+async function checkingAgain(launch: Parameters<typeof openSection>[0], home: string) {
+  const opened = await openSection(launch, home, "background-information", "en", { consistency: "Maybe." });
+  const { app, page } = opened;
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Her own background text.");
+  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/report/environmental-changes`);
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
+  await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+  await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("Ask for changes in your own words").fill("mention that the school started the communication plan");
+  await page.getByRole("button", { name: "Create version 3" }).click();
+  await expect(page.getByTestId("section-checks")).toContainText("Could not be checked", { timeout: 20_000 });
+
+  const finishCheck = await pauseDrafting(app);
+  await page.getByRole("button", { name: "Check again" }).click();
+  await expect(page.getByTestId("section-checks")).toContainText("Checking");
+  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
+  return { ...opened, finishCheck };
+}
+
+/**
+ * Her new version 4 is on disk, then the check ends and saves after it. Her answer is held,
+ * so only the check's news can bring version 4 into the version bar.
+ */
+async function checkSavedAfterHer(page: Page, caseFile: string, finishCheck: () => Promise<void>) {
+  await expect.poll(() => sectionData(caseFile, "environmental-changes").versions.length).toBe(4);
+  expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ currentVersion: 4 });
+  await finishCheck();
+  await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(4, { timeout: 20_000 });
+}
+
+test("check overtakes: during a check, version 1 then each line a paragraph; the new version is shown", async ({ launch, home }) => {
+  const { app, page, caseFile, finishCheck } = await checkingAgain(launch, home);
+  const release = await holdAnswers(app, "sections:save-text");
+  await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+  await checkSavedAfterHer(page, caseFile, finishCheck);
+  await expect(page.getByTestId("section-checks")).not.toContainText("Checking");
+
+  await release();
+  await settle(page);
+  // She asked for each line as a paragraph: the file shows version 4; so must the screen.
+  await expect(page.getByRole("button", { name: "Version 4" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("lines-notice")).toHaveCount(0);
+});
+
+test("check overtakes: during a check, she edits version 1's text; after Done her edit is what the screen shows", async ({ launch, home }) => {
+  const { app, page, caseFile, finishCheck } = await checkingAgain(launch, home);
+  await page.getByRole("button", { name: "Edit the text" }).click();
+  const release = await holdAnswers(app, "sections:save-text");
+  await page.getByTestId("section-text").fill("Para one.\n\nPara two, edited by her.\n\nPara three.");
+  await checkSavedAfterHer(page, caseFile, finishCheck);
+  expect(sectionData(caseFile, "environmental-changes").versions[3].text).toBe("Para one.\n\nPara two, edited by her.\n\nPara three.");
+
+  await release();
+  await settle(page);
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("button", { name: /^Version 4/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("section-view")).toContainText("Para two, edited by her.");
 });
 
 /* Review round 2: B3, the kept text goes back in its box */

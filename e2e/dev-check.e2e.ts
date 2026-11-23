@@ -1,6 +1,6 @@
 import type { AbaApi, GenerationUpdate } from "../src/shared/api.ts";
 import type { Page } from "@playwright/test";
-import { expect, goTo, test } from "./app.ts";
+import { expect, firstScreen, goTo, test } from "./app.ts";
 
 /** window.aba inside the page; typed by hand because the e2e code has no DOM types. */
 type InPage = { aba: AbaApi; crypto: { randomUUID(): string } };
@@ -16,7 +16,7 @@ async function openDevCheck(page: Page): Promise<void> {
 }
 
 test("the development check is reachable, in English, at #/dev-check", async ({ app }) => {
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openDevCheck(page);
   await expect(page).toHaveTitle("Development check · ABA Workbench");
   await expect(page.getByText(/^Development check, version \d+\.\d+\.\d+\./)).toBeVisible();
@@ -24,7 +24,7 @@ test("the development check is reachable, in English, at #/dev-check", async ({ 
 });
 
 test("the interface has window.aba and no Node.js", async ({ app }) => {
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openDevCheck(page);
   const seen = await page.evaluate(() => {
     // Runs in the interface. Typed by hand: the e2e code is compiled without DOM types.
@@ -98,8 +98,7 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
 });
 
 test("the evaluation's judge answers only in a development build started hidden", async ({ app }, testInfo) => {
-  const page = await app.firstWindow();
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const page = await firstScreen(app);
   // Not a section: the built app (started with --hidden) checks it and refuses; the packaged app has no handler at all.
   const answer = await page.evaluate(async () => {
     const inPage = globalThis as unknown as InPage;
@@ -115,7 +114,7 @@ test("the evaluation's judge answers only in a development build started hidden"
 });
 
 test("a mock generation streams to completion, with the rules found", async ({ app }) => {
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openDevCheck(page);
   const status = page.getByText(/^Status:/);
   const output = page.locator("pre");
@@ -155,7 +154,7 @@ test("a mock generation streams to completion, with the rules found", async ({ a
 });
 
 test("a navigation the app blocks leaves the running generation alone", async ({ app }) => {
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openDevCheck(page);
   // All in the page: Playwright would otherwise wait for a navigation that never finishes.
   const result = await page.evaluate(
@@ -193,7 +192,7 @@ test("a navigation the app blocks leaves the running generation alone", async ({
 });
 
 test("a reload stops the running generation: nothing more arrives for it", async ({ app }) => {
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openDevCheck(page);
   const oldId = await page.evaluate(async () => {
     const { aba, crypto } = globalThis as unknown as InPage;
@@ -227,7 +226,7 @@ test("a reload stops the running generation: nothing more arrives for it", async
 });
 
 test("a window runs at most two generations at once", async ({ app }) => {
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openDevCheck(page);
   const results = await page.evaluate(async () => {
     const { aba, crypto } = globalThis as unknown as InPage;

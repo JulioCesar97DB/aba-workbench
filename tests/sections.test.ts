@@ -14,6 +14,7 @@ import { changeInstructions, EDITING_PASS_MS, INSTRUCTIONS_FILE_NAME, Instructio
 import { SectionService } from "../src/main/sections.ts";
 import type { GenerationUpdateEvent, SectionSaveResult } from "../src/shared/api.ts";
 import { abaMatrixClipboard } from "../src/shared/section-text.ts";
+import { isOlderRevision } from "../src/shared/sections.ts";
 import { createAnthropicProvider } from "../src/lib/providers/anthropic.ts";
 import { CHATGPT_TASK_PREAMBLE, createOpenAIProvider } from "../src/lib/providers/openai.ts";
 import { caseCacheKey } from "../src/main/cache-key.ts";
@@ -973,4 +974,24 @@ test("R3-1, L-a: deleting text in the section editor during an outage adds no ve
   await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "P1. Right sentence.", editing: 1 });
   const texts = JSON.parse(readFileSync(caseFile, "utf8")).sections["crisis-plan"].versions.map((v: { text: string }) => v.text);
   assert.deepEqual(texts, ["P1. Right sentence."]);
+});
+
+test("revision: every saved change answers with a later revision, so the screen can drop a snapshot that comes back late", async () => {
+  const { service, caseId } = await setup();
+  const first = saved(await service.saveText(caseId, "environmental-changes", "Para one.\nPara two.", null));
+  const second = saved(await service.saveText(caseId, "environmental-changes", "Para one.\n\nPara two.", null));
+  const approved = saved(await service.approve(caseId, "environmental-changes", 2));
+  const shown = saved(await service.setCurrent(caseId, "environmental-changes", 1));
+  const revisions = [first, second, approved, shown].map((result) => result.section.revision);
+  for (const [older, newer] of revisions.slice(0, -1).map((revision, index) => [revision, revisions[index + 1]])) {
+    assert.ok(isOlderRevision(older, newer), `${older} is older than ${newer}`);
+    assert.ok(!isOlderRevision(newer, older));
+  }
+  const read = await service.get(caseId, "environmental-changes");
+  assert.ok(read.outcome === "read");
+  // A read changes nothing: the same revision, never older than the last answer.
+  assert.equal(read.section.revision, shown.section.revision);
+  assert.ok(!isOlderRevision(read.section.revision, shown.section.revision));
+  // A revision that does not parse is never taken for an older one.
+  assert.ok(!isOlderRevision("not a date", shown.section.revision));
 });
