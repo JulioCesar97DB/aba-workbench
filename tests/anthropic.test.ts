@@ -123,3 +123,10 @@ test("Claude usage: with a fallback, attempts are listed per model and summed", 
   assert.equal(total.cacheWriteTokens, 3000);
   assert.equal(total.cacheReadTokens, 3000);
 });
+
+test("Claude request: a JSON schema goes in output_config.format with the effort (the case map's requests)", async () => {
+  const { fetchStub, calls } = stubFetch(() => textStream("end_turn"));
+  const schema = { type: "object", additionalProperties: false, required: ["a"], properties: { a: { type: "string" } } };
+  await collect(createAnthropicProvider({ fetch: fetchStub }), { ...options("claude-opus-5-5"), outputFormat: { name: "case_map_facts", schema } });
+  assert.deepEqual(calls[0].body?.output_config, { effort: "high", format: { type: "json_schema", schema } });
+});

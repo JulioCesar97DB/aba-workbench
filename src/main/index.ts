@@ -133,9 +133,10 @@ const connections = new ConnectionService({
 
 // The report's sections: her standing instructions per section live in the app's own
 // data folder (instructions.json), everything else in each case's data file.
+const instructionsStore = new InstructionsStore(path.join(app.getPath("userData"), INSTRUCTIONS_FILE_NAME));
 const sections = new SectionService({
   cases,
-  instructions: new InstructionsStore(path.join(app.getPath("userData"), INSTRUCTIONS_FILE_NAME)),
+  instructions: instructionsStore,
   rulesDir,
   provider: (id) => (id === "anthropic" ? anthropicProvider : openaiProvider),
   credential: (id) => connections.credentialFor(id),
@@ -146,8 +147,19 @@ const sections = new SectionService({
   writeClipboard: (content) => clipboard.write([new ClipboardItem({ "text/plain": content.text, "text/html": content.html })]),
 });
 
-// The case map (step 1 of the AI knowledge plan): inside each case's data file.
-const caseMap = new CaseMapService({ cases });
+// The case map (step 1 of the AI knowledge plan): inside each case's data file, drafted by
+// the AI with the same connections, models and rules as the sections.
+const caseMap = new CaseMapService({
+  cases,
+  ai: {
+    instructions: instructionsStore,
+    rulesDir,
+    provider: (id) => (id === "anthropic" ? anthropicProvider : openaiProvider),
+    credential: (id) => connections.credentialFor(id),
+    chosenModel: async (id) => (await settings.get()).models?.[id] ?? null,
+    rememberProvider: (id) => settings.setLastProvider(id),
+  },
+});
 
 registerIpc({
   rulesDir,

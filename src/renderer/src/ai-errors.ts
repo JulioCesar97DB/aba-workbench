@@ -41,12 +41,15 @@ export const AI_ERROR_CODES: Record<string, AiErrorKind> = {
   model_not_found: "notAllowed",
   // The provider refused this request as it is: sending it again fails again.
   bad_request: "refused",
-  // The case's documents could not be read before sending.
+  // The case's documents could not be read before sending (a section, or the case map's draft).
   prepare_failed: "caseFiles",
+  case_unavailable: "caseFiles",
   // The app's own writing rules could not be loaded.
   rules_error: "appFiles",
-  // Anything else: try again in a moment.
+  // Anything else: try again in a moment. The case map's draft: an answer cut short, or one it could not read even after asking again.
   bad_response: "other",
+  incomplete: "other",
+  unreadable_answer: "other",
   provider_error: "other",
   internal_error: "other",
   blocked_endpoint: "other",

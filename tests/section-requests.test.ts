@@ -119,6 +119,7 @@ test("only src/main/outgoing.ts builds a section prompt, and only the generation
   walk("src");
   const using = (pattern: RegExp) => files.filter((file) => pattern.test(readFileSync(file, "utf8"))).map((file) => file.split(path.sep).join("/")).sort();
   assert.deepEqual(using(/buildSectionPrompt\(/), ["src/lib/rules.ts", "src/main/outgoing.ts"]);
+  assert.deepEqual(using(/buildCaseMapPrompt\(/), ["src/lib/rules.ts", "src/main/outgoing.ts"]);
   assert.deepEqual(using(/runPromptGeneration\(/), ["src/lib/generate.ts", "src/main/section-generation.ts"]);
   assert.deepEqual(using(/\.generate\(/), ["src/lib/generate.ts"]);
 });

@@ -164,8 +164,9 @@ export class SectionService {
     return this.change(caseId, id, (data, now) => approveVersion(data, id, number, now) ?? "version-not-found");
   }
 
+  /** Her standing instructions for a section, or for the case map ("case-map": her definition thresholds, D16). */
   async saveInstructions(sectionId: unknown, text: unknown): Promise<InstructionsSaveResult> {
-    const id = parse(SectionIdSchema, sectionId, "not a section.");
+    const id = sectionId === "case-map" ? ("case-map" as const) : parse(SectionIdSchema, sectionId, "not a section.");
     const raw = parse(NotesSchema, text, "the instructions must be text.");
     return (await this.options.instructions.save(id, raw)) ? { outcome: "saved" } : { outcome: "not-saved" };
   }

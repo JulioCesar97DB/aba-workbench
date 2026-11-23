@@ -31,7 +31,7 @@ export async function* runSectionGeneration<Saved>(options: {
   signal: AbortSignal;
   /** The case's opaque prompt-cache key (src/main/cache-key.ts). */
   cacheKey?: string | null;
-  /** Development only: the evaluation's judge asks for JSON in this schema. */
+  /** The answer must be JSON in this schema (the case map's requests, the evaluation's judge). */
   outputFormat?: OutputFormat | null;
   /** Writes the version; null when it wrote nothing because Stop came first. */
   save: (finished: FinishedText) => Promise<Saved | null>;

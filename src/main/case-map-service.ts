@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { GetCaseMapResult, MapSaveResult } from "../shared/api.ts";
+import type { Provider, ProviderCredential } from "../lib/providers/types.ts";
+import type { DraftingProvider, GenerationUpdateEvent, GetCaseMapResult, MapSaveResult, StartSectionResult } from "../shared/api.ts";
+import { defaultModel } from "../shared/models.ts";
+import { runMapDraft } from "./case-map-draft.ts";
+import type { InstructionsStore } from "./instructions.ts";
 import { isMapPartId, MAP_ITEM_ID, type MapCollection, type MapPartId } from "../shared/case-map.ts";
 import type { CaseData } from "./case-file.ts";
 import { addMapItem, approveMapPart, caseMapSummary, caseMapView, removeMapItem, saveMapItem, setMapPartVersion } from "./case-map.ts";
@@ -52,17 +56,60 @@ function itemInput(text: unknown): unknown {
 
 type Change = (data: CaseData, now: string) => { data: CaseData; version: number | null; itemId?: string } | null | "version-not-found" | "item-not-found";
 
+/** What the AI's drafts need; without it (the tests of typing by hand), "Draft the map" is refused. */
+export interface CaseMapAiOptions {
+  instructions: Pick<InstructionsStore, "get">;
+  rulesDir: string;
+  /** The provider by id; tests pass a fake. */
+  provider: (id: DraftingProvider) => Provider;
+  /** The credential for a provider, or null when it is not connected. */
+  credential: (id: DraftingProvider) => Promise<ProviderCredential | null>;
+  /** The model chosen in Settings for a provider (null: the default). */
+  chosenModel: (id: DraftingProvider) => Promise<string | null>;
+  rememberProvider: (id: DraftingProvider) => Promise<unknown>;
+  log?: (message: string) => void;
+}
+
 export class CaseMapService {
   private readonly cases: Pick<CaseLibrary, "changeCase">;
+  private readonly ai: CaseMapAiOptions | null;
 
-  constructor(options: { cases: Pick<CaseLibrary, "changeCase"> }) {
+  constructor(options: { cases: Pick<CaseLibrary, "changeCase">; ai?: CaseMapAiOptions }) {
     this.cases = options.cases;
+    this.ai = options.ai ?? null;
   }
 
   async get(caseId: unknown): Promise<GetCaseMapResult> {
     const result = await this.cases.changeCase(caseId, () => ({ save: null, value: null }));
-    if (result.kind === "saved" || result.kind === "unchanged") return { outcome: "read", map: caseMapView(result.data) };
+    if (result.kind === "saved" || result.kind === "unchanged") return { outcome: "read", map: caseMapView(result.data), instructions: (await this.ai?.instructions.get("case-map")) ?? "" };
     return { outcome: "case-unavailable" };
+  }
+
+  /**
+   * "Draft the map" / "Update the map": the AI's two requests (src/main/case-map-draft.ts),
+   * run like any generation. Her map's standing instructions (her thresholds) go with the
+   * behaviors request once she has confirmed them.
+   */
+  async prepareDraft(
+    caseId: unknown,
+    providerId: unknown,
+  ): Promise<{ outcome: Exclude<StartSectionResult["outcome"], "started" | "busy"> } | { outcome: "ready"; run: (signal: AbortSignal) => AsyncIterable<Exclude<GenerationUpdateEvent, { type: "finished" }>> }> {
+    const ai = this.ai;
+    if (!ai) refuse("the AI is not set up.");
+    if (providerId !== "anthropic" && providerId !== "openai") refuse("unknown provider.");
+    const credential = await ai.credential(providerId);
+    if (!credential) return { outcome: "not-connected" };
+    const read = await this.cases.changeCase(caseId, () => ({ save: null, value: null }));
+    if (read.kind !== "saved" && read.kind !== "unchanged") return { outcome: "case-unavailable" };
+    const model = (await ai.chosenModel(providerId)) ?? defaultModel(providerId);
+    const instructions = await ai.instructions.get("case-map");
+    await ai.rememberProvider(providerId).catch(() => undefined);
+    const provider = ai.provider(providerId);
+    const log = ai.log ?? ((message: string) => console.warn(message));
+    return {
+      outcome: "ready",
+      run: (signal) => runMapDraft({ cases: this.cases, caseId: caseId as string, rulesDir: ai.rulesDir, providerId, provider, credential, model, instructions, signal, log }),
+    };
   }
 
   /** Runs a change to the map and answers with the whole map as saved. */

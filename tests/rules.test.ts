@@ -106,6 +106,16 @@ test("each planted gap is still anticipated by the rules files case.json lists",
   }
 });
 
+test("the case map's definition example lives in the behaviors rules, sent with map requests only, and stays out of examples.md (owner's decision on review S9)", () => {
+  const behaviors = readFileSync("rules/behaviors.md", "utf8");
+  assert.match(behaviors, /## An example[\s\S]*Climbing furniture/);
+  assert.match(behaviors, /Never reuse its sentences, names, dates or numbers/);
+  // examples.md is in the cached prefix of every section request: it stays as it was before the case map.
+  const examples = readFileSync("rules/examples.md", "utf8");
+  assert.doesNotMatch(examples, /Climbing furniture|Case map/);
+  assert.match(examples, /^version: 3$/m);
+});
+
 test("the examples stay labeled as invented, with the rule never to reuse them", () => {
   const text = readFileSync("rules/examples.md", "utf8");
   assert.match(text, /about an invented child/);

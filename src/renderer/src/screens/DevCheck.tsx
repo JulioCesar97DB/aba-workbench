@@ -40,9 +40,11 @@ function applyEvent(run: Run, event: GenerationUpdateEvent): Run {
       return { ...run, status: `Error: ${event.message}` };
     case "finished":
       return { ...run, finished: true, status: event.cancelled ? "Cancelled" : run.status };
-    // Only a section's generation saves a version or checks it; the development check never does.
+    // Only a section's generation saves a version or checks it, and only a case map draft reports its parts; the development check does neither.
     case "saved":
     case "checked":
+    case "map-progress":
+    case "map-saved":
       return run;
   }
 }

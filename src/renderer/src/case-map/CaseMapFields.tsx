@@ -80,7 +80,7 @@ export function Provenance({ claim, context }: { claim: Pick<Claim<unknown>, "re
   const { t } = useTranslation();
   if (!claim) return null;
   const chips: ReactNode[] = [];
-  if (claim.origin !== "her" && claim.origin !== "extracted") {
+  if (claim.origin !== "her" && claim.origin !== "extracted" && claim.origin !== "app") {
     const known = claim.origin === "ai-drafted" || claim.origin === "hypothesis" || claim.origin === "proposed";
     chips.push(
       <span key="origin" className={`${chipBase} ${claim.origin === "proposed" ? "bg-warning-subtle text-warning" : "border border-border-control bg-surface text-fg"}`}>
@@ -89,8 +89,18 @@ export function Provenance({ claim, context }: { claim: Pick<Claim<unknown>, "re
     );
   }
   claim.refs.forEach((ref, index) => {
-    const label = refLabel(t, ref, context);
-    const tone = ref.kind === "her" ? "bg-success-subtle text-success" : ref.kind === "note" ? "bg-accent-subtle text-fg-on-accent-subtle" : "bg-neutral-subtle text-neutral";
+    // How the app checked the quote (D4): a PDF's is "not checked" yet (D32), one it could not find is flagged.
+    const checked = ref.checked;
+    const suffix = checked === "not-checked" ? ` · ${t("caseMap.quote.notChecked")}` : checked === "not-found" ? ` · ${t("caseMap.quote.notFound")}` : "";
+    const label = refLabel(t, ref, context) + suffix;
+    const tone =
+      checked === "not-found"
+        ? "bg-warning-subtle text-warning"
+        : ref.kind === "her"
+          ? "bg-success-subtle text-success"
+          : ref.kind === "note"
+            ? "bg-accent-subtle text-fg-on-accent-subtle"
+            : "bg-neutral-subtle text-neutral";
     const chip = (
       <span key={index} tabIndex={ref.quote ? 0 : undefined} aria-label={ref.quote ? `${label}: ${ref.quote}` : undefined} className={`${chipBase} ${tone}`}>
         {label}
@@ -526,7 +536,7 @@ function BaselineMean({ value }: { value: unknown }) {
       ) : (
         <>
           <span className="font-mono">{new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(mean)}</span>
-          <Provenance claim={{ refs: [{ kind: "app" }], origin: "extracted" }} context={{ part: "behaviors", behaviors: [], settings: [], sourceLabel: () => null }} />
+          <Provenance claim={{ refs: [{ kind: "app" }], origin: "app" }} context={{ part: "behaviors", behaviors: [], settings: [], sourceLabel: () => null }} />
         </>
       )}
     </p>

@@ -20,6 +20,8 @@ export interface PromptParts {
   system: string;
   sources: SourceDocument[];
   task: string;
+  /** What the task is: a section's (the default) or the case map's (its own preamble on the ChatGPT route; review round 1, M4). */
+  kind?: "section" | "case-map";
 }
 
 /**
@@ -49,9 +51,10 @@ export interface GenerateOptions {
    */
   cacheKey?: string | null;
   /**
-   * Development only (the evaluation's judge, src/lib/judge.ts): the answer must be JSON in
-   * this schema. OpenAI enforces it (text.format, strict); Claude ignores it, and the judge
-   * then reads plain JSON and validates it itself. Never set on her requests.
+   * The answer must be JSON in this schema: the case map's requests (src/lib/case-map-extraction.ts)
+   * and the evaluation's judge (src/lib/judge.ts). OpenAI enforces it with text.format
+   * (strict), Claude with output_config.format; the answer is still checked with Zod, and
+   * a route that refuses the schema is asked for plain JSON. Never set on a section's request.
    */
   outputFormat?: OutputFormat | null;
 }
