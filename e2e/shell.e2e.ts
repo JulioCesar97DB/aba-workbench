@@ -1,6 +1,7 @@
 import type { ConsoleMessage, ElectronApplication, Page } from "@playwright/test";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import type { AbaApi } from "../src/shared/api.ts";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
 import { defaultCasesFolder, expect, firstScreen, goTo, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
 
@@ -331,6 +332,35 @@ test("moving into and out of a case announces the new screen and puts focus on i
   await expect(heading(page)).toBeFocused();
 });
 
+test("the frame: the trial line is on every screen; the header and the rail stay put while a long section scrolls", async ({ launch, home }) => {
+  seedCase(defaultCasesFolder(home));
+  const page = await openApp(await launch());
+  // One slim line above every screen, Home and Settings included.
+  const trial = page.getByRole("complementary", { name: "Trial version" });
+  await expect(trial).toContainText("Trial version.");
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(heading(page)).toHaveText("Settings");
+  await expect(trial).toBeVisible();
+
+  // A long section of hers: only its text scrolls.
+  const long = Array.from({ length: 30 }, (_, index) => `Paragraph ${index + 1} of an invented section, written long enough that the section needs scrolling to read it all.`).join("\n\n");
+  const saved = await page.evaluate(([id, text]) => (globalThis as unknown as { aba: AbaApi }).aba.saveSectionText(id, "background-information", text, null), [SAMPLE_CASE.id, long] as const);
+  expect(saved.outcome).toBe("saved");
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/report/background-information`);
+  await expect(page.getByTestId("section-view")).toContainText("Paragraph 30");
+  const header = page.getByRole("main").locator("header");
+  const rail = page.getByRole("complementary", { name: "Sources and checks" });
+  const before = [await header.boundingBox(), await rail.boundingBox()];
+  const content = page.locator("[data-region='content']");
+  await content.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  expect(await content.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(page.getByTestId("section-view")).toContainText("Paragraph 30");
+  expect([await header.boundingBox(), await rail.boundingBox()]).toEqual(before);
+  await expect(trial).toBeVisible();
+});
+
 test("everything works from the keyboard, with the focus always visible", async ({ app }) => {
   const page = await openApp(app);
   const focused = () =>
@@ -352,15 +382,17 @@ test("everything works from the keyboard, with the focus always visible", async 
   await expect(heading(page)).toHaveText("Cases");
   await page.keyboard.press("Tab");
 
-  // Every stop on the way shows the focus ring.
+  // Every stop on the way shows the focus ring, up to the last control of the screen. How
+  // many stops come first depends on the build (a development build also links the
+  // development check), so it tabs until "Open Settings", with a cap.
   const stops: string[] = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 14 && stops.at(-1) !== "Open Settings"; i++) {
     await page.keyboard.press("Tab");
     const stop = await focused();
     expect(stop.outline, `focus ring on "${stop.name}"`).toBe(true);
     stops.push(stop.name);
   }
-  expect(stops).toEqual(expect.arrayContaining(["Cases", "Settings", "English", "Español", "New case", "Open Settings"]));
+  expect(stops).toEqual(expect.arrayContaining(["Cases", "Settings", "English", "Español", "What this means", "New case", "Open Settings"]));
 
   // A link opens with Enter; the Select opens and chooses with the arrow keys.
   await page.getByRole("link", { name: "Open Settings" }).focus();
