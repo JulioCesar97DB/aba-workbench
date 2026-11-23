@@ -308,3 +308,14 @@ test("a connection that drops while OpenAI is answering is named as such (review
     assert.equal(calls.length, 1, "a stream already under way is never sent again by itself");
   }
 });
+
+test("a stream event OpenAI sent that cannot be read is said so, not called a dropped connection (review round 2, R4)", async () => {
+  const { fetchStub } = stubFetch(() => new Response("event: response.output_text.delta\ndata: {not json\n\n", { headers: { "content-type": "text/event-stream" } }));
+  const error = await collect(createOpenAIProvider({ fetch: fetchStub }), { ...options("gpt-6.2-astra"), credential: chatgpt }).then(
+    () => null,
+    (e: unknown) => e as ProviderError,
+  );
+  assert.ok(error instanceof ProviderError);
+  assert.equal(error.code, "bad_response");
+  assert.equal(error.message, "OpenAI sent an answer this app could not read; nothing was saved.");
+});

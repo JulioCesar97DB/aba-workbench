@@ -259,7 +259,13 @@ export async function buildSectionPrompt(
                 "Her own text is hers. A fact of it that the new version replaces with another value (a time, a date, a number, a name) is a contradiction, with or without a [CHECK: ...] beside it. Her fact kept as she wrote it, with a [CHECK: ...] beside it quoting what a source says, is not a contradiction, and neither is a fact of hers that the new version leaves out.",
               ]
             : []),
-          ...(herRequest ? ["The new version answers what she asked for in <her-request>: a difference from her own text that she asked for there is not a contradiction."] : []),
+          ...(herRequest
+            ? [
+                "The new version answers what she asked for in <her-request>: a difference from her own text that she asked for there is not a contradiction.",
+                // Review round 2, R1: a fact she set by a request and a later version quietly put back is caught too.
+                "Where she asked in <her-request> for a fact to change, the value she asked for is now her fact: a new version that keeps her old value or gives a third one is a contradiction (unless a later request of hers changed it again).",
+              ]
+            : []),
           "Do not report missing information, style, length, or differences of emphasis; only statements that cannot both be true.",
           `If there is no contradiction, answer exactly: ${CONSISTENCY_NONE}`,
           `Otherwise answer with one line per contradiction, each starting with "- ", naming her section${ownText ? ' (or "Her own text" for her text of this section)' : ""} and saying briefly what differs. Nothing else.`,

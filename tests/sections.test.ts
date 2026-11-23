@@ -286,6 +286,46 @@ test("F1, case B: after she fixes a fact by hand in an AI version, later version
   assert.equal(versions[3].consistency.ownTextCompared, 3);
 });
 
+/* Review round 2 of the ChatGPT fixes */
+
+test("R1: a fact she set by a request is her fact; the check is told a later version that puts the old value back contradicts it", async () => {
+  const { service, caseId, model } = await setup();
+  saved(await service.saveText(caseId, "family-caregiver-involvement", "Grandmother cares for him from 3:00-6:00 p.m.", null));
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "change", fromVersion: 1, request: "The hours changed: it is now 4:00-7:00 p.m." });
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "change", fromVersion: 2, request: "shorter" });
+  const check = model.prompts.at(-1)!.task;
+  assert.match(check, /<her-own-text>\nGrandmother cares for him from 3:00-6:00 p\.m\.\n<\/her-own-text>/);
+  assert.match(check, /<her-request>\nThe hours changed: it is now 4:00-7:00 p\.m\.\n\nshorter\n<\/her-request>/);
+  assert.match(
+    check,
+    /Where she asked in <her-request> for a fact to change, the value she asked for is now her fact: a new version that keeps her old value or gives a third one is a contradiction \(unless a later request of hers changed it again\)\./,
+  );
+  // Without a request of hers (an improvement of her text) the line is not there.
+  saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
+  await generate(service, caseId, "crisis-plan", { kind: "improve", fromVersion: 1 });
+  assert.doesNotMatch(model.prompts.at(-1)!.task, /the value she asked for is now her fact/);
+});
+
+test("R2: her own text and her requests come from the version's own lineage, not from a hand edit on another branch", async () => {
+  const { service, caseId, model, caseFile } = await setup();
+  saved(await service.saveText(caseId, "family-caregiver-involvement", "Grandmother cares for him from 3:00-6:00 p.m.", null));
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "change", fromVersion: 1, request: "The hours changed: it is now 4:00-7:00 p.m." });
+  // She goes back to her text and edits it by hand (a branch from version 1), then asks for a change of version 2.
+  saved(await service.setCurrent(caseId, "family-caregiver-involvement", 1));
+  saved(await service.saveText(caseId, "family-caregiver-involvement", "Grandmother cares for him from 3:00-6:00 p.m. on weekdays.", null));
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "change", fromVersion: 2, request: "shorter" });
+  const versions = JSON.parse(readFileSync(caseFile, "utf8")).sections["family-caregiver-involvement"].versions;
+  assert.deepEqual(versions.map((v: { kind: string; basedOn?: number }) => [v.kind, v.basedOn ?? null]), [["hers", null], ["change", 1], ["edited", 1], ["change", 2]]);
+  const check = model.prompts.at(-1)!.task;
+  assert.match(check, /<her-own-text>\nGrandmother cares for him from 3:00-6:00 p\.m\.\n<\/her-own-text>/, "version 1, which version 4 came from");
+  assert.match(check, /<her-request>\nThe hours changed: it is now 4:00-7:00 p\.m\.\n\nshorter\n<\/her-request>/, "every request on the way, so 4:00-7:00 is not a false alarm");
+  assert.equal(versions[3].consistency.ownTextCompared, 1);
+  // A draft, which comes from no text of hers, is still compared with her latest hand-written version before it.
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "draft" });
+  assert.match(model.prompts.at(-1)!.task, /<her-own-text>\nGrandmother cares for him from 3:00-6:00 p\.m\. on weekdays\.\n<\/her-own-text>/);
+  assert.doesNotMatch(model.prompts.at(-1)!.task, /<her-request>/);
+});
+
 test("P1: a failed or stopped Check again never takes the earlier check's cost out of the totals", async () => {
   const model = fakeModel();
   let failChecks = false;

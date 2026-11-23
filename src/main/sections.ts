@@ -25,7 +25,6 @@ import {
   EditingSchema,
   NotesSchema,
   ownTextBefore,
-  requestsSince,
   saveOwnText,
   SectionIdSchema,
   SectionRequestSchema,
@@ -375,7 +374,7 @@ export class SectionService {
    * sections (hers or approved) and the result is saved with the version, with its tokens
    * and cost. Since 2026-11-23 it also compares the version with her own text of this
    * section (ownTextBefore), so a fact of hers that a request changed is reported, unless she
-   * asked for that change (requestsSince). With
+   * asked for that change (the requests ownTextBefore found on the way). With
    * nothing of hers to compare, nothing is sent. A failed check leaves the version as it is.
    */
   private async checkConsistency(
@@ -403,8 +402,7 @@ export class SectionService {
         ownTextCompared: own?.version ?? null,
       };
       try {
-        const asked = own ? requestsSince(data, id, version, own.version) : [];
-        const herRequest = asked.length > 0 ? asked.join("\n\n") : null;
+        const herRequest = own && own.requests.length > 0 ? own.requests.join("\n\n") : null;
         const { prepared } = await this.prepare(data, args.folder, id, { kind: "consistency", currentText: text, ownText: own?.text ?? null, herRequest }, instructions);
         let answer: string | null = null;
         const events = runSectionGeneration<null>({

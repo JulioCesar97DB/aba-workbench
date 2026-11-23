@@ -317,38 +317,33 @@ function isHandWritten(version: StoredVersion): boolean {
 
 /**
  * Her own text of a section, for the check of a new AI version of it (owner's request,
- * 2026-11-23: "Improve" changed her 3:00-6:00 p.m. to 5:30 unflagged): her latest
- * hand-written or hand-edited version before that version, her edit of an AI version
- * included (review round 1, F1: a fact she fixed by hand is her latest word on it). Null
- * for a version that is not the AI's, or when she wrote nothing by hand before it.
+ * 2026-11-23: "Improve" changed her 3:00-6:00 p.m. to 5:30 unflagged), with what she
+ * asked for since. Both come from one walk back along the version's lineage (each
+ * version's basedOn): her text is the first version on it that she wrote or edited by
+ * hand, her edit of an AI version included (review round 1, F1: a fact she fixed by hand
+ * is her latest word on it), and the requests are those of the change and paragraph
+ * versions passed on the way, oldest first (review round 2, R2: a hand edit on another
+ * branch of her versions is not what this version came from). A lineage that starts
+ * with a draft, from no text of hers, falls back to her latest hand-written version
+ * before it. Null for a version that is not the AI's, or when she wrote nothing by hand.
  */
-export function ownTextBefore(data: CaseData, id: ReportSectionId, number: number): { version: number; text: string } | null {
+export function ownTextBefore(data: CaseData, id: ReportSectionId, number: number): { version: number; text: string; requests: string[] } | null {
   const section = storedSection(data, id);
   const checked = findVersion(section, number);
   if (!checked || !AI_VERSION_KINDS.includes(kindOf(checked))) return null;
-  let found: StoredVersion | null = null;
-  for (const version of section.versions) {
-    if (!isHandWritten(version) || version.number >= number || version.text.trim() === "") continue;
-    if (!found || version.number > found.number) found = version;
-  }
-  return found ? { version: found.number, text: found.text } : null;
-}
-
-/**
- * What she asked for between her own text and a version: the requests of the change and
- * paragraph versions on the way from that version back to her text (each version's
- * basedOn), oldest first. A difference she asked for is not a contradiction of her text
- * (review round 1, F1).
- */
-export function requestsSince(data: CaseData, id: ReportSectionId, number: number, ownVersion: number): string[] {
-  const section = storedSection(data, id);
   const requests: string[] = [];
-  let version = findVersion(section, number);
-  for (let steps = 0; version && version.number > ownVersion && steps <= section.versions.length; steps++) {
+  let version: StoredVersion | undefined = checked;
+  for (let steps = 0; version && steps <= section.versions.length; steps++) {
+    if (isHandWritten(version) && version.text.trim() !== "") return { version: version.number, text: version.text, requests };
     if (version.generation && version.request?.trim()) requests.unshift(version.request.trim());
-    version = version.basedOn === undefined ? undefined : findVersion(section, version.basedOn);
+    version = version.basedOn === undefined || version.basedOn >= version.number ? undefined : findVersion(section, version.basedOn);
   }
-  return requests;
+  let latest: StoredVersion | null = null;
+  for (const candidate of section.versions) {
+    if (!isHandWritten(candidate) || candidate.number >= number || candidate.text.trim() === "") continue;
+    if (!latest || candidate.number > latest.number) latest = candidate;
+  }
+  return latest ? { version: latest.number, text: latest.text, requests } : null;
 }
 
 /** Her other sections that are hers or approved, in the report's order, for a request about `id`. */
