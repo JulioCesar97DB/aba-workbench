@@ -169,9 +169,10 @@ launch_and_quit() {
   # Rosetta translates the app's code as it first runs it, and on a runner's virtual Mac that
   # is slow: the first release run started the Intel renderer after 95 seconds and was still
   # starting up 30 seconds after being asked to quit (native: 2 seconds and 1 second).
-  local start_limit=120 quit_limit=30
+  local start_limit=120 idle_limit=60 quit_limit=30
   if [ "$expected" = "translated" ]; then
     start_limit=300
+    idle_limit=300
     quit_limit=180
   fi
   [ -d "$APP" ] || fail "No app at $APP."
@@ -214,6 +215,22 @@ launch_and_quit() {
   [ "$translated" = "$expected" ] || fail "$label: the app's main process (flags $flags) runs $translated, not $expected."
   echo "$label: the main process runs $translated (flags $flags)."
   [ -n "$(find "$profile" -mindepth 1 -print -quit)" ] || fail "$label: the app wrote nothing in its profile $profile."
+
+  # The interface done loading: its renderer idle (under 10% CPU) for 10 seconds in a row.
+  # Quitting asks the interface to save what is waiting and gives it 5 seconds to answer
+  # (src/main/close-guard.ts); a page still busy loading under Rosetta could not, and the app
+  # would then ask her about unsaved changes in a dialog, which nobody answers here.
+  local renderer_pid cpu quiet=0
+  waited=0
+  renderer_pid=$(pids_with "$renderer" | head -n 1)
+  while [ "$quiet" -lt 10 ]; do
+    [ "$waited" -lt "$idle_limit" ] || fail "$label: the app's renderer was still busy $idle_limit seconds after it started."
+    cpu=$(ps -o %cpu= -p "$renderer_pid" | tr -d ' ') || fail "$label: the app's renderer is gone."
+    if [ "${cpu%%.*}" -lt 10 ]; then quiet=$((quiet + 1)); else quiet=0; fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "$label: the interface is idle ($waited seconds after the check above)."
 
   # Quits it as macOS does when the user logs out (SIGTERM lets Electron close normally).
   kill -TERM "$pid"
