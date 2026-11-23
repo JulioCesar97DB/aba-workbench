@@ -46,7 +46,7 @@ test("create a case, see it in the list, restart the app and open it again", asy
   await createCase(page, "R.T. initial assessment", { years: "5", months: "3" });
   // The new case opens on its first step, with its label and age in the sidebar.
   await expect(heading(page)).toHaveText("Documents");
-  await expect(page.getByText("R.T. initial assessment · Step 1 of 5")).toBeVisible();
+  await expect(page.getByTestId("header-eyebrow")).toHaveText("Step 1 of 5");
   const sidebar = page.getByRole("navigation", { name: "Steps of the case" }).locator("xpath=ancestor::div[@data-surface='nav'][1]");
   await expect(sidebar.getByText("R.T. initial assessment", { exact: true })).toBeVisible();
   await expect(sidebar.getByText("5 years 3 months")).toBeVisible();

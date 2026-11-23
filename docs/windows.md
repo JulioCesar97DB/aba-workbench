@@ -46,7 +46,7 @@ A folder chosen in Settings or on Home is refused ("That folder is inside ABA Wo
    7. uninstalls silently, and checks that the app, its shortcuts and its registry entry are gone while every file in both folders is still there, byte for byte;
    8. writes the installer's SHA-256 and keeps both files with the run (14 days).
 2. **mac-installer** (`macos-26`, read-only token): the universal Mac disk image, built, mounted, started on both architectures and cleaned up ([docs/macos.md](macos.md#what-the-release-workflow-checks)).
-3. **publish** (`ubuntu-24.04`), only for a version tag, after **installer** and **mac-installer** passed: the only job whose token can write (`contents: write`). It checks both SHA-256 files and creates a **pre-release** for the existing tag with `gh release create --verify-tag --prerelease`, attaching the Windows installer, the Mac disk image and their `.sha256`. It never creates a tag and never replaces a release that exists.
+3. **publish** (`ubuntu-24.04`), only for a version tag, after **installer** and **mac-installer** passed: the only job whose token can write (`contents: write`). It checks both SHA-256 files and creates the release for the existing tag with `gh release create --verify-tag`, attaching the Windows installer, the Mac disk image and their `.sha256`. The tag decides the kind: a plain `vX.Y.Z` tag publishes a normal release marked **Latest** (`--latest`, title "ABA Workbench X.Y.Z (Windows and Mac)"); a tag with a suffix, such as `v0.3.0-beta.1`, publishes a **pre-release** that is not marked Latest (`--prerelease --latest=false`, "pre-release" in its title). Either way the tag must match `package.json`'s version (so a suffixed tag needs the same suffix there). It never creates a tag and never replaces a release that exists.
 
 Third-party actions are pinned to full commit SHAs (`tests/windows-installer.test.ts` checks every workflow). No secret is used.
 
@@ -57,13 +57,13 @@ If publishing fails halfway (a network error while `gh release create` uploads),
 To publish, once the change is merged (the owner does this; no worker pushes a tag):
 
 ```sh
-# package.json's version is the release's: 0.1.1 → tag v0.1.1
+# package.json's version is the release's: 0.2.0 → tag v0.2.0
 git switch dev && git pull
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
-The release page then has `ABA-Workbench-Setup-0.1.1-windows-x64.exe`, `ABA-Workbench-0.1.1-macos-universal.dmg` and a `.sha256` for each; the download link to give her is her system's file, as in the README's [Download](../README.md#download) section. For a later version, raise `version` in `package.json` first, then tag that, and change the README's links to the new version.
+The release page then has `ABA-Workbench-Setup-0.2.0-windows-x64.exe`, `ABA-Workbench-0.2.0-macos-universal.dmg` and a `.sha256` for each; the download link to give her is her system's file, as in the README's [Download](../README.md#download) section. For a later version, raise `version` in `package.json` first, then tag that, and change the README's links to the new version.
 
 ## Windows readiness
 
