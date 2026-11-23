@@ -120,18 +120,37 @@ test("a mock generation streams to completion, with the rules found", async ({ a
   const status = page.getByText(/^Status:/);
   const output = page.locator("pre");
 
-  await page.getByRole("button", { name: "Run mock generation" }).click();
+  // Every generation update the interface receives through the bridge, in order. What the page
+  // paints is not enough: on Windows runners the renderer went from "Starting" straight to "Done"
+  // without painting the states in between, and polling the status from the test missed the short
+  // "Writing" phase. The updates themselves show that the text arrives in pieces while it is written.
+  await page.evaluate(() => {
+    // Runs in the interface. Typed by hand: the e2e code is compiled without DOM types.
+    type Update = { event: { type: string; phase?: string } };
+    const inPage = globalThis as unknown as {
+      devCheckUpdates: string[];
+      aba: { onGenerationUpdate(listener: (update: Update) => void): () => void };
+    };
+    inPage.devCheckUpdates = [];
+    inPage.aba.onGenerationUpdate((update) => {
+      inPage.devCheckUpdates.push(update.event.type === "status" ? `status:${update.event.phase}` : update.event.type);
+    });
+  });
 
-  // Streaming: part of the text is on screen while the generation is still writing.
-  await expect(output).toContainText("MOCK OUTPUT");
-  await expect(status).toHaveText("Status: Writing");
-  const partial = (await output.textContent()) ?? "";
+  await page.getByRole("button", { name: "Run mock generation" }).click();
 
   await expect(status).toHaveText(/^Status: Done \(\d+ output tokens\)$/, { timeout: 30_000 });
   const final = (await output.textContent()) ?? "";
-  expect(final.length).toBeGreaterThan(partial.length);
   expect(final).toContain("Rules sent as the cached prefix");
-  await expect(page.getByText(/^Rules: /)).toHaveText(/^Rules: assessment \S+, payer-florida-molina \S+, instruments \S+, section-medical-necessity \S+$/);
+
+  // Streaming: the text arrived in several pieces after "writing" began and before "done".
+  const updates = await page.evaluate(() => (globalThis as unknown as { devCheckUpdates: string[] }).devCheckUpdates);
+  const writing = updates.indexOf("status:writing");
+  const done = updates.indexOf("done");
+  expect(writing, `updates: ${updates.join(", ")}`).toBeGreaterThanOrEqual(0);
+  expect(done, `updates: ${updates.join(", ")}`).toBeGreaterThan(writing);
+  expect(updates.slice(writing, done).filter((type) => type === "text").length, `updates: ${updates.join(", ")}`).toBeGreaterThan(1);
+  await expect(page.getByText(/^Rules: /)).toHaveText(/^Rules: assessment \S+, guide \S+, style \S+, examples \S+, payer-florida-molina \S+, instruments \S+, section-medical-necessity \S+$/);
   await expect(page.getByRole("button", { name: "Run mock generation" })).toBeEnabled();
 });
 

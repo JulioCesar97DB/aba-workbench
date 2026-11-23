@@ -38,7 +38,7 @@ test("generation: meta with the rules versions first, then the provider's events
   const events = await collect(runGeneration(request()));
   const meta = events[0];
   assert.equal(meta.type, "meta");
-  assert.deepEqual(Object.keys(meta.type === "meta" ? meta.rulesVersions : {}).sort(), ["assessment", "instruments", "payer-florida-molina", "section-medical-necessity"]);
+  assert.deepEqual(Object.keys(meta.type === "meta" ? meta.rulesVersions : {}).sort(), ["assessment", "examples", "guide", "instruments", "payer-florida-molina", "section-medical-necessity", "style"]);
   assert.ok(events.some((e) => e.type === "text"));
   const done = events.at(-1);
   assert.equal(done?.type, "done");

@@ -16,8 +16,12 @@ export type { SectionShape } from "../shared/section-text.ts";
  */
 export const DEFAULT_RULES_DIR = path.join(process.cwd(), "rules");
 
-/** Same for every section and every case: this is the cached system prefix. */
-const SYSTEM_FILES = ["assessment.md", "payers/florida-medicaid-molina.md", "instruments.md"];
+/**
+ * Same for every section and every case: this is the cached system prefix. The guide (the
+ * reasoning chain and the map of all 22 sections), the style guide and the invented examples go
+ * in it whole, with every request (owner's decisions, 2026-11-23).
+ */
+const SYSTEM_FILES = ["assessment.md", "guide.md", "style.md", "examples.md", "payers/florida-medicaid-molina.md", "instruments.md"];
 
 /** The app's section requests add how each kind of request works (her sections, instructions, notes, corrections). */
 const SECTION_REQUEST_SYSTEM_FILES = [...SYSTEM_FILES, "requests.md"];
@@ -110,7 +114,7 @@ function parseRange(value: string | undefined): { min: number; max: number } | n
   return min <= max ? { min, max } : null;
 }
 
-/** The shape a section's rules file declares in its front matter ("paragraphs: 6-9", "words: 900-1500"). */
+/** The shape a section's rules file declares in its front matter ("paragraphs: 7-10", "words: 900-1250"). */
 export async function loadSectionShape(sectionId: SectionId, rulesDir: string = DEFAULT_RULES_DIR): Promise<SectionShape> {
   const file = await loadRulesFile(rulesDir, SECTIONS[sectionId].file);
   return { paragraphs: parseRange(file.fields.paragraphs), words: parseRange(file.fields.words) };
