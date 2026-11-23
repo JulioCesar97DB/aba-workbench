@@ -48,6 +48,18 @@ export interface GenerateOptions {
    * name or anything she wrote: src/main/cache-key.ts derives it from the case's internal id.
    */
   cacheKey?: string | null;
+  /**
+   * Development only (the evaluation's judge, src/lib/judge.ts): the answer must be JSON in
+   * this schema. OpenAI enforces it (text.format, strict); Claude ignores it, and the judge
+   * then reads plain JSON and validates it itself. Never set on her requests.
+   */
+  outputFormat?: OutputFormat | null;
+}
+
+/** A JSON schema the answer must follow. */
+export interface OutputFormat {
+  name: string;
+  schema: Record<string, unknown>;
 }
 
 /** Token counts normalized across providers. The four buckets do not overlap. */

@@ -1,6 +1,6 @@
 import { measureRequest, requestTooLargeMessage } from "./limits.ts";
 import { toSafeError } from "./providers/index.ts";
-import type { Effort, PromptParts, Provider, ProviderCredential, SourceDocument } from "./providers/types.ts";
+import type { Effort, OutputFormat, PromptParts, Provider, ProviderCredential, SourceDocument } from "./providers/types.ts";
 import { buildPrompt, type SectionId } from "./rules.ts";
 import type { GenerationEvent } from "./generation-events.ts";
 
@@ -55,6 +55,8 @@ export interface PromptGenerationRequest {
   signal: AbortSignal;
   /** The case's opaque prompt-cache key (src/main/cache-key.ts); none outside a case. */
   cacheKey?: string | null;
+  /** Development only: the evaluation's judge asks for JSON in this schema (src/lib/judge.ts). */
+  outputFormat?: OutputFormat | null;
 }
 
 /**
@@ -78,6 +80,7 @@ export async function* runPromptGeneration(request: PromptGenerationRequest): As
     prompt,
     signal,
     cacheKey: request.cacheKey ?? null,
+    outputFormat: request.outputFormat ?? null,
   };
   yield {
     type: "meta",

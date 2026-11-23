@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PromptParts, SourceDocument } from "../lib/providers/types.ts";
+import { buildJudgePrompt, JUDGE_PROMPT_VERSION, type JudgedSection, type JudgeInput } from "../lib/judge.ts";
 import { buildSectionPrompt, type ContextSection, type SectionId, type SectionRequest } from "../lib/rules.ts";
 import { isSourceType, SOURCE_TYPE_NAMES } from "../shared/sources.ts";
 import type { CaseData } from "./case-file.ts";
@@ -82,15 +83,10 @@ export function outgoingSourcesOf(data: CaseData, folder: string): OutgoingSourc
 /** The identity until de-identification is plugged in: nothing was replaced, so nothing is restored. */
 const restoreNothing = (text: string) => text;
 
-/**
- * The one way a request about a case is made ready to send. Today it builds the prompt
- * from the rules and the case's content as they are; de-identification goes in here, on
- * every piece of text (sources, her sections, instructions, notes, the current text and
- * her request), and its restore map becomes `restore`.
- */
-export async function prepareOutgoingRequest(input: OutgoingInput): Promise<PreparedRequest> {
+/** Reads the PDFs of a request's sources (only when it is sent) and makes them the provider's documents. */
+async function loadSources(input: readonly OutgoingSource[]): Promise<SourceDocument[]> {
   const sources: SourceDocument[] = [];
-  for (const source of input.sources) {
+  for (const source of input) {
     if (source.kind === "text") {
       sources.push({ id: source.id, title: source.title, kind: "text", text: source.text });
     } else {
@@ -98,6 +94,34 @@ export async function prepareOutgoingRequest(input: OutgoingInput): Promise<Prep
       sources.push({ id: source.id, title: source.title, kind: "pdf", filename: source.fileName, base64: Buffer.from(bytes).toString("base64") });
     }
   }
+  return sources;
+}
+
+/**
+ * Development only: the evaluation's judge request for one section (src/lib/judge.ts). It
+ * goes through the same preparation as her requests, so de-identification, when it plugs
+ * in, covers it too: the case's sources and its drafted sections are the case's content.
+ */
+export async function prepareJudgeRequest(input: { section: SectionId; judge: JudgeInput; sections: readonly JudgedSection[]; sources: OutgoingSource[] }): Promise<PreparedRequest> {
+  const sources = await loadSources(input.sources);
+  return {
+    [prepared]: true,
+    prompt: buildJudgePrompt(input.judge, input.section, input.sections, sources),
+    rulesVersions: { judge: JUDGE_PROMPT_VERSION, rubric: input.judge.rubricVersion },
+    sourcesUsed: input.sources.map(({ id, title }) => ({ id, title })),
+    deidentified: false,
+    restore: restoreNothing,
+  };
+}
+
+/**
+ * The one way a request about a case is made ready to send. Today it builds the prompt
+ * from the rules and the case's content as they are; de-identification goes in here, on
+ * every piece of text (sources, her sections, instructions, notes, the current text and
+ * her request), and its restore map becomes `restore`.
+ */
+export async function prepareOutgoingRequest(input: OutgoingInput): Promise<PreparedRequest> {
+  const sources = await loadSources(input.sources);
   const { prompt, rulesVersions } = await buildSectionPrompt(
     { section: input.section, request: input.request, sources, herSections: input.herSections, instructions: input.instructions, notes: input.notes },
     input.rulesDir,
