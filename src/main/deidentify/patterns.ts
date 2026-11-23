@@ -84,7 +84,8 @@ const NOT_PLACES = new Set(
   sessions case claim claims authorization auth invoice account member policy group number no grade test tests level levels step steps
   week weeks day days month months year years age total raw standard percentile composite index item line lines box boxes table tables`.split(/\s+/u),
 );
-const CITY_ZIP = new RegExp(`(?<![\\p{L}\\p{N}])(?:${PLACE_WORD}(?:\\s+${PLACE_WORD}){0,3},\\s*)?${STATES}\\.?\\s+\\d{5}(?:-\\d{4})?(?![\\p{N}])`, "gu");
+// Without a city before it, a state that is also a label ("ID 98765" is an ID, not Idaho) or a word ("IN", "OR", "ME") is not read.
+const CITY_ZIP = new RegExp(`(?<![\\p{L}\\p{N}])(?:${PLACE_WORD}(?:\\s+${PLACE_WORD}){0,3},\\s*${STATES}|(?!(?:ID|IN|OR|ME|OK|HI)\\b)${STATES})\\.?\\s+\\d{5}(?:-\\d{4})?(?![\\p{N}])`, "gu");
 const ZIP_LABELLED = /(?<=\b(?:zip|zip\s+code|c[oó]digo\s+postal)\s*:?\s*)\d{5}(?:-\d{4})?(?![\p{N}])/giu;
 const PO_BOX = /(?<![\p{L}])(?:P\.?\s?O\.?\s*Box|Post\s+Office\s+Box|Apartado(?:\s+[Pp]ostal)?)\s+#?\s*\d+/gu;
 

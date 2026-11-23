@@ -34,6 +34,8 @@ export interface SequenceValue {
   capitals?: boolean;
   /** A sentence end between two pieces of two or more characters ends it ("born 3 14 2020. 03 14 20" is two dates). */
   sentences?: boolean;
+  /** Positions (character indexes) before which a separator must stand: "1 2 2019" is a date, "12 2019" is not. */
+  apart?: number[];
 }
 
 export interface SequenceMatch {
@@ -150,9 +152,21 @@ function search(sk: Skeleton, value: SequenceValue, original: string, folded: Fo
     const gaps = inner.filter((g, k) => g !== "" || markers[k]);
     if (gaps.length < value.minGaps) continue;
     if (value.uniform && inner.some((g) => g !== inner[0])) continue;
-    // OCR stand-ins: at least half of the value must be real digits.
+    // OCR stand-ins: at least half of the value must be real digits, and each piece between separators holds one ("6 lb 14" is no "6 18 14").
     const real = sk.real.slice(idx, last + 1).filter(Boolean).length;
     if (real < Math.max(3, Math.ceil(v.length / 2))) continue;
+    if (ocr) {
+      let pieceHasDigit = sk.real[idx];
+      let ok = true;
+      for (let k = idx + 1; k <= last && ok; k++) {
+        if (sk.gap[k] !== "" || sk.marker[k]) {
+          ok = pieceHasDigit;
+          pieceHasDigit = false;
+        }
+        pieceHasDigit ||= sk.real[k];
+      }
+      if (!ok || !pieceHasDigit) continue;
+    }
     if (value.capitals && !sk.pos.slice(idx, last + 1).every((p) => /\p{Lu}/u.test(original[folded.from[p]] ?? ""))) continue;
     const dateLike = inner.length > 0 && inner.every((g) => g === inner[0]) && DATE_SEPARATOR.test(inner[0]);
     const pieces = [1];
@@ -166,10 +180,15 @@ function search(sk: Skeleton, value: SequenceValue, original: string, folded: Fo
         pieces.push(1);
       }
     }
+    if (value.apart && value.apart.some((k) => inner[k - 1] === "" && !markers[k - 1])) continue;
     if (value.sentences && !uniformApart(inner)) {
-      // Between two dates, not inside one: "2020. 03 14", "2020; 03 14". A comma before the year stays inside ("03 14, 2020").
+      // Between two dates, not inside one: "2020. 03 14", "2020; 03 14", "2019. 1 2". A comma before the year stays inside ("03 14, 2020").
       const between = (k: number) => pieces[k - 1] >= 2 && pieces[k] >= 2;
-      if (sentenceEnds.some(between) || commas.some((k) => between(k) && k !== pieces.length - 1)) continue;
+      if (sentenceEnds.length || commas.some((k) => between(k) && k !== pieces.length - 1)) continue;
+      // A comma inside a date comes only before the year, after spaces: "03 14, 2020", never "10, 3/14" (a list of ratios).
+      // (One digit per box, any marks between them, is the boxed form's own: "0;3/1$4…".)
+      const wide = commas.filter((k) => pieces[k - 1] >= 2 || pieces[k] >= 2);
+      if (wide.length && (wide.some((k) => k !== pieces.length - 1) || inner.some((g) => g !== "" && !/[,;]/u.test(g) && !/^[ \t]+$/u.test(g)))) continue;
     }
     out.push({ tag: value.tag, start: sk.pos[idx], end: sk.pos[last] + 1, short: value.short ?? false, gaps: inner, whole: inner.every((g) => g === ""), dateLike, pieces });
   }

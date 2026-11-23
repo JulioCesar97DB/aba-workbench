@@ -22,6 +22,10 @@ import {
   R6_CLINICAL,
   R6_HOUSE_KEEP,
   R6_PROBES,
+  R7_CLINICAL,
+  R7_PROBES,
+  R7_RESTORE,
+  SHORT_SHEET,
   R5_RATIOS,
   R5_RESTORE,
   SPANISH_SHEET,
@@ -247,4 +251,46 @@ test("review round 6: every placeholder restores exactly the text it replaced", 
   assert.equal(reidentify(hidden.text, engine.map).text, text);
   // What the model writes comes back as each form was written.
   assert.equal(reidentify("[CLIENT], called [CLIENT NICKNAME], born [DOB].", engine.map).text, "Mateo, called Teo, born 3/14/2020.");
+});
+
+test("review round 7: three-letter names spelled out or joined in handles, sites and file names never survive, and restore exactly", (t) => {
+  const leaks: string[] = [];
+  let strings = 0;
+  for (const probe of R7_PROBES) {
+    const engine = new Deidentifier(SHORT_SHEET, { today: REVIEW_TODAY });
+    const result = engine.deidentify(probe.text);
+    for (const value of probe.hide) {
+      strings++;
+      if (survives(result.text, value)) leaks.push(`${probe.group}: ${JSON.stringify(probe.text)} -> ${JSON.stringify(result.text)} (${value})`);
+    }
+    assert.equal(reidentify(result.text, engine.map).text, probe.text);
+  }
+  // Inside a longer spelled run, or a three-letter name inside another word of a handle: listed, never passed silently.
+  for (const text of ["X A N A", "A N A B", "@anabel"]) {
+    const result = new Deidentifier(SHORT_SHEET, { today: REVIEW_TODAY }).deidentify(text);
+    assert.ok(result.possible.some((p) => p.reason === "name-inside-word"), text);
+  }
+  t.diagnostic(`${R7_PROBES.length} probes, ${strings} identifying strings, ${leaks.length} slipped through`);
+  assert.deepEqual(leaks, []);
+});
+
+test("review round 7: names and values broken across a line break restore exactly, the break kept", () => {
+  for (const text of R7_RESTORE) {
+    const engine = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY });
+    const hidden = engine.deidentify(text);
+    assert.doesNotMatch(hidden.text, /mateo|ticio|cía|0142/iu, text);
+    assert.equal(reidentify(hidden.text, engine.map).text, text);
+  }
+});
+
+test("review round 7: one-digit date forms, ratios after a birthday word and birth weights stay as written", () => {
+  for (const [dateOfBirth, line] of R7_CLINICAL) {
+    const sheet = { ...REVIEW_SHEET, client: { ...REVIEW_SHEET.client, dateOfBirth } };
+    assert.equal(new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(line).text, line, `${dateOfBirth}: ${line}`);
+  }
+  // The birthday itself is still hidden after a birthday word.
+  for (const text of ["Birthday: 3/14", "born on 3/14", "turns 7 on 3/14", "Bday 3 14", "DOB 1 2 2019"]) {
+    const sheet = text.includes("2019") ? { ...REVIEW_SHEET, client: { ...REVIEW_SHEET.client, dateOfBirth: "2019-01-02" } } : REVIEW_SHEET;
+    assert.notEqual(new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(text).text, text, text);
+  }
 });

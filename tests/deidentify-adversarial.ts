@@ -157,7 +157,8 @@ export const PROBES: Probe[] = [
   { group: "R2 N2 date of birth", text: "03 / 14 / 2020 and 03/14/ 2020 and 3/14/'20", hide: ["03 / 14 / 2020", "03/14/ 2020", "3/14/'20"] },
   { group: "R2 N2 date of birth", text: "DOB 031420; DOB 03142020; DOB 14032020", hide: ["031420", "03142020", "14032020"] },
   { group: "R2 N2 date of birth", text: "14-III-2020", hide: ["14-III-2020"] },
-  { group: "R2 N2 birthday", text: "turns 7 on 3/14. His birthday is coming up on 3/14. Celebrates on 14/3 every year.", hide: ["3/14", "14/3"] },
+  // (Round 7: "celebrates" and "party" alone no longer make a number pair a birthday; "Celebrates on 14/3" is listed for review.)
+  { group: "R2 N2 birthday", text: "turns 7 on 3/14. His birthday is coming up on 3/14. Celebrates his birthday on 14/3 every year.", hide: ["3/14", "14/3"] },
   { group: "R2 N2 birthday", text: "el catorce de marzo; the fourteenth of March; March fourteenth", hide: ["catorce de marzo", "fourteenth of March", "March fourteenth"] },
   { group: "R2 N3 compatibility", text: "Ｍａｔｅｏ and ＦＩＣＴＩＣＩＯ and Ｌｕｃíａ", hide: ["Ｍａｔｅｏ", "ＦＩＣＴＩＣＩＯ", "Ｌｕｃíａ"] },
   { group: "R2 N3 compatibility", text: "Daniela Muestra signed; Dani\u{FB01}cticio; Mu\u{FB06}stra", hide: ["Daniela", "Muestra"] },
@@ -385,3 +386,45 @@ export const R6_CLINICAL: Array<[string, string]> = [
 
 /** Round 6's house-number over-hiding (house number 102): counts and codes stay; the house number after its own word is hidden. */
 export const R6_HOUSE_KEEP = ["Street-crossing program: 102 trials.", "Lives nearby; 102 correct responses.", "Casa: 102 ensayos.", "ABLLS-R item C102. Seen at clinic suite 102.", "CPT 97153 x 102 units."];
+
+// ---------------------------------------------------------------- review round 7
+
+/** Round 7's sheet with three-letter names. */
+export const SHORT_SHEET: ClientSheet = {
+  client: { firstName: "Ana", lastName: "Paz Gil", nicknames: ["Ani"], dateOfBirth: "2018-09-05" },
+  caregivers: [
+    { firstName: "Eva", lastName: "Gil", relation: "mother" },
+    { firstName: "Luz", lastName: "Rey", relation: "grandmother" },
+  ],
+  schools: ["Escuela Sol"],
+  addresses: ["9 Calle Mar, Doral"],
+};
+
+/** B1: three-letter names spelled out, or joined in lowercase in handles, sites and file names. */
+export const R7_PROBES: Probe[] = [
+  { group: "B1 spelled", text: "She wrote A-N-A on the board.", hide: ["A-N-A"] },
+  { group: "B1 spelled", text: "Spelled A N A.", hide: ["A N A"] },
+  { group: "B1 spelled", text: "Then a.n.a. and E.V.A. and L-U-Z.", hide: ["a.n.a", "E.V.A", "L-U-Z"] },
+  { group: "B1 joined", text: "Follow @anapaz or www.anapaz.com; file ana_paz_cde.pdf; evarey@mail.com.", hide: ["anapaz", "paz_cde", "ana_", "evarey"] },
+];
+
+/** H1: names broken across a line break restore exactly, the break kept. */
+export const R7_RESTORE: string[] = [
+  "Ma-\nteo cried. Lucía Fic-\nticio said.",
+  "Ma-\nteo Fic-\nticio Gó-\nmez; Lu-\ncía",
+  "Mateo\nFicticio Gómez and Ficticio\nGómez; Mateo\tFicticio.",
+  "Call 305-555-\n0142 or 305-555- 0142.",
+];
+
+/** H2, H3: clinical lines that stay as written, with the birth date that used to change them. */
+export const R7_CLINICAL: Array<[string, string]> = [
+  ["2019-01-02", "Session 12 — 2019 plan"],
+  ["2019-01-02", "VB-MAPP 12 2019"],
+  ["2019-01-02", "Mand 12 | 2019 update"],
+  ["2019-01-02", "Scored 12 in 2019. 12/2019 manual."],
+  ["2020-01-04", "Mand 3 | Tact 14 | 2020 goal bank"],
+  ["2020-03-14", "Bday week data: 8/10, 3/14, 9/10, 2/7, 11/5."],
+  ["2012-08-10", "On his birthday he scored 8/10 on mands and 3/14 on tacts."],
+  ["2014-06-18", "Born premature; Apgar 7/9; birth weight 6 lb 14 oz"],
+  ["2020-03-14", "Born premature, 3/14 Apgar"],
+];

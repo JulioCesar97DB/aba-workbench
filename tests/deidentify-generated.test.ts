@@ -192,7 +192,7 @@ test("generated: the date of birth in every combination of month, day, year, ord
   }
   const pairs = monthDayVariants();
   for (const variant of pairs) {
-    for (const template of ["His birthday is {X}.", "He turns 7 on {X}.", "Cumple años el {X}.", "Party on {X} every year."]) {
+    for (const template of ["His birthday is {X}.", "He turns 7 on {X}.", "Cumple años el {X}.", "Birthday party on {X} every year."]) {
       const text = template.replace("{X}", variant);
       const { result } = hide(text);
       if (result.text.includes(variant) || /14|fourteenth|catorce/u.test(residue(result.text))) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(result.text)}`);
@@ -390,6 +390,19 @@ const SCORE_LINES: string[] = (() => {
     lines.push(`Raw ${a} | ${a + 5} | ${2012 + a} norm table | ${a + 9}`, `Score table: ${a} | ${a + 13} | ${2011 + a} | norms`, `ABLLS-R item C${a} and G${a + 10}; Grade ${a}, ${a + 13} students, ${2012 + a} cohort`);
     lines.push(`CPT 97153 x ${a} units; 97155 x ${a + 2} units`, `Session ${a}: ${a + 4} trials, ${a + 1} prompts, ${a + 2} independent`);
   }
+  // Round 7: two-digit numbers next to a year, ratios after birthday words, birth weights, and what held up.
+  for (let year = 2012; year <= 2024; year++) {
+    for (const n of ["12", "21", "13"]) lines.push(`Session ${n} — ${year} plan; VB-MAPP ${n} ${year}; Mand ${n} | ${year} update`, `Scored ${n} in ${year}. ${n}/${year} manual.`);
+    lines.push(`Mand 3 | Tact 14 | ${year} goal bank`, `Session 3, 14 trials, ${year} plan revision`, `VB-MAPP ${year}: level 3, 14 milestones`, `Percentile 3 | SS 14 | ${year} norms`);
+  }
+  lines.push(
+    "Bday week data: 8/10, 3/14, 9/10, 2/7, 11/5.",
+    "On his birthday he scored 8/10 on mands and 3/14 on tacts.",
+    "Born premature; Apgar 7/9; birth weight 6 lb 14 oz",
+    "3 of 14 targets (2020 curriculum); Item 3.14 (2020 manual)",
+    "Probe dates: 3 14, 4 2, 5 6 (all 2026)",
+    "Hours: 3, 14 and 20 per week in 2020, 2021 and 2022",
+  );
   // Trial data and rates: ratios, never a birthday.
   lines.push("Rates: 3 per hour, 1.5 per minute, 12 of 20 opportunities, 8/10, 9/10, 7/10, 6/10");
   for (let r = 1; r <= 12; r++) lines.push(`Target ${r}: ${r}/10 correct, ${(r % 5) + 1}/5 independent; IOA ${r}/12`, `Accuracy ${r}/${r + 2} on probe`);
@@ -588,5 +601,61 @@ test("generated: short forms of the sheet school before a school word never surv
     }
   }
   t.diagnostic(`${count} school short forms, ${failures.length} survived`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+// ---------------------------------------------------------------- review round 7: three-letter names, joined names, line breaks
+
+test("generated: three-letter sheet names spelled with any mark, and every name joined to another of the same person, never survive", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  const sheet = { client: { firstName: "Ana", lastName: "Paz Gil", nicknames: ["Ani"], dateOfBirth: "2018-09-05" }, caregivers: [{ firstName: "Eva", lastName: "Gil" }, { firstName: "Luz", lastName: "Rey" }] };
+  const marks = [" ", "-", ".", "_", "/", " / ", "*", "·", "•", ":", "|", "~", "+", ",", ". "];
+  for (const name of ["Ana", "ANA", "ana", "Eva", "Luz", "Paz", "Gil", "Rey", "Ani"]) {
+    for (const mark of marks) {
+      for (const tail of ["", mark.trim()]) {
+        const written = [...name].join(mark) + tail;
+        const result = new Deidentifier(sheet, { today: REVIEW_TODAY }).deidentify(`She wrote ${written} today.`);
+        count++;
+        if (residue(result.text).includes(foldString(name))) failures.push(`${JSON.stringify(written)} -> ${JSON.stringify(result.text)}`);
+      }
+    }
+  }
+  const people = [["ana", "paz", "gil", "ani"], ["eva", "gil"], ["luz", "rey"]];
+  for (const words of people) {
+    for (const a of words) {
+      for (const b of words) {
+        if (a === b) continue;
+        for (const form of [`@${a}${b}`, `www.${a}${b}.com`, `${a}_${b}_cde.pdf`, `${a}${b}@mail.com`, `#${a}${b}`, `${a}.${b}.docx`]) {
+          const engine = new Deidentifier(sheet, { today: REVIEW_TODAY });
+          const result = engine.deidentify(`See ${form} today.`);
+          count++;
+          const left = residue(result.text);
+          if (left.includes(a + b) || new RegExp(`(?:^|[^a-z])(?:${a}|${b})(?:[^a-z]|$)`, "u").test(result.text.replace(PLACEHOLDER, " ").toLowerCase()) || reidentify(result.text, engine.map).text !== `See ${form} today.`) {
+            failures.push(`${JSON.stringify(form)} -> ${JSON.stringify(result.text)}`);
+          }
+        }
+      }
+    }
+  }
+  t.diagnostic(`${count} spelled three-letter names and joined names, ${failures.length} survived`);
+  assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test("generated: a name or a value broken by a line break at every position restores exactly", (t) => {
+  const failures: string[] = [];
+  let count = 0;
+  for (const value of ["Mateo", "Ficticio", "Lucía", "Mateo Ficticio Gómez", "Valeria", "305-555-0142", "Martí"]) {
+    for (let i = 1; i < value.length; i++) {
+      for (const brk of ["-\n", "\n", "-\r\n", "- \n"]) {
+        if (value[i - 1] === " " || value[i] === " ") continue;
+        const text = `Seen with ${value.slice(0, i)}${brk}${value.slice(i)} today.`;
+        const { result, engine } = hide(text);
+        count++;
+        if (reidentify(result.text, engine.map).text !== text) failures.push(`${JSON.stringify(text)} -> ${JSON.stringify(reidentify(result.text, engine.map).text)}`);
+      }
+    }
+  }
+  t.diagnostic(`${count} line-broken names and values, ${failures.length} not restored exactly`);
   assert.deepEqual(failures.slice(0, 20), []);
 });
