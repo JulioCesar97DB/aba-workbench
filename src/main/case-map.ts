@@ -48,6 +48,8 @@ const RefSchema = z.looseObject({
   version: VersionNumberSchema.optional(),
   session: z.string().max(40).optional(),
   quote: z.string().max(MAP_TEXT_LIMITS.quote).optional(),
+  /** How the app checked the quote (D4): "found", "not-found", or "not-checked" for a PDF (D32). */
+  checked: WordSchema.optional(),
 });
 
 /**
@@ -795,4 +797,171 @@ export function approveMapPart<D extends WithCaseMap>(data: D, part: MapPartId, 
   if (!findVersion(stored, number)) return null;
   const versions = stored.versions.map((version) => (version.number === number && version.approvedOnce !== true ? { ...version, approvedOnce: true as const } : version));
   return withPart(data, part, { ...stored, versions, approvedVersion: number, approvedAt: now, currentVersion: number });
+}
+
+/* The AI's drafts (step 1, pull request 2) */
+
+/** What one AI request of the map recorded (caseMap.extractions): who wrote it, from what, and what the checks found. */
+export interface MapExtractionRecord {
+  id: string;
+  kind: string;
+  at: string;
+  /** The run it belongs to: the two requests of one "Draft the map". */
+  run: string;
+  generation: Record<string, unknown>;
+  format: string;
+  repaired: boolean;
+  /** What the code checks still found after the repair (at most 50). */
+  problems: string[];
+}
+
+/** An item as the AI's answer gives it, already in the stored shape, with its key instead of an id. */
+export type AnswerItem = Record<string, unknown> & { key: string };
+
+/** A part from an answer: its items, the behaviors part's groups, and whether the items replace the AI's or join them. */
+export interface AnswerPart {
+  items: AnswerItem[];
+  groups?: AnswerItem[];
+  /** "join": the items are added to what the version shown holds (the open items of the second request). */
+  mode?: "replace" | "join";
+}
+
+const MAX_EXTRACTIONS = 10_000;
+const MAX_EXTRACTION_PROBLEMS = 50;
+
+/**
+ * Saves an answer as new versions (D1, D5). For each part:
+ * - a part whose version shown she approved is left as it is: the AI never changes approved content;
+ * - an item keeps its id when its key is an id the part has had; any other key gets a new id from code;
+ * - an item she changed by hand (editedAt) is kept as hers, in place of the AI's, and kept
+ *   when the AI leaves it out;
+ * - the new version is "ai" when the part had no version before this run, "update" otherwise;
+ * - a part whose content would not change gets no new version.
+ * Links between items (a group's or a risk's behaviors) go from keys to ids. The record is kept.
+ */
+export function applyMapAnswer<D extends WithCaseMap>(
+  data: D,
+  parts: Partial<Record<MapPartId, AnswerPart>>,
+  record: MapExtractionRecord,
+  partsBeforeRun: ReadonlySet<MapPartId>,
+  now: string,
+): { data: D; written: MapPartId[]; kept: MapPartId[] } {
+  let next = data;
+  const written: MapPartId[] = [];
+  const kept: MapPartId[] = [];
+  const behaviorIds = new Map<string, string>();
+  const order = (Object.keys(parts) as MapPartId[]).sort((a, b) => (a === "behaviors" ? -1 : b === "behaviors" ? 1 : 0));
+  const mapIds = (keys: unknown) => (Array.isArray(keys) ? keys.map((key) => behaviorIds.get(String(key))).filter((id): id is string => id !== undefined) : []);
+
+  for (const part of order) {
+    const answer = parts[part]!;
+    const stored = storedPart(next, part);
+    const status = mapPartView(next, part).status;
+    if (status === "approved") {
+      kept.push(part);
+      continue;
+    }
+    const content = currentContent(stored);
+    const everIds = new Set(stored.versions.flatMap((version) => [...version.content.items, ...(version.content.groups ?? [])].map((item) => item.id)));
+    const counter = (prefix: string) => {
+      let max = 0;
+      for (const id of everIds) {
+        const match = new RegExp(`^${prefix}-(\\d+)$`).exec(id);
+        if (match) max = Math.max(max, Number(match[1]));
+      }
+      return () => `${prefix}-${++max}`;
+    };
+    const nextItemId = part === "client" ? () => "client" : counter(MAP_ID_PREFIX[part]);
+    const nextGroupId = counter(GROUP_ID_PREFIX);
+
+    const settle = (incoming: AnswerItem[], current: StoredItem[], newId: () => string, isGroup: boolean): StoredItem[] => {
+      const hers = new Map(current.filter((item) => typeof item.editedAt === "string").map((item) => [item.id, item]));
+      const used = new Set<string>();
+      const out: StoredItem[] = [];
+      for (const raw of incoming) {
+        const { key, behaviorKeys, ...rest } = raw;
+        const id = part === "client" ? "client" : everIds.has(key) && !used.has(key) ? key : newId();
+        used.add(id);
+        if (part === "behaviors" && !isGroup) behaviorIds.set(key, id);
+        if (hers.has(id)) {
+          out.push(hers.get(id)!);
+          continue;
+        }
+        const linked = isGroup || part === "risks" ? { behaviorIds: mapIds(behaviorKeys) } : {};
+        out.push({ ...rest, ...linked, id } as StoredItem);
+      }
+      for (const [id, item] of hers) if (!used.has(id)) out.push(item);
+      return out;
+    };
+
+    const items = answer.mode === "join" ? [...content.items, ...settle(answer.items, [], nextItemId, false)] : settle(answer.items, content.items, nextItemId, false);
+    let nextContent: Content = { ...content, items };
+    if (part === "behaviors") {
+      // Her behaviors kept by id: a group of the AI names them by the key the answer gave.
+      for (const item of items) if (!behaviorIds.has(item.id)) behaviorIds.set(item.id, item.id);
+      nextContent = settleGroups({ ...nextContent, groups: settle(answer.groups ?? [], content.groups ?? [], nextGroupId, true) }, null, now);
+    }
+    if (JSON.stringify(nextContent) === JSON.stringify(content)) continue;
+    if (!CONTENT_SCHEMAS[part].safeParse(nextContent).success) refuse(`the AI's ${part} do not fit the case map's limits.`);
+    const number = nextNumber(stored);
+    const version: StoredMapVersion = {
+      number,
+      kind: partsBeforeRun.has(part) ? "update" : "ai",
+      createdAt: now,
+      ...(currentPartVersion(stored) ? { basedOn: currentPartVersion(stored)!.number } : {}),
+      extraction: record.id,
+      content: nextContent,
+    };
+    next = withPart(next, part, withoutApproval({ ...stored, versions: [...stored.versions, version], currentVersion: number }));
+    written.push(part);
+  }
+  const map: StoredCaseMap = next.caseMap ?? { parts: {} };
+  const extractions = [...(map.extractions ?? []), { ...record, problems: record.problems.slice(0, MAX_EXTRACTION_PROBLEMS).map((problem) => problem.slice(0, 500)) }].slice(-MAX_EXTRACTIONS);
+  next = { ...next, caseMap: { ...map, extractions } };
+  return { data: next, written, kept };
+}
+
+/** Values only, for a prompt: a claim as its value (and its [CHECK]), everything else as it is. */
+function valuesOnly(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(valuesOnly);
+  if (!isPlainObject(value)) return value;
+  if (isClaim(value)) return value.check ? { value: value.value, check: value.check } : value.value;
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "editedAt" || key === "origin" || key === "refs") continue;
+    out[key] = valuesOnly(entry);
+  }
+  return out;
+}
+
+/**
+ * Her map, for an update (D12, "her-map"): the parts she approved, whole, and in every
+ * other part the items she typed or changed by hand. Each item with its id. Null when she
+ * has none.
+ */
+export function herMapForPrompt(data: WithCaseMap, parts: readonly MapPartId[]): string | null {
+  const out: Record<string, unknown> = {};
+  for (const part of parts) {
+    const view = mapPartView(data, part);
+    const stored = currentPartVersion(storedPart(data, part));
+    if (!stored) continue;
+    const items = view.status === "approved" ? stored.content.items : stored.content.items.filter((item) => typeof item.editedAt === "string");
+    const groups = part === "behaviors" ? (view.status === "approved" ? (stored.content.groups ?? []) : (stored.content.groups ?? []).filter((group) => typeof group.editedAt === "string")) : [];
+    if (items.length === 0 && groups.length === 0) continue;
+    out[part] = { ...(view.status === "approved" ? { approved: true } : {}), items: valuesOnly(items), ...(groups.length > 0 ? { groups: valuesOnly(groups) } : {}) };
+  }
+  return Object.keys(out).length > 0 ? JSON.stringify(out) : null;
+}
+
+/** The facts the behaviors request builds on: the settings with their ids, and the caregivers' roles. */
+export function mapFactsForPrompt(data: WithCaseMap): { text: string; settingIds: Set<string> } {
+  const settings = mapPartView(data, "settings").items as unknown as Array<Record<string, unknown> & { id: string }>;
+  const caregivers = mapPartView(data, "caregivers").items as unknown as Array<Record<string, unknown> & { id: string }>;
+  const text = JSON.stringify({ settings: valuesOnly(settings.map(({ id, name, kind, evidence }) => ({ id, name, kind, evidence }))), caregivers: valuesOnly(caregivers.map(({ id, role }) => ({ id, role }))) });
+  return { text, settingIds: new Set(settings.map((setting) => setting.id)) };
+}
+
+/** Every id an item of these parts has had, for the answers' keys to reuse (D5). */
+export function partsWithVersions(data: WithCaseMap): Set<MapPartId> {
+  return new Set(MAP_PARTS.filter((part) => storedPart(data, part).versions.length > 0));
 }

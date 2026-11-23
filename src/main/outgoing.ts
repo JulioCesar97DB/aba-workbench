@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PromptParts, SourceDocument } from "../lib/providers/types.ts";
 import { buildJudgePrompt, JUDGE_PROMPT_VERSION, type JudgedSection, type JudgeInput } from "../lib/judge.ts";
-import { buildSectionPrompt, type ContextSection, type SectionId, type SectionRequest } from "../lib/rules.ts";
+import { buildCaseMapPrompt, buildSectionPrompt, type ContextSection, type MapPromptInput, type SectionId, type SectionRequest } from "../lib/rules.ts";
 import { isSourceType, SOURCE_TYPE_NAMES } from "../shared/sources.ts";
 import type { CaseData } from "./case-file.ts";
 
@@ -174,4 +174,24 @@ export class StreamRestorer {
     this.#pending = "";
     return rest ? this.#restore(rest) : "";
   }
+}
+
+/**
+ * A case map request (step 1, pull request 2): built here like every request about a case,
+ * so de-identification, when it plugs in, covers it too. Her sections, her map, her
+ * instructions, her notes and the facts already saved are the case's content.
+ */
+export async function prepareMapRequest(input: Omit<MapPromptInput, "sources"> & { sources: OutgoingSource[]; rulesDir: string }): Promise<PreparedRequest> {
+  const sources = await loadSources(input.sources);
+  const { sources: _outgoing, rulesDir, ...rest } = input;
+  void _outgoing;
+  const { prompt, rulesVersions } = await buildCaseMapPrompt({ ...rest, sources }, rulesDir);
+  return {
+    [prepared]: true,
+    prompt,
+    rulesVersions,
+    sourcesUsed: input.sources.map(({ id, title }) => ({ id, title })),
+    deidentified: false,
+    restore: restoreNothing,
+  };
 }

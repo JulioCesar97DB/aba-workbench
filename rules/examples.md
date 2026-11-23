@@ -1,6 +1,6 @@
 ---
 id: examples
-version: 3
+version: 4
 updated: 2026-11-23
 sources: Written for these rules about an invented child, following the BCBA's patterns (the decisions file and the owner's notes on three of her assessments, 2026-11-23, in our own words). No text from any real assessment, and no facts shared with the invented evaluation cases.
 confirmed: no, pending review by the BCBA
@@ -31,3 +31,21 @@ A whole Strengths and Weaknesses section for the same child:
 > What Nadia needs to learn follows from them: to dress with less help, to ask an adult for help when something is out of reach, to accept the end of an activity, to stay safely on the floor, and to join other children's play, building on her ease with short routines and her interest in insects.
 
 What makes it work: each strength is concrete, sourced and tied to how treatment can use it; the qualification is attributed to its source; the needs follow Medical Necessity's areas in its order and terms, one sourced sentence each, without its counts or incidents; the closing states what Nadia needs to learn, each the plain reverse of a need just named, and names no procedure, strategy or program.
+
+## Case map: a behavior defined by what this child does
+
+One behavior from a case map, for the same invented child. Her standing instructions give the offset threshold (10 seconds without the behavior); the counts and incidents come from her father's interview and the BCBA's observation of 05/14/2026.
+
+> Name: Climbing furniture
+>
+> What she does: climbs onto the kitchen counter from a chair; climbs the living-room bookshelf by its shelves; stands on the top of the sofa back.
+>
+> Definition: Any instance in which Nadia raises both feet off the floor onto furniture not made for sitting or lying on (the counter, the bookshelf, the sofa back, a table). Onset: her second foot leaves the floor or the chair. Offset: both feet are back on the floor and she does not climb again for 10 consecutive seconds. Each climb is counted separately. Exclusions: climbing on playground equipment, and sitting or lying on the sofa or a bed.
+>
+> Examples: During the home observation on 05/14/2026, Nadia climbed the bookshelf within a minute of her father saying that the markers were put away. Nadia climbs from a kitchen chair onto the counter to reach the art supplies on top of the refrigerator.
+>
+> Non-examples: Nadia asks her father to get the markers down. Nadia climbs the ladder of the slide at the park. Nadia sits on the sofa to read.
+>
+> Measure: frequency. Baseline: 3 climbs in the 2-hour observation of 05/14/2026.
+
+What makes it work: every form of the behavior in the definition is one the sources record for Nadia; onset, offset and the counting rule can be observed; the exclusions keep it apart from play that is safe; the examples are her own incidents, and the first non-example is the request the plan will teach; the threshold comes from her standing instructions, not from habit.

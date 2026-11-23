@@ -10,6 +10,10 @@
  * content it is (origin) and the [CHECK: ...] text on it, if any.
  */
 
+/** The AI's two requests of a draft (D12): the case facts (with the report on her sections), then the behaviors. */
+export const MAP_REQUEST_KINDS = ["map-facts", "map-behaviors"] as const;
+export type MapRequestKind = (typeof MAP_REQUEST_KINDS)[number];
+
 /** The 22 sections of the ABA Matrix template, by number: a fact's home section names one (rules/guide.md, the section map). */
 export const TEMPLATE_SECTIONS = [
   "Recipient Information",

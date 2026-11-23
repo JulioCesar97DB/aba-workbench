@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PromptParts, SourceDocument } from "./providers/types.ts";
 import { splitParagraphs, type SectionShape } from "../shared/section-text.ts";
+import { mapAnswerSchema, type MapAnswerFormat, type MapRequestKind } from "./case-map-extraction.ts";
 
 export type { SectionShape } from "../shared/section-text.ts";
 
@@ -177,7 +178,7 @@ export interface SectionPromptInput {
 }
 
 /** The tags the section prompt uses: text she typed can never open or close one of them. */
-const PROMPT_TAGS = ["her-sections", "section", "standing-instructions", "session-notes", "current-text", "marked-paragraph", "her-request", "her-own-text", "source", "sources"];
+const PROMPT_TAGS = ["her-sections", "section", "standing-instructions", "session-notes", "current-text", "marked-paragraph", "her-request", "her-own-text", "source", "sources", "her-map", "map-facts", "previous-answer"];
 const TAG_PATTERN = new RegExp(`<(/?)(${PROMPT_TAGS.join("|")})\\b`, "giu");
 
 /** Text typed or pasted by her, made unable to break out of the tag it is put in. */
@@ -277,6 +278,80 @@ export async function buildSectionPrompt(
       );
       break;
     }
+  }
+  return { prompt: { system, sources: input.sources, task: parts.join("\n\n") }, rulesVersions };
+}
+
+/* The case map's requests (step 1, pull request 2: D12 to D15) */
+
+/** The rules files of the map's requests, sent in their task only (D15): the system prefix stays the sections'. */
+const MAP_RULES_FILES = { "map-facts": ["case-map.md"], "map-behaviors": ["case-map.md", "behaviors.md"] } as const;
+
+export interface MapPromptInput {
+  kind: MapRequestKind;
+  sources: SourceDocument[];
+  /** Her sections that are hers or approved, in the report's order: first in the task, and final. */
+  herSections: ReadonlyArray<ContextSection & { id: string }>;
+  /** The parts she corrected, typed or approved, as JSON with their ids (an update); null on a first draft. */
+  herMap: string | null;
+  /** Her standing instructions for the map (her thresholds, D16); null until she confirms them. */
+  instructions: string | null;
+  notes: string | null;
+  /** For the behaviors request: the facts already saved (the settings and their ids), as JSON. */
+  mapFacts: string | null;
+  format: MapAnswerFormat;
+  repair: { previousAnswer: string; problems: string[] } | null;
+}
+
+/**
+ * The prompt of one map request. The system prefix and the sources are the section
+ * requests' own, so they share the cache; everything else goes in the task, in this order:
+ * the map's rules, her sections (her text wins over the sources), her map, her standing
+ * instructions, her notes, the facts already saved (behaviors), then the request.
+ */
+export async function buildCaseMapPrompt(input: MapPromptInput, rulesDir: string = DEFAULT_RULES_DIR): Promise<{ prompt: PromptParts; rulesVersions: Record<string, string> }> {
+  const [systemFiles, mapFiles] = await Promise.all([
+    Promise.all(SECTION_REQUEST_SYSTEM_FILES.map((file) => loadRulesFile(rulesDir, file))),
+    Promise.all(MAP_RULES_FILES[input.kind].map((file) => loadRulesFile(rulesDir, file))),
+  ]);
+  const rulesVersions = Object.fromEntries([...systemFiles, ...mapFiles].map((f) => [f.id, f.version]));
+  const system = systemFiles.map((f) => f.body).join("\n\n---\n\n");
+  const parts: string[] = [mapFiles.map((f) => f.body).join("\n\n---\n\n"), "---"];
+  if (input.herSections.length > 0) {
+    const blocks = input.herSections.map((section) => `<section id="${section.id}" title="${section.title}">\n${quoteForPrompt(section.text)}\n</section>`);
+    parts.push(`<her-sections>\n${blocks.join("\n\n")}\n</her-sections>`);
+  }
+  if (input.herMap) parts.push(`<her-map>\n${quoteForPrompt(input.herMap)}\n</her-map>`);
+  const instructions = input.instructions?.trim();
+  if (instructions) parts.push(`<standing-instructions>\n${quoteForPrompt(instructions)}\n</standing-instructions>`);
+  const notes = input.notes?.trim();
+  if (notes) parts.push(`<session-notes>\n${quoteForPrompt(notes)}\n</session-notes>`);
+  if (input.mapFacts) parts.push(`<map-facts>\n${quoteForPrompt(input.mapFacts)}\n</map-facts>`);
+  const readWhatIHave = input.herSections.length > 0;
+  const what =
+    input.kind === "map-facts"
+      ? `Map request: case facts. Return the client, the caregivers, the settings, the deficit areas, the strengths, the facts with their home sections and the open items${readWhatIHave ? ", and the report on her sections (Read what I have: her sections come first and her text wins)" : "; her sections are not given, so the report is an empty list"}.`
+      : "Map request: behaviors. Return the target behaviors with their topographies, definitions, baselines, antecedents and consequences, functions with their evidence, and barriers; the groups; the risks; and the open items. A behavior's settingIds are ids from <map-facts>.";
+  parts.push(
+    [
+      what,
+      `Every quote is copied word for word from the place it cites. Intensity is hers: it is not asked for. ${input.herMap ? "Items of <her-map> keep their ids as their keys." : "Every key is new: new-1, new-2, and so on."}`,
+      input.format === "json-schema"
+        ? "Answer in the structured format."
+        : `Answer with one JSON object and nothing else (no code fence, no text before or after), following this JSON schema exactly:\n${JSON.stringify(mapAnswerSchema(input.kind))}`,
+    ].join("\n"),
+  );
+  if (input.repair) {
+    parts.push(
+      [
+        "<previous-answer>",
+        quoteForPrompt(input.repair.previousAnswer),
+        "</previous-answer>",
+        "Your previous answer could not be used as it is:",
+        ...input.repair.problems.map((problem) => `- ${problem}`),
+        "Answer again, complete, with these fixed: copy every quote word for word from the place it cites, or leave the value out.",
+      ].join("\n"),
+    );
   }
   return { prompt: { system, sources: input.sources, task: parts.join("\n\n") }, rulesVersions };
 }
