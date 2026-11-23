@@ -61,6 +61,7 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
       "getConnections",
       "getSection",
       "getSettings",
+      "judgeSection",
       "listCases",
       "listFailedSaves",
       "onConnectionsChange",
@@ -94,6 +95,23 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
     process: "undefined",
     popupBlocked: true,
   });
+});
+
+test("the evaluation's judge answers only in a development build started hidden", async ({ app }, testInfo) => {
+  const page = await app.firstWindow();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  // Not a section: the built app (started with --hidden) checks it and refuses; the packaged app has no handler at all.
+  const answer = await page.evaluate(async () => {
+    const inPage = globalThis as unknown as InPage;
+    try {
+      await inPage.aba.judgeSection("5b6f0f8e-2d7a-4c1e-9b3a-7e2f4d6c8a10", "not-a-section" as never, inPage.crypto.randomUUID(), "openai", {});
+      return "answered";
+    } catch (error) {
+      return String(error);
+    }
+  });
+  if (testInfo.project.name === "packaged") expect(answer).toMatch(/No handler registered/);
+  else expect(answer).toMatch(/Refused: not a section/);
 });
 
 test("a mock generation streams to completion, with the rules found", async ({ app }) => {
