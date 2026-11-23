@@ -121,6 +121,8 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   const [detail, setDetail] = useState(initial);
   const generation = useSectionGeneration(caseId, section.id);
   const running = isRunning(generation);
+  // While the AI only checks the new version against her sections, she can already read, compare, approve and copy.
+  const writing = running && generation?.phase !== "checking";
   const [mode, setMode] = useState<Mode>(initial.versions.length === 0 ? "choose" : "view");
   const [viewed, setViewed] = useState<number | null>(initial.currentVersion);
   const [actionFailed, setActionFailed] = useState(false);
@@ -186,11 +188,11 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
       title={section.title}
       titleLang="en"
       afterTitle={
-        mode === "view" || mode === "edit" ? <VersionBar detail={detail} current={current} disabled={running || mode === "edit"} onShow={(n) => void show(n)} /> : null
+        mode === "view" || mode === "edit" ? <VersionBar detail={detail} current={current} disabled={writing || mode === "edit"} onShow={(n) => void show(n)} /> : null
       }
       meta={mode === "view" && current ? <VersionLine version={current} /> : `${opened.label} · ${t("workspace.sectionPosition", { number, total: REPORT_SECTIONS.length })}`}
       actions={
-        mode === "view" && current && !running ? (
+        mode === "view" && current && !writing ? (
           <>
             {approvedHere ? (
               <Button onClick={() => void act(() => window.aba.approveSection(caseId, section.id, null))}>{t("section.unapprove")}</Button>
@@ -223,7 +225,8 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         ) : detail.approvedVersion !== null ? (
           <p className="text-sm text-fg-muted">{t("section.approvedOther", { number: detail.approvedVersion })}</p>
         ) : null}
-        {mode === "choose" && !running ? (
+        {detail.versions.length === 0 && generation && !running && mode !== "paste" ? <GenerationOutcomeMessage generation={generation} /> : null}
+        {detail.versions.length === 0 && !running && mode !== "paste" ? (
           <StartChooser canDraft={providers.provider !== null} onPaste={() => setMode("paste")} onDraft={() => void run({ kind: "draft" })} />
         ) : null}
         {mode === "paste" ? (
@@ -289,7 +292,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
             )}
           />
         ) : null}
-        {mode === "view" || (mode === "choose" && running) ? (
+        {(mode === "view" && detail.versions.length > 0) || running ? (
           <SectionView
             key={current?.number ?? "none"}
             version={current}

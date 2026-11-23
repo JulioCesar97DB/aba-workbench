@@ -167,6 +167,9 @@ test("stopping a draft saves nothing and says so; without an AI connected, draft
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByText("Stopped. Nothing was saved; your versions are unchanged.")).toBeVisible();
+  // She can start again, either way.
+  await expect(page.getByRole("button", { name: /Draft it with the AI/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /I already wrote it/ })).toBeVisible();
   expect(sectionData(caseFile, "crisis-plan")).toBeUndefined();
 
   await page.evaluate(() => (globalThis as unknown as { aba: AbaApi }).aba.removeClaudeKey());
