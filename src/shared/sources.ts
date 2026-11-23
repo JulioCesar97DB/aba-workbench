@@ -28,9 +28,6 @@ export const SOURCE_TYPE_NAMES: Record<Exclude<SourceType, "other">, string> = {
   "ablls-r": "ABLLS-R",
 };
 
-/** The types offered first for a pasted text, in this order; the rest follow. */
-export const TEXT_SOURCE_TYPES: readonly SourceType[] = ["cde", "parent-interview", "direct-observation", "fba-questionnaire", "iep", "other"];
-
 export function isSourceType(value: unknown): value is SourceType {
   return typeof value === "string" && (SOURCE_TYPES as readonly string[]).includes(value);
 }

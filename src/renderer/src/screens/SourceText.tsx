@@ -3,9 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router";
 import { isSourceType, MAX_SOURCE_TEXT_LENGTH, type SourceType } from "../../../shared/sources.ts";
 import { registerFlusher, sourceAnswer, useCaseSaves } from "../case-saves.tsx";
-import { casePath, sourceTextPath } from "../case-steps.tsx";
+import { casePath, sourceTextPath, stepTitle } from "../case-steps.tsx";
 import { ButtonLink } from "../components/Link.tsx";
-import { stepTitle } from "../case-steps.tsx";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase } from "../open-case.tsx";
 import { StepHeader } from "../shell/PageHeader.tsx";
@@ -188,6 +187,8 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
         <div data-testid="text-details" className="flex flex-col gap-4 @split:flex-row @split:items-start [&>*:nth-child(2)]:flex-1">
           <SourceDetailFields details={details} />
         </div>
+        {/* A new text of no type yet ("Pegar un texto"): say that the type is chosen here (review, minor 2). */}
+        {!existingId && details.type === "other" ? <p className="max-w-reading text-sm text-fg-muted">{t("sources.otherTypeHint")}</p> : null}
         <div className="flex flex-1 flex-col gap-1.5">
           <label htmlFor={textId} className="font-medium">
             {t("sources.textLabel")}

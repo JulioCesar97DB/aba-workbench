@@ -95,6 +95,10 @@ test("sources: a text's preview shows it without Markdown's marks; the text itse
   // Underscores and stars inside words, arithmetic and dashes in prose are kept.
   assert.equal(withoutMarkdownMarks("snake_case_name and 2 * 3 * 4 - a dash"), "snake_case_name and 2 * 3 * 4 - a dash");
   assert.equal(withoutMarkdownMarks("__bold__ and _italic_ words"), "bold and italic words");
+  // Bold marks only around words, never between them: arithmetic keeps its stars (review, minor 4).
+  assert.equal(withoutMarkdownMarks("2**3 and 4**5"), "2**3 and 4**5");
+  assert.equal(withoutMarkdownMarks("a**b**c"), "a**b**c");
+  assert.equal(withoutMarkdownMarks("Score: **85** (low)"), "Score: 85 (low)");
   // A table: its separator row goes, its cells read in one line.
   assert.equal(withoutMarkdownMarks("| Behavior | Escape |\n| --- | :---: |\n| Hitting | 4 |"), "Behavior · Escape\n\nHitting · 4");
   // A heading mark with no space is not a heading (#hashtag), and a lone hash line goes.

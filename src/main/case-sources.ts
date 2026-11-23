@@ -154,7 +154,7 @@ export function withoutMarkdownMarks(text: string): string {
     .replace(/^[ \t]{0,3}#{1,6}(?:[ \t]+|$)/gmu, "")
     .replace(/^[ \t]*>[ \t]?/gmu, "")
     .replace(/^[ \t]*[-*+][ \t]+/gmu, "")
-    .replace(/(\*\*|__)(?=\S)([^\n]*?\S)\1/gu, "$2")
+    .replace(/(^|[^\p{L}\p{N}*_])(\*\*|__)(?=\S)([^\n]*?\S)\2(?![\p{L}\p{N}])/gmu, "$1$3")
     .replace(/(^|[^\p{L}\p{N}*_])([*_])(?=\S)([^*_\n]*?\S)\2(?![\p{L}\p{N}])/gmu, "$1$3")
     .replace(/`([^`\n]+)`/gu, "$1");
 }

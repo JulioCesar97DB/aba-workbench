@@ -77,6 +77,21 @@ export function SourcesScreen() {
   const ignored = useIgnoredFolderPdfs(caseId);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [adding, setAdding] = useState(false);
+  // The control to focus once the screen has drawn the change (review S2): the one she pressed
+  // (a checklist row's or a folder PDF's button, Ignorar, Mostrar) has gone with what it changed.
+  const focusNext = useRef<string | null>(null);
+  useEffect(() => {
+    const selector = focusNext.current;
+    if (!selector) return;
+    const target = document.querySelector<HTMLElement>(selector);
+    if (!target) return;
+    focusNext.current = null;
+    target.focus();
+  });
+  /** After PDFs are added: the first new document's "Abrir". */
+  const focusAdded = (added: string[]) => {
+    if (added.length > 0) focusNext.current = `[data-open-source="${CSS.escape(added[0])}"]`;
+  };
 
   const active = sources.sources.filter((source) => !source.removedAt);
   const removed = sources.sources.filter((source) => source.removedAt);
@@ -103,19 +118,24 @@ export function SourcesScreen() {
   );
 
   /**
-   * PDFs through the system's dialog. From a checklist row, each PDF added gets that row's
-   * type (it was guessed from its file name): the same change as choosing the type in
-   * "Nombre y fecha", saved right after.
+   * PDFs through the system's dialog. From a checklist row, each PDF added whose file name
+   * said nothing of its type ("other") gets that row's type: the same change as choosing the
+   * type in "Nombre y fecha", saved right after. A name that does say it ("basc-3-prq.pdf"
+   * chosen from the Vineland-3 row) keeps its own type (review, minor 1). A PDF copied but not
+   * added (`copied-not-added`) gets its type guessed again when she adds it from the folder.
    */
   async function choosePdfs(type?: SourceType) {
     setAdding(true);
     try {
       const result = await window.aba.choosePdfs(caseId);
       reportAdded(result);
-      if (type && result.outcome === "done") {
-        for (const id of result.added) {
-          const added = result.sources.sources.find((source) => source.id === id);
-          if (added && added.type !== type) await run(async () => sourceAnswer(await window.aba.changeSource(caseId, id, { type })));
+      if (result.outcome === "done") {
+        focusAdded(result.added);
+        if (type) {
+          for (const id of result.added) {
+            const added = result.sources.sources.find((source) => source.id === id);
+            if (added && added.type === "other" && type !== "other") await run(async () => sourceAnswer(await window.aba.changeSource(caseId, id, { type })));
+          }
         }
       }
     } catch {
@@ -184,7 +204,9 @@ export function SourcesScreen() {
   const addFromFolder = useCallback(
     async (name: string) => {
       try {
-        reportAdded(await window.aba.addFolderPdf(caseId, name));
+        const result = await window.aba.addFolderPdf(caseId, name);
+        reportAdded(result);
+        if (result.outcome === "done") focusAdded(result.added);
       } catch {
         setNotice({ kind: "error", message: t("sources.addFailed") });
       }
@@ -206,6 +228,15 @@ export function SourcesScreen() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  /** Ignorar: the focus goes to the next PDF's "Agregar" (the one before when it was the last), or to "Mostrar" when none is left. */
+  function ignoreFolderPdf(file: CaseSources["files"][number]) {
+    const index = looseShown.indexOf(file);
+    const left = looseShown.filter((other) => other !== file);
+    const next = left[Math.min(index, left.length - 1)];
+    focusNext.current = next ? `[data-folder-add="${CSS.escape(next.name)}"]` : "[data-show-ignored]";
+    ignored.ignore(file);
+  }
 
   const empty = active.length === 0;
   const pasteLabel = t("sources.pasteText");
@@ -266,8 +297,16 @@ export function SourcesScreen() {
             <DocumentList caseId={caseId} active={active} adding={adding} onAddPdf={(type) => void choosePdfs(type)} onRemove={(source) => void remove(source)} />
           </>
         )}
-        {looseShown.length > 0 ? <FolderPdfs files={looseShown} onAdd={(name) => void addFromFolder(name)} onIgnore={ignored.ignore} /> : null}
-        {looseIgnored > 0 ? <IgnoredLine count={looseIgnored} onShow={ignored.showAll} /> : null}
+        {looseShown.length > 0 ? <FolderPdfs files={looseShown} onAdd={(name) => void addFromFolder(name)} onIgnore={ignoreFolderPdf} /> : null}
+        {looseIgnored > 0 ? (
+          <IgnoredLine
+            count={looseIgnored}
+            onShow={() => {
+              focusNext.current = "[data-folder-add]";
+              ignored.showAll();
+            }}
+          />
+        ) : null}
         {removed.length > 0 ? <RemovedSources sources={removed} onRestore={(source) => void restore(source)} /> : null}
       </div>
       {dragging ? <DropOverlay /> : null}
@@ -379,6 +418,16 @@ function MissingRow({ caseId, row, adding, onAddPdf, inList }: { caseId: string;
   const nameId = useId();
   const { description, form } = rowWords(t, row);
   const detail = inList ? `${t("sources.notAdded")} · ${description}` : `${description} · ${form}`;
+  const name = rowName(t, row.type);
+  const lang = row.type === "other" ? undefined : sourceTypeLang(row.type);
+  // Each row's buttons say whose they are in their own name too: nine "Pegar texto" in a
+  // screen reader's list of links would be one and the same (review, minor 5).
+  const suffix = (
+    <span className="sr-only">
+      {" · "}
+      <span lang={lang}>{name}</span>
+    </span>
+  );
   return (
     <li
       data-testid="checklist-row"
@@ -387,17 +436,19 @@ function MissingRow({ caseId, row, adding, onAddPdf, inList }: { caseId: string;
       className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-dashed border-border-control px-3.5 py-2"
     >
       <div className="min-w-0 flex-1 basis-56">
-        <p id={nameId} lang={row.type === "other" ? undefined : sourceTypeLang(row.type)} className="font-semibold">
-          {rowName(t, row.type)}
-        </p>
+        <h3 id={nameId} lang={lang} className="font-semibold">
+          {name}
+        </h3>
         <p className="text-sm text-fg-muted">{detail}</p>
       </div>
       <div className="flex shrink-0 gap-1.5">
         <ButtonLink size="sm" to={newTextPath(caseId, row.type)} aria-describedby={nameId}>
           {t("sources.pasteRow")}
+          {suffix}
         </ButtonLink>
         <Button size="sm" aria-describedby={nameId} disabled={adding} focusableWhenDisabled onClick={() => onAddPdf(row.type)}>
           {t("sources.addPdf")}
+          {suffix}
         </Button>
       </div>
     </li>
@@ -482,13 +533,14 @@ function SourceRow({ caseId, source, onRemove }: { caseId: string; source: Sourc
       </div>
       <div className="flex shrink-0 gap-1.5">
         {source.kind === "text" ? (
-          <ButtonLink size="sm" to={sourceTextPath(caseId, source.id)} aria-describedby={nameId}>
+          <ButtonLink size="sm" to={sourceTextPath(caseId, source.id)} aria-describedby={nameId} data-open-source={source.id}>
             {t("sources.open")}
           </ButtonLink>
         ) : (
           <Button
             size="sm"
             aria-describedby={nameId}
+            data-open-source={source.id}
             disabled={!source.present}
             focusableWhenDisabled
             onClick={() => {
@@ -574,7 +626,7 @@ function FolderPdfs({ files, onAdd, onIgnore }: { files: CaseSources["files"]; o
               {file.name} <span className="text-fg-muted">· {formatFileSize(language, file.bytes)}</span>
             </span>
             <span className="flex shrink-0 gap-1.5">
-              <Button size="sm" aria-describedby={`${headingId}-${index}`} onClick={() => onAdd(file.name)}>
+              <Button size="sm" aria-describedby={`${headingId}-${index}`} data-folder-add={file.name} onClick={() => onAdd(file.name)}>
                 {t("sources.folderAdd")}
               </Button>
               <Button size="sm" aria-describedby={`${headingId}-${index}`} onClick={() => onIgnore(file)}>
@@ -596,7 +648,7 @@ function IgnoredLine({ count, onShow }: { count: number; onShow: () => void }) {
       <span>
         {t("sources.ignoredLine", { count })} · {t("sources.ignoredNote")} ·
       </span>
-      <button type="button" onClick={onShow} className="font-medium text-accent underline underline-offset-2 hover:text-accent-hover">
+      <button type="button" data-show-ignored onClick={onShow} className="font-medium text-accent underline underline-offset-2 hover:text-accent-hover">
         {t("sources.showIgnored")}
       </button>
     </p>
@@ -612,7 +664,7 @@ function RemovedSources({ sources, onRestore }: { sources: SourceSummary[]; onRe
       <summary className="flex min-h-control-sm cursor-default list-none items-center gap-1.5 text-sm [&::-webkit-details-marker]:hidden">
         <Icon name="chevron" className="-rotate-90 text-accent transition-transform group-open:rotate-0" />
         <span className="font-medium text-accent underline underline-offset-2">{t("sources.removedHeading", { count: sources.length })}</span>
-        <span className="text-fg-muted">· {t("sources.removedHint")}</span>
+        <span className="text-fg-muted">· {t("sources.removedHint", { count: sources.length })}</span>
       </summary>
       <p className="max-w-measure text-sm text-fg-muted">{t("sources.removedBody")}</p>
       <ul className="mt-2 flex flex-col gap-1.5">
@@ -680,7 +732,7 @@ function DocumentsRail({ active, sources }: { active: SourceSummary[]; sources: 
         )}
         {checks.coreMissing.length > 0 ? <p className="text-sm text-fg-muted">{t("sources.whenHint")}</p> : null}
       </section>
-      {empty ? null : (
+      {!active.some((source) => source.kind === "pdf") ? null : (
         <section aria-labelledby={sizeId} className="flex flex-col gap-1.5">
           <Eyebrow id={sizeId} className="text-fg-muted">
             {t("sources.sizeHeading")}
@@ -722,6 +774,8 @@ function SizeWarningText({ warning, bytes, total = false }: { warning: PdfSizeWa
 /** Whether the case's PDFs fit what each AI reads at once (the rail's "Tamaño para la IA"). */
 function TotalSize({ sources, active }: { sources: CaseSources; active: SourceSummary[] }) {
   const { t } = useTranslation();
+  // Only the PDFs' sizes are checked against each provider's limit for one request: the
+  // sentence says that and no more (review S1; pasted texts and context windows are not checked).
   if (!sources.totalPdfWarning) return <p className="text-sm text-fg-muted">{t("sources.sizeFits")}</p>;
   // A single PDF over the limit already says so on its own row.
   if (active.some((source) => source.kind === "pdf" && source.sizeWarning === sources.totalPdfWarning)) return <p className="text-sm font-medium text-danger">{t("sources.sizeSeeRow")}</p>;
