@@ -2,7 +2,7 @@
 id: guide
 version: 1
 updated: 2026-11-23
-sources: The ABA Matrix template as exported by her agency (22 sections, read 2026-11-21), the BCBA's answers of 2026-11-21, the payer facts (Florida Medicaid policy 4.2.1 and 6.2.2; Molina guide sections 2 to 5 and 8), and the quality runs on an invented case (2026-11-23).
+sources: The ABA Matrix template as exported by her agency (22 sections, read 2026-11-21), the BCBA's answers of 2026-11-21, the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), the payer facts (Florida Medicaid policy 4.2.1 and 6.2.2; Molina guide sections 2 to 5 and 8), and the quality runs on an invented case (2026-11-23).
 confirmed: no, pending review by the BCBA
 ---
 
@@ -36,26 +36,32 @@ Each fact has one home: the section that owns it states it in full. Other sectio
 | --- | --- | --- | --- | --- |
 | 1 | Recipient Information | The client's identification, caregivers and provider (ABA Matrix fills it in) | – | Names and roles of caregivers everywhere |
 | 2 | Documents Reviewed | The list of documents reviewed | – | Every source any section cites; Medical Necessity's opening |
-| 3 | Background Information | Referral and who referred; family, household and languages; the diagnosis as the CDE states it, who and when, and the CDE's own test results; medications; developmental and medical history; school and its plan; every other service | The behaviors that led to the referral, named in one or two sentences | People, dates, diagnosis wording, medications and services in 4, 5, 16, 18 and 21 |
-| 4 | Medical Necessity Criteria | The argument for need: the Vineland-3 and BASC-3 PRQ results explained; impairment by area across settings; why ABA, where and why there; the caregivers' part; how progress is measured | The behaviors (the most impairing argued, the others named with their baselines); the strategies by name | Deficit areas with 6; behavior names and baselines with 8 and 10; scores with 13; settings; other services with 3 |
+| 3 | Background Information | Referral and who referred; family, household, languages and the family's priorities; the diagnosis as the CDE states it, who and when; medications; pregnancy, birth, medical and developmental history; communication history; school and its plan; every other service and any earlier ABA; the concerns that led to the referral, by source; social, play, sensory and transition history. No scores. | – | People, dates, diagnosis wording, medications and services in 4, 5, 16, 18 and 21 |
+| 4 | Medical Necessity Criteria | The argument for need: the Vineland-3 and BASC-3 PRQ results explained; impairment by area across settings; what the BCBA's direct observation showed; why ABA, where and why there; how it will teach; the caregivers' part; how progress is measured | The family's priorities (3); the behaviors (the most impairing argued, the others named with their baselines); the skills and strategies by name | Deficit areas with 6; behavior names and baselines with 8 and 10; scores with 13; settings; other services with 3 |
 | 5 | Diagnosis Code and medications | Diagnosis codes and the medication table | – | The diagnosis and medications in 3 |
-| 6 | Strengths and Weaknesses | Strengths and interests, concrete and sourced | The deficit areas of 4, named in the same order, without their numbers | The area names in 4 |
-| 7 | Environmental Changes | Changes in the child's environment (recent, current, coming), who reported them, how the child responds, and the supports planned | – | Dates and people with 3 and 16 |
-| 8 | Maladaptive Behaviors Summary | Each behavior's name, operational definition with examples and non-examples, baseline and intensity | – | The name, definition and baseline of each behavior everywhere |
+| 6 | Strengths and Weaknesses | Strengths and interests, concrete and sourced, each tied to how treatment can use it; the needs, each sourced, and what ABA will teach to meet them | The deficit areas of 4, named in the same order, without repeating its numbers; the family's priorities (3) | The area names in 4 |
+| 7 | Environmental Changes | How the child responds to changes in place, routine and people, with sourced examples; the transitions reported (recent, current, coming); the supports planned for them | – | Dates and people with 3 and 16 |
+| 8 | Maladaptive Behaviors Summary | Each behavior's name, its operational definition, its examples and non-examples, its baseline and its intensity | – | The name, definition and baseline of each behavior everywhere |
 | 9 | Replacement Behaviors Summary | Each replacement skill's name, definition and baseline | – | Skill names in 11, 14, 16, 17 |
 | 10 | Maladaptive Behaviors Info | Each behavior's topography, barriers, dated baselines and status (ABA Matrix builds the objectives) | – | 8 |
 | 11 | Replacement Behaviors Info | Each replacement skill's definition, procedure steps and baseline | – | 9 and 15 |
 | 12 | Skills Acquisition Info | Each acquisition target's definition, procedure and baseline | – | Deficit areas in 4 |
-| 13 | Assessments Conducted | The tools used; the observations (date, observer, setting, duration); the questionnaire and score reports; the function matrix; the preference assessment | – | Observation dates and settings cited anywhere; the functions in 14 |
-| 14 | Hypothesis Based Interventions | For each function: its behaviors, preventive strategies, replacement skills and management strategies (positive, and one entry per behavior or group) | – | Functions in 13; behaviors in 8; skills in 9; procedures in 15 |
+| 13 | Assessments Conducted | The tools used; the observations (date, observer, setting, duration, what each tool was for); the questionnaire and score reports, shown but not interpreted (4 and 6 interpret them); the function matrix; the preference assessment | – | Observation dates and settings cited anywhere; the functions in 14 |
+| 14 | Hypothesis Based Interventions | For each function: its behaviors, preventive strategies, replacement skills and management strategies (positive, and one entry per behavior or group), with the safety response for dangerous behaviors | The Crisis Plan by name | Functions in 13; behaviors in 8; skills in 9; procedures in 15 |
 | 15 | Interventions | Each procedure's definition and its implementation with this child, with parameters | – | Every procedure named in 11, 12, 14 and 16 |
-| 16 | Family/Caregiver Involvement | Who takes part, their availability, languages and capacity; what training covers and why; limited participation, its impact and the mitigation | Procedures by name (15 describes them); behaviors and skills by name | Caregivers with 1 and 3; procedures with 14 and 15 |
-| 17 | Generalization and Maintenance | How skills generalize across this child's settings and people, and how they are maintained | The child's goals and skills by name | Skills in 9, 11, 12; settings and people in 3 and 16 |
+| 16 | Family/Caregiver Involvement | Who takes part, their availability, languages and capacity; what the caregivers do now, described without blame; what training covers and why; limited participation, its impact and the mitigation (the caregiver goals are their own blocks in ABA Matrix) | The family's priorities (3); procedures by name (15 describes them); behaviors and skills by name | Caregivers with 1 and 3; procedures with 14 and 15 |
+| 17 | Generalization and Maintenance | How the plan's skills generalize across this child's people, settings, materials and routines, and how they are maintained; coordination with the child's other providers for generalization | The child's goals and skills by name | Skills in 9, 11, 12; settings and people in 3 and 16 |
 | 18 | Discharge and Service Fading Plan | Discharge criteria for each behavior, skill and caregiver; how services step down; the transition | Behaviors and baselines by name and number; other providers | 8, 10, 16 |
-| 19 | Risk Assessment | Each risk and its evidence: the behavior, how often, how severe, where, who is exposed, injuries and near misses | – | Behavior names and incidents with 4 and 8 |
+| 19 | Risk Assessment | The risks the assessment found: to the plan's success (inconsistent cues, prompt dependence) and from each behavior, most dangerous first, with its evidence | The safety response in 14 and the Crisis Plan by name | Behavior names and incidents with 4 and 8 |
 | 20 | Crisis Plan | The protocol: early signs, de-escalation, when emergency services are called, what caregivers must do, how crises are monitored; the family's current responses | The risks of 19 by name | Behavior names with 8 and 19 |
-| 21 | Summary and Recommendations | Codes, hours, units, place of service and the weekly schedule, with their justification | – | Hours appear nowhere else; the schedule fits the availability in 3 and 16 |
+| 21 | Summary and Recommendations | Codes, hours, units, place of service and the weekly schedule, as a table | – | Hours appear nowhere else; the schedule fits the availability in 3 and 16 |
 | 22 | Consent to Treatment | Consent and signatures (a form) | – | – |
+
+## What she repeats on purpose, and what never
+
+Two things are carried on purpose through several sections. The family's priorities, set out in Background Information, return in Medical Necessity, Strengths and Weaknesses and Family/Caregiver Involvement, so the plan visibly answers what the family asked for. The safety response for dangerous behaviors, set in the interventions, is referred to in Risk Assessment and given in full in the Crisis Plan. Even these are referred to in a sentence where they are not owned; the evidence is not retold.
+
+Nothing else is repeated: no score tables or runs of scores outside the section that owns them, no incident retold in section after section, no session note in every section.
 
 ## What must match everywhere
 

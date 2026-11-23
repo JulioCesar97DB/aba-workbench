@@ -35,7 +35,7 @@ test("sections whose rules the decisions file does not settle say so instead of 
 });
 
 test("the section's shape comes from its rules' front matter; none when the rules give none", async () => {
-  assert.deepEqual(await loadSectionShape("medical-necessity"), { paragraphs: { min: 6, max: 9 }, words: { min: 900, max: 1500 } });
+  assert.deepEqual(await loadSectionShape("medical-necessity"), { paragraphs: { min: 7, max: 10 }, words: { min: 900, max: 1250 } });
   assert.deepEqual(await loadSectionShape("crisis-plan"), { paragraphs: null, words: null });
 });
 

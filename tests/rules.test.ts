@@ -6,10 +6,11 @@ import { buildPrompt } from "../src/lib/rules.ts";
 
 test("the prompt carries every rules file and its version", async () => {
   const { prompt, rulesVersions } = await buildPrompt("medical-necessity", [{ id: "a", title: "A", kind: "text", text: "x" }]);
-  assert.deepEqual(Object.keys(rulesVersions).sort(), ["assessment", "guide", "instruments", "payer-florida-molina", "section-medical-necessity", "style"]);
+  assert.deepEqual(Object.keys(rulesVersions).sort(), ["assessment", "examples", "guide", "instruments", "payer-florida-molina", "section-medical-necessity", "style"]);
   assert.match(prompt.system, /Nothing invented/);
   assert.match(prompt.system, /The section map/);
   assert.match(prompt.system, /# How she writes/);
+  assert.match(prompt.system, /# Examples of the writing she expects/);
   assert.match(prompt.system, /Reading the standardized score reports/);
   assert.match(prompt.task, /Required structure/);
   assert.doesNotMatch(prompt.system, /Required structure/, "section rules stay out of the cached prefix");
