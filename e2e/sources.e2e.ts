@@ -446,7 +446,8 @@ test("Ignore hides a PDF of the folder for this run of the app only: nothing is 
   app = await launch();
   page = await firstScreen(app);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/sources`);
-  await expect(card).toBeVisible();
+  // A new window: its own locator.
+  await expect(page.getByRole("region", { name: "There are 2 PDFs in the case's folder you have not added" })).toBeVisible();
   await expect(page.getByText(/Ignored PDFs/)).toHaveCount(0);
 });
 
