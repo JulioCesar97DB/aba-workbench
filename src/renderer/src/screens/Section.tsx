@@ -5,7 +5,7 @@ import type { DraftingProvider } from "../../../shared/api.ts";
 import { modelLabel } from "../../../shared/models.ts";
 import { findReportSection, REPORT_SECTIONS, type ReportSection } from "../../../shared/report-sections.ts";
 import { checkStructure, findMarkers, hasLinesInParagraphs, linesAsParagraphs, MAX_REQUEST_LENGTH, splitParagraphs, type StructureIssue } from "../../../shared/section-text.ts";
-import type { SectionDetail, SectionRequestInput, SectionSummary, SectionVersion } from "../../../shared/sections.ts";
+import { isOlderRevision, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion } from "../../../shared/sections.ts";
 import { useAutosave, useKeptText } from "../autosave.tsx";
 import type { FailedSave } from "../../../shared/sources.ts";
 import { onRetried, retry, useFailedSavesLoaded, useSectionFailures } from "../case-saves.tsx";
@@ -141,28 +141,46 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   /** The version her pasted text made, once saved. */
   const editingSaved = useRef<number | null>(null);
 
+  /*
+   * Every answer from the main process is a whole snapshot of the section. Answers can come
+   * back in another order than the changes were saved (a slow or busy disk), so a snapshot
+   * older than the one shown (its revision, the case's save time) is dropped: it would
+   * undo a newer change on screen, such as an approval she just made or a version just saved.
+   */
+  const shownRevision = useRef(initial.revision);
+  const take = useCallback(
+    (next: SectionDetail, sections?: SectionSummary[]): boolean => {
+      if (isOlderRevision(next.revision, shownRevision.current)) return false;
+      shownRevision.current = next.revision;
+      setDetail(next);
+      if (sections) patch(caseId, { sections });
+      return true;
+    },
+    [caseId, patch],
+  );
+
+  /** Shows a snapshot and the version it holds as current, unless it is older than the one shown. */
   const accept = useCallback(
     (next: SectionDetail, sections?: SectionSummary[]) => {
-      setDetail(next);
+      if (!take(next, sections)) return;
       setViewed(next.currentVersion);
       // A version saved from elsewhere (Try again after a reload) shows the text instead of the two ways to start.
       setMode((current) => (current === "choose" && next.versions.length > 0 ? "view" : current));
-      if (sections) patch(caseId, { sections });
     },
-    [caseId, patch],
+    [take],
   );
 
   useOnSectionSaved(
     useCallback(
       (savedCase: string, result, kind) => {
         if (savedCase !== caseId || result.section.id !== section.id) return;
-        setDetail(result.section);
+        if (!take(result.section)) return;
         // A check only adds its result: she stays on the version and the mode she is in.
         if (kind === "check") return;
         setViewed(result.section.currentVersion);
         setMode("view");
       },
-      [caseId, section.id],
+      [caseId, section.id, take],
     ),
   );
 
@@ -194,14 +212,12 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
       setActionFailed(true);
       return;
     }
-    // Only the newest action's answer moves the version shown. An older answer that comes
-    // back late (a slow disk) keeps its data but must not undo what she chose since: Approve,
-    // then version 1 at once, would otherwise jump back to version 2, and Copy copy it.
+    // Only the newest action's answer moves the version shown: Approve, then version 1 at
+    // once, must not jump back to version 2 when the approval's answer comes back last (and
+    // Copy then copy version 2). An older action's answer only updates the data, and only
+    // when no newer snapshot is shown already (take).
     if (action === actionsStarted.current) accept(result.section, result.sections);
-    else {
-      setDetail(result.section);
-      if (result.sections) patch(caseId, { sections: result.sections });
-    }
+    else take(result.section, result.sections);
   }
 
   async function show(version: number) {

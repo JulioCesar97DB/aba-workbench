@@ -319,6 +319,85 @@ for (const [late, channels] of Object.entries(SLOW_ANSWERS)) {
   });
 }
 
+/*
+ * Answers that come back out of order (review of PR #15, B1 and N1): the main process
+ * saves each change in the order she made it, but the answers can come back in another
+ * order (each is read again after its save, outside the case's queue). An older snapshot
+ * that comes back last must change nothing on screen: not the approval, not the versions.
+ */
+
+/** The section with two versions: hers with single line breaks (1), and each line a paragraph (2, shown). */
+async function twoVersions(launch: Parameters<typeof openSection>[0], home: string) {
+  const opened = await openSection(launch, home, "environmental-changes");
+  const { page } = opened;
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
+  await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+  await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+  return opened;
+}
+
+/** One more call to the main process: its answer comes after every answer released before it, so the screen has had them. */
+async function settle(page: Page) {
+  await page.evaluate(([caseId, sectionId]) => (globalThis as unknown as { aba: AbaApi }).aba.getSection(caseId, sectionId as "environmental-changes"), [SAMPLE_CASE.id, "environmental-changes"]);
+}
+
+test("out of order: version 1, then Approve at once, the version's answer last; the approval stays shown", async ({ launch, home }) => {
+  const { app, page, caseFile } = await twoVersions(launch, home);
+  const release = await holdAnswers(app, "sections:set-current");
+  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Undo approval" })).toBeVisible();
+  expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ approvedVersion: 1, currentVersion: 1 });
+
+  await release();
+  await settle(page);
+  await expect(page.getByRole("button", { name: "Undo approval" })).toBeVisible();
+  // The badge beside the text, and the section's line in the sidebar.
+  await expect(page.locator("#content").getByText("Approved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Version 1, approved" })).toHaveAttribute("aria-pressed", "true");
+  await expect(sidebarItem(page, "Environmental Changes")).toContainText("Approved");
+});
+
+test("out of order: Approve version 1, then each line a paragraph at once, the approval's answer last; version 3 stays, unapproved", async ({ launch, home }) => {
+  const { app, page, caseFile } = await twoVersions(launch, home);
+  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
+  await settle(page);
+  const release = await holdAnswers(app, "sections:approve");
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true");
+  // The new version took the approval away (she approves again).
+  const stored = sectionData(caseFile, "environmental-changes");
+  expect(stored.versions).toHaveLength(3);
+  expect(stored.approvedVersion ?? null).toBeNull();
+
+  await release();
+  await settle(page);
+  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+  await expect(page.locator("#content").getByText("Approved", { exact: true })).toHaveCount(0);
+  await expect(sidebarItem(page, "Environmental Changes")).not.toContainText("Approved");
+});
+
+test("out of order: version 1, then ask for changes; the version's answer after the new version is saved never hides it", async ({ launch, home }) => {
+  const { app, page, caseFile } = await twoVersions(launch, home);
+  const release = await holdAnswers(app, "sections:set-current");
+  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await page.getByLabel("Ask for changes in your own words").fill("mention that the school started the communication plan");
+  await page.getByRole("button", { name: "Create version 3" }).click();
+  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true", { timeout: 20_000 });
+  expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ currentVersion: 3 });
+
+  await release();
+  await settle(page);
+  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(3);
+  await expect(page.getByTestId("section-view")).toContainText("The school reports that his communication plan is now in place.");
+});
+
 /* Review round 2: B3, the kept text goes back in its box */
 
 /** Puts the caret at the end of a text area (Cmd+End does not move it in a macOS text area). */

@@ -234,7 +234,8 @@ export async function startSecondCopy(project: string, profile: string, home: st
  * Holds the main process's answers on one of the interface's channels, as a slow disk
  * does (a Windows runner): each call is still done at once, in the order it came, but its
  * answer waits. Returns what lets the answers held go. Electron keeps the handlers of
- * ipcMain.handle in ipcMain._invokeHandlers; the one there is wrapped, not replaced.
+ * ipcMain.handle in ipcMain._invokeHandlers, a private field (checked on Electron 45.4.1);
+ * the one there is wrapped, not replaced. Should Electron rename it, this throws.
  */
 export async function holdAnswers(app: ElectronApplication, channel: string): Promise<() => Promise<void>> {
   await app.evaluate(({ ipcMain }, name) => {
