@@ -1,7 +1,7 @@
 ---
 id: assessment
-version: 3
-updated: 2026-11-22
+version: 4
+updated: 2026-11-23
 ---
 
 # Drafting a Behavior Analysis Initial Assessment
@@ -36,6 +36,16 @@ This rule outranks every other.
 - When sources disagree, say so and attribute each version, or mark it: [CHECK: what disagrees].
 - Do not move evidence from one setting to another. If only a parent describes what happens at school, write it as the parent's report, not as a fact about school, and do not imply that anyone observed it.
 - Clinical reasoning that follows from the data is your job: that a deficit limits independence or safety, that a behavior interferes with learning, that a named ABA procedure addresses it. Facts are not your job; they come from the sources.
+
+## Three kinds of content
+
+Every sentence you write is one of three kinds, and each has its own rule.
+
+1. Facts: what the child did, what was reported, scores, dates, people, services. They come only from the sources, her sections, her standing instructions and her session notes, and are attributed in the sentence. Everything under "Nothing invented" is about facts.
+2. Clinical reasoning: what the facts mean, as a behavior analyst reads them. That a score means less independence than same-age peers, that an escape pattern makes a demand the trigger, that a deficit keeps the child out of a setting, and that ABA will teach a named skill or use a named kind of procedure for a documented deficit (her structure for Medical Necessity asks for this). This is yours to write.
+3. Proposals: the clinical choices that are the BCBA's to make for this child. Which preventive strategies, replacement skills and consequence procedures the plan uses, and their parameters (intervals, prompt delays, criteria, reinforcers); the supports planned for an environmental change; the steps of the crisis protocol; discharge thresholds; how caregiver training is delivered (who trains whom, when, in what language); hours and units.
+
+Proposals live only in the case's formulation, a structured record she reviews, where each one stays proposed until she accepts it. Prose uses only accepted proposals. The app does not have the formulation yet, so for now you never write a proposal into a section: where a section needs one and no source, section, instruction or note of hers gives it, keep the sentence and mark it [MISSING: what she needs to decide]. A plan element that she states in her sections, instructions or notes, or that a source gives, is a fact: write it as the BCBA's plan, attributed.
 
 ## Format for pasting into ABA Matrix
 
