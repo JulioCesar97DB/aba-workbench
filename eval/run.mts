@@ -2,11 +2,12 @@
  * pnpm eval: the evaluation set, run through the real app (docs/evaluation.md).
  *
  * For each invented case with a key (fixtures/cases/<case>/key.json) it starts the built
- * app hidden (--hidden: no window shown, no Dock icon, never the focus), loads the case
- * through window.aba as she would, drafts the nine narrative sections in report order,
- * runs the automatic checks, asks the judge to score each section, writes results.json
- * and summary.md to eval-results/<run>/, and compares them with the last accepted run
- * (eval/baselines/<name>/).
+ * app hidden (--hidden: no window shown, no Dock icon, never the focus) and runs the case
+ * several times (3 by default, the owner's decision of 2026-11-23). Each run loads the
+ * case through window.aba as she would, drafts the nine narrative sections in report
+ * order, runs the automatic checks and asks the judge to score each section. The run
+ * writes results.json and summary.md to eval-results/<run>/ and compares the medians of
+ * its runs with those of the last accepted run (eval/baselines/<name>/).
  *
  * Every request goes the way hers do: window.aba (the preload) → the main process's
  * section service → prepareOutgoingRequest → the provider. Nothing here talks to a
@@ -24,7 +25,8 @@
  *   pnpm eval --no-build                use the apps as they are built (default: pnpm build in each checkout first)
  *   pnpm eval --from-run <run folder>   take that run's drafts: check them again, and judge only where there is no answer from this judge
  *   pnpm eval --rejudge <run folder>    take that run's drafts: check them again, and judge every section again
- *   pnpm eval --judge-samples <n>       judge each section n times and score the median (default 1)
+ *   pnpm eval --runs <n>                run each case n times (1, 3 or 5; default 3) and compare the medians
+ *   pnpm eval --judge-samples <n>       judge each section n times in each run (default 1: the runs are the samples)
  */
 import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
@@ -43,13 +45,18 @@ import {
   addUsage,
   baselineCopy,
   compareRuns,
+  caseMedians,
   exitCodeFor,
+  incompleteParts,
+  keepsEarlierJudge,
   normalizeRun,
   RESULTS_VERSION,
+  RUN_COUNTS,
   rescoreRun,
   scoreSection,
   summaryMarkdown,
   type CaseResult,
+  type CaseRun,
   type CheckoutRecord,
   type JudgeRecord,
   type LaunchCheck,
@@ -99,6 +106,7 @@ const { values: args } = parseArgs({
     "no-build": { type: "boolean", default: false },
     "from-run": { type: "string" },
     rejudge: { type: "string" },
+    runs: { type: "string" },
     "judge-samples": { type: "string", default: "1" },
   },
 });
@@ -114,6 +122,8 @@ interface Options {
   /** --from-run or --rejudge: an earlier run whose drafts are taken instead of drafting. */
   prior: RunResult | null;
   rejudgeAll: boolean;
+  /** How many times each case is run (with --from-run or --rejudge: that run's count). */
+  runs: number;
   samples: number;
   label: string;
   runDir: string;
@@ -126,6 +136,9 @@ function readOptions(): Options {
   if (args["from-run"] && args.rejudge) fail("--from-run and --rejudge are two ways of taking a run's drafts: give one.");
   const priorDir = args.rejudge ?? args["from-run"];
   const prior = priorDir ? normalizeRun(JSON.parse(readFileSync(path.join(path.resolve(priorDir), "results.json"), "utf8"))) : null;
+  const runs = args.runs === undefined ? (prior ? prior.runs : 3) : Number(args.runs);
+  if (!(RUN_COUNTS as readonly number[]).includes(runs)) fail("--runs takes 1, 3 or 5: an odd count, so a median and a majority never tie.");
+  if (prior && runs !== prior.runs) fail(`--from-run and --rejudge take every run of that run (${prior.runs}); --runs cannot change it.`);
   if (prior && args["draft-app"]) fail("--from-run and --rejudge draft nothing, so they take no --draft-app.");
   const rehearse = args.rehearse === true;
   if (prior && rehearse !== prior.provider.startsWith("rehearsal")) fail("--from-run and --rejudge take a run of the same kind (real or rehearsal).");
@@ -145,6 +158,7 @@ function readOptions(): Options {
     draftCheckout,
     prior,
     rejudgeAll: args.rejudge !== undefined,
+    runs,
     samples,
     label,
     runDir: path.join(RESULTS_DIR, label),
@@ -716,7 +730,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
   const startedAt = new Date().toISOString();
   const baseline = findBaseline(args.baseline ?? null, options.rehearse);
   console.log(
-    `Evaluation run ${options.label}: ${cases.map((c) => c.key.caseId).join(", ")}; ${options.mode} drafting; ${options.samples} judge sample(s); ${options.rehearse ? "REHEARSAL with a fake provider (no request leaves the computer)" : "ChatGPT sign-in of the eval profile"}${prior ? `; drafts from run ${prior.label} (${options.rejudgeAll ? "every section judged again" : "judged where this judge has no answer"})` : ""}${baseline ? `; baseline ${baseline.name}` : ""}.`,
+    `Evaluation run ${options.label}: ${cases.map((c) => c.key.caseId).join(", ")}; ${options.runs} run(s) per case; ${options.mode} drafting; ${options.samples} judge sample(s) per run; ${options.rehearse ? "REHEARSAL with a fake provider (no request leaves the computer)" : "ChatGPT sign-in of the eval profile"}${prior ? `; drafts from run ${prior.label} (${options.rejudgeAll ? "every section judged again" : "judged where this judge has no answer"})` : ""}${baseline ? `; baseline ${baseline.name}` : ""}.`,
   );
 
   if (!prior) build(options.draftCheckout);
@@ -724,9 +738,10 @@ async function main(options: Options, home: string, profile: string): Promise<nu
   const examples = examplesOf(prior ? ROOT : options.draftCheckout);
 
   const caseResults: CaseResult[] = [];
-  /** The baseline's judge records, judged again in this run where its judge differs (review B3). */
-  const baselineJudged = new Map<string, Map<ReportSectionId, JudgeRecord>>();
-  const baselineFindings = new Map<string, Finding[]>();
+  /** The baseline's judge records, run by run, judged again in this run where its judge differs (review B3). */
+  const baselineJudged = new Map<string, Array<Map<ReportSectionId, JudgeRecord>>>();
+  /** The current checks' findings on every stored run of the baseline. */
+  const baselineFindings = new Map<string, Finding[][]>();
   let model: string | null = prior?.model ?? null;
   let judgeModel: string | null = null;
   let rulesVersions: Record<string, string> | null = prior?.drafting.rulesVersions ?? null;
@@ -737,24 +752,30 @@ async function main(options: Options, home: string, profile: string): Promise<nu
     const loadedSources = new Set([...plan.map((source) => source.id), ...(loaded.key.inputs.notes ? ["notes"] : [])]);
     const priorCase = prior ? (prior.cases.find((c) => c.caseId === loaded.key.caseId) ?? fail(`the run ${prior.label} has no case ${loaded.key.caseId}.`)) : null;
     const baseCase = baseline?.run.cases.find((c) => c.caseId === loaded.key.caseId) ?? null;
+    const runCount = priorCase ? priorCase.runs.length : options.runs;
+    const runName = (r: number) => (runCount > 1 ? `run ${r + 1} ` : "");
 
-    // Draft with the app under test (or, with --from-run or --rejudge, put the earlier run's drafts in place).
+    // Every run drafts the case fully, chained, as a case of its own in the app under test.
+    // With --from-run or --rejudge, each of the earlier run's runs has its drafts put in place instead.
     let current = await launch(priorCase ? ROOT : options.draftCheckout, priorCase ? "judge" : "draft", profile, home);
-    let caseId: string;
-    let drafted = new Map<ReportSectionId, Drafted>();
-    let texts: Map<ReportSectionId, { version: number; text: string; detail: unknown }>;
+    const made: Array<{ caseId: string; drafted: Map<ReportSectionId, Drafted>; texts: Map<ReportSectionId, { version: number; text: string; detail: unknown }> }> = [];
     try {
       const connected = await connect(current.page, current.app, options);
       if (!priorCase) model = connected;
       judgeModel = connected;
-      caseId = await loadIntoApp(current.page, loaded, plan, `${loaded.key.child.fullName} (evaluation ${options.label.slice(0, 19)})`);
-      if (priorCase) await putDrafts(current.page, caseId, priorCase.sections);
-      else drafted = await draftSections(current.page, caseId, options);
-      texts = await currentTexts(current.page, caseId);
-      const recorded = recordedVersions(home, caseId);
-      for (const [id, entry] of texts) {
-        const stored = recorded.get(id)?.get(entry.version);
-        if (stored) entry.detail = stored;
+      for (let r = 0; r < runCount; r++) {
+        if (runCount > 1) console.log(`  run ${r + 1} of ${runCount}`);
+        const caseId = await loadIntoApp(current.page, loaded, plan, `${loaded.key.child.fullName} (evaluation ${options.label.slice(0, 19)}, run ${r + 1})`);
+        let drafted = new Map<ReportSectionId, Drafted>();
+        if (priorCase) await putDrafts(current.page, caseId, priorCase.runs[r].sections);
+        else drafted = await draftSections(current.page, caseId, options);
+        const texts = await currentTexts(current.page, caseId);
+        const recorded = recordedVersions(home, caseId);
+        for (const [id, entry] of texts) {
+          const stored = recorded.get(id)?.get(entry.version);
+          if (stored) entry.detail = stored;
+        }
+        made.push({ caseId, drafted, texts });
       }
     } finally {
       if (!priorCase && options.draftCheckout !== ROOT) await closeApp(current.app, "draft", current.stopWatching);
@@ -765,86 +786,102 @@ async function main(options: Options, home: string, profile: string): Promise<nu
       current = await launch(ROOT, "judge", profile, home);
       if (options.rehearse) await installRehearsalProvider(current.app);
       else judgeModel = (await aba(current.page, (api) => api.getAiPreferences())).models.openai;
-      const opened = await aba(current.page, (api, id) => api.openCase(id as string), caseId);
-      if (opened.outcome !== "opened") fail(`the judge app could not open the case (${opened.outcome}).`);
+      for (const { caseId } of made) {
+        const opened = await aba(current.page, (api, id) => api.openCase(id as string), caseId);
+        if (opened.outcome !== "opened") fail(`the judge app could not open the case (${opened.outcome}).`);
+      }
     }
-    const judged = new Map<ReportSectionId, JudgeRecord>();
+    const judgedRuns: Array<Map<ReportSectionId, JudgeRecord>> = [];
     try {
-      for (const { id } of REPORT_SECTIONS) {
-        if (!texts.has(id)) continue;
-        const earlier = priorCase?.sections.find((section) => section.id === id)?.judge ?? null;
-        const fingerprint = judgeFingerprint(judgeInputFor(loaded, id, loadedSources, "json-schema"), loaded, id, judgeModel, options.samples);
-        // --from-run keeps an answer of this same judge; --rejudge always judges again.
-        if (!options.rejudgeAll && earlier && earlier.answers.length === options.samples && earlier.fingerprint === fingerprint) {
-          judged.set(id, earlier);
-          continue;
+      for (const [r, { caseId, texts }] of made.entries()) {
+        const judged = new Map<ReportSectionId, JudgeRecord>();
+        for (const { id } of REPORT_SECTIONS) {
+          if (!texts.has(id)) continue;
+          const earlier = priorCase?.runs[r].sections.find((section) => section.id === id)?.judge ?? null;
+          const fingerprint = judgeFingerprint(judgeInputFor(loaded, id, loadedSources, "json-schema"), loaded, id, judgeModel, options.samples);
+          // --from-run keeps an answer of this same judge; --rejudge always judges again.
+          if (keepsEarlierJudge(earlier, fingerprint, options.samples, options.rejudgeAll)) {
+            judged.set(id, earlier);
+            continue;
+          }
+          process.stdout.write(`  ${runName(r)}judge ${id} ... `);
+          const record = await judgeSection(current.page, caseId, loaded, id, loadedSources, options, judgeModel, false);
+          judged.set(id, record);
+          console.log(record.error ? `FAILED (${record.error})` : `${record.format}${record.repaired ? ", repaired" : ""}, ${record.seconds.toFixed(1)} s`);
         }
-        process.stdout.write(`  judge ${id} ... `);
-        const record = await judgeSection(current.page, caseId, loaded, id, loadedSources, options, judgeModel, false);
-        judged.set(id, record);
-        console.log(record.error ? `FAILED (${record.error})` : `${record.format}${record.repaired ? ", repaired" : ""}, ${record.seconds.toFixed(1)} s`);
+        judgedRuns.push(judged);
       }
 
-      // Review B3: the baseline's drafts judged again by this same judge where its judgement came from another one.
+      // Review B3: every run of the baseline is checked again with the current checks, and its
+      // drafts are judged again by this same judge where its judgement came from another one.
       if (baseCase) {
-        const stale = baseCase.sections.filter((section) => {
-          if (section.text === null) return false;
-          const fingerprint = judgeFingerprint(judgeInputFor(loaded, section.id, loadedSources, "json-schema"), loaded, section.id, judgeModel, options.samples);
-          return section.judge?.fingerprint !== fingerprint || (section.judge?.answers.length ?? 0) < options.samples;
-        });
-        if (stale.length > 0) {
-          console.log(`  the baseline's drafts were judged by another judge: judging ${stale.length} of them again with this one`);
-          const baseCaseId = await loadIntoApp(current.page, loaded, plan, `${loaded.key.child.fullName} (baseline ${baseline!.name})`);
-          await putDrafts(current.page, baseCaseId, baseCase.sections);
-          const records = new Map<ReportSectionId, JudgeRecord>();
-          for (const section of stale) {
-            process.stdout.write(`  judge baseline ${section.id} ... `);
-            const record = await judgeSection(current.page, baseCaseId, loaded, section.id, loadedSources, options, judgeModel, true);
-            records.set(section.id, record);
-            console.log(record.error ? `FAILED (${record.error})` : `${record.format}, ${record.seconds.toFixed(1)} s`);
+        const records: Array<Map<ReportSectionId, JudgeRecord>> = [];
+        const findings: Finding[][] = [];
+        for (const baseRun of baseCase.runs) {
+          const stale = baseRun.sections.filter((section) => {
+            if (section.text === null) return false;
+            const fingerprint = judgeFingerprint(judgeInputFor(loaded, section.id, loadedSources, "json-schema"), loaded, section.id, judgeModel, options.samples);
+            return section.judge?.fingerprint !== fingerprint || (section.judge?.answers.length ?? 0) < options.samples;
+          });
+          const rejudged = new Map<ReportSectionId, JudgeRecord>();
+          if (stale.length > 0) {
+            console.log(`  the baseline's run ${baseRun.run} was judged by another judge: judging ${stale.length} of its drafts again with this one`);
+            const baseCaseId = await loadIntoApp(current.page, loaded, plan, `${loaded.key.child.fullName} (baseline ${baseline!.name}, run ${baseRun.run})`);
+            await putDrafts(current.page, baseCaseId, baseRun.sections);
+            for (const section of stale) {
+              process.stdout.write(`  judge baseline run ${baseRun.run} ${section.id} ... `);
+              const record = await judgeSection(current.page, baseCaseId, loaded, section.id, loadedSources, options, judgeModel, true);
+              rejudged.set(section.id, record);
+              console.log(record.error ? `FAILED (${record.error})` : `${record.format}, ${record.seconds.toFixed(1)} s`);
+            }
           }
-          baselineJudged.set(loaded.key.caseId, records);
+          records.push(rejudged);
+          const baseTexts = Object.fromEntries(baseRun.sections.filter((s) => s.text !== null).map((s) => [s.id, s.text as string])) as Partial<Record<ReportSectionId, string>>;
+          findings.push(checkCase(loaded, plan, loadedSources, baseTexts, examples));
         }
-        const baseTexts = Object.fromEntries(baseCase.sections.filter((s) => s.text !== null).map((s) => [s.id, s.text as string])) as Partial<Record<ReportSectionId, string>>;
-        baselineFindings.set(loaded.key.caseId, checkCase(loaded, plan, loadedSources, baseTexts, examples));
+        baselineJudged.set(loaded.key.caseId, records);
+        baselineFindings.set(loaded.key.caseId, findings);
       }
     } finally {
       await closeApp(current.app, priorCase || options.draftCheckout !== ROOT ? "judge" : "draft", current.stopWatching);
     }
 
-    // The checks, the scores, the record.
-    const sectionTexts = Object.fromEntries([...texts].map(([id, entry]) => [id, entry.text])) as Partial<Record<ReportSectionId, string>>;
-    const findings = checkCase(loaded, plan, loadedSources, sectionTexts, examples);
-    const sections: SectionResult[] = REPORT_SECTIONS.map(({ id }): SectionResult => {
-      const entry = texts.get(id) ?? null;
-      const detail = entry?.detail as { generation?: { usage?: Usage; servedModel?: string; rulesVersions?: Record<string, string> }; consistency?: { status: string; items: string[] } | null } | undefined;
-      const mine = findings.filter((finding) => finding.section === id);
-      const judge = judged.get(id) ?? null;
-      const before = priorCase?.sections.find((section) => section.id === id) ?? null;
-      if (before) return { ...before, findings: mine, scores: scoreSection(id, mine, judge?.answers ?? [], before.text !== null), judge };
-      return {
-        id,
-        version: entry?.version ?? null,
-        text: entry?.text ?? null,
-        words: entry ? countWords(entry.text) : 0,
-        paragraphs: entry ? splitParagraphs(entry.text).length : 0,
-        markers: entry ? findMarkers(entry.text).map(({ kind, note }) => ({ kind, note })) : [],
-        generation: detail?.generation ? { seconds: drafted.get(id)?.seconds ?? 0, usage: detail.generation.usage ?? null, servedModel: detail.generation.servedModel ?? null, rulesVersions: detail.generation.rulesVersions ?? {} } : null,
-        consistency: detail?.consistency ? { status: detail.consistency.status, items: detail.consistency.items } : null,
-        draftError: drafted.get(id)?.error ?? null,
-        findings: mine,
-        scores: scoreSection(id, mine, judge?.answers ?? [], entry !== null),
-        judge,
-      };
+    // The checks, the scores, the record of every run.
+    const caseRuns: CaseRun[] = made.map(({ texts, drafted }, r): CaseRun => {
+      const sectionTexts = Object.fromEntries([...texts].map(([id, entry]) => [id, entry.text])) as Partial<Record<ReportSectionId, string>>;
+      const findings = checkCase(loaded, plan, loadedSources, sectionTexts, examples);
+      const sections: SectionResult[] = REPORT_SECTIONS.map(({ id }): SectionResult => {
+        const entry = texts.get(id) ?? null;
+        const detail = entry?.detail as { generation?: { usage?: Usage; servedModel?: string; rulesVersions?: Record<string, string> }; consistency?: { status: string; items: string[] } | null } | undefined;
+        const mine = findings.filter((finding) => finding.section === id);
+        const judge = judgedRuns[r]?.get(id) ?? null;
+        const before = priorCase?.runs[r].sections.find((section) => section.id === id) ?? null;
+        if (before) return { ...before, findings: mine, scores: scoreSection(id, mine, judge?.answers ?? [], before.text !== null), judge };
+        return {
+          id,
+          version: entry?.version ?? null,
+          text: entry?.text ?? null,
+          words: entry ? countWords(entry.text) : 0,
+          paragraphs: entry ? splitParagraphs(entry.text).length : 0,
+          markers: entry ? findMarkers(entry.text).map(({ kind, note }) => ({ kind, note })) : [],
+          generation: detail?.generation ? { seconds: drafted.get(id)?.seconds ?? 0, usage: detail.generation.usage ?? null, servedModel: detail.generation.servedModel ?? null, rulesVersions: detail.generation.rulesVersions ?? {} } : null,
+          consistency: detail?.consistency ? { status: detail.consistency.status, items: detail.consistency.items } : null,
+          draftError: drafted.get(id)?.error ?? null,
+          findings: mine,
+          scores: scoreSection(id, mine, judge?.answers ?? [], entry !== null),
+          judge,
+        };
+      });
+      return { run: r + 1, sections };
     });
     const keyNotes = [
       ...loaded.key.incidents.filter((incident) => incident.provisional && incident.from.every((id) => loadedSources.has(id))).map((incident) => `"${incident.description}" belongs to ${incident.home} (step 0's section map)`),
       ...Object.entries(loaded.key.sectionFacts).flatMap(([section, facts]) => (facts ?? []).filter((fact) => fact.provisional).map((fact) => `fact ${fact.id} (${section}) is not scored: it rests on her standard practice`)),
     ];
-    caseResults.push({ caseId: loaded.key.caseId, keyVersion: loaded.key.keyVersion, sourcesLoaded: [...loadedSources], inputs: { notes: loaded.key.inputs.notes ?? "", instructions: instructionsFor(loaded) }, keyNotes, sections });
+    caseResults.push({ caseId: loaded.key.caseId, keyVersion: loaded.key.keyVersion, sourcesLoaded: [...loadedSources], inputs: { notes: loaded.key.inputs.notes ?? "", instructions: instructionsFor(loaded) }, keyNotes, runs: caseRuns, medians: caseMedians(caseRuns) });
     if (!rulesVersions) {
       rulesVersions = {};
-      for (const { detail } of texts.values()) Object.assign(rulesVersions, (detail as { generation?: { rulesVersions?: Record<string, string> } }).generation?.rulesVersions ?? {});
+      for (const { texts } of made) for (const { detail } of texts.values()) Object.assign(rulesVersions, (detail as { generation?: { rulesVersions?: Record<string, string> } }).generation?.rulesVersions ?? {});
     }
   }
 
@@ -857,6 +894,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
     rubricVersion: RUBRIC_VERSION,
     judgePromptVersion: JUDGE_PROMPT_VERSION,
     checksVersion: CHECKS_VERSION,
+    runs: options.runs,
     judgeSamples: options.samples,
     drafting: prior ? prior.drafting : { ...checkoutRecord(options.draftCheckout), rulesVersions: rulesVersions ?? {} },
     judging: { ...judging, model: judgeModel },
@@ -889,12 +927,15 @@ async function main(options: Options, home: string, profile: string): Promise<nu
     for (const c of comparedBaseline.cases) {
       const records = baselineJudged.get(c.caseId);
       if (!records) continue;
-      for (const s of c.sections) {
-        const record = records.get(s.id);
-        if (!record) continue;
-        s.judge = record;
-        s.scores = scoreSection(s.id, s.findings, record.answers, s.text !== null);
-      }
+      c.runs.forEach((r, index) => {
+        for (const s of r.sections) {
+          const record = records[index]?.get(s.id);
+          if (!record) continue;
+          s.judge = record;
+          s.scores = scoreSection(s.id, s.findings, record.answers, s.text !== null);
+        }
+      });
+      c.medians = caseMedians(c.runs);
     }
   }
   const comparison = comparedBaseline ? compareRuns(run, comparedBaseline) : null;
@@ -907,20 +948,26 @@ async function main(options: Options, home: string, profile: string): Promise<nu
     writeFileSync(path.join(options.runDir, "baseline-as-compared.json"), JSON.stringify(comparedBaseline, null, 2));
   }
   for (const c of caseResults) {
-    mkdirSync(path.join(options.runDir, "drafts", c.caseId), { recursive: true });
-    for (const s of c.sections) if (s.text !== null) writeFileSync(path.join(options.runDir, "drafts", c.caseId, `${s.id}.txt`), s.text);
+    for (const r of c.runs) {
+      const folder = path.join(options.runDir, "drafts", c.caseId, `run-${r.run}`);
+      mkdirSync(folder, { recursive: true });
+      for (const s of r.sections) if (s.text !== null) writeFileSync(path.join(folder, `${s.id}.txt`), s.text);
+    }
   }
   if (args.accept) accept(run, args.accept, summary);
   console.log(`\n${summary.split("\n").slice(0, 3).join("\n")}`);
   if (prior) console.log(`This run made ${requests.total} new requests (${requests.judges} judge, ${requests.repairs} repairs, ${requests.baselineJudges} on the baseline's drafts).`);
-  console.log(`\nResults: ${path.relative(ROOT, options.runDir)}/ (results.json, summary.md, drafts/).`);
+  console.log(`\nResults: ${path.relative(ROOT, options.runDir)}/ (results.json, summary.md, drafts/<case>/run-<n>/).`);
   return exitCodeFor(comparison, run);
 }
 
-/** Saves a run as an accepted baseline: never an invalid run or one from a dirty checkout, and never with a local path (review B4, S9, S10). */
+/** Saves a run as an accepted baseline: never an invalid or incomplete run or one from a dirty checkout, and never with a local path (review B4, S9, S10; 3-run review S1). */
 function accept(run: RunResult, name: string, summary: string): void {
   if (!run.valid) fail(`an invalid run is never accepted (${run.invalidReason}).`);
   if (run.drafting.dirty || run.judging.dirty) fail("a run from a checkout with uncommitted changes in rules/, src/ or eval/ is never accepted: commit them and run again.");
+  // Review S1 (3-run evaluation): a run with a failed draft, a judge error or an unscored item never becomes the bar.
+  const incomplete = incompleteParts(run);
+  if (incomplete.length > 0) fail(`a run with a failed draft, a judge error or an unscored item is never accepted; fill it with --from-run (a missing judge answer) or run again (a failed draft) before accepting: ${incomplete.slice(0, 5).join("; ")}${incomplete.length > 5 ? `; and ${incomplete.length - 5} more` : ""}.`);
   const copy = baselineCopy(run, { home: homedir(), user: userInfo().username });
   const target = path.join(BASELINES_DIR, name);
   mkdirSync(target, { recursive: true });

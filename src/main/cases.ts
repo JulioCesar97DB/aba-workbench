@@ -34,6 +34,7 @@ import {
 } from "./case-sources.ts";
 import { caseFolderNames } from "./case-folder-name.ts";
 import { SectionInputError, sectionSummaries, sessionNotes } from "./case-sections.ts";
+import { caseMapSummary } from "./case-map.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { finishInterruptedSave, isLeftBehind, isTemporaryFileOf, writeFileDurably } from "./durable-write.ts";
 
@@ -486,6 +487,7 @@ export class CaseLibrary {
         sources: caseSources(data, files),
         sections: sectionSummaries(data),
         notes: sessionNotes(data),
+        caseMap: caseMapSummary(data),
       };
       return { outcome: "opened", case: detail };
     });

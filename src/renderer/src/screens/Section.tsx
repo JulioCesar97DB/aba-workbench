@@ -242,7 +242,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     () =>
       onRetried((item) => {
         if (item.caseId !== caseId) return;
-        if (item.about === "notes") return;
+        if (item.about === "notes" || item.about === "map") return;
         void window.aba.getSection(caseId, section.id).then((result) => {
           if (result.outcome === "read") accept(result.section);
         });
@@ -315,7 +315,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         <NotReadyNotice />
         {failures.map((item) => (
           <div key={item.id} role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-danger px-3.5 py-2 text-md font-medium text-danger">
-            <span>{t(`section.failedSave.${item.about === "source" ? "section" : item.about}`)}</span>
+            <span>{t(`section.failedSave.${item.about}`)}</span>
             <Button size="sm" onClick={() => retry(item, (sources) => setSources(caseId, sources))}>
               {t("sources.tryAgain")}
             </Button>

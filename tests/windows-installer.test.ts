@@ -228,14 +228,14 @@ test("release workflow: triggered by a version tag, a pull request or by hand; r
   assert.equal([...release.matchAll(/contents: write/g)].length, 1);
   const publish = job("publish");
   assert.match(publish, /permissions:\n\s+contents: write/);
-  assert.match(publish, /needs: installer/);
+  assert.match(publish, /needs: \[installer, mac-installer\]/);
   assert.match(publish, /if: github\.ref_type == 'tag' && startsWith\(github\.ref_name, 'v'\)/);
   assert.match(publish, /--prerelease/);
   assert.match(publish, /--verify-tag/);
   // No secret: the only token is GitHub's own, in the publish job.
   assert.doesNotMatch(release, /secrets\./);
   assert.equal([...release.matchAll(/github\.token/g)].length, 1);
-  assert.doesNotMatch(job("installer"), /GH_TOKEN|GITHUB_TOKEN|github\.token|CSC_LINK|WIN_CSC/);
+  for (const name of ["installer", "mac-installer"]) assert.doesNotMatch(job(name), /GH_TOKEN|GITHUB_TOKEN|github\.token|CSC_LINK|WIN_CSC/);
 });
 
 test("release workflow: every check passes on windows-2025 before the installer is kept, and only then can it be published", () => {

@@ -1,4 +1,5 @@
 import type { GenerationEvent } from "../lib/generation-events.ts";
+import type { CaseMapSummary, CaseMapView, MapCollection, MapPartId } from "./case-map.ts";
 import type { ReportSectionId } from "./report-sections.ts";
 import type { SectionDetail, SectionRequestInput, SectionSummary } from "./sections.ts";
 import type { AddPdfsResult, CaseSources, DroppedPdf, FailedSave, NewTextSource, ReadSourceTextResult, SourceChange, SourceSaveResult } from "./sources.ts";
@@ -136,7 +137,23 @@ export interface CaseDetail extends CaseSummary {
   sections: SectionSummary[];
   /** Her notes for this session: the AI takes them into account in everything it drafts. */
   notes: string;
+  /** Its case map (src/shared/case-map.ts): parts approved, out of parts with something in them. */
+  caseMap: CaseMapSummary;
 }
+
+/* A case's map (src/shared/case-map.ts). */
+
+/** Why a change to the case map could not be saved: as for a section, or the item is gone (another version is shown, say). */
+export type MapSaveFailure = { outcome: "case-unavailable" } | { outcome: "not-saved" } | { outcome: "case-full" } | { outcome: "version-not-found" } | { outcome: "item-not-found" };
+
+/**
+ * A change to the case map, saved: the whole map as saved, its summary for the sidebar,
+ * the version of the part the change wrote (her editing pass, which her next change
+ * names), and the id of an item just added. version is null when nothing changed.
+ */
+export type MapSaveResult = { outcome: "saved"; map: CaseMapView; summary: CaseMapSummary; version: number | null; itemId: string | null } | MapSaveFailure;
+
+export type GetCaseMapResult = { outcome: "read"; map: CaseMapView } | { outcome: "case-unavailable" };
 
 /* A case's report sections (src/shared/sections.ts). */
 
@@ -454,7 +471,7 @@ export interface AbaApi {
   /** The interface put a kept text back in its box: that box's next save is built on it, so it may replace the kept one. */
   failedSaveShown(id: string): Promise<void>;
   /** Runs a change that could not be saved again (a source's, or what was typed in a section, its instructions or the notes). */
-  retryFailedSave(id: string): Promise<SourceSaveResult | SectionSaveResult | NotesSaveResult | InstructionsSaveResult>;
+  retryFailedSave(id: string): Promise<SourceSaveResult | SectionSaveResult | NotesSaveResult | InstructionsSaveResult | MapSaveResult>;
 
   /*
    * A case's report sections (src/shared/sections.ts). Nothing is ever deleted: every
@@ -497,6 +514,24 @@ export interface AbaApi {
    * (src/lib/judge.ts). The answer streams as generation updates ("text", then "done"); nothing is saved.
    */
   judgeSection(caseId: string, sectionId: ReportSectionId, generationId: string, provider: DraftingProvider, input: unknown): Promise<StartSectionResult>;
+
+  /*
+   * The case map (src/shared/case-map.ts). Nothing is ever deleted: each part keeps every
+   * version, and she can go back to any of them. `editing` is the version of the part her
+   * editing pass made and keeps updating (the last answer's `version`); null starts a new one.
+   */
+  /** The whole map, every part with its versions and the items of the version shown. */
+  getCaseMap(caseId: string): Promise<GetCaseMapResult>;
+  /** Saves her change to an item or a group as she types. `item` is the item's fields as JSON: values and [CHECK]s only. */
+  saveMapItem(caseId: string, part: MapPartId, collection: MapCollection, itemId: string, item: string, editing: number | null): Promise<MapSaveResult>;
+  /** Adds an item or a group (her own), with what she typed so far (JSON); the answer names its id. */
+  addMapItem(caseId: string, part: MapPartId, collection: MapCollection, item: string, editing: number | null): Promise<MapSaveResult>;
+  /** Removes an item or a group from the version she works in; earlier versions keep it. */
+  removeMapItem(caseId: string, part: MapPartId, collection: MapCollection, itemId: string, editing: number | null): Promise<MapSaveResult>;
+  /** Shows another version of a part: nothing is lost, only which one is current changes. */
+  setMapPartVersion(caseId: string, part: MapPartId, version: number): Promise<MapSaveResult>;
+  /** Approves a version of a part (null takes the approval back). */
+  approveMapPart(caseId: string, part: MapPartId, version: number | null): Promise<MapSaveResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -551,6 +586,12 @@ export const IPC_CHANNELS = {
   startNewSession: "sections:new-session",
   copySection: "sections:copy",
   judgeSection: "eval:judge-section",
+  getCaseMap: "case-map:get",
+  saveMapItem: "case-map:save-item",
+  addMapItem: "case-map:add-item",
+  removeMapItem: "case-map:remove-item",
+  setMapPartVersion: "case-map:set-current",
+  approveMapPart: "case-map:approve",
   getAiPreferences: "settings:get-ai",
   setModel: "settings:set-model",
 } as const;

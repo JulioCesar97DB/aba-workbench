@@ -10,19 +10,20 @@ The core of the project is the AI's knowledge: how well it writes an ABA initial
    - **Fail-closed:** anything shown or focused kills the app and stops the run. A window at the end marks the run invalid: it is never compared or accepted.
    - **No dialog:** the harness replaces the app's message boxes right after launch, as the window tests do. The app itself is unchanged: `--hidden` never changes how it closes or asks. A box the app asks for (the "unsaved changes" question, say) is recorded, answered with its second button ("Close anyway"), and makes the run invalid. The window is closed before the app quits, so a question asked on close is recorded too.
    - **Old checkouts refused:** `--draft-app` refuses a checkout that has no hidden mode.
-2. **It drafts each case.** It takes every case in `fixtures/cases/` that has a `key.json`, or the ones named with `--cases`. For each case:
+2. **It runs each case 3 times** (`--runs`, owner's decision of 2026-11-23: the AI drafts differently each time, and so does the judge, so one run per case is too noisy to gate on). It takes every case in `fixtures/cases/` that has a `key.json`, or the ones named with `--cases`. Each run is a case of its own in the app:
    - it creates the case and adds its sources (PDFs as dropped bytes), her session notes and her standing instructions for **every** section (the key's text, or cleared, since the eval profile is kept between runs), through `window.aba` as she would;
-   - it drafts the nine narrative sections in report order. In the default **chained** mode (owner's decision) each draft is approved before the next one, so the app's own consistency check runs after drafts 2 to 9.
-3. **It runs the automatic checks** on every section (`eval/checks/checks.ts`).
-4. **It asks the judge** to score each section on its own, with the other eight drafts of the case as context (owner's decision), through `window.aba.judgeSection`. With `--judge-samples n` it asks n times and scores the median.
-5. **It writes `eval-results/<run>/`** (gitignored):
-   - `results.json`: everything, with labels and commits instead of paths;
-   - `summary.md`: the verdict, a score table per case (baseline → this run), requests, windows;
+   - it drafts the nine narrative sections in report order, fully. In the default **chained** mode (owner's decision) each draft is approved before the next one, so the app's own consistency check runs after drafts 2 to 9.
+3. **It runs the automatic checks** on every section of every run (`eval/checks/checks.ts`).
+4. **It asks the judge** to score each section of each run on its own, with the other eight drafts of that run as context (owner's decision), through `window.aba.judgeSection`. One judge request per section and run by default: the 3 runs are the judge's 3 samples. With `--judge-samples n` it asks n times in each run and takes that run's median.
+5. **It takes the medians.** For each section and item, the score is the median of the runs, and the spread (every run's score) is kept next to it. An item that any run could not score is unscored. A check fails when it finds something in most runs (2 of 3).
+6. **It writes `eval-results/<run>/`** (gitignored):
+   - `results.json`: every run (texts, findings, judge answers, scores) and the medians, with labels and commits instead of paths;
+   - `summary.md`: the verdict, a median table per case (baseline → this run), the spread of every item over the runs, requests, windows;
    - `comparison.json` and `baseline-as-compared.json`;
-   - `drafts/<case>/<section>.txt`.
-6. **It compares** the run with the newest accepted run in `eval/baselines/` (committed; owner's decision):
-   - the baseline's stored drafts are checked again with the current checks;
-   - where the baseline was judged by another judge, its drafts are judged again in the same run by this judge (see "The verdict").
+   - `drafts/<case>/run-<n>/<section>.txt`.
+7. **It compares** the medians with those of the newest accepted run in `eval/baselines/` (committed; owner's decision):
+   - every stored run of the baseline is checked again with the current checks;
+   - where the baseline was judged by another judge, its drafts are judged again in the same run by this judge, run by run (see "The verdict").
 
 Every request takes the path her requests take:
 
@@ -35,19 +36,25 @@ The harness never talks to a provider and never reads the app's credentials file
 
 ## The verdict
 
+Both sides are compared on their medians (owner's decision, 2026-11-23).
+
 - **REGRESSION** (exit code 2), the hard verdict, on any of these:
-  - a code item went down;
-  - a check that found nothing in the baseline finds something now;
-  - an item scored in the baseline is not scored now.
+  - a code item's median went down;
+  - a check that passed in the baseline (it found something in at most half of its runs) fails in most runs now;
+  - an item scored in the baseline is not scored now: some run could not score it (a failed draft, or no valid judge answer). `--from-run` fills a missing judge answer in the run that lacks it.
 
   The rules change does not go to her.
-- **No hard regression** (exit code 0). Judge items that went up or down are listed **apart from the verdict**, for the sections both runs had the same judge. A single judge sample's noise is not measured yet; whether one sample or the median of three decides is the owner's call (pending).
+- **No hard regression** (exit code 0). Judge item medians that went up or down are listed **apart from the verdict**, for the sections both runs had the same judge in every run.
+- **Noise stays visible, not in the verdict.** A drop in one run of three leaves the median and the majority as they were. The summary shows every run's score for every item (**bold** where the runs disagree), and each change in the lists comes with its runs, as in `2 → 1 (runs 2·2·2 → 1·1·2)`.
+- **Not compared, and said so:** an item the baseline could not score is listed under "Not compared: the baseline could not score these", never skipped in silence. The checks of a section that some baseline run has no draft of are not compared either (the failing count would be read against runs that never had a text) and are listed under "Checks not compared". The verdict line names both.
+- **Run counts:** `--runs` takes 1, 3 or 5, an odd count, so a median and a majority never tie (owner's choice). A baseline with another run count is still compared, each side on its own medians, with a note; results from before runs (such as `dev-2026-11-23`) are read as a single run.
+  - **Fewer runs than the baseline:** a 1-run comparison with a 3-run baseline carries one run's drafting and judging noise, which the medians were brought in to absorb. Its hard verdict is not reliable, and the note says so: each single run of `dev-step0-2026-11-23`, compared with that baseline's own medians, reads REGRESSION. Run as many runs as the baseline to decide.
 - **NOT COMPARED** (exit code 3): another rubric version, another provider (a rehearsal against a real run) or another drafting mode.
 - **INVALID** (exit code 1): a window, the Dock icon or the focus showed, or the app asked for a dialog.
 
 **The same judge.** A judge record carries a fingerprint: the judge's prompt version and code, its inputs for the section (rubric, expectations, payer facts, key facts and notes, her notes and instructions), the model and the number of samples. The drafts it judges are not part of it.
-- Judge items are compared only between records with the same fingerprint.
-- When the baseline's fingerprint differs, the run first judges the baseline's drafts again with this judge, which costs 9 requests per case.
+- Judge items are compared only between sections whose runs all carry the same fingerprint, on both sides.
+- When the baseline's fingerprint differs, the run first judges the baseline's drafts again with this judge, which costs 9 requests per case for each of the baseline's runs.
 
 **Findings under a rule pending her answer** (a caregiver called by her given name) are listed as provisional and never scored. Key facts that rest on her unconfirmed standard practice are left out of the judge's list.
 
@@ -59,24 +66,28 @@ The harness never talks to a provider and never reads the app's credentials file
 | `pnpm eval` | A real run on the ChatGPT sign-in of the eval profile |
 | `pnpm eval --rehearse` | The whole run with a fake provider inside the app's main process: no request leaves the computer, nothing is spent. It uses a profile of its own, deleted afterwards |
 | `pnpm eval --draft-app <checkout>` | Drafts with another checkout's app (its rules and its code, built there with `pnpm build`), and judges with this one. Use it to compare a rules branch with `dev` |
-| `pnpm eval --from-run <run folder>` | Takes that run's drafts (no drafting), checks them again, and asks the judge only for the sections with no answer from this same judge |
-| `pnpm eval --rejudge <run folder>` | Takes that run's drafts, checks them again, and judges every section again. Also takes a baseline's folder |
-| `pnpm eval --judge-samples <n>` | Judges each section n times (1 to 5) and scores the median (default 1) |
+| `pnpm eval --runs <n>` | Runs each case n times, each drafted and judged on its own, and compares the medians: 1, 3 or 5 (default 3) |
+| `pnpm eval --from-run <run folder>` | Takes every run's drafts from that run (no drafting), checks them again, and asks the judge only for the sections of each run with no answer from this same judge. Keeps that run's run count |
+| `pnpm eval --rejudge <run folder>` | Takes every run's drafts from that run, checks them again, and judges every section of every run again. Also takes a baseline's folder |
+| `pnpm eval --judge-samples <n>` | Judges each section n times (1 to 5) in each run and takes that run's median (default 1: the runs are the samples) |
 | `pnpm eval --cases case-b-sofia` | Only these cases |
 | `pnpm eval --mode independent` | Drafts without approving, so no consistency checks |
 | `pnpm eval --baseline <name>` | Compares with `eval/baselines/<name>/` instead of the newest |
-| `pnpm eval --accept <name>` | Also saves the run as `eval/baselines/<name>/`, with every path stripped (commit it). Refused for an invalid run, a rehearsal, or a checkout with uncommitted changes in `rules/`, `src/` or `eval/` |
+| `pnpm eval --accept <name>` | Also saves the run as `eval/baselines/<name>/`, with every path stripped (commit it). Refused for an invalid run, a rehearsal, a checkout with uncommitted changes in `rules/`, `src/` or `eval/`, and a run with a failed draft, a judge error or an unscored item in any run (fill it with `--from-run`, or run again for a failed draft) |
 | `pnpm eval --label <text>`, `--no-build` | Names the run folder; uses the apps as already built |
 
 **The eval profile** is `~/.aba-workbench-eval/profile`. It is owner-only and kept signed in between runs (owner's decision), so the owner signs in once. A fresh temporary home folder is used for every run and deleted at the end, even when the run fails.
 
-**Requests per run** (chained mode, one judge sample, a judge request per section):
+**Requests per comparison** (chained mode, 3 runs, one judge sample per run):
 
-- **per case:** 9 drafts + 8 consistency checks + 9 judge = **26**, plus up to 9 repair requests and one retry for each request that fails on the provider's side;
-- **plus 9 per case** when the baseline's drafts need judging again;
+- **per case and run:** 9 drafts + 8 consistency checks + 9 judge = 26;
+- **per case:** 3 × 26 = **78**, plus up to 9 repair requests per run and one retry for each request that fails on the provider's side;
+- **plus 9 per case for each of the baseline's runs** whose drafts need judging again (another judge);
 - **plus** one free model-list call to check the sign-in before anything is spent.
 
-`--rejudge` costs 9 judge requests per case and drafts nothing. The writing and the judge both spend the owner's ChatGPT Pro plan (no money).
+`--rejudge` costs 9 judge requests per case and run (27 with 3 runs) and drafts nothing. `--from-run` costs only the missing judge answers. The writing and the judge both spend the owner's ChatGPT Pro plan (no money).
+
+**Reproducible from the stored drafts:** `results.json` keeps every run's texts, so `--from-run` and `--rejudge` check and judge them again run by run without drafting, and the compare checks every stored run of the baseline again.
 
 **Comparing a rules branch with `dev` on case B:**
 
@@ -116,7 +127,7 @@ Every input is quoted, so nothing in it can open or close a tag. **The answer:**
 | `eval/RUBRIC.md`, `eval/rubric.ts` | The rubric: items, anchors, who scores each, her shapes, structure, habits and the payer facts |
 | `eval/checks/` | The automatic checks, pure functions (`tests/eval-checks.test.ts`) |
 | `eval/key.ts`, `fixtures/cases/*/key.json` | The case key schema and the keys of cases A and B |
-| `eval/results.ts` | The results' shape, scores, medians, rescoring, the comparison, the summary and the baseline path guard (`tests/eval-rubric.test.ts`) |
+| `eval/results.ts` | The results' shape (every run and the medians), scores, medians over samples and over runs, rescoring, the comparison, the summary and the baseline path guard (`tests/eval-rubric.test.ts`) |
 | `eval/run.mts` | The run |
 | `eval/rehearsal.ts` | The fake provider of `--rehearse` |
 | `eval/baselines/` | Accepted runs, committed |

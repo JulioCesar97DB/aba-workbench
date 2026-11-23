@@ -6,6 +6,7 @@ import { ConnectionsProvider } from "./connections.tsx";
 import { TooltipProvider } from "./components/Tooltip.tsx";
 import { CaseIndex, CaseRoute, ReportScreen, StepScreen } from "./screens/Case.tsx";
 import { SectionScreen } from "./screens/Section.tsx";
+import { CaseMapScreen } from "./screens/CaseMap.tsx";
 import { DevCheck } from "./screens/DevCheck.tsx";
 import { Home } from "./screens/Home.tsx";
 import { NotFound } from "./screens/NotFound.tsx";
@@ -37,7 +38,7 @@ const router = createHashRouter([
           { path: "sources", element: <SourcesScreen /> },
           { path: "sources/text/:sourceId", element: <SourceTextScreen /> },
           { path: "sources/new/:type", element: <SourceTextScreen /> },
-          { path: "behaviors", element: <StepScreen step="behaviors" /> },
+          { path: "case-map", element: <CaseMapScreen /> },
           { path: "interventions", element: <StepScreen step="interventions" /> },
           { path: "report", element: <ReportScreen /> },
           { path: "report/:sectionId", element: <SectionScreen /> },
