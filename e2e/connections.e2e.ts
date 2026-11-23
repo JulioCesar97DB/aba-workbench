@@ -4,7 +4,7 @@ import { request as httpRequest } from "node:http";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import type { AbaApi } from "../src/shared/api.ts";
-import { connectionStubLog, expect, goTo, setStubAnswers, stubConnections, test } from "./app.ts";
+import { connectionStubLog, expect, firstScreen, goTo, setStubAnswers, stubConnections, test } from "./app.ts";
 
 /*
  * The AI connections in Settings, with both providers faked inside the main process
@@ -88,7 +88,7 @@ test("ChatGPT: sign in through the system browser, see the account, survive a re
   const { jwks } = await signingKey();
   let app = await launch();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
-  let page = await app.firstWindow();
+  let page = await firstScreen(app);
   await openSettings(page);
   const card = page.getByTestId("chatgpt-card");
   await expect(card.getByText("Not connected")).toBeVisible();
@@ -132,7 +132,7 @@ test("ChatGPT: sign in through the system browser, see the account, survive a re
   await app.close();
   app = await launch();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
-  page = await app.firstWindow();
+  page = await firstScreen(app);
   await openSettings(page);
   await expect(page.getByTestId("chatgpt-account")).toHaveText("Signed in as Test Clinician");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -153,7 +153,7 @@ test("ChatGPT: sign in through the system browser, see the account, survive a re
 test("ChatGPT: access denied says what happened, a paid plan as a possibility, and offers Claude; a plan scope not granted needs attention", async ({ app, profile }) => {
   const { jwks } = await signingKey();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openSettings(page);
   const card = page.getByTestId("chatgpt-card");
 
@@ -186,7 +186,7 @@ test("ChatGPT: access denied says what happened, a paid plan as a possibility, a
 test("ChatGPT: an account that cannot use its plan, then a session revoked elsewhere, each say what to do", async ({ app, profile }) => {
   const { jwks } = await signingKey();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openSettings(page);
   const card = page.getByTestId("chatgpt-card");
   await card.getByRole("button", { name: "Continue with ChatGPT" }).click();
@@ -216,7 +216,7 @@ test("ChatGPT: an account that cannot use its plan, then a session revoked elsew
 test("ChatGPT: cancelling the sign-in stops listening for the browser", async ({ app }) => {
   const { jwks } = await signingKey();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openSettings(page);
   const card = page.getByTestId("chatgpt-card");
   await card.getByRole("button", { name: "Continue with ChatGPT" }).click();
@@ -231,7 +231,7 @@ test("Claude: a wrong key says so, a good key connects and is kept, removing it 
   const { jwks } = await signingKey();
   let app = await launch();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
-  let page = await app.firstWindow();
+  let page = await firstScreen(app);
   await openSettings(page);
   const card = page.getByTestId("claude-card");
   const field = card.getByLabel("Claude API key");
@@ -259,7 +259,7 @@ test("Claude: a wrong key says so, a good key connects and is kept, removing it 
   await app.close();
   app = await launch();
   await stubConnections(app, { claudeKey: CLAUDE_KEY, jwks });
-  page = await app.firstWindow();
+  page = await firstScreen(app);
   await openSettings(page);
   await expect(page.getByTestId("claude-card").getByText("A key is saved in ABA Workbench.")).toBeVisible();
   // Anthropic no longer accepts it (deleted in the Console): it needs attention.
@@ -276,7 +276,7 @@ test("a damaged credentials file shows both as not connected, is never overwritt
   const file = path.join(profile, "credentials.json");
   writeFileSync(file, "{ damaged", { mode: 0o600 });
   const app = await launch();
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openSettings(page);
   await expect(page.getByTestId("credentials-problem")).toContainText("the file that keeps them is damaged");
   await expect(page.getByRole("button", { name: "Continue with ChatGPT" })).toBeDisabled();
@@ -294,7 +294,7 @@ test("a damaged credentials file shows both as not connected, is never overwritt
 });
 
 test("the connection functions refuse hostile input and return no secret", async ({ app }) => {
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   const results = await page.evaluate(async () => {
     const attempt = (call: () => Promise<unknown>) => call().then((value) => ({ value }), (error: Error) => ({ error: error.message }));
     const aba = (globalThis as unknown as { aba: Record<string, (...args: unknown[]) => Promise<unknown>> }).aba;
@@ -315,7 +315,7 @@ test("the connection functions refuse hostile input and return no secret", async
 
 test("the connection screen in Spanish", async ({ launch }) => {
   const app = await launch({ language: "es" });
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   await openSettings(page);
   await expect(page.getByRole("heading", { name: "Conexión con la IA" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continuar con ChatGPT" })).toBeVisible();
@@ -347,7 +347,7 @@ test("ChatGPT: the plan welcome always closes, and says so when the settings fil
   };
   writeFileSync(path.join(profile, "credentials.json"), JSON.stringify(credentials), { mode: 0o600 });
   const app = await launch();
-  const page = await app.firstWindow();
+  const page = await firstScreen(app);
   // A folder where settings.json should be: no save can succeed from now on.
   rmSync(path.join(profile, "settings.json"));
   mkdirSync(path.join(profile, "settings.json"));

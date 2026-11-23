@@ -6,7 +6,7 @@ import path from "node:path";
 import { isSameOrInside } from "../src/main/cases-folder.ts";
 import { accessEntries, describeAccess } from "../src/main/owner-only.ts";
 import type { AbaApi } from "../src/shared/api.ts";
-import { connectionStubLog, expect, packagedExecutable, stubConnections, stubFolderDialog, test } from "./app.ts";
+import { connectionStubLog, expect, firstScreen, packagedExecutable, stubConnections, stubFolderDialog, test } from "./app.ts";
 
 /*
  * The installed Windows app as she will first start it, run by the release workflow
@@ -78,8 +78,7 @@ test("the installed app's first start: Spanish from Windows, cases in the home f
     // And as a Spanish Windows.
     expect(where.languages[0]?.toLowerCase().startsWith("es")).toBe(true);
 
-    const page = await app.firstWindow();
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const page = await firstScreen(app);
     await expect(page.locator("html")).toHaveAttribute("lang", "es");
     expect((await page.evaluate(() => (globalThis as unknown as { aba: AbaApi }).aba.getSettings())).language).toBe("es");
 

@@ -2,7 +2,7 @@ import type { ElectronApplication, Page } from "@playwright/test";
 import { chmodSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { AbaApi } from "../src/shared/api.ts";
-import { defaultCasesFolder, draftingStubLog, expect, goTo, SAMPLE_CASE, seedCase, setDraftingFailures, setDraftingSpeed, stubDrafting, test } from "./app.ts";
+import { defaultCasesFolder, draftingStubLog, expect, firstScreen, goTo, holdAnswers, SAMPLE_CASE, seedCase, setDraftingFailures, setDraftingSpeed, stubDrafting, test } from "./app.ts";
 
 /*
  * The report's sections as the clinician meets them: drafting one with the AI, changing
@@ -37,8 +37,7 @@ async function openSection(launch: (options?: { language?: "en" | "es" }) => Pro
   seedCase(casesFolder, SAMPLE_CASE.label, { ...SAMPLE_CASE, sources: [SOURCE] });
   const app = await launch({ language });
   await stubDrafting(app, { claudeKey: CLAUDE_KEY, ...stub });
-  const page = await app.firstWindow();
-  await expect(heading(page)).toBeVisible();
+  const page = await firstScreen(app);
   const saved = await page.evaluate((key) => (globalThis as unknown as { aba: AbaApi }).aba.saveClaudeKey(key), CLAUDE_KEY);
   expect(saved).toEqual({ outcome: "saved" });
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/${sectionId}`);
@@ -213,8 +212,7 @@ test("her edits, instructions and notes survive a restart; the file keeps every 
   await app.close();
 
   const again = await launch();
-  const page2 = await again.firstWindow();
-  await expect(heading(page2)).toBeVisible();
+  const page2 = await firstScreen(again);
   await goTo(page2, `/cases/${SAMPLE_CASE.id}/report/generalization-and-maintenance`);
   await expect(page2.getByTestId("section-view")).toContainText("Generalization paragraph, edited.");
   await expect(page2.getByRole("button", { name: "Version 1" })).toBeVisible();
@@ -278,6 +276,48 @@ test("M3 and M6: lines pasted with single line breaks can become paragraphs; the
   expect(await app.evaluate(async ({ clipboard }) => clipboard.readText())).toBe("Para one.\nPara two.\nPara three.");
   await expect(page.getByRole("button", { name: "Version 2, approved" })).toBeVisible();
 });
+
+/*
+ * M6 on a slow disk (the Windows runner, dev run 45149934208): she approves version 2,
+ * then picks version 1 and copies it before the answers are back. The main process does
+ * each call in the order she made them; only the answers come back late: the approval's,
+ * or every one of them. The clipboard is recorded, never the system's.
+ */
+const SLOW_ANSWERS = {
+  "the approval's answer": ["sections:approve"],
+  "every answer": ["sections:approve", "sections:set-current", "sections:copy"],
+};
+for (const [late, channels] of Object.entries(SLOW_ANSWERS)) {
+  test(`M6 on a slow disk, ${late} late: approve, then version 1 at once; she stays on version 1, and the copy names the approved version`, async ({ launch, home }) => {
+    const { app, page, caseFile } = await openSection(launch, home, "environmental-changes");
+    await app.evaluate(({ clipboard }) => {
+      const g = globalThis as unknown as { copied: string[] };
+      g.copied = [];
+      clipboard.write = async (items) => {
+        g.copied.push(await (await items[0].getType("text/plain")).text());
+      };
+    });
+    await page.getByRole("button", { name: /I already wrote it/ }).click();
+    await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
+    await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
+    await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+
+    const releases: Array<() => Promise<void>> = [];
+    for (const channel of channels) releases.push(await holdAnswers(app, channel));
+    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await page.getByRole("button", { name: "Version 1, yours" }).click();
+    await page.getByRole("button", { name: "Copy for ABA Matrix" }).click();
+    await expect.poll(() => app.evaluate(() => (globalThis as unknown as { copied: string[] }).copied)).toEqual(["Para one.\nPara two.\nPara three."]);
+
+    for (const release of releases) await release();
+    // One more call to the main process: its answer comes after the held ones, so the screen has had them.
+    await page.evaluate(([caseId, sectionId]) => (globalThis as unknown as { aba: AbaApi }).aba.getSection(caseId, sectionId as "environmental-changes"), [SAMPLE_CASE.id, "environmental-changes"]);
+    await expect(page.getByRole("button", { name: "Version 2, approved" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("Copied version 1. Paste it into ABA Matrix. Version 2 is the approved one.")).toBeVisible();
+    expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ approvedVersion: 2, currentVersion: 1 });
+  });
+}
 
 /* Review round 2: B3, the kept text goes back in its box */
 

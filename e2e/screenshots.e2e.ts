@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import type { Language } from "../src/shared/api.ts";
-import { expect, goTo, setStubAnswers, stubConnections, test } from "./app.ts";
+import { expect, firstScreen, goTo, setStubAnswers, stubConnections, test } from "./app.ts";
 
 /*
  * Screenshots of the connection screen in each state and language, for review. Runs only
@@ -63,7 +63,7 @@ for (const language of ["en", "es"] as Language[]) {
       const app = await launch({ settingsFile: JSON.stringify({ version: 1, language, ...(state.welcome ? {} : { chatgptWelcomeShown: true }) }) });
       await stubConnections(app, { claudeKey: "not-this-one", jwks: { keys: [] } });
       await setStubAnswers(app, { claudeStatus: 401, chatgptModelsStatus: 403 });
-      const page = await app.firstWindow();
+      const page = await firstScreen(app);
       await goTo(page, "/settings");
       mkdirSync(out!, { recursive: true });
       if (state.welcome) {

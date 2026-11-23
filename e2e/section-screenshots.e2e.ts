@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import type { AbaApi, Language } from "../src/shared/api.ts";
-import { defaultCasesFolder, expect, goTo, SAMPLE_CASE, seedCase, setDraftingSpeed, stubDrafting, test } from "./app.ts";
+import { defaultCasesFolder, expect, firstScreen, goTo, SAMPLE_CASE, seedCase, setDraftingSpeed, stubDrafting, test } from "./app.ts";
 
 /*
  * Screenshots of the section workspace in each state and language, for review. Runs only
@@ -26,8 +26,7 @@ for (const language of ["en", "es"] as Language[]) {
     seedCase(defaultCasesFolder(home), SAMPLE_CASE.label, { ...SAMPLE_CASE, label: "Mateo F. (invented)", sources: SOURCES });
     const app = await launch({ language });
     await stubDrafting(app, { claudeKey: CLAUDE_KEY, consistency: "- Background Information says he lives with his parents and an older brother; this version says he is an only child." });
-    const page = await app.firstWindow();
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const page = await firstScreen(app);
     await page.evaluate((key) => (globalThis as unknown as { aba: AbaApi }).aba.saveClaudeKey(key), CLAUDE_KEY);
     const section = (id: string) => goTo(page, `/cases/${SAMPLE_CASE.id}/report/${id}`);
 

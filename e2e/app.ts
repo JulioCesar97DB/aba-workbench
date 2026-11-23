@@ -1,4 +1,4 @@
-import { test as base, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test as base, _electron as electron, expect, type ElectronApplication, type Page } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -135,6 +135,26 @@ export const test = base.extend<Fixtures>({
   },
 });
 
+/**
+ * How long a freshly started app may take to show its first screen. Every other wait keeps
+ * Playwright's 5 seconds; this one covers starting the app's processes and loading the
+ * interface for the first time, which on a Windows runner going through a slow spell took
+ * over 5 seconds (dev run 45127438804: the tests around it were 2 to 6 times slower than
+ * usual). The same budget as Playwright gives the start itself (electron.launch, 30 s).
+ */
+export const FIRST_SCREEN_TIMEOUT_MS = 30_000;
+
+/**
+ * The app's window once its first screen is up (a page title). Until then the window may
+ * still hold the empty page it is created with: an address set there (goTo) is lost when
+ * the interface loads, and a call into the page can find it gone. Tests start from here.
+ */
+export async function firstScreen(app: ElectronApplication): Promise<Page> {
+  const page = await app.firstWindow();
+  await expect(page.locator("#page-title")).toBeVisible({ timeout: FIRST_SCREEN_TIMEOUT_MS });
+  return page;
+}
+
 /** The default cases folder for a test's home folder (in the packaged app, the chosen one: see LaunchOptions). */
 export function defaultCasesFolder(home: string): string {
   return path.join(home, "ABA Workbench");
@@ -208,6 +228,38 @@ export async function startSecondCopy(project: string, profile: string, home: st
       resolve(code);
     });
   });
+}
+
+/**
+ * Holds the main process's answers on one of the interface's channels, as a slow disk
+ * does (a Windows runner): each call is still done at once, in the order it came, but its
+ * answer waits. Returns what lets the answers held go. Electron keeps the handlers of
+ * ipcMain.handle in ipcMain._invokeHandlers; the one there is wrapped, not replaced.
+ */
+export async function holdAnswers(app: ElectronApplication, channel: string): Promise<() => Promise<void>> {
+  await app.evaluate(({ ipcMain }, name) => {
+    type Handler = (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown;
+    const original = (ipcMain as unknown as { _invokeHandlers: Map<string, Handler> })._invokeHandlers.get(name);
+    if (!original) throw new Error(`No handler for ${name}`);
+    const g = globalThis as unknown as { heldAnswers?: Record<string, () => void> };
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    g.heldAnswers = { ...g.heldAnswers, [name]: release };
+    ipcMain.removeHandler(name);
+    ipcMain.handle(name, async (event, ...args) => {
+      const answer = await Promise.resolve(original(event, ...args)).then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      );
+      await released;
+      if ("error" in answer) throw answer.error;
+      return answer.value;
+    });
+  }, channel);
+  return () =>
+    app.evaluate((_electron, name) => {
+      (globalThis as unknown as { heldAnswers: Record<string, () => void> }).heldAnswers[name]();
+    }, channel);
 }
 
 /** Shows a screen by its address (the part after #), as a link inside the app would. */
