@@ -81,3 +81,52 @@ export function copiedLead(text: string): { key: "copiedLead" } | { key: "copied
   if (markers.length === 0) return { key: "copiedLead" };
   return { key: markers.every((marker) => marker.kind === "missing") ? "copiedMissing" : "copiedMarked", count: markers.length };
 }
+
+/** Her own text: what she pasted, or edited by hand (a hand edit is her word on the facts, even of an AI text). */
+export function isHerText(version: Pick<SectionVersion, "kind">): boolean {
+  return version.kind === "hers" || version.kind === "edited";
+}
+
+/**
+ * "Mejorarla con la IA" from the editor (UX-3 review round 1, S1) improves what she has on
+ * screen, as her text. So it is offered when the box holds text that is hers: anything she
+ * typed, or a version that is already her text, untouched. An AI version opened in the
+ * editor and left as it was is not her text, and is not sent as if it were.
+ * `opened` is the version the editor opened on (null when she pastes a new text).
+ */
+export function canImproveFromEditor(onScreen: string, opened: Pick<SectionVersion, "kind" | "text"> | null): boolean {
+  if (onScreen.trim() === "") return false;
+  return opened === null || isHerText(opened) || onScreen !== opened.text;
+}
+
+/**
+ * Which version to improve once what is on screen is saved: the version this editing pass
+ * wrote (it holds what she has on screen), or, when there was nothing to save, the version
+ * she opened, if it is her text. Null: nothing of hers to improve.
+ */
+export function improveFromVersion(passVersion: number | null, opened: Pick<SectionVersion, "kind" | "number"> | null): number | null {
+  if (passVersion !== null) return passVersion;
+  return opened !== null && isHerText(opened) ? opened.number : null;
+}
+
+/**
+ * "Mejorarla con la IA" pressed in the editor (UX-3 review round 1, S1): the version to
+ * improve, or null to send nothing. What she has on screen is saved first (`flush`); only
+ * then is the version this editing pass wrote read (`passVersion`), since that save may be
+ * the one that makes it. Reading it before the save would send an earlier version.
+ */
+export async function improveFromEditorVersion({
+  onScreen,
+  opened,
+  flush,
+  passVersion,
+}: {
+  onScreen: string;
+  opened: Pick<SectionVersion, "kind" | "number" | "text"> | null;
+  flush: () => Promise<boolean>;
+  passVersion: () => number | null;
+}): Promise<number | null> {
+  if (!canImproveFromEditor(onScreen, opened)) return null;
+  if (!(await flush())) return null;
+  return improveFromVersion(passVersion(), opened);
+}

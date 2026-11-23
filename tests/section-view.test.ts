@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { relativeDay } from "../src/renderer/src/format.ts";
 import { en } from "../src/renderer/src/i18n/en.ts";
 import { es } from "../src/renderer/src/i18n/es.ts";
-import { changedParagraphs, copiedLead, isCorrection, nextSection, paragraphBeingWritten, versionChip } from "../src/renderer/src/section-view.ts";
+import { canImproveFromEditor, changedParagraphs, copiedLead, improveFromEditorVersion, improveFromVersion, isCorrection, nextSection, paragraphBeingWritten, versionChip } from "../src/renderer/src/section-view.ts";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
 import type { SectionState, SectionVersion } from "../src/shared/sections.ts";
 
@@ -88,4 +88,80 @@ test("a version's day: today, yesterday, or neither, on this computer's calendar
   assert.equal(relativeDay(new Date(2026, 10, 23, 0, 5).toISOString(), now), "today");
   assert.equal(relativeDay(new Date(2026, 10, 22, 23, 55).toISOString(), now), "yesterday");
   assert.equal(relativeDay(new Date(2026, 10, 21, 12, 0).toISOString(), now), null);
+});
+
+test("Improve it with the AI from the editor: only her text, as she has it on screen (review round 1, S1)", () => {
+  const draft = version(2, "draft", null, "The AI's text.");
+  const hers = version(1, "hers", null, "Her text.");
+  // An AI draft opened in the editor and left as it was is not her text.
+  assert.equal(canImproveFromEditor("The AI's text.", draft), false);
+  // Once she changed it, what is on screen is hers.
+  assert.equal(canImproveFromEditor("The AI's text, corrected by her.", draft), true);
+  // Her own version, untouched, is her text as it is.
+  assert.equal(canImproveFromEditor("Her text.", hers), true);
+  // A new text she pastes, once there is one.
+  assert.equal(canImproveFromEditor("  ", null), false);
+  assert.equal(canImproveFromEditor("Pasted.", null), true);
+  // After saving what is on screen: the version this pass wrote, never the one she opened.
+  assert.equal(improveFromVersion(3, draft), 3);
+  assert.equal(improveFromVersion(null, hers), 1);
+  assert.equal(improveFromVersion(null, draft), null);
+  assert.equal(improveFromVersion(null, null), null);
+});
+
+/**
+ * One editing pass as the screen runs it: her text on screen, the version the pass has
+ * written so far, and a flush that saves what is on screen (one version per pass: the
+ * first save makes the next version, later saves update it).
+ */
+function editingPass(opened: SectionVersion | null, nextNumber: number, initial: string) {
+  const pass = { onScreen: initial, saved: initial, version: null as number | null, sent: [] as { version: number; text: string }[], flushes: 0 };
+  const flush = async () => {
+    pass.flushes += 1;
+    // The save goes to the main process and back before the pass knows its version.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    if (pass.onScreen !== pass.saved) {
+      pass.version ??= nextNumber;
+      pass.saved = pass.onScreen;
+      pass.sent.push({ version: pass.version, text: pass.onScreen });
+    }
+    return true;
+  };
+  const press = () => improveFromEditorVersion({ onScreen: pass.onScreen, opened, flush, passVersion: () => pass.version });
+  return { pass, press, opened };
+}
+
+test("Improve it with the AI from the editor sends what is on screen when she presses it, saved as her text first (review round 1, S1)", async () => {
+  const draft = version(2, "draft", null, "The AI's text.");
+  // She opens the AI's draft, types a correction and presses at once: nothing of this pass is saved yet.
+  const quick = editingPass(draft, 3, draft.text);
+  quick.pass.onScreen = "The AI's text, with her correction.";
+  assert.equal(await quick.press(), 3);
+  assert.deepEqual(quick.pass.sent, [{ version: 3, text: "The AI's text, with her correction." }]);
+
+  // An earlier save of this pass, then more typing: the newest text is saved into the pass's version, and that is sent.
+  const later = editingPass(draft, 3, draft.text);
+  later.pass.onScreen = "First correction.";
+  assert.equal(await later.press(), 3);
+  later.pass.onScreen = "First correction. And a second one.";
+  assert.equal(await later.press(), 3);
+  assert.equal(later.pass.saved, "First correction. And a second one.");
+
+  // The AI's draft opened and left as it was: nothing is sent, and nothing is saved as hers.
+  const untouched = editingPass(draft, 3, draft.text);
+  assert.equal(await untouched.press(), null);
+  assert.equal(untouched.pass.flushes, 0);
+
+  // Her own version, untouched: that version, as it is.
+  const hers = version(1, "hers", null, "Her text.");
+  const own = editingPass(hers, 3, hers.text);
+  assert.equal(await own.press(), 1);
+  assert.deepEqual(own.pass.sent, []);
+
+  // A pasted text, pressed before the typing pause: saved first, then that version.
+  const pasted = editingPass(null, 1, "");
+  pasted.pass.onScreen = "Her pasted text.";
+  assert.equal(await pasted.press(), 1);
+  // An empty box sends nothing.
+  assert.equal(await editingPass(null, 1, "").press(), null);
 });

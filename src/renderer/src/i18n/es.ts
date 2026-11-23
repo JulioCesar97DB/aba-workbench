@@ -469,7 +469,8 @@ export const es: Messages = {
     nextSectionBody: "La siguiente sección sin terminar, en el orden de ABA Matrix.",
     nextSectionAction: "Abrir la sección",
     allReadyName: "Las {{total}} secciones están listas",
-    allReadyBody: "Cópialas a ABA Matrix, cada una desde su pantalla. «Revisión y copia», con todas juntas, llega más adelante.",
+    allReadyBody: "Sigue «Revisión y copia». Por ahora, cópialas a ABA Matrix, cada una desde su pantalla.",
+    toReview: "Ir a Revisión y copia",
   },
 
   settings: {

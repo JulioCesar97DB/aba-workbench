@@ -36,7 +36,7 @@ import {
   useSectionGeneration,
   type SectionGeneration,
 } from "../section-generation.tsx";
-import { changedParagraphs, copiedLead, isAiVersion, isCorrection, nextSection, paragraphBeingWritten, versionChip } from "../section-view.ts";
+import { canImproveFromEditor, changedParagraphs, copiedLead, improveFromEditorVersion, isAiVersion, isCorrection, nextSection, paragraphBeingWritten, versionChip } from "../section-view.ts";
 import { sourceName, sourceNameLang } from "../source-labels.tsx";
 import { Mono, StepHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
@@ -133,6 +133,8 @@ function withSlot(sentence: string, node: ReactNode): ReactNode {
 interface EditorState {
   status: AutosaveStatus;
   saved: number | null;
+  /** What the box holds now. */
+  text: string;
 }
 
 interface Copied {
@@ -154,6 +156,8 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   const [viewed, setViewed] = useState<number | null>(initial.currentVersion);
   const [actionFailed, setActionFailed] = useState(false);
   const [copied, setCopied] = useState<Copied | "failed" | null>(null);
+  /** Whether the live region says what the last copy did: emptied while a copy runs, so the same sentence is announced again. */
+  const [copyAnnounced, setCopyAnnounced] = useState(false);
   const failures = useSectionFailures(caseId);
   // Her text for this section that could not be saved: after a reload it goes back in the editor it came from (review round 2, B3).
   // The newest of them (the list is oldest first): never an older text over a newer one (review round 3, R3-1).
@@ -161,9 +165,19 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   const [keptOpen, setKeptOpen] = useState<FailedSave | null>(null);
   const setSources = useSetCaseSources();
   const providers = useProviders();
-  /** The version her pasted text made, once saved. */
+  /** The version this editing pass wrote (her pasted text, or her edit), once saved. */
   const editingSaved = useRef<number | null>(null);
-  const [editor, setEditor] = useState<EditorState>({ status: "idle", saved: null });
+  /** The version the editor opened on ("Editar a mano"); none when she pastes a new text. */
+  const [editOpened, setEditOpened] = useState<SectionVersion | null>(null);
+  const [editor, setEditor] = useState<EditorState>({ status: "idle", saved: null, text: "" });
+  /** What the editor holds now, for "Mejorarla con la IA" at the moment she presses it. */
+  const editorText = useRef("");
+  const onEditorState = useCallback((state: EditorState) => {
+    editorText.current = state.text;
+    setEditor(state);
+  }, []);
+  /** After a copy that finished the section, the focus goes to what is now the primary (review round 1, S3). */
+  const focusAfterCopy = useRef(false);
   const editorFlush = useRef<() => Promise<boolean>>(async () => true);
   /** The version whose changed paragraphs are marked ("ver qué cambió"); another version shown starts with none. */
   const [changesFor, setChangesFor] = useState<number | null>(null);
@@ -225,6 +239,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   // Adjusted while rendering (React's pattern for state that follows other state), once per kept text.
   if (keptText && keptOpen?.id !== keptText.id && mode !== "paste" && mode !== "edit") {
     setKeptOpen(keptText);
+    setEditOpened(detail.versions.find((version) => version.number === detail.currentVersion) ?? null);
     setMode(detail.versions.length === 0 ? "paste" : "edit");
   }
 
@@ -286,9 +301,34 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   async function copy() {
     if (!current) return;
     const version = current;
+    // The copy button unmounts when this copy finishes the section (approved, not copied yet): "Copiar otra vez" replaces it.
+    const finishes = detail.approvedVersion === version.number && !sectionDone;
+    // The live region is emptied first, so the same sentence after "Copiar otra vez" is announced again (review round 1,
+    // S2). The visible line and the header stay as they are meanwhile.
+    setCopyAnnounced(false);
     const result = await window.aba.copySection(caseId, section.id, version.number).catch(() => null);
     // The line names where to paste it, what is still marked, and whether this is the approved version (P2).
-    setCopied(result?.outcome === "copied" ? { number: version.number, text: version.text } : "failed");
+    const done = result?.outcome === "copied";
+    focusAfterCopy.current = done && finishes;
+    setCopied(done ? { number: version.number, text: version.text } : "failed");
+    setCopyAnnounced(true);
+  }
+
+  // The approved version copied for the first time: the copy button it was in becomes "Copiar otra vez" in another
+  // place, so the focus moves to "Siguiente paso", the screen's primary now (review round 1, S3).
+  useEffect(() => {
+    if (!focusAfterCopy.current || copied === null) return;
+    focusAfterCopy.current = false;
+    const target = document.querySelector<HTMLElement>("[data-testid='next-step'] a") ?? document.querySelector<HTMLElement>("[data-testid='copy-again']");
+    target?.focus();
+  }, [copied]);
+
+  /** "Editar a mano" or "Pegar o escribir": a new editing pass, on the version shown or on a new text. */
+  function startEditing(next: "paste" | "edit") {
+    editingSaved.current = null;
+    editorText.current = "";
+    setEditOpened(next === "edit" ? current : null);
+    setMode(next);
   }
 
   /** "Treat each line as a paragraph" (review M3): a new version, hers kept as she pasted it. */
@@ -314,10 +354,18 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     setMode("view");
   }
 
-  /** "Mejorarla con la IA" from the editor: her text is saved first, and stays as it is beside the AI's version. */
+  /**
+   * "Mejorarla con la IA" from the editor (review round 1, S1): what she has on screen at that
+   * moment is saved as her text first, and that version is improved; hers stays as it is
+   * beside the AI's. Never an earlier version, and never an AI text she has not touched.
+   */
   async function improveFromEditor() {
-    await editorFlush.current();
-    const from = mode === "paste" ? editingSaved.current : (editor.saved ?? current?.number ?? null);
+    const from = await improveFromEditorVersion({
+      onScreen: editorText.current,
+      opened: mode === "edit" ? editOpened : null,
+      flush: () => editorFlush.current(),
+      passVersion: () => editingSaved.current,
+    });
     if (from !== null) void run({ kind: "improve", fromVersion: from });
   }
 
@@ -356,7 +404,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     if (approvedHere && sectionDone) {
       // Copied: "Siguiente paso" in the rail is now the screen's one primary (layout rule 9).
       secondary = (
-        <Button onClick={() => void copy()}>
+        <Button data-testid="copy-again" onClick={() => void copy()}>
           <Icon name="copy" />
           {t("section.copyAgain")}
         </Button>
@@ -411,7 +459,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     sectionId: section.id,
     keptId: keptOpen?.id ?? null,
     editing: keptOpen?.editing ?? null,
-    onState: setEditor,
+    onState: onEditorState,
     flushRef: editorFlush,
     onTreatLines: async (text: string, flush: () => Promise<boolean>) => {
       if (await flush()) await linesToParagraphs(text);
@@ -426,12 +474,12 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         {generation && !running ? <GenerationOutcomeMessage generation={generation} providers={providers} /> : null}
         <TwoWays
           layout="cards"
-          aiConnected={providers.provider !== null}
+          aiConnected={providers.provider !== null || providers.loading}
           hand={{
             title: t("section.startHandTitle"),
             body: t("section.startHandBody"),
             actions: (
-              <Button onClick={() => setMode("paste")}>
+              <Button onClick={() => startEditing("paste")}>
                 <Icon name="pencil" />
                 {t("section.startHandAction")}
               </Button>
@@ -441,7 +489,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
             title: t("section.startAiTitle"),
             body: t("section.startAiBody"),
             actions: (
-              <Button variant="ai" onClick={() => void run({ kind: "draft" })}>
+              <Button variant="ai" disabled={providers.provider === null} onClick={() => void run({ kind: "draft" })}>
                 <Icon name="sparkle" />
                 {t("section.startAiAction")}
               </Button>
@@ -469,17 +517,30 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
             }}
           />
         ) : current ? (
-          <OwnTextEditor {...editorProps} initialText={keptOpen?.text ?? current.text} savedValue={keptOpen ? null : current.text} onSaved={accept} />
+          <OwnTextEditor
+            {...editorProps}
+            initialText={keptOpen?.text ?? current.text}
+            savedValue={keptOpen ? null : current.text}
+            onSaved={(next, sections) => {
+              editingSaved.current = next.currentVersion;
+              accept(next, sections);
+            }}
+          />
         ) : null}
       </>
     );
     footer = (
       <div className="flex max-w-list flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <p className="text-sm text-fg-muted">{withSlot(t(correcting ? "section.composerDoneCorrected" : "section.composerDone", { done: SLOT }), <strong className="font-semibold text-fg">{t("section.doneEditing")}</strong>)}</p>
-        {providers.provider === null ? (
+        {providers.provider === null && !providers.loading ? (
           <ConnectButton />
         ) : (
-          <Button variant="ai" disabled={mode === "paste" ? editor.saved === null : false} onClick={() => void improveFromEditor()}>
+          <Button
+            variant="ai"
+            data-testid="improve-from-editor"
+            disabled={providers.provider === null || !canImproveFromEditor(editor.text, display === "edit" ? editOpened : null)}
+            onClick={() => void improveFromEditor()}
+          >
             <Icon name="sparkle" />
             {t("section.improve")}
           </Button>
@@ -499,7 +560,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         onTreatLines={() => void linesToParagraphs(current.text)}
       />
     );
-    footer = <Composer key={current.number} version={current} nextNumber={nextNumber} providers={providers} onRequest={(request) => void run(request)} onEdit={() => setMode("edit")} />;
+    footer = <Composer key={current.number} version={current} nextNumber={nextNumber} providers={providers} onRequest={(request) => void run(request)} onEdit={() => startEditing("edit")} />;
   }
 
   return (
@@ -524,6 +585,14 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
       }
     >
       <div className="flex flex-1 flex-col gap-4">
+        {/*
+         * One live region, always there and empty until it has news, so a screen reader hears
+         * what changes (review round 1, S2 and M4): the paragraph the AI is writing, and what a
+         * copy did. The visible lines say the same.
+         */}
+        <p role="status" data-testid="section-announcer" className="sr-only">
+          {display === "writing" && generation ? bandTitle(t, generation) : display === "view" && copyAnnounced && copied !== null ? copiedSentence(t, copied, section, detail.approvedVersion, next) : ""}
+        </p>
         {failures.map((item) => (
           <div key={item.id} role="alert" className="flex max-w-reading flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-danger px-3.5 py-2 text-md font-medium text-danger">
             <span>{t(`section.failedSave.${item.about}`)}</span>
@@ -753,7 +822,7 @@ function CopiedLine({ copied, section, approvedVersion, next, caseId }: { copied
   const { t } = useTranslation();
   if (copied === "failed") {
     return (
-      <p role="status" className="text-sm font-medium text-danger">
+      <p data-testid="copied-line" className="text-sm font-medium text-danger">
         {t("section.copyFailed")}
       </p>
     );
@@ -761,7 +830,7 @@ function CopiedLine({ copied, section, approvedVersion, next, caseId }: { copied
   const lead = copiedLead(copied.text);
   const warn = lead.key !== "copiedLead" || approvedVersion !== copied.number;
   return (
-    <p role="status" data-testid="copied-line" className={cn("max-w-reading text-sm font-medium", warn ? "text-warning" : "text-success")}>
+    <p data-testid="copied-line" className={cn("max-w-reading text-sm font-medium", warn ? "text-warning" : "text-success")}>
       {lead.key === "copiedLead" ? t("section.copiedLead") : t(`section.${lead.key}`, { count: lead.count })}{" "}
       {withSlot(t("section.pasteWhere", { section: SLOT }), <span lang="en">{section.title}</span>)}
       {approvedVersion === null ? ` ${t("section.copiedNotApprovedYet")}` : approvedVersion !== copied.number ? ` ${t("section.copiedOtherVersion", { number: copied.number, approved: approvedVersion })}` : null}
@@ -776,6 +845,17 @@ function CopiedLine({ copied, section, approvedVersion, next, caseId }: { copied
       ) : null}
     </p>
   );
+}
+
+/** What the copied line says, as one sentence for the screen's live region (review round 1, S2). */
+function copiedSentence(t: TFunction, copied: Copied | "failed", section: ReportSection, approvedVersion: number | null, next: ReportSection | null): string {
+  if (copied === "failed") return t("section.copyFailed");
+  const lead = copiedLead(copied.text);
+  const parts = [lead.key === "copiedLead" ? t("section.copiedLead") : t(`section.${lead.key}`, { count: lead.count }), t("section.pasteWhere", { section: section.title })];
+  if (approvedVersion === null) parts.push(t("section.copiedNotApprovedYet"));
+  else if (approvedVersion !== copied.number) parts.push(t("section.copiedOtherVersion", { number: copied.number, approved: approvedVersion }));
+  if (next) parts.push(t("section.nextSectionLink", { section: next.title }));
+  return parts.join(" ");
 }
 
 /** Text with single line breaks reads as one paragraph (review M3): say so, and offer each line as a paragraph. */
@@ -849,8 +929,16 @@ function OwnTextEditor({
     if (keptId) void window.aba.failedSaveShown(keptId).catch(() => undefined);
   }, [keptId]);
   useEffect(() => {
-    onState({ status: text.status, saved });
-  }, [onState, text.status, saved]);
+    onState({ status: text.status, saved, text: text.value });
+  }, [onState, text.status, saved, text.value]);
+  // The button that opened the editor is gone: the focus goes to the text, at its end (review round 1, M5).
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const element = box.current;
+    if (!element || (document.activeElement !== document.body && document.activeElement !== null)) return;
+    element.focus();
+    element.setSelectionRange(element.value.length, element.value.length);
+  }, []);
   useEffect(() => {
     flushRef.current = text.flush;
   }, [flushRef, text.flush]);
@@ -882,6 +970,7 @@ function OwnTextEditor({
         {t("section.herTextLabel")}
       </label>
       <textarea
+        ref={box}
         id={fieldId}
         lang="en"
         aria-describedby={hintId}
@@ -926,17 +1015,13 @@ function WritingView({ generation, base }: { generation: SectionGeneration; base
   const asked = generation.request;
   const markedIndex = asked?.kind === "paragraph" ? asked.paragraphIndex : null;
   const paragraphs = markedIndex !== null ? splitParagraphs(base?.text ?? "") : splitParagraphs(generation.text);
-  const title =
-    markedIndex !== null
-      ? t("section.bandParagraph", { number: markedIndex + 1 })
-      : generation.phase === "writing" && generation.text
-        ? t("section.bandWriting", { number: paragraphBeingWritten(generation.text) })
-        : t("section.bandReading");
+  const title = bandTitle(t, generation);
   return (
     <>
       <div className="flex max-w-reading gap-3 rounded-lg border border-accent bg-ai-subtle px-4 py-3 text-fg-on-accent-subtle">
         <Icon name="sparkle" size={18} className="mt-0.5" />
-        <div role="status" className="flex flex-col gap-0.5">
+        {/* Announced by the screen's live region (review round 1, M4). */}
+        <div className="flex flex-col gap-0.5">
           <p className="text-base font-semibold">{title}</p>
           <p className="text-sm">{t("section.bandBody")}</p>
         </div>
@@ -955,6 +1040,14 @@ function WritingView({ generation, base }: { generation: SectionGeneration; base
       </ol>
     </>
   );
+}
+
+/** The drafting band's first line: reading the case, writing paragraph N, or changing paragraph N. */
+function bandTitle(t: TFunction, generation: SectionGeneration): string {
+  const asked = generation.request;
+  if (asked?.kind === "paragraph") return t("section.bandParagraph", { number: asked.paragraphIndex + 1 });
+  if (generation.phase === "writing" && generation.text) return t("section.bandWriting", { number: paragraphBeingWritten(generation.text) });
+  return t("section.bandReading");
 }
 
 /** The request box while the AI writes: visible, waiting. */
@@ -1093,10 +1186,10 @@ function SectionText({
                     }}
                     className="min-h-control min-w-48 flex-1 rounded-md border border-border-control bg-surface px-3 text-base @split:min-w-0"
                   />
-                  {providers.provider === null ? (
+                  {providers.provider === null && !providers.loading ? (
                     <ConnectButton />
                   ) : (
-                    <Button type="submit" variant="ai" disabled={paragraphRequest.trim() === ""}>
+                    <Button type="submit" variant="ai" disabled={paragraphRequest.trim() === "" || providers.provider === null}>
                       {t("section.changeButton")}
                     </Button>
                   )}
@@ -1151,10 +1244,10 @@ function Composer({ version, nextNumber, providers, onRequest, onEdit }: { versi
             className="min-h-control w-full rounded-md border border-border-control bg-surface pr-3 pl-9 text-base"
           />
         </div>
-        {providers.provider === null ? (
+        {providers.provider === null && !providers.loading ? (
           <ConnectButton />
         ) : (
-          <Button type="submit" variant="ai" disabled={request.trim() === ""} className="shrink-0">
+          <Button type="submit" variant="ai" disabled={request.trim() === "" || providers.provider === null} className="shrink-0">
             {t("section.createVersion", { number: nextNumber })}
           </Button>
         )}
@@ -1306,7 +1399,8 @@ function SectionRail({
   }
   if (display !== "writing") parts.push({ key: "instructions", node: <InstructionsBox caseId={caseId} section={section} detail={detail} /> });
   if (display === "view" && current && current.sourcesUsed.length > 0) parts.push({ key: "used", node: <UsedLine version={current} /> });
-  if (display === "choose" || display === "view" || display === "writing") parts.push({ key: "writes-with", node: <WritesWith providers={providers} /> });
+  // Which AI writes, in every state: also while she edits by hand, for "Mejorarla con la IA" (review round 1, M2).
+  parts.push({ key: "writes-with", node: <WritesWith providers={providers} /> });
   if (!(display === "view" && approved) && display !== "writing") parts.push(nextCard);
   return <>{parts.map((part) => <RailPart key={part.key}>{part.node}</RailPart>)}</>;
 }
@@ -1319,7 +1413,8 @@ function RailPart({ children }: { children: ReactNode }) {
 /** "Siguiente paso" for a section: the next one not ready, or, with every section ready, that they are. */
 function SectionNextStep({ caseId, next, primary }: { caseId: string; next: ReportSection | null; primary: boolean }) {
   const { t } = useTranslation();
-  if (!next) return <NextStepCard name={t("section.allReadyName", { total: REPORT_SECTIONS.length })} body={t("section.allReadyBody")} />;
+  // After the last section, Revisión y copia (owner's proposal §4, "Next"; review round 1, M1).
+  if (!next) return <NextStepCard name={t("section.allReadyName", { total: REPORT_SECTIONS.length })} body={t("section.allReadyBody")} to={casePath(caseId, "review")} action={t("section.toReview")} primary={primary} />;
   return <NextStepCard name={next.title} nameLang="en" body={t("section.nextSectionBody")} to={casePath(caseId, "report", next.id)} action={t("section.nextSectionAction")} primary={primary} />;
 }
 
@@ -1389,7 +1484,7 @@ function WritesWith({ providers }: { providers: Providers }) {
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1.5">
       <RailHeading id={headingId}>{t("section.providerLabel")}</RailHeading>
-      {providers.available.length === 0 ? (
+      {providers.loading ? null : providers.available.length === 0 ? (
         <p className="text-sm text-fg-muted">{t("section.notConnected")}</p>
       ) : providers.available.length === 1 || !providers.provider ? (
         <p className="text-sm">{name(providers.available[0])}</p>

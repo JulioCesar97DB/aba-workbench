@@ -169,9 +169,15 @@ test("draft a section, change one paragraph, ask for changes, go back, approve a
   await expect(page.getByTestId("copied-line")).toHaveText(
     "Copied with 1 detail to complete: look for [MISSING: …] when you paste. Paste it into ABA Matrix, in “Medical Necessity Criteria”. Next: Strengths and Weaknesses",
   );
+  // A screen reader hears the same, from the screen's one live region (UX-3 review round 1, S2).
+  await expect(page.getByTestId("section-announcer")).toHaveText(
+    "Copied with 1 detail to complete: look for [MISSING: …] when you paste. Paste it into ABA Matrix, in “Medical Necessity Criteria”. Next: Strengths and Weaknesses",
+  );
   await expect(page.getByTestId("state-chip")).toHaveText("Copied");
   // The section is done: "Next step" is the rail's first part, and its button the screen's primary.
   await expect(page.getByTestId("next-step")).toHaveAttribute("data-primary", "true");
+  // The copy button she pressed is gone: the focus is on that primary, not lost (UX-3 review round 1, S3).
+  await expect(page.getByTestId("next-step").getByRole("link", { name: "Open the section" })).toBeFocused();
   const copied = await app.evaluate(async ({ clipboard }) => clipboard.readText());
   expect(copied).toContain("The school reports that his communication plan is now in place.");
   expect(copied.split("\n\n")).toHaveLength(3);
@@ -300,6 +306,31 @@ test("stopping a draft saves nothing and says so; without an AI connected, draft
   await aiCard.getByRole("link", { name: "Connect the AI" }).click();
   await expect(page.locator("#page-title")).toHaveText("Settings");
   void app;
+});
+
+test("Improve it with the AI from an edit sends what she has on screen at that moment, as her text (UX-3 review round 1, S1)", async ({ launch, home }) => {
+  const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
+  await draftWithAi(page).click();
+  await expect(page.getByTestId("section-view")).toContainText("ABA will teach", { timeout: 20_000 });
+  await expect(page.getByTestId("section-checks")).not.toContainText("Checking", { timeout: 20_000 });
+  await page.getByRole("button", { name: "Edit by hand" }).click();
+  const box = page.getByTestId("section-text");
+  const improve = page.getByTestId("improve-from-editor");
+  // The AI's draft, untouched, is not her text: there is nothing of hers to improve yet.
+  await expect(improve).toBeDisabled();
+  const hers = `${await box.inputValue()}\n\nHer correction, typed by hand just now.`;
+  await box.fill(hers);
+  // At once, inside the typing pause: nothing of this editing pass is saved yet.
+  await improve.click();
+  await expectVersion(page, 3, { timeout: 20_000 });
+  const versions = sectionData(caseFile, "crisis-plan").versions as { number: number; kind: string; text: string; basedOn: number | null }[];
+  expect(versions.map((v) => v.kind)).toEqual(["draft", "edited", "improve"]);
+  // Her edit is kept as she typed it, and the improvement is built on it, not on the AI's draft.
+  expect(versions[1].text).toBe(hers);
+  expect(versions[2].basedOn).toBe(2);
+  const log = await draftingStubLog(app);
+  const bodies = log.requests.filter((r) => r.url.includes("/v1/messages")).map((r) => r.body ?? "");
+  expect(bodies.some((body) => body.includes("Her correction, typed by hand just now."))).toBe(true);
 });
 
 test("her edits, instructions and notes survive a restart; the file keeps every version", async ({ launch, home }) => {

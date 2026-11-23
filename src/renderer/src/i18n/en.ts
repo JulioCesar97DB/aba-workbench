@@ -483,7 +483,8 @@ export const en = {
     nextSectionBody: "The next unfinished section, in ABA Matrix's order.",
     nextSectionAction: "Open the section",
     allReadyName: "All {{total}} sections are ready",
-    allReadyBody: "Copy each one into ABA Matrix from its own screen. “Review and copy”, with all of them together, is coming later.",
+    allReadyBody: "Next is “Review and copy”. For now, copy each one into ABA Matrix from its own screen.",
+    toReview: "Go to Review and copy",
   },
 
   settings: {
