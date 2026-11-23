@@ -26,8 +26,8 @@ test("the case map by hand: add a behavior, type it, approve the part, correct i
   // A behavior, typed by hand: saved as she types, hers.
   await page.getByRole("button", { name: "Add a behavior" }).click();
   await page.getByLabel("Name", { exact: true }).fill("Hair pulling");
-  await page.getByRole("group", { name: "Examples" }).getByRole("button", { name: "Add a line" }).click();
-  await page.getByRole("textbox", { name: "Examples 1" }).fill("During the home observation, the child pulled his sister's hair when she took the tablet.");
+  await page.getByRole("group", { name: "Examples", exact: true }).getByRole("button", { name: "Add a line" }).click();
+  await page.getByRole("textbox", { name: "Examples 1", exact: true }).fill("During the home observation, the child pulled his sister's hair when she took the tablet.");
   await expect.poll(() => caseMapOf(caseFile)?.parts?.behaviors?.versions?.[0]?.content?.items?.[0]?.examples?.length ?? 0).toBe(1);
   const first = caseMapOf(caseFile).parts.behaviors;
   expect(first.versions).toHaveLength(1);
