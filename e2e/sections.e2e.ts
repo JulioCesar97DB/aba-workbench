@@ -1,5 +1,5 @@
 import type { ElectronApplication, Page } from "@playwright/test";
-import { chmodSync, readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { AbaApi } from "../src/shared/api.ts";
 import { defaultCasesFolder, draftingStubLog, expect, goTo, SAMPLE_CASE, seedCase, setDraftingSpeed, stubDrafting, test } from "./app.ts";
@@ -228,10 +228,14 @@ test("B3: what she typed in a section that could not be saved is still there aft
     // The page starts again with nothing in memory: the main process still has the text and the failure.
     await expect(notice).toBeVisible();
     chmodSync(caseFolder, 0o755);
+    // The editor is open again with what she typed (review round 2): Try again saves it, and she can go on.
+    await expect(page.getByTestId("section-text")).toHaveValue("Typed while the folder refused.");
     await page.getByRole("button", { name: "Try again" }).click();
     await expect(notice).toBeHidden();
-    await expect(page.getByTestId("section-view")).toContainText("Typed while the folder refused.");
     expect(sectionData(caseFile, "crisis-plan").versions[0].text).toBe("Typed while the folder refused.");
+    await page.getByRole("button", { name: "Keep it as it is" }).click();
+    await expect(page.getByTestId("section-view")).toContainText("Typed while the folder refused.");
+    expect(sectionData(caseFile, "crisis-plan").versions).toHaveLength(1);
   } finally {
     chmodSync(caseFolder, 0o755);
   }
@@ -255,4 +259,112 @@ test("M3 and M6: lines pasted with single line breaks can become paragraphs; the
   await expect(page.getByText("Copied version 1. Paste it into ABA Matrix. Version 2 is the approved one.")).toBeVisible();
   expect(await app.evaluate(async ({ clipboard }) => clipboard.readText())).toBe("Para one.\nPara two.\nPara three.");
   await expect(page.getByRole("button", { name: "Version 2, approved" })).toBeVisible();
+});
+
+/* Review round 2: B3, the kept text goes back in its box */
+
+/** Puts the caret at the end of a text area (Cmd+End does not move it in a macOS text area). */
+async function caretAtEnd(field: ReturnType<Page["getByTestId"]>) {
+  await field.focus();
+  await field.evaluate((element) => {
+    const area = element as unknown as { value: string; setSelectionRange(start: number, end: number): void };
+    area.setSelectionRange(area.value.length, area.value.length);
+  });
+}
+
+const caseJson = (caseFile: string) => JSON.parse(readFileSync(caseFile, "utf8"));
+
+test("B3 round 2, notes: after a reload the kept notes are back in the box, and typing after Try again builds on them", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
+  const caseFolder = path.dirname(caseFile);
+  const notes = page.getByTestId("session-notes");
+  await notes.fill("Saved note.");
+  await notes.blur();
+  await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("Saved note.");
+  chmodSync(caseFolder, 0o555);
+  try {
+    await notes.fill("Saved note. Pre-reload addition the mother told me.");
+    await notes.blur();
+    const alert = page.getByText("Your notes for this session could not be saved. They are kept");
+    await expect(alert).toBeVisible();
+    await reloadWindow(app, page);
+    await expect(alert).toBeVisible();
+    await expect(page.getByTestId("session-notes")).toHaveValue("Saved note. Pre-reload addition the mother told me.");
+    chmodSync(caseFolder, 0o755);
+    await page.getByRole("alert").filter({ hasText: "Your notes for this session" }).getByRole("button", { name: "Try again" }).click();
+    await expect(alert).toBeHidden();
+    expect(caseJson(caseFile).sessionNotes.text).toBe("Saved note. Pre-reload addition the mother told me.");
+    const box = page.getByTestId("session-notes");
+    await caretAtEnd(box);
+    await box.pressSequentially(" Later.");
+    await box.blur();
+    await expect.poll(() => caseJson(caseFile).sessionNotes.text).toBe("Saved note. Pre-reload addition the mother told me. Later.");
+  } finally {
+    chmodSync(caseFolder, 0o755);
+  }
+});
+
+test("B3 round 2, section text: after a reload the editor reopens with her correction, and her next keystroke builds on it", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
+  const caseFolder = path.dirname(caseFile);
+  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await page.getByTestId("section-text").fill("Hers v1.");
+  await page.getByRole("button", { name: "Keep it as it is" }).click();
+  await expect(page.getByTestId("section-view")).toContainText("Hers v1.");
+  await page.getByRole("button", { name: "Edit the text" }).click();
+  chmodSync(caseFolder, 0o555);
+  try {
+    await page.getByTestId("section-text").fill("Hers v1. A long correction of the dates, typed before the reload.");
+    await page.getByTestId("section-text").blur();
+    const alert = page.getByText("What you typed in this section could not be saved. It is kept");
+    await expect(alert).toBeVisible();
+    await reloadWindow(app, page);
+    await expect(alert).toBeVisible();
+    // The editor is open again, with her correction, not the text on disk.
+    const editor = page.getByTestId("section-text");
+    await expect(editor).toHaveValue("Hers v1. A long correction of the dates, typed before the reload.");
+    chmodSync(caseFolder, 0o755);
+    await caretAtEnd(editor);
+    await editor.pressSequentially(" Small fix.");
+    await editor.blur();
+    await expect(alert).toBeHidden();
+    await expect
+      .poll(() => sectionData(caseFile, "crisis-plan").versions.map((v: { kind: string; text: string }) => [v.kind, v.text]))
+      .toEqual([
+        ["hers", "Hers v1."],
+        ["edited", "Hers v1. A long correction of the dates, typed before the reload. Small fix."],
+      ]);
+    expect(await page.evaluate(() => (globalThis as unknown as { aba: AbaApi }).aba.listFailedSaves())).toEqual([]);
+  } finally {
+    chmodSync(caseFolder, 0o755);
+  }
+});
+
+test("B3 round 2, instructions: after a reload the kept instructions are back in the box; Try again saves them and typing builds on them", async ({ launch, home, profile }) => {
+  const { app, page } = await openSection(launch, home, "medical-necessity");
+  const instructionsFile = path.join(profile, "instructions.json");
+  // A folder where the file goes: the app cannot read or write its instructions until it is gone.
+  mkdirSync(instructionsFile);
+  try {
+    const box = page.getByTestId("section-instructions");
+    await box.fill("Each area with its score.");
+    await box.blur();
+    const alert = page.getByText("Your instructions for a section could not be saved. They are kept");
+    await expect(alert).toBeVisible();
+    await reloadWindow(app, page);
+    await expect(alert).toBeVisible();
+    await expect(page.getByTestId("section-instructions")).toHaveValue("Each area with its score.");
+    rmSync(instructionsFile, { recursive: true, force: true });
+    await page.getByRole("alert").filter({ hasText: "Your instructions" }).getByRole("button", { name: "Try again" }).click();
+    await expect(alert).toBeHidden();
+    const again = page.getByTestId("section-instructions");
+    await caretAtEnd(again);
+    await again.pressSequentially(" One example from home.");
+    await again.blur();
+    await expect.poll(() => JSON.parse(readFileSync(instructionsFile, "utf8")).sections["medical-necessity"].text).toBe("Each area with its score. One example from home.");
+  } finally {
+    rmSync(instructionsFile, { recursive: true, force: true });
+  }
 });

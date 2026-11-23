@@ -6,7 +6,8 @@ import { modelLabel } from "../../../shared/models.ts";
 import { findReportSection, REPORT_SECTIONS, type ReportSection } from "../../../shared/report-sections.ts";
 import { checkStructure, findMarkers, hasLinesInParagraphs, linesAsParagraphs, MAX_REQUEST_LENGTH, splitParagraphs, type StructureIssue } from "../../../shared/section-text.ts";
 import type { SectionDetail, SectionRequestInput, SectionSummary, SectionVersion } from "../../../shared/sections.ts";
-import { useAutosave } from "../autosave.tsx";
+import { useAutosave, useKeptText } from "../autosave.tsx";
+import type { FailedSave } from "../../../shared/sources.ts";
 import { onRetried, retry, useSectionFailures } from "../case-saves.tsx";
 import { casePath } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
@@ -130,6 +131,9 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   const [actionFailed, setActionFailed] = useState(false);
   const [copied, setCopied] = useState<Copied | "failed" | null>(null);
   const failures = useSectionFailures(caseId);
+  // Her text for this section that could not be saved: after a reload it goes back in the editor it came from (review round 2, B3).
+  const keptText = failures.find((item) => item.about === "section" && item.sectionId === section.id && item.text !== null) ?? null;
+  const [keptOpen, setKeptOpen] = useState<FailedSave | null>(null);
   const setSources = useSetCaseSources();
   const providers = useProviders();
   /** The version her pasted text made, once saved. */
@@ -159,6 +163,12 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
       [caseId, section.id],
     ),
   );
+
+  // Adjusted while rendering (React's pattern for state that follows other state), once per kept text.
+  if (keptText && keptOpen?.id !== keptText.id && mode !== "paste" && mode !== "edit") {
+    setKeptOpen(keptText);
+    setMode(detail.versions.length === 0 ? "paste" : "edit");
+  }
 
   const current = detail.versions.find((version) => version.number === viewed) ?? detail.versions.at(-1) ?? null;
   const number = REPORT_SECTIONS.indexOf(section) + 1;
@@ -289,8 +299,10 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
           <OwnTextEditor
             caseId={caseId}
             sectionId={section.id}
-            initialText=""
-            editing={null}
+            initialText={keptOpen?.text ?? ""}
+            savedValue={keptOpen ? null : ""}
+            keptId={keptOpen?.id ?? null}
+            editing={keptOpen?.editing ?? null}
             label={t("section.herTextLabel")}
             hint={t("section.herTextHint")}
             onSaved={(next, sections) => {
@@ -331,8 +343,10 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
           <OwnTextEditor
             caseId={caseId}
             sectionId={section.id}
-            initialText={current.text}
-            editing={null}
+            initialText={keptOpen?.text ?? current.text}
+            savedValue={keptOpen ? null : current.text}
+            keptId={keptOpen?.id ?? null}
+            editing={keptOpen?.editing ?? null}
             label={t("section.herTextLabel")}
             hint={t("section.editHint")}
             onSaved={accept}
@@ -345,6 +359,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
                   variant="primary"
                   onClick={async () => {
                     await flush();
+                    setKeptOpen((open) => (open && keptText?.id === open.id ? open : null));
                     setMode("view");
                   }}
                 >
@@ -488,6 +503,8 @@ function OwnTextEditor({
   caseId,
   sectionId,
   initialText,
+  savedValue,
+  keptId,
   editing: initialEditing,
   label,
   hint,
@@ -498,10 +515,14 @@ function OwnTextEditor({
   caseId: string;
   sectionId: ReportSection["id"];
   initialText: string;
+  /** What is on disk, when the box starts from a kept text instead (null: nothing of it saved yet). */
+  savedValue: string | null;
+  /** The kept text it starts from (review round 2, B3), told to the main process once shown. */
+  keptId: string | null;
   editing: number | null;
   label: string;
   hint: string;
-  onSaved: (detail: SectionDetail, sections: ReturnType<typeof useOpenedCase>["sections"]) => void;
+  onSaved: (detail: SectionDetail, sections?: ReturnType<typeof useOpenedCase>["sections"]) => void;
   onTreatLines: (text: string, flush: () => Promise<boolean>) => Promise<void>;
   footer: (saved: number | null, flush: () => Promise<boolean>) => ReactNode;
 }) {
@@ -513,6 +534,7 @@ function OwnTextEditor({
   const text = useAutosave({
     caseId,
     initial: initialText,
+    savedValue,
     save: async (value) => {
       const result = await window.aba.saveSectionText(caseId, sectionId, value, editing.current);
       if (result.outcome !== "saved") return false;
@@ -523,6 +545,30 @@ function OwnTextEditor({
       return true;
     },
   });
+  // The box shows the kept text: from now on its saves are built on it.
+  useEffect(() => {
+    if (keptId) void window.aba.failedSaveShown(keptId).catch(() => undefined);
+  }, [keptId]);
+  // "Try again" saved what she typed: the box knows it is on disk, and her next keystroke updates that version.
+  const markSaved = text.markSaved;
+  const onSavedRef = useRef(onSaved);
+  useEffect(() => {
+    onSavedRef.current = onSaved;
+  }, [onSaved]);
+  useEffect(
+    () =>
+      onRetried((item) => {
+        if (item.about !== "section" || item.caseId !== caseId || item.sectionId !== sectionId || item.text === null) return;
+        markSaved(item.text);
+        void window.aba.getSection(caseId, sectionId).then((result) => {
+          if (result.outcome !== "read") return;
+          editing.current = result.section.currentVersion;
+          setSaved(result.section.currentVersion);
+          onSavedRef.current(result.section);
+        });
+      }),
+    [caseId, sectionId, markSaved],
+  );
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
@@ -907,6 +953,11 @@ function SectionRail({
     initial: detail.instructions,
     save: async (text) => (await window.aba.saveSectionInstructions(caseId, section.id, text)).outcome === "saved",
   });
+  // Instructions she typed that could not be saved come back in this box after a reload, from whichever case (review round 2, B3).
+  useKeptText(
+    instructions,
+    useCallback((item: FailedSave) => item.about === "instructions" && item.sectionId === section.id, [section.id]),
+  );
   const caseSources = opened.sources.sources.filter((source) => !source.removedAt);
   const used = current && current.sourcesUsed.length > 0 ? current.sourcesUsed : null;
   return (

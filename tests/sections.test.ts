@@ -560,3 +560,72 @@ test("M4: every kind of section request sends Claude the same settings and the s
     assert.deepEqual(cachedPrefix(body), first, `request ${index + 1} (${tasks[index].split("\n").at(-1)?.slice(0, 40)}) has the draft's settings and cached prefix`);
   }
 });
+
+/* Review round 2 */
+
+test("L1: her hand fix of the version she approved stays what the other sections build on", async () => {
+  const { service, caseId, model } = await setup();
+  saved(await service.saveText(caseId, "background-information", "Her pasted text.", null));
+  saved(await service.saveText(caseId, "background-information", "Her edit of it.", null));
+  await generate(service, caseId, "background-information", { kind: "improve", fromVersion: 2 });
+  saved(await service.approve(caseId, "background-information", 3));
+  const fixed = saved(await service.saveText(caseId, "background-information", "The improved text, with a typo fixed by hand.", null));
+  assert.equal(fixed.section.approvedVersion, null, "an edit still clears the approval");
+  await generate(service, caseId, "crisis-plan", { kind: "draft" });
+  const draft = model.prompts.find((prompt) => prompt.task.includes('"Crisis Plan"') && prompt.task.includes("Draft request"))!;
+  assert.match(draft.task, /with a typo fixed by hand/);
+  assert.doesNotMatch(draft.task, /Her edit of it\./);
+});
+
+test("B3 round 2: a save that does not contain a kept text never forgets it, until its box has shown it", async () => {
+  let failing = false;
+  const { service, caseId, caseFile, cases } = await setup({}, { failWrites: () => failing });
+  failing = true;
+  let n = 0;
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => "Invented case", newId: () => `id-${++n}` });
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "Saved note. What the mother told me." })).outcome, "not-saved");
+  const [kept] = failed.list();
+  assert.equal(kept.text, "Saved note. What the mother told me.");
+  failing = false;
+  // A save of the older text plus new typing (the box did not show the kept text): saved, but the kept text stays.
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "Saved note. Later." })).outcome, "saved");
+  assert.deepEqual(failed.list().map((item) => item.text), ["Saved note. What the mother told me."]);
+  // A save that holds it forgets it.
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "Saved note. What the mother told me. Later." })).outcome, "saved");
+  assert.equal(failed.size, 0);
+  // Once its box has shown it, the box's next save replaces it, whatever she did with the text.
+  failing = true;
+  await failed.save(caseId, { kind: "notes", text: "Another kept note." });
+  failed.markShown(failed.list()[0].id);
+  failing = false;
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "She rewrote it." })).outcome, "saved");
+  assert.equal(failed.size, 0);
+  assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).sessionNotes.text, "She rewrote it.");
+});
+
+test("B3 round 2: a kept section text a later save does not contain is saved as its own version first", async () => {
+  let failing = false;
+  const { service, caseId, caseFile, cases } = await setup({}, { failWrites: () => failing });
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => null });
+  assert.equal((await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "Hers v1.", editing: null })).outcome, "saved");
+  failing = true;
+  await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "Hers v1. A long correction typed before the reload.", editing: null });
+  assert.deepEqual(failed.list().map(({ text, editing }) => ({ text, editing })), [{ text: "Hers v1. A long correction typed before the reload.", editing: null }]);
+  failing = false;
+  // After the reload she edits the text on disk, not the kept one: the kept one is saved first, as its own version.
+  assert.equal((await failed.save(caseId, { kind: "section-text", sectionId: "crisis-plan", text: "Hers v1. Small fix.", editing: null })).outcome, "saved");
+  assert.equal(failed.size, 0);
+  const texts = JSON.parse(readFileSync(caseFile, "utf8")).sections["crisis-plan"].versions.map((v: { text: string }) => v.text);
+  assert.deepEqual(texts, ["Hers v1.", "Hers v1. A long correction typed before the reload.", "Hers v1. Small fix."]);
+});
+
+test("B3 round 2: a later failed text that does not hold the kept one is kept beside it", async () => {
+  let failing = false;
+  const { service, caseId, cases } = await setup({}, { failWrites: () => failing });
+  failing = true;
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => null });
+  await failed.save(caseId, { kind: "notes", text: "First kept." });
+  await failed.save(caseId, { kind: "notes", text: "Typed over the old text" });
+  await failed.save(caseId, { kind: "notes", text: "Typed over the old text, growing" });
+  assert.deepEqual(failed.list().map((item) => item.text).sort(), ["First kept.", "Typed over the old text, growing"]);
+});

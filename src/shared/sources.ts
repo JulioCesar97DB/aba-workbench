@@ -231,6 +231,10 @@ export interface FailedSave {
   about: "source" | "section" | "instructions" | "notes";
   /** The section, for "section" and "instructions". */
   sectionId: string | null;
+  /** What she typed, kept while it is not saved (a section's text, instructions, notes): the box it came from shows it again after a reload. Null for a source's change. */
+  text: string | null;
+  /** For a section's text: the version that editing pass was writing to, or null. */
+  editing: number | null;
 }
 
 export type ReadSourceTextResult = { outcome: "read"; text: string } | { outcome: "source-not-found" } | { outcome: "case-unavailable" };

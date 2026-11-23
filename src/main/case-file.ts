@@ -157,6 +157,8 @@ const StoredVersionSchema = z.looseObject({
   /** Her own text changes while she types in it; AI versions never change. */
   updatedAt: TimestampSchema.optional(),
   basedOn: VersionNumberSchema.optional(),
+  /** Her edit of the version she had approved: final for the other sections, like her own text (review round 2, L1). */
+  fromApproved: z.literal(true).optional(),
   request: z.string().max(MAX_REQUEST_LENGTH).optional(),
   paragraphIndex: z.int().min(0).max(10_000).optional(),
   text: z.string().max(MAX_SECTION_TEXT_LENGTH),

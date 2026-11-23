@@ -53,6 +53,7 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
       "copySection",
       "createCase",
       "dismissChatGptWelcome",
+      "failedSaveShown",
       "forgetChatGptAccount",
       "getAiPreferences",
       "getAppInfo",

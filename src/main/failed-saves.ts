@@ -91,6 +91,27 @@ interface Entry {
   op: SaveOp;
   failure: Failure;
   at: number;
+  /** The interface put the kept text back in its box (review round 2, B3): the box's next save is built on it. */
+  shown: boolean;
+}
+
+/** What she typed, for a change to a section's text, her instructions or her notes; null for a source's change. */
+function typedText(op: SaveOp): string | null {
+  if (op.kind !== "section-text" && op.kind !== "instructions" && op.kind !== "notes") return null;
+  return typeof op.text === "string" ? op.text : null;
+}
+
+/** Whether a later text holds the kept one (line endings and the spaces at its ends aside). */
+function contains(later: string | null, kept: string | null): boolean {
+  if (kept === null) return true;
+  if (later === null) return false;
+  const clean = (text: string) => text.replace(/\r\n?/g, "\n").trim();
+  return clean(later).includes(clean(kept));
+}
+
+/** The entries of one thing: its key, and the keys of kept texts a later one did not contain ("<key>#<id>"). */
+function sameThing(entryKey: string, key: string): boolean {
+  return entryKey === key || entryKey.startsWith(`${key}#`);
 }
 
 export interface FailedSavesOptions {
@@ -118,6 +139,7 @@ export class FailedSaves {
   /** Runs a change and remembers it if it could not be saved; a saved one clears a failed one with the same key. */
   async save<R extends SaveResult = SourceSaveResult>(caseId: unknown, op: SaveOp): Promise<R> {
     let result: SaveResult;
+    if (typeof caseId === "string") await this.keepSectionText(caseId, op);
     try {
       result = await this.options.run(caseId, op);
     } catch (error) {
@@ -131,11 +153,45 @@ export class FailedSaves {
     return result as R;
   }
 
+  /**
+   * Before a section's text is saved, a kept text of that section that this save does not
+   * contain, and that no box has shown, is saved as its own version first (review round 2,
+   * B3): a version costs nothing, and so the kept text is never dropped by a save that was
+   * not built on it.
+   */
+  private async keepSectionText(caseId: string, op: SaveOp): Promise<void> {
+    if (op.kind !== "section-text") return;
+    const key = saveKey(caseId, op);
+    for (const [entryKey, entry] of [...this.entries]) {
+      if (!sameThing(entryKey, key) || entry.shown || contains(typedText(op), typedText(entry.op)) || entry.op.kind !== "section-text") continue;
+      try {
+        const kept = await this.options.run(caseId, { ...entry.op, editing: null });
+        if (kept.outcome === "saved") this.entries.delete(entryKey);
+      } catch {
+        // Kept as it is: Try again can still save it.
+      }
+    }
+  }
+
+  /** The interface put a kept text back in its box: from now on, that box's saves are built on it. */
+  markShown(id: unknown): void {
+    for (const entry of this.entries.values()) if (entry.id === id) entry.shown = true;
+  }
+
   /** Every change not saved, oldest first. */
   list(): FailedSave[] {
     return [...this.entries.values()]
       .sort((a, b) => a.at - b.at)
-      .map(({ id, caseId, failure, op }) => ({ id, caseId, label: this.options.labelOf(caseId), failure, ...aboutOf(op) }));
+      .map(({ id, caseId, failure, op }) => ({
+        id,
+        caseId,
+        label: this.options.labelOf(caseId),
+        failure,
+        ...aboutOf(op),
+        // What she typed, so the interface can put it back in its box after a reload.
+        text: typedText(op),
+        editing: op.kind === "section-text" && typeof op.editing === "number" ? op.editing : null,
+      }));
   }
 
   /** Runs a failed change again. */
@@ -147,6 +203,17 @@ export class FailedSaves {
 
   /** Forgets the failed changes a saved one replaces. */
   private forget(caseId: string, op: SaveOp): void {
+    const typed = typedText(op);
+    if (typed !== null) {
+      // A save forgets a kept text only when it holds it, or when the box it was typed in
+      // showed it again before this save: a save that does not contain a kept text never
+      // forgets it (review round 2, B3).
+      const key = saveKey(caseId, op);
+      for (const [entryKey, entry] of [...this.entries]) {
+        if (sameThing(entryKey, key) && (entry.shown || contains(typed, typedText(entry.op)))) this.entries.delete(entryKey);
+      }
+      return;
+    }
     if (op.kind !== "add-text") {
       this.entries.delete(saveKey(caseId, op));
       return;
@@ -155,10 +222,25 @@ export class FailedSaves {
   }
 
   private record(caseId: string, op: SaveOp, failure: Failure): void {
+    const typed = typedText(op);
+    if (typed !== null) {
+      const key = saveKey(caseId, op);
+      const earlier = this.entries.get(key);
+      // A later failed text that does not hold the kept one is kept beside it, never over it.
+      if (earlier && !earlier.shown && !contains(typed, typedText(earlier.op))) {
+        const id = this.options.newId();
+        this.entries.set(`${key}#${id}`, { ...earlier, shown: false });
+        this.entries.delete(key);
+        this.entries.set(key, { id: this.options.newId(), caseId, op, failure, at: this.options.now(), shown: false });
+        return;
+      }
+      this.entries.set(key, { id: earlier?.id ?? this.options.newId(), caseId, op, failure, at: earlier?.at ?? this.options.now(), shown: false });
+      return;
+    }
     // A new text failing again as it grows is one entry, not one per try.
     if (op.kind === "add-text") this.forget(caseId, op);
     const id = op.kind === "add-text" ? this.options.newId() : (this.entries.get(saveKey(caseId, op))?.id ?? this.options.newId());
-    this.entries.set(saveKey(caseId, op, op.kind === "add-text" ? id : ""), { id, caseId, op, failure, at: this.options.now() });
+    this.entries.set(saveKey(caseId, op, op.kind === "add-text" ? id : ""), { id, caseId, op, failure, at: this.options.now(), shown: false });
   }
 }
 

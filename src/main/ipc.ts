@@ -301,6 +301,11 @@ export function registerIpc(options: {
     return options.failedSaves.list();
   });
 
+  ipcMain.handle(IPC_CHANNELS.failedSaveShown, (event, id: unknown): void => {
+    assertTrusted(event);
+    options.failedSaves.markShown(id);
+  });
+
   ipcMain.handle(IPC_CHANNELS.retryFailedSave, (event, id: unknown): Promise<SaveResult> => {
     assertTrusted(event);
     return sourceCall(() => options.failedSaves.retry(id), "The change could not be saved.");

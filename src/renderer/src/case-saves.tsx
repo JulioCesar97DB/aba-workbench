@@ -116,6 +116,12 @@ export function trackSave(caseId: string, work: Promise<boolean>): Promise<boole
   return track(caseId, work.catch(() => false));
 }
 
+/** Every change not saved, as the main process keeps it. */
+export function useFailedSaveList(): FailedSave[] {
+  useVersion();
+  return failed;
+}
+
 /** The changes not saved that are about a case's report sections: what was typed in a section, its instructions or the notes. */
 export function useSectionFailures(caseId: string): FailedSave[] {
   useVersion();

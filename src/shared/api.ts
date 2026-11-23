@@ -444,6 +444,8 @@ export interface AbaApi {
   onFlushSaves(listener: () => Promise<{ ok: boolean }>): () => void;
   /** The changes to sources that could not be saved, kept by the main process while the app runs (a reload does not forget them). */
   listFailedSaves(): Promise<FailedSave[]>;
+  /** The interface put a kept text back in its box: that box's next save is built on it, so it may replace the kept one. */
+  failedSaveShown(id: string): Promise<void>;
   /** Runs a change that could not be saved again (a source's, or what was typed in a section, its instructions or the notes). */
   retryFailedSave(id: string): Promise<SourceSaveResult | SectionSaveResult | NotesSaveResult | InstructionsSaveResult>;
 
@@ -523,6 +525,7 @@ export const IPC_CHANNELS = {
   savesFlushed: "saves:flushed",
   listFailedSaves: "saves:list-failed",
   retryFailedSave: "saves:retry-failed",
+  failedSaveShown: "saves:failed-shown",
   getSection: "sections:get",
   saveSectionText: "sections:save-text",
   setCurrentVersion: "sections:set-current",

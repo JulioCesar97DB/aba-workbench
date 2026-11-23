@@ -60,6 +60,7 @@ const api: AbaApi = {
   openSourcePdf: (caseId, sourceId) => ipcRenderer.invoke(IPC_CHANNELS.openSourcePdf, caseId, sourceId),
   listFailedSaves: () => ipcRenderer.invoke(IPC_CHANNELS.listFailedSaves),
   retryFailedSave: (id) => ipcRenderer.invoke(IPC_CHANNELS.retryFailedSave, id),
+  failedSaveShown: (id) => ipcRenderer.invoke(IPC_CHANNELS.failedSaveShown, id),
   getSection: (caseId, sectionId) => ipcRenderer.invoke(IPC_CHANNELS.getSection, caseId, sectionId),
   saveSectionText: (caseId, sectionId, text, editing) => ipcRenderer.invoke(IPC_CHANNELS.saveSectionText, caseId, sectionId, text, editing),
   setCurrentVersion: (caseId, sectionId, version) => ipcRenderer.invoke(IPC_CHANNELS.setCurrentVersion, caseId, sectionId, version),

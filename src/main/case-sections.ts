@@ -177,6 +177,8 @@ export function saveOwnText(data: CaseData, id: ReportSectionId, raw: string, ed
     createdAt: now,
     updatedAt: now,
     ...(current ? { basedOn: current.number } : {}),
+    // Her hand fix of the version she approved stays final for the other sections while she has not approved it again.
+    ...(current && section.approvedVersion === current.number ? { fromApproved: true as const } : {}),
     text,
   };
   return { data: withSection(data, id, withoutApproval({ ...section, versions: [...section.versions, version], currentVersion: number })), version: number };
@@ -244,7 +246,8 @@ export function finalVersion(data: CaseData, id: ReportSectionId): StoredVersion
   const approved = findVersion(section, section.approvedVersion);
   if (approved) return approved;
   // Her newest text with no AI version in its lineage: what she pasted, and every edit
-  // she made of it (review B2), not an AI version she edited.
+  // she made of it (review B2), not an AI version she edited; and her edit of a version
+  // she had approved, with her edits of that (review round 2, L1).
   const own = ownVersions(section);
   for (let index = section.versions.length - 1; index >= 0; index--) {
     if (own.has(section.versions[index].number)) return section.versions[index];
@@ -252,7 +255,7 @@ export function finalVersion(data: CaseData, id: ReportSectionId): StoredVersion
   return null;
 }
 
-/** The numbers of the versions that are hers all the way down: "hers", or her edit of one of those. */
+/** The numbers of the versions that are final for the other sections: "hers", her edit of the approved version, or her edit of one of those. */
 function ownVersions(section: StoredSection): Set<number> {
   const byNumber = new Map(section.versions.map((version) => [version.number, version]));
   const known = new Map<number, boolean>();
@@ -264,7 +267,7 @@ function ownVersions(section: StoredSection): Set<number> {
     else if (version.kind === "hers") own = true;
     else if (version.kind === "edited") {
       const base = version.basedOn === undefined ? undefined : byNumber.get(version.basedOn);
-      own = base === undefined ? true : isOwn(base, depth + 1);
+      own = version.fromApproved === true || base === undefined ? true : isOwn(base, depth + 1);
     }
     known.set(version.number, own);
     return own;

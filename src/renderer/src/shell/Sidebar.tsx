@@ -1,7 +1,9 @@
-import { useId, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import type { SectionSummary } from "../../../shared/sections.ts";
-import { useAutosave } from "../autosave.tsx";
+import { useAutosave, useKeptText } from "../autosave.tsx";
+import { onRetried } from "../case-saves.tsx";
+import type { FailedSave } from "../../../shared/sources.ts";
 import { usePatchOpenedCase } from "../open-case.tsx";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
@@ -285,6 +287,16 @@ function NotesBox({
       return result.outcome === "saved";
     },
   });
+  // Notes she typed that could not be saved come back in this box after a reload (review round 2, B3).
+  const isMine = useCallback((item: FailedSave) => item.about === "notes" && item.caseId === caseId, [caseId]);
+  useKeptText(notes, isMine);
+  useEffect(
+    () =>
+      onRetried((item) => {
+        if (isMine(item) && item.text !== null) patch(caseId, { notes: item.text });
+      }),
+    [isMine, caseId, patch],
+  );
   return (
     <>
       <textarea
