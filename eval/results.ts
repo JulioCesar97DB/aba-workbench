@@ -2,15 +2,20 @@
  * What one evaluation run writes (results.json), how two runs are compared, and the short
  * Markdown summary. Pure functions over plain data (tests/eval-rubric.test.ts).
  *
+ * Every case is run several times (owner's decision, 2026-11-23: 3 runs, each drafted and
+ * judged), and the comparison is made on the medians of the runs:
+ * - an item's score is the median of its runs, and it is unscored when any run could not
+ *   score it;
+ * - a check fails when it finds something in most runs (2 of 3), and passes otherwise.
+ *
  * The verdict (review round 1, B3):
- * - hard: a code item that went down, a check that passed in the baseline and finds
- *   something now, or an item scored in the baseline and not scored now. The code items of
- *   the baseline are scored again with the current checks before the comparison, so a
- *   change to the checks never reads as a change of the rules.
- * - soft: judge items that went down or up. They are reported apart from the verdict,
- *   because a single judge sample has a noise nobody has measured yet; they are compared
- *   only where both runs were judged with the same judge (same prompt, inputs, model and
- *   samples: the judge fingerprint).
+ * - hard: a code item whose median went down, a check that passed in the baseline and fails
+ *   in most runs now, or an item scored in the baseline and not scored now. The code items of
+ *   the baseline are scored again with the current checks on every stored run before the
+ *   comparison, so a change to the checks never reads as a change of the rules.
+ * - soft: judge items whose median went down or up. They are reported apart from the
+ *   verdict, and only where both runs were judged with the same judge (same prompt, inputs,
+ *   model and samples: the judge fingerprint) in every run.
  * - NOT COMPARED: another rubric version, provider or drafting mode.
  * - INVALID: a window or the Dock icon showed during the run.
  */
@@ -19,7 +24,10 @@ import { REPORT_SECTIONS, type ReportSectionId } from "../src/shared/report-sect
 import type { CheckId, Finding } from "./checks/checks.ts";
 import { codeScore, keyFactsScore, RUBRIC, type CodeItem, type Score } from "./rubric.ts";
 
-export const RESULTS_VERSION = 2;
+export const RESULTS_VERSION = 3;
+
+/** How many times a case may be run: an odd count, so a median and a majority never tie (owner's choice, 2026-11-23). */
+export const RUN_COUNTS = [1, 3, 5] as const;
 
 export interface Usage {
   uncachedInputTokens: number;
@@ -89,7 +97,32 @@ export interface CaseResult {
   inputs: { notes: string; instructions: Partial<Record<ReportSectionId, string>> };
   /** What the key holds that is provisional (review M7): incident homes on a map she has not confirmed, facts left out of the judge's list. */
   keyNotes?: string[];
+  /** Every run of the case, in order: each one drafted (or taken from an earlier run), checked and judged on its own. */
+  runs: CaseRun[];
+  /** Each section's medians over the runs (caseMedians); what the comparison reads. */
+  medians: MedianSection[];
+}
+
+/** One run of a case: its nine sections, each with its text, findings, judge record and scores. */
+export interface CaseRun {
+  /** 1, 2, 3… */
+  run: number;
   sections: SectionResult[];
+}
+
+/** A section over all the runs of a case. */
+export interface MedianSection {
+  id: ReportSectionId;
+  /** Each item's median over the runs; null (unscored) when any run could not score it. */
+  scores: Record<string, Score | null>;
+  /** Each item's score in every run, in run order: the noise. */
+  spread: Record<string, Array<Score | null>>;
+  /** For each code check: in how many runs it found something (provisional findings left out). */
+  failing: Partial<Record<CheckId, number>>;
+  /** How many runs have a text for the section. */
+  drafted: number;
+  /** The words of each run's text (0 where there is none). */
+  words: number[];
 }
 
 export interface LaunchCheck {
@@ -121,6 +154,9 @@ export interface RunResult {
   rubricVersion: string;
   judgePromptVersion: string;
   checksVersion: string;
+  /** How many times each case was run (pnpm eval --runs; 1 for results from before runs). */
+  runs: number;
+  /** Judge requests per section in each run (pnpm eval --judge-samples); the runs themselves are the samples by default. */
   judgeSamples: number;
   drafting: CheckoutRecord & { rulesVersions: Record<string, string> };
   judging: CheckoutRecord & { model: string | null };
@@ -197,6 +233,50 @@ export function scoreSection(section: ReportSectionId, findings: readonly Findin
 const CODE_ITEMS = new Set(RUBRIC.filter((item) => item.scoredBy === "code").map((item) => item.id));
 const CODE_CHECKS = new Set<CheckId>(RUBRIC.filter((item): item is CodeItem => item.scoredBy === "code").map((item) => item.check));
 
+/* Medians over the runs ------------------------------------------------------------------ */
+
+/** The median of one item's scores over the runs; null (unscored) when any run could not score it (owner's choice, 2026-11-23). */
+export function medianScore(scores: ReadonlyArray<Score | null>): Score | null {
+  if (scores.length === 0 || scores.some((score) => score === null)) return null;
+  return median(scores as Score[]) as Score;
+}
+
+/** Whether a check fails over the runs: it finds something in most of them (2 of 3). */
+export function failsInMost(failing: number | undefined, runs: number): boolean {
+  return (failing ?? 0) * 2 > runs;
+}
+
+const countedFindings = (findings: readonly Finding[], check: CheckId) => findings.filter((finding) => finding.check === check && !finding.provisional);
+
+/** Each section's medians, spread and failing checks over a case's runs. */
+export function caseMedians(runs: readonly CaseRun[]): MedianSection[] {
+  const ids = REPORT_SECTIONS.map((section) => section.id).filter((id) => runs.some((r) => r.sections.some((s) => s.id === id)));
+  return ids.map((id) => {
+    const sections = runs.map((r) => r.sections.find((s) => s.id === id) ?? null);
+    const items = [...new Set(sections.flatMap((s) => (s ? Object.keys(s.scores) : [])))];
+    const spread = Object.fromEntries(items.map((item) => [item, sections.map((s) => s?.scores[item] ?? null)]));
+    const failing: Partial<Record<CheckId, number>> = {};
+    for (const check of CODE_CHECKS) {
+      const count = sections.filter((s) => s !== null && s.text !== null && countedFindings(s.findings, check).length > 0).length;
+      if (count > 0) failing[check] = count;
+    }
+    return {
+      id,
+      scores: Object.fromEntries(items.map((item) => [item, medianScore(spread[item])])),
+      spread,
+      failing,
+      drafted: sections.filter((s) => s?.text !== null && s?.text !== undefined).length,
+      words: sections.map((s) => s?.words ?? 0),
+    };
+  });
+}
+
+/** The judge fingerprint every run of a case shares for a section, or null when the runs differ or one has none. */
+function sharedFingerprint(c: CaseResult, id: ReportSectionId): string | null {
+  const prints = c.runs.map((r) => r.sections.find((s) => s.id === id)?.judge?.fingerprint ?? "");
+  return prints.length > 0 && prints[0] !== "" && prints.every((print) => print === prints[0]) ? prints[0] : null;
+}
+
 /* Reading older results ------------------------------------------------------------------ */
 
 /** The last part of a path, so an older record never carries the path itself. */
@@ -206,17 +286,27 @@ function neutralLabel(value: unknown, fallback: string): string {
   return parts.at(-1) ?? fallback;
 }
 
+type OlderSection = SectionResult & { judge: (JudgeRecord & { answer?: JudgeAnswer | null }) | null };
+
 /**
- * Any results.json as this version reads it: a version 1 file gets its judge answers as a
- * list, labels instead of paths, the checks version it was made with ("1"), one sample and
- * no fingerprint (so its judge items are never taken as comparable).
+ * Any results.json as this version reads it:
+ * - a version 1 file gets its judge answers as a list, labels instead of paths, the checks
+ *   version it was made with ("1"), one sample and no fingerprint (so its judge items are
+ *   never taken as comparable);
+ * - a version 1 or 2 file, from before runs, is one run of each case.
+ * The medians are always worked out again from the runs' scores.
  */
 export function normalizeRun(raw: unknown): RunResult {
   const run = structuredClone(raw) as RunResult & {
     drafting: RunResult["drafting"] & { checkout?: string };
     judging: RunResult["judging"] & { checkout?: string };
-    cases: Array<CaseResult & { sections: Array<SectionResult & { judge: (JudgeRecord & { answer?: JudgeAnswer | null }) | null }> }>;
+    cases: Array<CaseResult & { sections?: OlderSection[] }>;
   };
+  for (const c of run.cases) {
+    if (!Array.isArray(c.runs)) c.runs = [{ run: 1, sections: c.sections ?? [] }];
+    delete c.sections;
+  }
+  run.runs ??= run.cases[0]?.runs.length ?? 1;
   run.checksVersion ??= "1";
   run.judgeSamples ??= 1;
   run.valid ??= true;
@@ -229,31 +319,39 @@ export function normalizeRun(raw: unknown): RunResult {
   run.judging = { label: judging.label ?? neutralLabel(judging.checkout, "unknown"), commit: judging.commit, branch: judging.branch ?? "unknown", dirty: judging.dirty ?? false, model: judging.model ?? run.model ?? null };
   for (const c of run.cases) {
     c.inputs ??= { notes: "", instructions: {} };
-    for (const s of c.sections) {
-      if (!s.judge) continue;
-      if (!Array.isArray(s.judge.answers)) s.judge.answers = s.judge.answer ? [s.judge.answer] : [];
-      delete s.judge.answer;
-      s.judge.fingerprint ??= "";
+    for (const r of c.runs) {
+      for (const s of r.sections as OlderSection[]) {
+        if (!s.judge) continue;
+        if (!Array.isArray(s.judge.answers)) s.judge.answers = s.judge.answer ? [s.judge.answer] : [];
+        delete s.judge.answer;
+        s.judge.fingerprint ??= "";
+      }
     }
+    c.medians = caseMedians(c.runs);
   }
   run.resultsVersion = RESULTS_VERSION;
   return run;
 }
 
 /**
- * The baseline as the current checks see it (review B3, part 1): its stored texts checked
- * again (`findings` per case, by the caller), and its code items scored again; its judge
- * answers stay as they are.
+ * The baseline as the current checks see it (review B3, part 1): every stored run's texts
+ * checked again (`findings` per case and run, in run order, by the caller), its code items
+ * scored again and its medians worked out again; its judge answers stay as they are.
  */
-export function rescoreRun(run: RunResult, findingsByCase: ReadonlyMap<string, readonly Finding[]>): RunResult {
+export function rescoreRun(run: RunResult, findingsByCase: ReadonlyMap<string, ReadonlyArray<readonly Finding[]>>): RunResult {
   const copy = structuredClone(run);
   for (const c of copy.cases) {
-    const findings = findingsByCase.get(c.caseId);
-    if (!findings) continue;
-    for (const s of c.sections) {
-      s.findings = findings.filter((finding) => finding.section === s.id);
-      s.scores = scoreSection(s.id, s.findings, s.judge?.answers ?? [], s.text !== null);
-    }
+    const perRun = findingsByCase.get(c.caseId);
+    if (!perRun) continue;
+    c.runs.forEach((r, index) => {
+      const findings = perRun[index];
+      if (!findings) return;
+      for (const s of r.sections) {
+        s.findings = findings.filter((finding) => finding.section === s.id);
+        s.scores = scoreSection(s.id, s.findings, s.judge?.answers ?? [], s.text !== null);
+      }
+    });
+    c.medians = caseMedians(c.runs);
   }
   return copy;
 }
@@ -266,22 +364,26 @@ interface ItemChange {
   caseId: string;
   section: ReportSectionId;
   item: string;
+  /** The medians. */
   from: Score;
   to: Score;
+  /** Every run's score, baseline and now: the spread behind each median. */
+  fromRuns: Array<Score | null>;
+  toRuns: Array<Score | null>;
 }
 
 export interface Comparison {
   status: CompareStatus;
   /** Why not compared, why invalid, and what else differs between the runs. */
   notes: string[];
-  /** Hard: a code item that went down. */
+  /** Hard: a code item whose median went down. */
   codeDrops: ItemChange[];
   codeRises: ItemChange[];
-  /** Hard: a check that found nothing in the baseline and finds something now (provisional findings left out). */
-  newFailures: Array<{ caseId: string; section: ReportSectionId; check: CheckId; findings: string[] }>;
-  /** Hard: scored in the baseline, not scored now (no draft, or no judge answer). */
-  unscored: Array<{ caseId: string; section: ReportSectionId; item: string }>;
-  /** Soft, apart from the verdict: judge items that moved, where both runs had the same judge. */
+  /** Hard: a check that passed in the baseline (found something in at most half its runs) and fails in most runs now (provisional findings left out). */
+  newFailures: Array<{ caseId: string; section: ReportSectionId; check: CheckId; failing: number; runs: number; baselineFailing: number; baselineRuns: number; findings: string[] }>;
+  /** Hard: scored in the baseline, not scored now (no draft, or no judge answer, in some run). */
+  unscored: Array<{ caseId: string; section: ReportSectionId; item: string; toRuns: Array<Score | null> }>;
+  /** Soft, apart from the verdict: judge items whose median moved, where both runs had the same judge in every run. */
   judgeDrops: ItemChange[];
   judgeRises: ItemChange[];
   /** Sections whose judge items were not compared: another judge (fingerprint) in one of the runs. */
@@ -308,7 +410,8 @@ export function compareRuns(current: RunResult, baseline: RunResult): Comparison
   }
   if (current.model !== baseline.model) comparison.notes.push(`The drafting model differs: ${baseline.model ?? "unknown"} in the baseline, ${current.model ?? "unknown"} now.`);
   if (current.judgeFormat !== baseline.judgeFormat) comparison.notes.push(`The judge format differs: ${baseline.judgeFormat ?? "none"} in the baseline, ${current.judgeFormat ?? "none"} now.`);
-  if (current.judgeSamples !== baseline.judgeSamples) comparison.notes.push(`Judge samples differ: ${baseline.judgeSamples} in the baseline, ${current.judgeSamples} now.`);
+  if (current.judgeSamples !== baseline.judgeSamples) comparison.notes.push(`Judge samples per run differ: ${baseline.judgeSamples} in the baseline, ${current.judgeSamples} now.`);
+  if (current.runs !== baseline.runs) comparison.notes.push(`Runs per case differ: ${plural(baseline.runs, "run", "runs")} in the baseline, ${current.runs} now; each side is compared on its own medians.`);
   for (const c of current.cases) if (!baseline.cases.some((b) => b.caseId === c.caseId)) comparison.notes.push(`Case ${c.caseId} is new: the baseline has no run of it, so it is not compared.`);
   for (const baseCase of baseline.cases) {
     const nowCase = current.cases.find((c) => c.caseId === baseCase.caseId);
@@ -317,37 +420,48 @@ export function compareRuns(current: RunResult, baseline: RunResult): Comparison
       continue;
     }
     if (nowCase.keyVersion !== baseCase.keyVersion) comparison.notes.push(`Case ${baseCase.caseId}: its key changed (version ${baseCase.keyVersion} to ${nowCase.keyVersion}).`);
-    for (const baseSection of baseCase.sections) {
-      const nowSection = nowCase.sections.find((s) => s.id === baseSection.id);
+    for (const baseSection of baseCase.medians) {
+      const nowSection = nowCase.medians.find((s) => s.id === baseSection.id);
       if (!nowSection) continue;
-      const sameJudge = Boolean(baseSection.judge?.fingerprint) && baseSection.judge?.fingerprint === nowSection.judge?.fingerprint;
+      const baseJudge = sharedFingerprint(baseCase, baseSection.id);
+      const sameJudge = baseJudge !== null && baseJudge === sharedFingerprint(nowCase, baseSection.id);
       let judgeSkipped = false;
       for (const [item, before] of Object.entries(baseSection.scores)) {
         if (before === null) continue;
         const after = nowSection.scores[item] ?? null;
+        const runs = { fromRuns: baseSection.spread[item] ?? [], toRuns: nowSection.spread[item] ?? [] };
         const change = { caseId: baseCase.caseId, section: baseSection.id, item };
         if (after === null) {
-          comparison.unscored.push(change);
+          comparison.unscored.push({ ...change, toRuns: runs.toRuns });
           continue;
         }
         if (CODE_ITEMS.has(item)) {
-          if (after < before) comparison.codeDrops.push({ ...change, from: before, to: after });
-          else if (after > before) comparison.codeRises.push({ ...change, from: before, to: after });
+          if (after < before) comparison.codeDrops.push({ ...change, from: before, to: after, ...runs });
+          else if (after > before) comparison.codeRises.push({ ...change, from: before, to: after, ...runs });
         } else if (!sameJudge) {
           judgeSkipped = true;
         } else if (after < before) {
-          comparison.judgeDrops.push({ ...change, from: before, to: after });
+          comparison.judgeDrops.push({ ...change, from: before, to: after, ...runs });
         } else if (after > before) {
-          comparison.judgeRises.push({ ...change, from: before, to: after });
+          comparison.judgeRises.push({ ...change, from: before, to: after, ...runs });
         }
       }
       if (judgeSkipped) comparison.judgeNotCompared.push({ caseId: baseCase.caseId, section: baseSection.id });
-      if (baseSection.text === null || nowSection.text === null) continue;
+      if (baseSection.drafted === 0 || nowSection.drafted === 0) continue;
       for (const check of CODE_CHECKS) {
-        const counted = (findings: readonly Finding[]) => findings.filter((finding) => finding.check === check && !finding.provisional);
-        if (counted(baseSection.findings).length > 0) continue;
-        const now = counted(nowSection.findings);
-        if (now.length > 0) comparison.newFailures.push({ caseId: baseCase.caseId, section: baseSection.id, check, findings: now.map((finding) => finding.message) });
+        if (failsInMost(baseSection.failing[check], baseCase.runs.length)) continue;
+        if (!failsInMost(nowSection.failing[check], nowCase.runs.length)) continue;
+        const messages = nowCase.runs.flatMap((r) => countedFindings(r.sections.find((s) => s.id === baseSection.id)?.findings ?? [], check).map((finding) => `run ${r.run}: ${finding.message}`));
+        comparison.newFailures.push({
+          caseId: baseCase.caseId,
+          section: baseSection.id,
+          check,
+          failing: nowSection.failing[check] ?? 0,
+          runs: nowCase.runs.length,
+          baselineFailing: baseSection.failing[check] ?? 0,
+          baselineRuns: baseCase.runs.length,
+          findings: messages,
+        });
       }
     }
   }
@@ -370,11 +484,11 @@ export function verdictLine(comparison: Comparison | null, run?: RunResult): str
   if (!comparison) return "No accepted baseline to compare with: this run is not compared.";
   if (comparison.status === "invalid") return `INVALID: ${comparison.notes.join(" ")}`;
   if (comparison.status === "not-compared") return `NOT COMPARED: ${comparison.notes.filter((note) => note.startsWith("Not compared")).map((note) => note.replace(/^Not compared: /, "").replace(/\.$/, "")).join("; ")}.`;
-  const judge = `Judge items, apart from the verdict: ${comparison.judgeDrops.length} down, ${comparison.judgeRises.length} up${comparison.judgeNotCompared.length > 0 ? `, ${plural(comparison.judgeNotCompared.length, "section", "sections")} not comparable` : ""}.`;
-  if (comparison.status === "pass") return `No hard regression: no code item went down, no check that passed in the baseline fails now, and nothing went unscored. ${judge}`;
+  const judge = `Judge item medians, apart from the verdict: ${comparison.judgeDrops.length} down, ${comparison.judgeRises.length} up${comparison.judgeNotCompared.length > 0 ? `, ${plural(comparison.judgeNotCompared.length, "section", "sections")} not comparable` : ""}.`;
+  if (comparison.status === "pass") return `No hard regression: no code item's median went down, no check that passed in the baseline fails in most runs now, and nothing went unscored. ${judge}`;
   const parts: string[] = [];
-  if (comparison.codeDrops.length > 0) parts.push(`${plural(comparison.codeDrops.length, "code item score", "code item scores")} went down`);
-  if (comparison.newFailures.length > 0) parts.push(`${plural(comparison.newFailures.length, "check that passed in the baseline fails", "checks that passed in the baseline fail")} now`);
+  if (comparison.codeDrops.length > 0) parts.push(`${plural(comparison.codeDrops.length, "code item median", "code item medians")} went down`);
+  if (comparison.newFailures.length > 0) parts.push(`${plural(comparison.newFailures.length, "check that passed in the baseline fails", "checks that passed in the baseline fail")} in most runs now`);
   if (comparison.unscored.length > 0) parts.push(`${plural(comparison.unscored.length, "item was", "items were")} scored in the baseline but not now`);
   return `REGRESSION: ${parts.join("; ")}. This rules change does not go to the BCBA as it is. ${judge}`;
 }
@@ -394,13 +508,16 @@ const SHORT: Record<ReportSectionId, string> = {
 };
 
 const cell = (score: Score | null | undefined) => (score === null || score === undefined ? "–" : String(score));
+/** Every run's score, "2·1·2"; a single run shows just its score. */
+const runsCell = (scores: ReadonlyArray<Score | null>) => scores.map(cell).join("·");
+const disagree = (scores: ReadonlyArray<Score | null>) => new Set(scores.map(cell)).size > 1;
 
 function totals(run: RunResult): { code: [number, number]; judge: [number, number] } {
   const t = { code: [0, 0] as [number, number], judge: [0, 0] as [number, number] };
   for (const c of run.cases) {
-    for (const s of c.sections) {
+    for (const s of c.medians) {
       for (const [item, score] of Object.entries(s.scores)) {
-        if (score === null) continue;
+        if (score === null || score === undefined) continue;
         const bucket = CODE_ITEMS.has(item) ? t.code : t.judge;
         bucket[0] += score;
         bucket[1] += 2;
@@ -410,57 +527,109 @@ function totals(run: RunResult): { code: [number, number]; judge: [number, numbe
   return t;
 }
 
+/** How many section items the runs disagree on, of those scored in every run: the noise, made visible. */
+export function noiseOf(run: RunResult): { code: [number, number]; judge: [number, number] } {
+  const n = { code: [0, 0] as [number, number], judge: [0, 0] as [number, number] };
+  for (const c of run.cases) {
+    for (const s of c.medians) {
+      for (const [item, scores] of Object.entries(s.spread)) {
+        if (scores.some((score) => score === null)) continue;
+        const bucket = CODE_ITEMS.has(item) ? n.code : n.judge;
+        if (disagree(scores)) bucket[0]++;
+        bucket[1]++;
+      }
+    }
+  }
+  return n;
+}
+
 /** The short Markdown summary written next to results.json. */
 export function summaryMarkdown(run: RunResult, comparison: Comparison | null, baselineLabel: string | null, baseline: RunResult | null = null): string {
   const lines: string[] = [];
   lines.push(`# Evaluation run: ${run.label}`, "");
   lines.push(`**${verdictLine(comparison, run)}**${baselineLabel ? ` (baseline: ${baselineLabel})` : ""}`, "");
   const t = totals(run);
-  const judgeUsage = run.cases.flatMap((c) => c.sections.map((s) => s.judge?.usage ?? null)).reduce<Usage | null>(addUsage, null);
+  const noise = noiseOf(run);
+  const allSections = run.cases.flatMap((c) => c.runs.flatMap((r) => r.sections));
+  const judgeUsage = allSections.map((s) => s.judge?.usage ?? null).reduce<Usage | null>(addUsage, null);
   const judgeInput = judgeUsage ? judgeUsage.uncachedInputTokens + judgeUsage.cacheReadTokens + judgeUsage.cacheWriteTokens : 0;
   lines.push(
     `- Drafted by ${run.drafting.label} (${run.drafting.branch} at ${run.drafting.commit.slice(0, 7)})${run.drafting.dirty ? " with UNCOMMITTED changes" : ""}; judged by ${run.judging.label} at ${run.judging.commit.slice(0, 7)}${run.judging.dirty ? " with UNCOMMITTED changes" : ""}.`,
-    `- Rubric v${run.rubricVersion}, judge prompt v${run.judgePromptVersion}, checks v${run.checksVersion}, ${plural(run.judgeSamples, "judge sample", "judge samples")} per section (median when more than one); judge format ${run.judgeFormat ?? "none"}; ${run.provider}, ${run.model ?? "model unknown"}; ${run.mode} drafting.`,
-    ...(run.fromRun ? [`- ${run.rejudged ? "Every section judged again" : "Judged again only where there was no answer"} from run ${run.fromRun}'s drafts, checked again with the current checks. The request counts below are both runs together.`] : []),
+    `- ${plural(run.runs, "run", "runs")} per case, each drafted and judged on its own. Every score below is the median of the runs; an item is unscored when any run could not score it, and a check fails when it fails in most runs.`,
+    `- Rubric v${run.rubricVersion}, judge prompt v${run.judgePromptVersion}, checks v${run.checksVersion}, ${plural(run.judgeSamples, "judge sample", "judge samples")} per section in each run (median when more than one); judge format ${run.judgeFormat ?? "none"}; ${run.provider}, ${run.model ?? "model unknown"}; ${run.mode} drafting.`,
+    ...(run.fromRun ? [`- ${run.rejudged ? "Every section of every run judged again" : "Judged again only where a run had no answer"} from run ${run.fromRun}'s drafts, checked again with the current checks. The request counts below are both runs together.`] : []),
     `- Requests: ${run.requests.total} (${run.requests.drafts} drafts, ${run.requests.checks} consistency checks, ${run.requests.judges} judge, ${run.requests.repairs} repairs, ${run.requests.baselineJudges} judging the baseline's drafts again). ${run.startedAt} to ${run.finishedAt}.`,
     `- Judge input: ${judgeInput} tokens, ${judgeUsage?.cacheReadTokens ?? 0} read from the cache.`,
     `- Windows: ${run.launches.filter((launch) => launch.at !== "during").map((launch) => `${launch.role} ${launch.at}: ${launch.visibleWindows} visible, Dock ${launch.dockVisible === null ? "n/a" : launch.dockVisible ? "VISIBLE" : "hidden"}, ${launch.focusedWindows} focused${launch.dialogs && launch.dialogs.length > 0 ? `, ${launch.dialogs.length} dialog(s) asked for` : ""}`).join("; ")}; ${run.windowChecksDuring} checks during the run${run.valid ? ", all clear" : ", NOT clear"}.`,
-    `- Scores: code items ${t.code[0]} of ${t.code[1]}, judge items ${t.judge[0]} of ${t.judge[1]}${baseline ? `; the baseline as the current checks score it: code ${totals(baseline).code[0]} of ${totals(baseline).code[1]}, judge ${totals(baseline).judge[0]} of ${totals(baseline).judge[1]}` : ""}.`,
+    `- Scores (medians): code items ${t.code[0]} of ${t.code[1]}, judge items ${t.judge[0]} of ${t.judge[1]}${baseline ? `; the baseline as the current checks score it: code ${totals(baseline).code[0]} of ${totals(baseline).code[1]}, judge ${totals(baseline).judge[0]} of ${totals(baseline).judge[1]} (${plural(baseline.runs, "run", "runs")})` : ""}.`,
+    ...(run.runs > 1 ? [`- Noise: the runs disagree on ${noise.code[0]} of ${noise.code[1]} code item scores and ${noise.judge[0]} of ${noise.judge[1]} judge item scores (see each case's spread).`] : []),
     "",
   );
   const items = RUBRIC.filter((item) => item.stage === "body");
   for (const c of run.cases) {
     const base = baseline?.cases.find((b) => b.caseId === c.caseId) ?? null;
     lines.push(`## ${c.caseId}`, "");
-    if (base) lines.push("Each cell: baseline → this run.", "");
-    lines.push(`| Item | ${c.sections.map((s) => SHORT[s.id]).join(" | ")} |`, `| --- | ${c.sections.map(() => "---").join(" | ")} |`);
+    lines.push(base ? "Medians. Each cell: baseline → this run." : "Medians.", "");
+    lines.push(`| Item | ${c.medians.map((s) => SHORT[s.id]).join(" | ")} |`, `| --- | ${c.medians.map(() => "---").join(" | ")} |`);
     for (const item of items) {
-      const row = c.sections.map((s) => {
-        const before = base?.sections.find((b) => b.id === s.id)?.scores[item.id];
+      const row = c.medians.map((s) => {
+        const before = base?.medians.find((b) => b.id === s.id)?.scores[item.id];
         return base ? `${cell(before)} → ${cell(s.scores[item.id])}` : cell(s.scores[item.id]);
       });
       lines.push(`| ${item.id} (${item.scoredBy}) | ${row.join(" | ")} |`);
     }
-    lines.push(`| words | ${c.sections.map((s) => String(s.words)).join(" | ")} |`, `| markers | ${c.sections.map((s) => String(s.markers.length)).join(" | ")} |`, "");
+    const middle = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) / 2)] ?? 0;
+    const markersOf = (id: ReportSectionId) => c.runs.map((r) => r.sections.find((s) => s.id === id)?.markers.length ?? 0);
+    lines.push(`| words | ${c.medians.map((s) => String(middle(s.words))).join(" | ")} |`, `| markers | ${c.medians.map((s) => String(middle(markersOf(s.id)))).join(" | ")} |`, "");
+    if (c.runs.length > 1) {
+      lines.push(`Spread over the ${c.runs.length} runs: each cell is every run's score in order; **bold** where the runs disagree.`, "");
+      lines.push(`| Item | ${c.medians.map((s) => SHORT[s.id]).join(" | ")} |`, `| --- | ${c.medians.map(() => "---").join(" | ")} |`);
+      for (const item of items) {
+        const row = c.medians.map((s) => {
+          const scores = s.spread[item.id] ?? [];
+          return disagree(scores) ? `**${runsCell(scores)}**` : runsCell(scores);
+        });
+        lines.push(`| ${item.id} (${item.scoredBy}) | ${row.join(" | ")} |`);
+      }
+      lines.push(`| words | ${c.medians.map((s) => s.words.join("·")).join(" | ")} |`, "");
+    }
     const instructions = Object.entries(c.inputs.instructions).filter(([, text]) => text && text.trim() !== "");
     lines.push(`- Her inputs: ${c.inputs.notes.trim() ? "session notes given" : "no session notes"}; ${instructions.length > 0 ? `standing instructions for ${instructions.map(([id]) => SHORT[id as ReportSectionId]).join(", ")}` : "no standing instructions (every section's cleared)"}.`);
     if (c.keyNotes && c.keyNotes.length > 0) lines.push("- Provisional in the key, for her to confirm:", ...c.keyNotes.map((note) => `  - ${note}`));
-    const provisional = c.sections.flatMap((s) => s.findings.filter((finding) => finding.provisional).map((finding) => `${SHORT[s.id]}: ${finding.message}`));
-    if (provisional.length > 0) lines.push("- Provisional, not scored (a rule pending her answer):", ...provisional.map((line) => `  - ${line}`));
-    const problems = c.sections.filter((s) => s.draftError || s.judge?.error);
-    for (const s of problems) lines.push(`- ${SHORT[s.id]}: ${s.draftError ? `draft failed: ${s.draftError}` : `judge: ${s.judge?.error}`}`);
+    const provisional = new Map<string, number[]>();
+    for (const r of c.runs) {
+      for (const s of r.sections) {
+        for (const finding of s.findings.filter((f) => f.provisional)) {
+          const key = `${SHORT[s.id]}: ${finding.message}`;
+          provisional.set(key, [...(provisional.get(key) ?? []), r.run]);
+        }
+      }
+    }
+    if (provisional.size > 0) lines.push("- Provisional, not scored (a rule pending her answer):", ...[...provisional].map(([line, runs]) => `  - ${line}${c.runs.length > 1 ? ` (run ${[...new Set(runs)].join(", ")})` : ""}`));
+    for (const r of c.runs) {
+      for (const s of r.sections.filter((section) => section.draftError || section.judge?.error)) {
+        lines.push(`- ${c.runs.length > 1 ? `run ${r.run} ` : ""}${SHORT[s.id]}: ${s.draftError ? `draft failed: ${s.draftError}` : `judge: ${s.judge?.error}`}`);
+      }
+    }
     lines.push("");
   }
   if (comparison && comparison.status !== "invalid") {
     if (comparison.notes.length > 0) lines.push("## Notes", "", ...comparison.notes.map((note) => `- ${note}`), "");
-    const list = (title: string, changes: readonly ItemChange[]) => (changes.length > 0 ? [title, "", ...changes.map((d) => `- ${d.caseId} ${SHORT[d.section]} ${d.item}: ${d.from} → ${d.to}`), ""] : []);
-    lines.push(...list("## Hard: code items that went down", comparison.codeDrops));
-    if (comparison.newFailures.length > 0) lines.push("## Hard: checks that passed and fail now", "", ...comparison.newFailures.map((f) => `- ${f.caseId} ${SHORT[f.section]} ${f.check}: ${f.findings.slice(0, 3).join(" / ")}`), "");
-    if (comparison.unscored.length > 0) lines.push("## Hard: not scored this time", "", ...comparison.unscored.map((u) => `- ${u.caseId} ${SHORT[u.section]} ${u.item}`), "");
-    lines.push(...list("## Code items that went up", comparison.codeRises));
+    const list = (title: string, changes: readonly ItemChange[]) =>
+      changes.length > 0 ? [title, "", ...changes.map((d) => `- ${d.caseId} ${SHORT[d.section]} ${d.item}: ${d.from} → ${d.to} (runs ${runsCell(d.fromRuns)} → ${runsCell(d.toRuns)})`), ""] : [];
+    lines.push(...list("## Hard: code item medians that went down", comparison.codeDrops));
+    if (comparison.newFailures.length > 0)
+      lines.push(
+        "## Hard: checks that passed and fail in most runs now",
+        "",
+        ...comparison.newFailures.map((f) => `- ${f.caseId} ${SHORT[f.section]} ${f.check}: fails in ${f.failing} of ${f.runs} runs (baseline ${f.baselineFailing} of ${f.baselineRuns}): ${f.findings.slice(0, 3).join(" / ")}`),
+        "",
+      );
+    if (comparison.unscored.length > 0) lines.push("## Hard: not scored in every run this time", "", ...comparison.unscored.map((u) => `- ${u.caseId} ${SHORT[u.section]} ${u.item} (runs ${runsCell(u.toRuns)})`), "");
+    lines.push(...list("## Code item medians that went up", comparison.codeRises));
     lines.push(
-      ...list(`## Judge items that went down (apart from the verdict; ${plural(run.judgeSamples, "sample", "samples")}, noise not measured)`, comparison.judgeDrops),
-      ...list("## Judge items that went up", comparison.judgeRises),
+      ...list(`## Judge item medians that went down (apart from the verdict; ${plural(run.runs, "run", "runs")} × ${plural(run.judgeSamples, "sample", "samples")})`, comparison.judgeDrops),
+      ...list("## Judge item medians that went up", comparison.judgeRises),
     );
     if (comparison.judgeNotCompared.length > 0) lines.push("## Judge items not compared (another judge)", "", ...comparison.judgeNotCompared.map((s) => `- ${s.caseId} ${SHORT[s.section]}`), "");
   }
