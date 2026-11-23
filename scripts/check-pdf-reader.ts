@@ -5,7 +5,9 @@
  * with the built child (out/main/pdf-text-child.js). It reads an invented fixture, reports a
  * scan, stops a text bomb without blocking the main process, kills a whitespace bomb at the
  * memory limit, gives the child its heap cap, its refusal of code built from strings and none of
- * the app's environment, and an out-of-memory ends only the child.
+ * the app's environment, and an out-of-memory ends only the child. It also runs the built
+ * de-identification thread (out/main/deidentify-worker.js) on a text at the 2 MB cap and checks
+ * that the main process stays free and the state reads "preparing" while it works.
  * Run with: pnpm check:pdf-reader (builds the app and this script first). No window opens.
  */
 import { app } from "electron";
@@ -13,6 +15,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
+import { DeidentifyThread } from "../src/main/deidentify/off-thread.ts";
 import { spawnElectronPdfChild } from "../src/main/pdf-text/electron-child.ts";
 import { DEFAULT_LIMITS, type PdfTextResult } from "../src/main/pdf-text/extract.ts";
 import { CHILD_MEMORY_LIMIT_MB, extractPdfTextIsolated } from "../src/main/pdf-text/isolated.ts";
@@ -104,9 +107,9 @@ app.whenReady().then(async () => {
   clearInterval(tick);
   check("a text bomb is stopped, the main process never blocked", bomb.status === "unreadable" && bomb.ms < 8_000 && lag < 500, { ...bomb, lagMs: lag });
 
-  // 1.5 GB of spaces once decompressed: well past the memory limit (a 1 GB one peaks right at it, and may finish first).
-  const whitespace = await read(onePage(Buffer.alloc(1536 * 1024 * 1024, 0x20)));
-  check(`a 1.5 GB whitespace bomb is killed at the memory limit (${CHILD_MEMORY_LIMIT_MB} MB)`, whitespace.status === "unreadable" && whitespace.reason === "too-large" && whitespace.ms < 30_000, whitespace);
+  // 3 GB of spaces once decompressed: well past the memory limit (1 and 1.5 GB ones peak near it, and may finish first).
+  const whitespace = await read(onePage(Buffer.alloc(3 * 1024 * 1024 * 1024, 0x20)));
+  check(`a 3 GB whitespace bomb is killed at the memory limit (${CHILD_MEMORY_LIMIT_MB} MB)`, whitespace.status === "unreadable" && whitespace.reason === "too-large" && whitespace.ms < 30_000, whitespace);
 
   const probes = mkdtempSync(path.join(tmpdir(), "aba-pdf-reader-check-"));
   try {
@@ -123,6 +126,33 @@ app.whenReady().then(async () => {
     check("a process that eats memory ends, and only it ends", hog.ended === "crashed" || hog.ended === "too-large", hog);
   } finally {
     rmSync(probes, { recursive: true, force: true });
+  }
+
+  // The de-identification thread, as built: a text at the 2 MB cap, the main process free meanwhile.
+  const thread = new DeidentifyThread(
+    { client: { firstName: "Mateo", lastName: "Ficticio Gómez", dateOfBirth: "2020-03-14" }, phones: ["(305) 555-0142"] },
+    { today: new Date("2026-11-22T12:00:00Z") },
+    path.join(root, "out", "main", "deidentify-worker.js"),
+  );
+  try {
+    const line = "Mateo Ficticio Gómez (DOB 03/14/2020) called (305) 555-0142 about Communication | 23 | 62 | Low.\n";
+    const text = line.repeat(Math.floor(2_000_000 / line.length));
+    let threadLag = 0;
+    let previous = Date.now();
+    const ticker = setInterval(() => {
+      threadLag = Math.max(threadLag, Date.now() - previous - 20);
+      previous = Date.now();
+    }, 20);
+    const started = Date.now();
+    const stateNow = () => thread.state;
+    const pending = thread.deidentify(text);
+    const preparing = stateNow() === "preparing";
+    const result = await pending;
+    clearInterval(ticker);
+    const ok = preparing && stateNow() === "idle" && !/Mateo|0142|03\/14/u.test(result.text) && result.text.includes("Communication | 23 | 62 | Low") && threadLag < 200;
+    check("the built de-identification thread reads a 2 MB text off the main process", ok, { ms: Date.now() - started, lagMs: threadLag, preparing });
+  } finally {
+    await thread.close();
   }
 
   clearTimeout(deadline);

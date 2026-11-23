@@ -23,8 +23,10 @@ export default defineConfig(({ mode }) => ({
     build: {
       rollupOptions: {
         // The PDF reading process is a second entry: out/main/pdf-text-child.js, started as an
-        // Electron utility process for each PDF (src/main/pdf-text/electron-child.ts).
-        input: { index: "src/main/index.ts", "pdf-text-child": "src/main/pdf-text/child.ts" },
+        // Electron utility process for each PDF (src/main/pdf-text/electron-child.ts). The
+        // de-identification worker thread is a third: out/main/deidentify-worker.js
+        // (src/main/deidentify/off-thread.ts).
+        input: { index: "src/main/index.ts", "pdf-text-child": "src/main/pdf-text/child.ts", "deidentify-worker": "src/main/deidentify/thread.ts" },
       },
     },
   },
