@@ -6,7 +6,7 @@ import { Deidentifier, type ClientSheet } from "../src/main/deidentify/index.ts"
 import { DEFAULT_LIMITS, extractPdfText } from "../src/main/pdf-text/extract.ts";
 import { pdfjsReader } from "../src/main/pdf-text/pdfjs-reader.ts";
 import { REVIEW_SHEET, REVIEW_TODAY } from "./deidentify-adversarial.ts";
-import { deepNesting, hyphenatedParagraph, manyPages, pagesLoop, selfDrawingForm, spacedNames, textBomb, whitespaceBomb } from "./hostile-pdfs.ts";
+import { boxedForm, deepNesting, hyphenatedParagraph, manyPages, pagesLoop, selfDrawingForm, spacedNames, textBomb, whitespaceBomb } from "./hostile-pdfs.ts";
 
 /*
  * The real reader (PDF.js) on the invented fixture PDFs: the score reports rendered from
@@ -160,4 +160,15 @@ test("hyphenated PDF paragraph: names, the school, the city and the date of birt
   const plain = hidden.replace(/\[[A-Z0-9 ]+\]/gu, " ").toLowerCase().replace(/[-\s]/gu, "");
   for (const value of ["lucia", "ficticio", "gomez", "valeria", "marti", "miami", "march14"]) assert.ok(!plain.includes(value), `${value} in ${hidden}`);
   assert.ok(hidden.includes("six years old"), hidden);
+});
+
+test("boxed PDF form: a date of birth, a phone, a Medicaid ID and a ZIP drawn one character per box never survive", async () => {
+  const result = await extractPdfText(boxedForm(), pdfjsReader);
+  assert.equal(result.status, "text");
+  if (result.status !== "text") return;
+  const hidden = new Deidentifier(REVIEW_SHEET, { today: REVIEW_TODAY }).deidentify(result.text).text;
+  const digits = hidden.replace(/\[[A-Z0-9 ]+\]/gu, " ").replace(/[^0-9A-Za-z]/gu, "");
+  for (const value of ["03142020", "3055550142", "5550142", "FL123456789", "123456789", "33135"]) assert.ok(!digits.includes(value), `${value} in ${hidden}`);
+  // The item scores, single digits in a row, stay as they are.
+  assert.ok(hidden.includes("0 1 2 1 0 2"), hidden);
 });

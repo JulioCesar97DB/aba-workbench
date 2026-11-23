@@ -15,8 +15,9 @@ import { app, utilityProcess } from "electron";
 import path from "node:path";
 import { CHILD_JS_FLAGS, CHILD_MEMORY_LIMIT_MB, type ChildHandle } from "./isolated.ts";
 
-export function spawnElectronPdfChild(): ChildHandle {
-  const child = utilityProcess.fork(path.join(import.meta.dirname, "pdf-text-child.js"), [], {
+/** `script`: the child to run; the bundled reader next to the main process by default (the check script points it elsewhere). */
+export function spawnElectronPdfChild(script = path.join(import.meta.dirname, "pdf-text-child.js")): ChildHandle {
+  const child = utilityProcess.fork(script, [], {
     serviceName: "ABA Workbench PDF reader",
     execArgv: [`--js-flags=${CHILD_JS_FLAGS}`],
     // Electron 45 reads an empty env as "inherit everything"; one variable of our own replaces the whole environment.

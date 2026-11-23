@@ -115,3 +115,19 @@ export function hyphenatedParagraph(): Uint8Array {
   ];
   return onePage(lines.map((line, i) => `BT /F1 11 Tf 72 ${700 - i * 13} Td (${line}) Tj ET`).join("\n"));
 }
+
+/** An intake form with one box per character, 18 points apart, as insurance and intake forms draw them. */
+export function boxedForm(): Uint8Array {
+  const rows: Array<[string, string]> = [["Date of birth", "03142020"], ["Phone", "3055550142"], ["Medicaid ID", "FL123456789"], ["ZIP", "33135"]];
+  const ops: string[] = [];
+  rows.forEach(([label, value], r) => {
+    const y = 700 - r * 40;
+    ops.push(`BT /F1 11 Tf 72 ${y} Td (${label}) Tj ET`);
+    [...value].forEach((ch, i) => {
+      const x = 200 + i * 18;
+      ops.push(`${x - 3} ${y - 4} 16 18 re S`, `BT /F1 12 Tf ${x} ${y} Td (${ch}) Tj ET`);
+    });
+  });
+  ops.push("BT /F1 11 Tf 72 520 Td (Item scores: 0 1 2 1 0 2) Tj ET");
+  return onePage(ops.join("\n"));
+}

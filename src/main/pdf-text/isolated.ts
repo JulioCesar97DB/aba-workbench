@@ -41,9 +41,30 @@ function checked(message: unknown): PdfTextResult {
   return { status: "unreadable", reason: "crashed" };
 }
 
+/** At most this many PDFs are read at once: each reading process may use up to CHILD_MEMORY_LIMIT_MB. */
+export const MAX_READERS = 2;
+let reading = 0;
+const waiting: Array<() => void> = [];
+
+/** Waits for a free reader, runs `task`, then lets the next one in. */
+async function inTurn<T>(task: () => Promise<T>): Promise<T> {
+  if (reading >= MAX_READERS) await new Promise<void>((resolve) => waiting.push(resolve));
+  reading++;
+  try {
+    return await task();
+  } finally {
+    reading--;
+    waiting.shift()?.();
+  }
+}
+
 export function extractPdfTextIsolated(bytes: Uint8Array, spawn: SpawnChild, limits: PdfReadLimits = DEFAULT_LIMITS): Promise<PdfTextResult> {
   if (bytes.length > limits.maxBytes) return Promise.resolve({ status: "unreadable", reason: "too-large" });
   if (!looksLikePdf(bytes)) return Promise.resolve({ status: "unreadable", reason: "not-a-pdf" });
+  return inTurn(() => readInChild(bytes, spawn, limits));
+}
+
+function readInChild(bytes: Uint8Array, spawn: SpawnChild, limits: PdfReadLimits): Promise<PdfTextResult> {
   return new Promise((resolve) => {
     let child: ChildHandle;
     try {

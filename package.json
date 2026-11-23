@@ -18,7 +18,7 @@
     "test:e2e": "install-electron && electron-vite build && playwright test --project=built",
     "test:e2e:packaged": "playwright test --project=packaged",
     "phase0": "node --env-file-if-exists=.env.phase0 scripts/phase0.mts",
-    "check:pdf-reader": "install-electron && electron-vite build && electron scripts/check-pdf-reader.mjs"
+    "check:pdf-reader": "install-electron && electron-vite build && vite build --config scripts/check-pdf-reader.vite.config.ts --logLevel warn && electron tmp/check-pdf-reader/bundle/check.mjs"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^1.12.0",

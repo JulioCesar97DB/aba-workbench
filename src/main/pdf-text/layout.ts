@@ -209,7 +209,9 @@ export function layoutPage(pieces: TextPiece[]): { text: string; needsReview: bo
   const text = pageTextOf(linesOf(pieces, review));
   const tokens = text.split(/\s+/u).filter((t) => /\p{L}/u.test(t));
   const singles = tokens.filter((t) => /^\p{L}$/u.test(t)).length;
-  return { text, needsReview: review.spaced || review.overlapping || (tokens.length >= 10 && singles / tokens.length > 0.3) };
+  // A row of five or more one-character cells: a form with one box per character (its values are read whole by the de-identifier).
+  const boxed = text.split("\n").some((line) => line.split(" | ").filter((cell) => cell.trim().length === 1).length >= 5);
+  return { text, needsReview: review.spaced || review.overlapping || boxed || (tokens.length >= 10 && singles / tokens.length > 0.3) };
 }
 
 /** The text of one page. */

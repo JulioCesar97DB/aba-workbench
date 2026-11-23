@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { after, test } from "node:test";
 import { DEFAULT_LIMITS } from "../src/main/pdf-text/extract.ts";
-import { extractPdfTextIsolated } from "../src/main/pdf-text/isolated.ts";
+import { extractPdfTextIsolated, MAX_READERS, type ChildHandle } from "../src/main/pdf-text/isolated.ts";
 import { spawnNodeChild, STAND_IN, started } from "./pdf-child.ts";
 import { textBomb } from "./hostile-pdfs.ts";
 
@@ -68,4 +68,26 @@ test("isolated: files too large or not PDFs are refused before any process start
   assert.deepEqual(await extractPdfTextIsolated(new Uint8Array(11), spawn, { ...DEFAULT_LIMITS, maxBytes: 10 }), { status: "unreadable", reason: "too-large" });
   assert.deepEqual(await extractPdfTextIsolated(new TextEncoder().encode("PK zip"), spawn), { status: "unreadable", reason: "not-a-pdf" });
   assert.equal(spawned, 0);
+});
+
+test("isolated: at most ${MAX_READERS} PDFs are read at once; the others wait their turn", async () => {
+  let running = 0;
+  let most = 0;
+  const spawn = (): ChildHandle => {
+    running++;
+    most = Math.max(most, running);
+    let listener: (message: unknown) => void = () => {};
+    return {
+      postMessage: () => setTimeout(() => {
+        running--;
+        listener({ status: "no-text", pageCount: 1 });
+      }, 50),
+      onMessage: (l) => (listener = l),
+      onExit: () => {},
+      kill: () => {},
+    };
+  };
+  const results = await Promise.all(Array.from({ length: 6 }, () => extractPdfTextIsolated(PDF, spawn)));
+  assert.equal(results.length, 6);
+  assert.equal(most, MAX_READERS);
 });

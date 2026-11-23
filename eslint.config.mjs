@@ -46,6 +46,11 @@ export default defineConfig([
           ],
         },
       ],
+      // The same for a dynamic import("pdfjs-dist/…") or import("./pdfjs-reader.ts").
+      "no-restricted-syntax": [
+        "error",
+        { selector: "ImportExpression[source.value=/pdfjs-dist|pdfjs-reader/]", message: "PDF.js runs only in the PDF reading process: use extractPdfTextIsolated." },
+      ],
     },
   },
   {
