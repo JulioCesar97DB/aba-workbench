@@ -92,8 +92,9 @@ export class GenerationRegistry {
       for await (const event of run(signal)) {
         // After a Stop nothing more is sent, except a version already written: the interface
         // must learn of every version on disk (review round 4, R4-1).
-        // A section's run yields nothing between its write and that "saved" (src/main/section-generation.ts).
-        if (signal.aborted && event.type !== "saved") break;
+        // A section's run yields nothing between its write and that "saved" (src/main/section-generation.ts);
+        // a case map draft yields nothing between a write and its "map-saved" (src/main/case-map-draft.ts).
+        if (signal.aborted && event.type !== "saved" && event.type !== "map-saved") break;
         send({ generationId, event });
       }
     } catch {

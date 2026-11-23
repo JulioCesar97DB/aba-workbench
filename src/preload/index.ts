@@ -80,6 +80,7 @@ const api: AbaApi = {
   removeMapItem: (caseId, part, collection, itemId, editing) => ipcRenderer.invoke(IPC_CHANNELS.removeMapItem, caseId, part, collection, itemId, editing),
   setMapPartVersion: (caseId, part, version) => ipcRenderer.invoke(IPC_CHANNELS.setMapPartVersion, caseId, part, version),
   approveMapPart: (caseId, part, version) => ipcRenderer.invoke(IPC_CHANNELS.approveMapPart, caseId, part, version),
+  startMapDraft: (caseId, generationId, provider) => ipcRenderer.invoke(IPC_CHANNELS.startMapDraft, caseId, generationId, provider),
   onFlushSaves: (listener) => {
     flushListener = listener;
     return () => {

@@ -10,6 +10,10 @@
  * content it is (origin) and the [CHECK: ...] text on it, if any.
  */
 
+/** The AI's two requests of a draft (D12): the case facts (with the report on her sections), then the behaviors. */
+export const MAP_REQUEST_KINDS = ["map-facts", "map-behaviors"] as const;
+export type MapRequestKind = (typeof MAP_REQUEST_KINDS)[number];
+
 /** The 22 sections of the ABA Matrix template, by number: a fact's home section names one (rules/guide.md, the section map). */
 export const TEMPLATE_SECTIONS = [
   "Recipient Information",
@@ -121,10 +125,11 @@ export const INTENSITIES = ["1", "2", "3"] as const;
  * - "extracted": a source states it;
  * - "ai-drafted": written by the AI from cited facts (a definition), for her to approve;
  * - "hypothesis": a function or a group, with its evidence;
- * - "proposed": a clinical choice that is hers to make (a barrier tag).
+ * - "proposed": a clinical choice that is hers to make (a barrier tag);
+ * - "app": computed by the app from a quoted value (an observation's minutes from its length; review round 2, M5).
  * A kind a newer app writes is kept as it is and shown as "her" would not be: as unknown.
  */
-export const ORIGINS = ["her", "extracted", "ai-drafted", "hypothesis", "proposed"] as const;
+export const ORIGINS = ["her", "extracted", "ai-drafted", "hypothesis", "proposed", "app"] as const;
 export type Origin = (typeof ORIGINS)[number];
 
 /**
@@ -143,6 +148,8 @@ export interface MapRef {
   version?: number;
   session?: string;
   quote?: string;
+  /** How the app checked the quote: "found", "not-found", or "not-checked" for a PDF (D4, D32). */
+  checked?: string;
 }
 
 export interface Claim<T = string> {
@@ -216,6 +223,9 @@ export interface StrengthItem {
 export interface BaselineObservation {
   date: TextClaim | null;
   setting: TextClaim | null;
+  /** How long the observation was, as the notes write it ("3:30 to 5:30 p.m.", "2 hours"), with its quote (review round 1, S7). */
+  length?: TextClaim | null;
+  /** The minutes: hers, or the app's from the length (a ref of kind "app"). */
   minutes: TextClaim | null;
   value: TextClaim | null;
 }
@@ -391,6 +401,44 @@ export function baselineMean(observations: ReadonlyArray<Pick<BaselineObservatio
     sum += Number(raw);
   }
   return Math.round((sum / observations.length) * 100) / 100;
+}
+
+/**
+ * The minutes of an observation from its length as the notes write it (review round 1, S7):
+ * a span of clock times ("3:30 to 5:30 p.m.", "10:00 a.m. to 12:00 p.m."), hours ("2 hours",
+ * "a 2-hour observation", "1.5 hrs") or minutes ("45 minutes"), with hours and minutes
+ * together ("1 hour 30 minutes"). Null when the text is none of these, or the result is not
+ * between 1 and 720 minutes: the app never guesses.
+ */
+export function minutesOfLength(text: string): number | null {
+  const plain = text.toLowerCase().replace(/\u{2013}|\u{2014}/gu, "-");
+  const fits = (minutes: number) => (minutes >= 1 && minutes <= 720 ? Math.round(minutes) : null);
+  const span = /(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\s*(?:to|-|until)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?/u.exec(plain);
+  if (span && (span[2] || span[5] || span[3] || span[6])) {
+    const at = (hour: string, minute: string | undefined, half: string | undefined) => {
+      let h = Number(hour) % 12;
+      if (half?.startsWith("p")) h += 12;
+      return h * 60 + Number(minute ?? 0);
+    };
+    // "3:30 to 5:30 p.m.": the start takes the end's half of the day unless that would put it after the end.
+    let start = at(span[1], span[2], span[3] ?? span[6]);
+    const end = at(span[4], span[5], span[6] ?? span[3]);
+    if (!span[3] && start > end) start = at(span[1], span[2], undefined);
+    let minutes = end - start;
+    if (minutes <= 0) minutes += 12 * 60;
+    return fits(minutes);
+  }
+  // A range of hours or minutes ("1-2 hours", "30 to 45 minutes") is no length: no guess (review round 2, M1).
+  if (/\d+(?:\.\d+)?\s*(?:-|to|or)\s*\d+(?:\.\d+)?\s*-?\s*(?:hours?|hrs?|h|minutes?|mins?)\b/u.test(plain)) return null;
+  // Hours, with the minutes that directly follow them ("1 hour 30 minutes", "1 hour and 30 minutes").
+  const hours = [...plain.matchAll(/(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b(?:\s*(?:and\s+)?(\d+)\s*-?\s*(?:minutes?|mins?)\b)?/gu)];
+  const lengths = hours.map((match) => Number(match[1]) * 60 + (match[2] ? Number(match[2]) : 0));
+  // Minutes written on their own ("45 minutes", or "(120 minutes)" after "2 hours"): the same length said again, or another.
+  const alone = plain.replace(/(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b(?:\s*(?:and\s+)?(\d+)\s*-?\s*(?:minutes?|mins?)\b)?/gu, " ");
+  for (const match of alone.matchAll(/(\d+)\s*-?\s*(?:minutes?|mins?)\b/gu)) lengths.push(Number(match[1]));
+  if (lengths.length === 0) return null;
+  // Every mention must agree: a length written twice is counted once, two different ones give nothing.
+  return lengths.every((length) => length === lengths[0]) ? fits(lengths[0]) : null;
 }
 
 /* What the interface sends: values and [CHECK] texts only. Where each value came from is the main process's to record. */
