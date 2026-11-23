@@ -10,14 +10,14 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the int
 
 ## Download
 
-ABA Workbench 0.2.0 is a pre-release for a demo. It is **not ready for real client data**. Both installers are on the release page, [v0.2.0](https://github.com/JulioCesar97DB/aba-workbench/releases/tag/v0.2.0):
+ABA Workbench 0.2.0 is the current release. It is **not ready for real client data**. Both installers are on its release page, [v0.2.0](https://github.com/JulioCesar97DB/aba-workbench/releases/tag/v0.2.0), which is also the [latest release](https://github.com/JulioCesar97DB/aba-workbench/releases/latest):
 
 | System | File |
 | --- | --- |
 | Windows, x64 | [ABA-Workbench-Setup-0.2.0-windows-x64.exe](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.2.0/ABA-Workbench-Setup-0.2.0-windows-x64.exe) ([SHA-256](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.2.0/ABA-Workbench-Setup-0.2.0-windows-x64.exe.sha256)) |
 | Mac, Apple Silicon or Intel, macOS 13 Ventura or later | [ABA-Workbench-0.2.0-macos-universal.dmg](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.2.0/ABA-Workbench-0.2.0-macos-universal.dmg) ([SHA-256](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.2.0/ABA-Workbench-0.2.0-macos-universal.dmg.sha256)) |
 
-The links name the v0.2.0 release, because GitHub's "latest release" link skips pre-releases. A later version gets new links here.
+The file links name the v0.2.0 release, because each file's name carries its version. GitHub's "latest release" link opens the newest stable release (a pre-release is never marked Latest); a later version gets new file links here.
 
 ### Check the download (optional)
 
@@ -52,8 +52,8 @@ To uninstall: drag ABA Workbench from Applications to the Trash. Your cases fold
 | `pnpm build` | Builds the main process, the preload and the interface into `out/`. |
 | `pnpm preview` | Starts the built app from `out/`. |
 | `pnpm package` | Builds, then packages an unpacked app for the current platform into `dist/` (`dist/mac-arm64/ABA Workbench.app`, `dist/win-unpacked/ABA Workbench.exe`). No certificate: unsigned on Windows, an ad-hoc signature on macOS. |
-| `pnpm package:windows` | Builds the Windows installer, `dist/ABA-Workbench-Setup-<version>-windows-x64.exe`: one click, for the current user, unsigned ([docs/windows.md](docs/windows.md)). The release workflow builds it on Windows, installs it, tests it, uninstalls it, and attaches it to a GitHub pre-release for a version tag. |
-| `pnpm package:mac` | Builds the Mac disk image, `dist/ABA-Workbench-<version>-macos-universal.dmg`: one universal app for Apple Silicon and Intel, with an ad-hoc signature only, no certificate and no notarization ([docs/macos.md](docs/macos.md)). The release workflow builds it on macOS, mounts it, starts the app from it on both architectures, cleans up, and attaches it to the same pre-release. |
+| `pnpm package:windows` | Builds the Windows installer, `dist/ABA-Workbench-Setup-<version>-windows-x64.exe`: one click, for the current user, unsigned ([docs/windows.md](docs/windows.md)). The release workflow builds it on Windows, installs it, tests it, uninstalls it, and attaches it to a GitHub release for a version tag (a pre-release for a tag with a suffix, such as `v0.3.0-beta.1`). |
+| `pnpm package:mac` | Builds the Mac disk image, `dist/ABA-Workbench-<version>-macos-universal.dmg`: one universal app for Apple Silicon and Intel, with an ad-hoc signature only, no certificate and no notarization ([docs/macos.md](docs/macos.md)). The release workflow builds it on macOS, mounts it, starts the app from it on both architectures, cleans up, and attaches it to the same release. |
 | `pnpm test:e2e` | Builds the app and drives its window with Playwright: it opens on Home, a case is created, listed, and opened again after a restart, unreadable folders show as such, the cases folder changes in Settings, a case's sources are pasted, added from the dialog and by dropping PDFs, edited, removed and restored, a section is drafted, corrected by paragraph and in her words, approved and copied, or picked up from her own text, against a faked Claude, the navigation reaches every screen, the language changes and survives a restart, the keyboard and a narrow window work, ChatGPT sign-in and the Claude key work on the AI connection screen with both providers faked, and the development check's mock generation streams to completion. Every test uses a temporary home folder or cases folder, never the real ones. Needs a display (`xvfb-run` on a Linux machine without one). `pnpm test:e2e:packaged` runs the same tests on the app from `pnpm package`. |
 | `pnpm lint` / `pnpm typecheck` | ESLint; TypeScript for the Node side and for the interface, separately. |
 | `pnpm test` | Unit tests (`node:test`): the provider layer, the rules, the spending cap, the main process's logic (the settings file, the case data file, folder names, durable writes, the cases folder, a case's sources, the credentials file and the ChatGPT sign-in included), both languages having the same strings, macOS's permission texts, and the design tokens' contrast. No keys, no network, no window. |

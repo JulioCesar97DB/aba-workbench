@@ -3,7 +3,7 @@
 # `pnpm package:windows` builds the Windows installer (below, nsis), `pnpm package:mac` the
 # universal Mac disk image (below, mac and dmg); the release workflow
 # (.github/workflows/release.yml) builds each on its own system and attaches both to the
-# same GitHub pre-release. Nothing is signed with a certificate and nothing updates itself
+# same GitHub release. Nothing is signed with a certificate and nothing updates itself
 # (owner's decisions, 2026-11-23); the Mac app has only an ad-hoc signature (below).
 #
 # The app's permanent identity (owner's decision, 2026-11-23). On Windows the installer

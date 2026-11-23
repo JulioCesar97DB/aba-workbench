@@ -230,12 +230,30 @@ test("release workflow: triggered by a version tag, a pull request or by hand; r
   assert.match(publish, /permissions:\n\s+contents: write/);
   assert.match(publish, /needs: \[installer, mac-installer\]/);
   assert.match(publish, /if: github\.ref_type == 'tag' && startsWith\(github\.ref_name, 'v'\)/);
-  assert.match(publish, /--prerelease/);
   assert.match(publish, /--verify-tag/);
   // No secret: the only token is GitHub's own, in the publish job.
   assert.doesNotMatch(release, /secrets\./);
   assert.equal([...release.matchAll(/github\.token/g)].length, 1);
   for (const name of ["installer", "mac-installer"]) assert.doesNotMatch(job(name), /GH_TOKEN|GITHUB_TOKEN|github\.token|CSC_LINK|WIN_CSC/);
+});
+
+test("release workflow: a plain vX.Y.Z tag publishes a normal release marked Latest; a tag with a suffix, a pre-release", () => {
+  const publish = job("publish");
+  // The flags and title come from the tag, in one block the release command uses.
+  const block = /^( +)if \[\[ "\$TAG" =~ .*\n(?:\1 .*\n|\1else\n)*\1fi\n/m.exec(publish);
+  assert.ok(block, "the block that decides the release's kind");
+  assert.match(publish, /gh release create "\$TAG" [^\n]*\\\n\s+--verify-tag \\\n\s+"\$\{kind\[@\]\}" \\\n\s+--title "\$title" \\\n\s+--notes-file notes\.md/);
+  const script = block[0].replace(new RegExp(`^${block[1]}`, "gm"), "");
+  const kindOf = (tag: string): string => {
+    const run = spawnSync("bash", ["-c", `${script}printf '%s|' "\${kind[@]}"; printf '%s' "$title"`], { env: { PATH: process.env.PATH ?? "", TAG: tag }, encoding: "utf8" });
+    assert.equal(run.status, 0, run.stderr);
+    return run.stdout;
+  };
+  assert.equal(kindOf("v0.2.0"), "--latest|ABA Workbench 0.2.0 (Windows and Mac)");
+  assert.equal(kindOf("v10.20.30"), "--latest|ABA Workbench 10.20.30 (Windows and Mac)");
+  for (const tag of ["v0.3.0-beta.1", "v0.3.0-rc.2", "v1.0.0-alpha"]) {
+    assert.equal(kindOf(tag), `--prerelease|--latest=false|ABA Workbench ${tag.slice(1)} (Windows and Mac, pre-release)`);
+  }
 });
 
 test("release workflow: every check passes on windows-2025 before the installer is kept, and only then can it be published", () => {
