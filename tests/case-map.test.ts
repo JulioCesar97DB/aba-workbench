@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -219,7 +219,12 @@ test("case map: what she changes becomes hers; what she leaves keeps where it ca
   assert.equal(behavior.name.refs[0].kind, "source");
   assert.equal(behavior.topographies[0].origin, "extracted", "an untouched line keeps its source");
   assert.equal(behavior.topographies[1].origin, "her");
-  assert.deepEqual(behavior.topographies[1].refs, [{ kind: "her" }]);
+  // The line she edited keeps the source of the line it replaced, after her own ref (review round 1, S4).
+  assert.deepEqual(
+    behavior.topographies[1].refs.map((ref: { kind: string }) => ref.kind),
+    ["her", "source"],
+  );
+  assert.equal(behavior.topographies[1].refs[1].quote, "spits on the floor");
   assert.equal(behavior.editedAt, T1);
   assert.equal(mapPartView(data, "behaviors").status, "corrected");
 
@@ -251,12 +256,58 @@ test("case map: groups by hand; a behavior is in one group only, and a removed b
   assert.equal(group.itemId, "grp-1");
   data = group.data;
   assert.equal(mapPartView(data, "behaviors").groups[0].origin, "her");
-  assert.throws(() => addMapItem(data, "behaviors", "groups", { behaviorIds: ["beh-1"], nature: "Again", function: "escape", measure: null, reason: "" }, 1, T1), /one group only/);
-  assert.throws(() => addMapItem(data, "behaviors", "groups", { behaviorIds: ["beh-9"], nature: "Ghost", function: null, measure: null, reason: "" }, 1, T1), /does not have/);
+  // A behavior ticked into another group moves there: never refused, so nothing she types is lost (review round 1, S1).
+  const second = addMapItem(data, "behaviors", "groups", { behaviorIds: ["beh-1"], nature: "Spitting alone", function: "escape", measure: null, reason: "" }, 1, T2);
+  let groups = mapPartView(second.data, "behaviors").groups;
+  assert.deepEqual(groups.map((g) => [g.id, g.behaviorIds]), [["grp-1", ["beh-2"]], ["grp-2", ["beh-1"]]]);
+  assert.equal(groups[0].editedAt, T2, "the group it left is marked changed by her");
+  // Typing in the second group, ticking a behavior of the first: it moves too, and the reason she typed is saved.
+  const typed = saveMapItem(second.data, "behaviors", "groups", "grp-2", { behaviorIds: ["beh-1", "beh-2"], nature: "Spitting alone", function: "escape", measure: null, reason: "Both escape." }, 1, T3);
+  assert.ok(typed && typed !== "item-not-found");
+  groups = mapPartView(typed.data, "behaviors").groups;
+  assert.deepEqual(groups.map((g) => [g.id, g.behaviorIds]), [["grp-1", []], ["grp-2", ["beh-1", "beh-2"]]]);
+  assert.equal(groups[1].reason, "Both escape.");
+  // A behavior the version does not have, or one named twice, is dropped rather than refused.
+  const ghost = addMapItem(data, "behaviors", "groups", { behaviorIds: ["beh-9", "beh-2", "beh-2"], nature: "Ghost", function: null, measure: null, reason: "" }, 1, T1);
+  assert.deepEqual(mapPartView(ghost.data, "behaviors").groups.map((g) => g.behaviorIds), [["beh-1"], ["beh-2"]]);
   assert.throws(() => addMapItem(data, "caregivers", "groups", {}, null, T1), /only the behaviors part/);
   const removed = removeMapItem(data, "behaviors", "items", "beh-2", 1, T2);
   assert.ok(removed !== "item-not-found");
   assert.deepEqual(mapPartView(removed.data, "behaviors").groups[0].behaviorIds, ["beh-1"]);
+});
+
+test("case map: an edit of an item the version shown does not hold brings it back with the edit, never lost (review round 1, minor 2)", () => {
+  let data = blank();
+  data = addMapItem(data, "caregivers", "items", { role: claim("Mother") }, null, T1).data;
+  data = approveMapPart(data, "caregivers", 1, T1)!;
+  data = addMapItem(data, "caregivers", "items", { role: claim("Grandmother") }, 1, T2).data; // version 2 has cg-2
+  data = setMapPartVersion(data, "caregivers", 1)!; // version 1 does not
+  const kept = saveMapItem(data, "caregivers", "items", "cg-2", { availability: claim("Tuesdays") }, 2, T3);
+  assert.ok(kept && kept !== "item-not-found");
+  assert.equal(kept.version, 3, "a new version, based on the one shown");
+  const items = mapPartView(kept.data, "caregivers").items as Array<Record<string, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any -- reading the view in a test
+  assert.deepEqual(items.map((item) => item.id), ["cg-1", "cg-2"]);
+  assert.equal(items[1].role.value, "Grandmother");
+  assert.equal(items[1].availability.value, "Tuesdays");
+  // An id no version ever had is still not found.
+  assert.equal(saveMapItem(data, "caregivers", "items", "cg-9", {}, null, T3), "item-not-found");
+});
+
+test("case map: an empty line is not stored, and a changed claim keeps every earlier ref after hers (review round 1, minor 4 and 5)", () => {
+  const merged = mergeInput([claim("kept"), claim(""), claim("  "), claim("", "a check on an empty line")], []) as Array<{ value: string }>;
+  assert.deepEqual(
+    merged.map((line) => line.value),
+    ["kept", ""],
+    "an empty line with a [CHECK] is kept",
+  );
+  const ten = Array.from({ length: 10 }, (_, index) => ({ kind: "source", sourceId: "11111111-2222-4333-8444-555555555555", quote: `quote ${index}` }));
+  const changed = mergeInput(claim("changed"), { value: "before", refs: ten, origin: "extracted", check: null }) as { refs: unknown[] };
+  assert.equal(changed.refs.length, 11, "her ref and all ten sources");
+  const data = withAiBehaviors();
+  (data.caseMap!.parts.behaviors.versions[0].content.items[0] as Record<string, unknown>).name = { value: "Spitting", refs: ten, origin: "extracted", check: null };
+  const saved = saveMapItem(data, "behaviors", "items", "beh-1", { name: claim("Spitting at people") }, null, T1);
+  assert.ok(saved && saved !== "item-not-found");
+  assert.ok(readableCaseFileText(saved.data), "eleven refs read back whole");
 });
 
 test("case map: the limits hold on what she sends (D6)", () => {
@@ -385,6 +436,23 @@ test("case map service: hostile or malformed input is refused before anything is
   await assert.rejects(service.saveItem(caseId, "behaviors", "items", "beh-1", json({}), 0), /Refused: not a version/);
   await assert.rejects(service.approve(caseId, "behaviors", "1"), /Refused/);
   await assert.rejects(service.addItem(caseId, "behaviors", "items", "x".repeat(400_001), null), /Refused/);
+  assert.equal(readFileSync(caseFile, "utf8"), before);
+});
+
+test("case map service: a case from a newer app is never written to, through any map call (review round 1, minor 9)", async () => {
+  const { service, caseId, caseFile } = await serviceSetup();
+  writeFileSync(caseFile, JSON.stringify({ ...JSON.parse(readFileSync(caseFile, "utf8")), schemaVersion: 5 }, null, 2));
+  const before = readFileSync(caseFile, "utf8");
+  assert.deepEqual(await service.get(caseId), { outcome: "case-unavailable" });
+  for (const call of [
+    () => service.addItem(caseId, "behaviors", "items", json({}), null),
+    () => service.saveItem(caseId, "behaviors", "items", "beh-1", json({}), null),
+    () => service.removeItem(caseId, "behaviors", "items", "beh-1", null),
+    () => service.setCurrent(caseId, "behaviors", 1),
+    () => service.approve(caseId, "behaviors", 1),
+  ]) {
+    assert.deepEqual(await call(), { outcome: "case-unavailable" });
+  }
   assert.equal(readFileSync(caseFile, "utf8"), before);
 });
 

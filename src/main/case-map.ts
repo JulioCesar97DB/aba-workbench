@@ -50,10 +50,14 @@ const RefSchema = z.looseObject({
   quote: z.string().max(MAP_TEXT_LIMITS.quote).optional(),
 });
 
+/**
+ * A claim as stored. Its refs: up to MAX_MAP_REFS where it came from, plus her own ref
+ * when she changed it (the earlier refs are kept after hers, never cut: review round 1, minor 4).
+ */
 function claimOf<T extends z.ZodType>(value: T) {
   return z.looseObject({
     value,
-    refs: z.array(RefSchema).max(MAX_MAP_REFS),
+    refs: z.array(RefSchema).max(MAX_MAP_REFS + 1),
     origin: WordSchema,
     check: z.string().max(MAP_TEXT_LIMITS.text).nullable(),
   });
@@ -211,6 +215,9 @@ export function contentSchemaFor(part: MapPartId) {
   });
 }
 
+/** Each known part's content schema, built once (a read checks every version of every part). */
+const CONTENT_SCHEMAS = Object.fromEntries(MAP_PARTS.map((part) => [part, contentSchemaFor(part)])) as Record<MapPartId, ReturnType<typeof contentSchemaFor>>;
+
 const PartVersionSchema = z.looseObject({
   number: VersionNumberSchema,
   /** "ai", "edited", "update"; a kind a newer app writes is kept as it is. */
@@ -245,7 +252,7 @@ export const CaseMapSchema = z
   .superRefine((map, ctx) => {
     for (const part of MAP_PARTS) {
       for (const version of map.parts[part]?.versions ?? []) {
-        if (!contentSchemaFor(part).safeParse(version.content).success) ctx.addIssue({ code: "custom", message: `part ${part}, version ${version.number}` });
+        if (!CONTENT_SCHEMAS[part].safeParse(version.content).success) ctx.addIssue({ code: "custom", message: `part ${part}, version ${version.number}` });
       }
     }
   });
@@ -431,7 +438,7 @@ function withoutApproval(part: StoredMapPart): StoredMapPart {
 function writeContent<D extends WithCaseMap>(data: D, part: MapPartId, content: Content, editing: number | null, now: string): { data: D; version: number } {
   const stored = storedPart(data, part);
   const newest = stored.versions.at(-1);
-  const checked = contentSchemaFor(part).safeParse(content);
+  const checked = CONTENT_SCHEMAS[part].safeParse(content);
   if (!checked.success) refuse("the change does not fit the case map's limits.");
   if (editing !== null && newest && newest.number === editing && newest.kind === "edited" && stored.approvedVersion !== newest.number && currentPartVersion(stored)?.number === newest.number) {
     const versions = [...stored.versions.slice(0, -1), { ...newest, content, updatedAt: now }];
@@ -480,16 +487,26 @@ function mergeClaim(input: { value: unknown; check?: unknown }, stored: unknown)
   const check = typeof input.check === "string" && input.check.trim() !== "" ? input.check : null;
   if (isClaim(stored) && same(stored.value, input.value)) return { ...stored, check };
   const earlier = isClaim(stored) ? stored.refs.filter((ref) => !(isPlainObject(ref) && ref.kind === "her")) : [];
-  return { value: input.value, refs: [HER_REF, ...earlier].slice(0, MAX_MAP_REFS), origin: "her", check };
+  // Her ref first, every earlier one after it: a claim's refs are at most MAX_MAP_REFS plus hers, so nothing is cut.
+  return { value: input.value, refs: [HER_REF, ...earlier], origin: "her", check };
 }
 
 /** Keys the interface never sends: the main process keeps them. */
 const KEPT_KEYS = new Set(["origin", "refs", "editedAt"]);
 
+/** A line she added and left empty: not stored (review round 1, minor 5). */
+function isEmptyLine(claim: unknown): boolean {
+  if (!isClaimInput(claim)) return false;
+  const check = typeof claim.check === "string" ? claim.check.trim() : "";
+  return typeof claim.value === "string" && claim.value.trim() === "" && check === "";
+}
+
 /**
  * Her input merged into the stored item. A claim whose value she kept keeps its refs and
- * origin; a changed or new one is hers. A list of claims is matched by value, so a line
- * she did not touch keeps where it came from. An object with an origin of its own (a
+ * origin; a changed or new one is hers. A list of claims is matched by value first, so a
+ * line she did not touch keeps where it came from; a line she edited is then paired with
+ * the unmatched stored line at the same place, so its earlier refs follow it after hers
+ * (review round 1, S4). Empty lines are dropped. An object with an origin of its own (a
  * function, a group) becomes hers when anything in it changed. Keys the interface does
  * not send (a newer app's) are kept.
  */
@@ -499,11 +516,22 @@ export function mergeInput(input: unknown, stored: unknown): unknown {
   if (Array.isArray(input)) {
     const storedList = Array.isArray(stored) ? [...stored] : [];
     if (input.every(isClaimInput)) {
-      const unused = [...storedList];
-      return input.map((claim) => {
-        const index = unused.findIndex((candidate) => isClaim(candidate) && same(candidate.value, (claim as { value: unknown }).value));
-        const match = index === -1 ? undefined : unused.splice(index, 1)[0];
-        return mergeClaim(claim as { value: unknown; check?: unknown }, match);
+      const lines = input.filter((claim) => !isEmptyLine(claim)) as Array<{ value: unknown; check?: unknown }>;
+      const used = new Set<number>();
+      // First the lines she kept, by value.
+      const matches = lines.map((claim) => {
+        const at = storedList.findIndex((candidate, position) => !used.has(position) && isClaim(candidate) && same(candidate.value, claim.value));
+        if (at !== -1) used.add(at);
+        return at;
+      });
+      // Then each edited line takes the unmatched stored line at its own place, if any.
+      return lines.map((claim, index) => {
+        let at = matches[index];
+        if (at === -1 && index < storedList.length && !used.has(index) && isClaim(storedList[index])) {
+          at = index;
+          used.add(index);
+        }
+        return mergeClaim(claim, at === -1 ? undefined : storedList[at]);
       });
     }
     return input.map((entry, index) => mergeInput(entry, storedList[index]));
@@ -627,17 +655,36 @@ function withItems(content: Content, collection: MapCollection, items: StoredIte
   return collection === "groups" ? { ...content, groups: items } : { ...content, items };
 }
 
-/** A behavior belongs to one group at most (her rule groups same-nature behaviors with one function). */
-function checkGroups(content: Content): void {
+/**
+ * A behavior belongs to one group at most (her rule groups same-nature behaviors with one
+ * function). The groups are put in order after a change, never refused (review round 1,
+ * S1: a refused save would lose what she typed): a behavior the group she changed now
+ * names leaves any other group (which is marked changed by her); an id the version has no
+ * behavior for, or one named twice, is dropped.
+ */
+function settleGroups(content: Content, changedGroup: string | null, now: string): Content {
   const behaviors = new Set(content.items.map((item) => item.id));
+  const groups = content.groups ?? [];
+  const idsOf = (group: StoredItem) => ((group.behaviorIds as string[] | undefined) ?? []).filter((id, at, all) => behaviors.has(id) && all.indexOf(id) === at);
+  const claimed = new Set(changedGroup === null ? [] : idsOf(groups.find((group) => group.id === changedGroup) ?? { id: "" }));
   const seen = new Set<string>();
-  for (const group of content.groups ?? []) {
-    for (const id of (group.behaviorIds as string[] | undefined) ?? []) {
-      if (!behaviors.has(id)) refuse("a group names a behavior the map does not have.");
-      if (seen.has(id)) refuse("a behavior can be in one group only.");
-      seen.add(id);
-    }
+  const settled = groups.map((group) => {
+    const before = (group.behaviorIds as string[] | undefined) ?? [];
+    const ids = idsOf(group).filter((id) => (group.id === changedGroup || !claimed.has(id)) && !seen.has(id));
+    for (const id of ids) seen.add(id);
+    if (same(ids, before)) return group;
+    return { ...group, behaviorIds: ids, ...(group.id === changedGroup ? {} : { editedAt: now }) };
+  });
+  return { ...content, groups: settled };
+}
+
+/** The newest version of a part that holds an item (or group), and that item: a kept edit of an item the version shown no longer has. */
+function latestStoredItem(stored: StoredMapPart, collection: MapCollection, itemId: string): StoredItem | undefined {
+  for (const version of [...stored.versions].sort((a, b) => b.number - a.number)) {
+    const found = itemsOf(version.content, collection).find((item) => item.id === itemId);
+    if (found) return found;
   }
+  return undefined;
 }
 
 /** Her change to an item (or a group) of a part, as she types: the item as saved, in her editing pass. Null when nothing changed. */
@@ -654,14 +701,24 @@ export function saveMapItem<D extends WithCaseMap>(
   const stored = storedPart(data, part);
   const content = currentContent(stored);
   const items = itemsOf(content, collection);
-  const index = items.findIndex((item) => item.id === itemId);
-  if (index === -1) return "item-not-found";
+  let index = items.findIndex((item) => item.id === itemId);
+  if (index === -1) {
+    // An edit of an item the version shown does not hold (she showed an older version, or
+    // "Try again" of an edit kept from before): the item comes back with it, from the newest
+    // version that had it, so what she typed is never lost (review round 1, minor 2).
+    const earlier = latestStoredItem(stored, collection, itemId);
+    if (!earlier) return "item-not-found";
+    const limit = collection === "groups" ? MAX_MAP_GROUPS : MAP_PART_LIMITS[part];
+    if (items.length >= limit) refuse("this part is full.");
+    items.push(earlier);
+    index = items.length - 1;
+  }
   const before = items[index];
   const merged = mergeInput(input, before) as StoredItem;
-  if (same(merged, before)) return null;
+  if (same(merged, before) && items.length === itemsOf(content, collection).length) return null;
   items[index] = { ...merged, id: before.id, editedAt: now };
-  const next = withItems(content, collection, items);
-  if (part === "behaviors") checkGroups(next);
+  let next = withItems(content, collection, items);
+  if (part === "behaviors") next = settleGroups(next, collection === "groups" ? before.id : null, now);
   return writeContent(data, part, next, editing, now);
 }
 
@@ -680,8 +737,8 @@ export function addMapItem<D extends WithCaseMap>(data: D, part: MapPartId, coll
   const item = { ...(withDefaults(blank, merged) as Record<string, unknown>), id, editedAt: now } as StoredItem;
   if (collection === "groups") item.origin = "her";
   if (part === "behaviors" && collection === "items") (item.function as Record<string, unknown>).origin = "her";
-  const next = withItems(content, collection, [...items, item]);
-  if (part === "behaviors") checkGroups(next);
+  let next = withItems(content, collection, [...items, item]);
+  if (part === "behaviors") next = settleGroups(next, collection === "groups" ? id : null, now);
   const written = writeContent(data, part, next, editing, now);
   return { ...written, itemId: id };
 }

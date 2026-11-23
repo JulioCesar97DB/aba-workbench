@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GetCaseMapResult, MapSaveResult } from "../shared/api.ts";
-import { isMapPartId, type MapCollection, type MapPartId } from "../shared/case-map.ts";
+import { isMapPartId, MAP_ITEM_ID, type MapCollection, type MapPartId } from "../shared/case-map.ts";
 import type { CaseData } from "./case-file.ts";
 import { addMapItem, approveMapPart, caseMapSummary, caseMapView, removeMapItem, saveMapItem, setMapPartVersion } from "./case-map.ts";
 import type { CaseLibrary } from "./cases.ts";
@@ -17,7 +17,7 @@ import type { CaseLibrary } from "./cases.ts";
 export const MAX_MAP_ITEM_JSON = 400_000;
 
 const CollectionSchema = z.enum(["items", "groups"]);
-const ItemIdSchema = z.string().regex(/^(client|[a-z]{1,8}-[1-9][0-9]{0,5})$/);
+const ItemIdSchema = z.string().regex(MAP_ITEM_ID);
 const EditingSchema = z.int().min(1).max(1_000_000).nullable();
 const VersionSchema = z.int().min(1).max(1_000_000);
 const ApproveSchema = VersionSchema.nullable();
