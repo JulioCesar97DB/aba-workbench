@@ -134,10 +134,13 @@ export async function* runMapDraft(options: MapDraftOptions): AsyncGenerator<Run
     if (options.signal.aborted) return;
     let written: MapPartId[] = [];
     let kept: MapPartId[] = [];
+    let problemsLeft = outcome.checks.problems.length;
     const saved = await options.cases.changeCase(options.caseId, (data, _folder, now) => {
       const applied = applyMapAnswer(data, parts, { ...record, at: now }, before, now);
       written = applied.written;
       kept = applied.kept;
+      // What the save itself left out (links, items over the limits) counts too (review round 2, M4).
+      problemsLeft = applied.problems.length;
       return { save: applied.data, value: null };
     });
     if (saved.kind === "unavailable") {
@@ -145,7 +148,7 @@ export async function* runMapDraft(options: MapDraftOptions): AsyncGenerator<Run
       return;
     }
     const result = saved.kind === "failed" ? { outcome: saved.outcome } : { outcome: "saved" as const, map: caseMapView(saved.data), summary: caseMapSummary(saved.data), version: null, itemId: null };
-    yield { type: "map-saved", step: kind, result, written, kept, problems: outcome.checks.problems.length };
+    yield { type: "map-saved", step: kind, result, written, kept, problems: problemsLeft };
     if (saved.kind === "failed") return;
   }
 }
@@ -277,7 +280,7 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
         yield { type: "error", code: "unreadable_answer", message: "The AI's answer could not be read, even after asking it again, so nothing was saved.", status: null };
         return null;
       }
-      const answer = first ? mergeRepair(kind, first.answer, parsed.answer, first.checks.failing) : parsed.answer;
+      const answer = first ? mergeRepair(kind, first.answer, parsed.answer, first.checks.failing, first.checks.whole) : parsed.answer;
       return outcome(answer, checkMapAnswer(kind, answer, context), true);
     }
     if (parsed.ok) {
@@ -316,6 +319,7 @@ interface ConvertContext {
 const UNFOUND_CHECK = "A quote of this value was not found word for word in what it cites: check it against the source.";
 const NUMBER_CHECK = "This number is not written in the quote it cites: check it against the source.";
 const NO_REF_CHECK = "No quote supports this value: check it against the sources.";
+const PDF_NUMBER_CHECK = "A number of this value is only in a PDF's quote, which the app cannot check yet: check it against the PDF.";
 const NOT_HERS_CHECK = "Marked as hers, but no quote of her section or her notes was found: check it.";
 
 /** The answer's parts as the map stores them, with each item's key (src/main/case-map.ts turns keys into ids). */
@@ -344,6 +348,7 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
     if (options.proposedUnlessSourced && !value.refs.some((item) => item.kind === "source" && checkOf(item) === "found")) origin = "proposed";
     if (!check && value.refs.some((item) => checkOf(item) === "not-found")) check = UNFOUND_CHECK;
     if (!check && checks.numbers.has(value)) check = NUMBER_CHECK;
+    if (!check && checks.pdfNumbers.has(value)) check = PDF_NUMBER_CHECK;
     if (!check && (origin === "extracted" || origin === "her") && value.refs.length === 0) check = NO_REF_CHECK;
     return { value: value.value, refs: value.refs.map(ref), origin, check };
   };
@@ -436,7 +441,7 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
             date: claim(observation.date),
             setting: claim(observation.setting),
             length: claim(observation.length),
-            minutes: minutes === null ? null : { value: String(minutes), refs: [{ kind: "app" }], origin: "extracted", check: null },
+            minutes: minutes === null ? null : { value: String(minutes), refs: [{ kind: "app" }], origin: "app", check: null },
             value: claim(observation.value),
           };
         }),

@@ -274,7 +274,23 @@ export function parseMapAnswer(kind: MapRequestKind, text: string): { ok: true; 
   }
   const parsed = (kind === "map-facts" ? FactsAnswerSchema : BehaviorsAnswerSchema).safeParse(value);
   if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 20).map((issue) => `${issue.path.join(".") || "(answer)"}: ${issue.message}`) };
-  return { ok: true, answer: parsed.data, raw: value as Record<string, unknown> };
+  // An empty value is left out, but its note is not lost: it becomes an open item (review round 2, M3).
+  const answer = parsed.data;
+  for (const note of notesOfEmptyValues(value)) {
+    if (answer.openItems.length >= MAP_PART_LIMITS.openItems) break;
+    if (!answer.openItems.some((item) => item.text === note)) answer.openItems.push({ kind: "check", text: note.slice(0, T.text), homeSection: null });
+  }
+  return { ok: true, answer, raw: value as Record<string, unknown> };
+}
+
+/** The checks written on empty values ("" with a check), with where each was: "client.severityLevel: the evaluation gives no level". */
+function notesOfEmptyValues(value: unknown, where = ""): string[] {
+  if (Array.isArray(value)) return value.flatMap((entry, index) => notesOfEmptyValues(entry, `${where}[${index}]`));
+  if (!isPlain(value)) return [];
+  if (typeof value.value === "string" && Array.isArray(value.refs)) {
+    return value.value.trim() === "" && typeof value.check === "string" && value.check.trim() !== "" ? [`${where}: ${value.check.trim()}`] : [];
+  }
+  return Object.entries(value).flatMap(([key, entry]) => notesOfEmptyValues(entry, where ? `${where}.${key}` : key));
 }
 
 /* The code checks (D4) */
@@ -324,6 +340,10 @@ export function normalizeForQuote(text: string): string {
 export const MIN_QUOTE_WORDS = 3;
 
 const DATE = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/gu;
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const WORD_DATE = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b/giu;
+/** A year as four digits: "26" is 2026 (review round 2, M6). */
+const fullYear = (year: string) => (year.length <= 2 ? String(2000 + Number(year)) : plainNumber(year));
 const plainNumber = (raw: string) => {
   const [whole, fraction] = raw.replace(",", ".").split(".");
   const trimmed = whole.replace(/^0+(?=\d)/u, "");
@@ -338,12 +358,25 @@ const plainNumber = (raw: string) => {
 export function numbersIn(text: string): string[] {
   const withoutMarkers = text.replace(/\[(?:MISSING|CHECK):[^\]]*\]/gu, " ");
   const out: string[] = [];
-  const rest = withoutMarkers.replace(DATE, (_match, month: string, day: string, year: string | undefined) => {
-    out.push(`d:${plainNumber(month)}/${plainNumber(day)}${year ? `/${plainNumber(year)}` : ""}`);
-    return " ";
-  });
+  const rest = withoutMarkers
+    .replace(DATE, (_match, month: string, day: string, year: string | undefined) => {
+      out.push(`d:${plainNumber(month)}/${plainNumber(day)}${year ? `/${fullYear(year)}` : ""}`);
+      return " ";
+    })
+    .replace(WORD_DATE, (_match, month: string, day: string, year: string | undefined) => {
+      out.push(`d:${MONTHS.indexOf(month.slice(0, 3).toLowerCase()) + 1}/${plainNumber(day)}${year ? `/${fullYear(year)}` : ""}`);
+      return " ";
+    });
   for (const match of rest.matchAll(/\d+(?:[.,]\d+)?/gu)) out.push(plainNumber(match[0]));
   return out;
+}
+
+/** Whether a number of a value is the same as one of a quote: equal, or the same date where one of the two leaves the year out. */
+function sameNumber(wanted: string, quoted: string): boolean {
+  if (wanted === quoted) return true;
+  if (!wanted.startsWith("d:") || !quoted.startsWith("d:")) return false;
+  const [a, b] = [wanted.slice(2).split("/"), quoted.slice(2).split("/")];
+  return a[0] === b[0] && a[1] === b[1] && (a.length === 2 || b.length === 2);
 }
 
 const THRESHOLD = /\d+(?:\.\d+)?\s*(?:-\s*)?(?:seconds?|secs?|s\b|feet|foot|ft\b|minutes?|mins?\b|meters?|m\b)/iu;
@@ -355,6 +388,8 @@ export interface CheckResult {
   quotes: Map<AnswerRef, QuoteCheck>;
   /** Claims with a number in none of their quotes. */
   numbers: Set<AnswerClaim>;
+  /** Claims with a number found only in a PDF's quote, which cannot be checked yet: not a problem, but marked [CHECK] (review round 2, S1). */
+  pdfNumbers: Set<AnswerClaim>;
   /** The items with a problem, by list ("client", "caregivers", "behaviors", "report", …) and index: what a repair asks about. */
   failing: Map<string, Set<number>>;
   /** A problem that belongs to no single item (a key used twice): the repair asks about the whole answer. */
@@ -374,6 +409,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   const problems: string[] = [];
   const quotes = new Map<AnswerRef, QuoteCheck>();
   const numbers = new Set<AnswerClaim>();
+  const pdfNumbers = new Set<AnswerClaim>();
   const failing = new Map<string, Set<number>>();
   let whole = false;
   const sources = new Map(context.sources.map((source) => [source.id, source]));
@@ -430,11 +466,16 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     if (!claim) return;
     claim.refs.forEach((ref, index) => checkRef(ref, `${where}.refs[${index}]`));
     if ((claim.origin === "extracted" || claim.origin === "her") && claim.refs.length === 0) problem(where, "a value a source or her text states needs a ref with its quote.");
-    // A number the text cannot show: a PDF's (D32).
-    if (claim.refs.some((ref) => quotes.get(ref) === "not-checked")) return;
-    const quoted = new Set(claim.refs.filter((ref) => quotes.get(ref) === "found").flatMap((ref) => numbersIn(ref.quote)));
-    const allowed = (number: string) => quoted.has(number) || (claim.origin === "ai-drafted" && thresholdNumbers.has(number));
-    const missing = numbersIn(claim.value).filter((number) => !allowed(number));
+    // Only PDFs cited: their text cannot be read yet, so nothing can be checked (D32).
+    if (claim.refs.length > 0 && claim.refs.every((ref) => quotes.get(ref) === "not-checked")) return;
+    const quotedIn = (state: QuoteCheck) => claim.refs.filter((ref) => quotes.get(ref) === state).flatMap((ref) => numbersIn(ref.quote));
+    const found = quotedIn("found");
+    const inPdf = quotedIn("not-checked");
+    const allowed = (number: string) => found.some((quoted) => sameNumber(number, quoted)) || (claim.origin === "ai-drafted" && [...thresholdNumbers].some((quoted) => sameNumber(number, quoted)));
+    const unchecked = numbersIn(claim.value).filter((number) => !allowed(number));
+    // A number only in a PDF's quote next to a text quote passes, marked [CHECK] on the value (review round 2, S1).
+    const missing = unchecked.filter((number) => !inPdf.some((quoted) => sameNumber(number, quoted)));
+    if (unchecked.length > 0 && missing.length === 0) pdfNumbers.add(claim);
     if (missing.length === 0) return;
     numbers.add(claim);
     if (options.threshold && THRESHOLD.test(claim.value) && thresholdNumbers.size === 0) {
@@ -546,7 +587,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     uniqueKeys(found.groups, "groups (keys)");
     uniqueKeys(found.risks, "risks (keys)");
   }
-  return { problems: [...new Set(problems)], quotes, numbers, failing, whole };
+  return { problems: [...new Set(problems)], quotes, numbers, pdfNumbers, failing, whole };
 }
 
 /* The repair (review round 1, B1): only the items that failed are asked about, and the answer is merged back by key */
@@ -579,12 +620,45 @@ function emptyClient(): Record<string, unknown> {
   return { ...out, medications: [], otherServices: [], languages: [] };
 }
 
-/** Items by key: the repair's item where it gives one, the first answer's otherwise, then the repair's new keys. */
-function mergeKeyed<T extends { key: string }>(first: readonly T[], repaired: readonly T[]): T[] {
+const isPlain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const emptyValue = (value: unknown) => value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+
+/**
+ * One item of the first answer with the repair's version over it, field by field (review
+ * round 2, S2): a field the repair gives replaces the first answer's; a field the repair
+ * leaves empty keeps the first answer's value, which the checks then flag again as before.
+ * A claim (an object with a value) is one field; other objects (a baseline, a function) are
+ * merged field by field too.
+ */
+export function mergeFields<T>(first: T, repaired: T): T {
+  if (!isPlain(first) || !isPlain(repaired) || "value" in repaired) return emptyValue(repaired) ? first : repaired;
+  const out: Record<string, unknown> = { ...repaired };
+  for (const [key, value] of Object.entries(first)) {
+    const next = repaired[key];
+    if (emptyValue(next)) out[key] = value;
+    else if (isPlain(value) && isPlain(next) && !("value" in next)) out[key] = mergeFields(value, next);
+  }
+  return out as T;
+}
+
+/**
+ * Items by key. After a repair about some items: the first answer's list, each item merged
+ * field by field with the repair's item of the same key, then the repair's new keys. After a
+ * whole-answer repair: the repair's list first, merged the same way, then the first answer's
+ * keys it lacks, once each, so a key the first answer used twice is not doubled (review round 2, M2).
+ */
+function mergeKeyed<T extends { key: string }>(first: readonly T[], repaired: readonly T[], whole: boolean): T[] {
+  const firstByKey = new Map<string, T>();
+  for (const item of first) if (!firstByKey.has(item.key)) firstByKey.set(item.key, item);
+  if (whole) {
+    const out = repaired.map((item) => (firstByKey.has(item.key) ? mergeFields(firstByKey.get(item.key)!, item) : item));
+    const present = new Set(repaired.map((item) => item.key));
+    for (const [key, item] of firstByKey) if (!present.has(key)) out.push(item);
+    return out;
+  }
   const fromRepair = new Map(repaired.map((item) => [item.key, item]));
-  const out = first.map((item) => fromRepair.get(item.key) ?? item);
-  const seen = new Set(first.map((item) => item.key));
-  for (const item of repaired) if (!seen.has(item.key)) out.push(item);
+  const out = first.map((item) => (fromRepair.has(item.key) ? mergeFields(item, fromRepair.get(item.key)!) : item));
+  for (const item of repaired) if (!firstByKey.has(item.key)) out.push(item);
   return out;
 }
 
@@ -596,19 +670,19 @@ const sameText = (a: string, b: string) => normalizeForQuote(a) === normalizeFor
  * first answer is lost. Unkeyed lists: the report's failed items are replaced by the
  * repair's report items when it gives any; open items are joined without repeats.
  */
-export function mergeRepair(kind: MapRequestKind, first: MapAnswer, repaired: MapAnswer, failing: CheckResult["failing"]): MapAnswer {
+export function mergeRepair(kind: MapRequestKind, first: MapAnswer, repaired: MapAnswer, failing: CheckResult["failing"], whole = false): MapAnswer {
   const joinOpen = <T extends { text: string }>(a: readonly T[], b: readonly T[]) => [...a, ...b.filter((item) => !a.some((other) => sameText(other.text, item.text)))];
   if (kind === "map-facts") {
     const a = first as FactsAnswer;
     const b = repaired as FactsAnswer;
     const failedReport = failing.get("report") ?? new Set<number>();
     return {
-      client: b.client ?? a.client,
-      caregivers: mergeKeyed(a.caregivers, b.caregivers),
-      settings: mergeKeyed(a.settings, b.settings),
-      deficits: mergeKeyed(a.deficits, b.deficits),
-      strengths: mergeKeyed(a.strengths, b.strengths),
-      facts: mergeKeyed(a.facts, b.facts),
+      client: a.client && b.client ? mergeFields(a.client, b.client) : (b.client ?? a.client),
+      caregivers: mergeKeyed(a.caregivers, b.caregivers, whole),
+      settings: mergeKeyed(a.settings, b.settings, whole),
+      deficits: mergeKeyed(a.deficits, b.deficits, whole),
+      strengths: mergeKeyed(a.strengths, b.strengths, whole),
+      facts: mergeKeyed(a.facts, b.facts, whole),
       openItems: joinOpen(a.openItems, b.openItems),
       report: b.report.length > 0 ? [...a.report.filter((_item, index) => !failedReport.has(index)), ...b.report] : a.report,
     };
@@ -616,9 +690,9 @@ export function mergeRepair(kind: MapRequestKind, first: MapAnswer, repaired: Ma
   const a = first as BehaviorsAnswer;
   const b = repaired as BehaviorsAnswer;
   return {
-    behaviors: mergeKeyed(a.behaviors, b.behaviors),
-    groups: mergeKeyed(a.groups, b.groups),
-    risks: mergeKeyed(a.risks, b.risks),
+    behaviors: mergeKeyed(a.behaviors, b.behaviors, whole),
+    groups: mergeKeyed(a.groups, b.groups, whole),
+    risks: mergeKeyed(a.risks, b.risks, whole),
     openItems: joinOpen(a.openItems, b.openItems),
   };
 }

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, beforeEach, test } from "node:test";
-import { checkMapAnswer, mapAnswerSchema, normalizeForQuote, numbersIn, parseMapAnswer, type BehaviorsAnswer, type CheckContext, type CheckResult } from "../src/lib/case-map-extraction.ts";
+import { checkMapAnswer, mapAnswerSchema, mergeRepair, normalizeForQuote, numbersIn, parseMapAnswer, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer } from "../src/lib/case-map-extraction.ts";
 import { mockProvider } from "../src/lib/providers/mock.ts";
 import { CHATGPT_MAP_TASK_PREAMBLE, CHATGPT_TASK_PREAMBLE, responsesRequest } from "../src/lib/providers/openai.ts";
 import { ProviderError, type GenerateEvent, type GenerateOptions, type Provider } from "../src/lib/providers/types.ts";
@@ -257,7 +257,7 @@ test("a draft: two requests on the sections' cached prefix, then each request's 
   // The observation's length as the notes write it, and the app's minutes from it (review round 1, S7).
   const observation = spitting.baseline.observations[0];
   assert.equal(observation.length.value, "2 hours");
-  assert.deepEqual(observation.minutes, { value: "120", refs: [{ kind: "app" }], origin: "extracted", check: null });
+  assert.deepEqual(observation.minutes, { value: "120", refs: [{ kind: "app" }], origin: "app", check: null }, "the app's own, not a source's (review round 2, M5)");
   assert.equal(observation.value.refs[0].checked, "found", "a quote without the source's Markdown bold is found");
   assert.deepEqual(behaviorsPart.versions[0].content.groups[0].behaviorIds, ["beh-1", "beh-2"]);
   assert.deepEqual(map.parts.risks.versions[0].content.items[0].behaviorIds, ["beh-1"]);
@@ -394,8 +394,9 @@ test("B2: applyMapAnswer never throws on the AI's content: a link to an unknown 
     return { save: applied.data, value: applied };
   });
   assert.ok(outcome.kind === "saved");
-  const value = outcome.value as unknown as { written: string[]; data: { caseMap: { parts: Record<string, { versions: Array<{ content: { items: Array<{ settingIds: string[] }> } }> }>; extractions: Array<{ problems: string[] }> } } };
+  const value = outcome.value as unknown as { written: string[]; problems: string[]; data: { caseMap: { parts: Record<string, { versions: Array<{ content: { items: Array<{ settingIds: string[] }> } }> }>; extractions: Array<{ problems: string[] }> } } };
   assert.deepEqual(value.written, ["behaviors"]);
+  assert.ok(value.problems.some((problem) => /named settings the map does not have/.test(problem)), "what the save left out is returned, for the screen's count (review round 2, M4)");
   assert.deepEqual(value.data.caseMap.parts.behaviors.versions[0].content.items[0].settingIds, []);
   assert.ok(value.data.caseMap.extractions[0].problems.some((problem) => /named settings the map does not have/.test(problem)));
 });
@@ -506,7 +507,7 @@ test("M5: only a refusal that names the schema or the format switches the route 
 test("M6: a ref the checks never reached is stored as not found, never as a PDF's 'not checked'", () => {
   const parsed = parseMapAnswer("map-facts", JSON.stringify(factsAnswer({ obs: "o", interview: "i", pdf: "p" })));
   assert.ok(parsed.ok);
-  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), failing: new Map(), whole: false };
+  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failing: new Map(), whole: false };
   const parts = toAnswerParts("map-facts", parsed.answer, empty, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
   const role = (parts.caregivers!.items[0] as Record<string, { refs: Array<{ checked: string }> }>).role;
   assert.equal(role.refs[0].checked, "not-found");
@@ -620,4 +621,104 @@ test("a claim whose value is one of a fixed list carries that list in the schema
   assert.deepEqual(valueOf(settings.evidence), ["", "observed", "reported"]);
   assert.deepEqual(valueOf(facts.properties.strengths.items.properties.kind), ["", "strength", "interest", "preference", "reinforcer"]);
   assert.deepEqual(valueOf(facts.properties.client.properties.otherServices.items.properties.paid), ["", "paid", "not-paid"]);
+});
+
+/* Review round 2 */
+
+const withPdf = (extra: Partial<CheckContext> = {}) => checkContext({ sources: [...checkContext().sources, { id: "p", title: "Vineland-3 report", text: null }], ...extra });
+
+test("R2-S1: a PDF ref next to a found text quote does not turn off the number and threshold checks", () => {
+  const answer = behaviorsAnswer({ obs: "o", interview: "i" }, []);
+  const [first] = answer.behaviors as Array<Record<string, unknown>>;
+  // The review's probe: a count in neither quote, one quote found in the notes, one a PDF's.
+  first.antecedents = [claim("7 of 8 episodes followed a demand", [ref("o", "she set the reading worksheet on the table"), ref("p", "demands at home")])];
+  // A threshold nobody gave, cited with a text quote and a PDF.
+  first.offset = claim("The child has not spat for 10 seconds.", [ref("o", "spat toward his mother's forearm"), ref("p", "spitting episodes")], "ai-drafted");
+  // A score only in the PDF's quote, next to a found text quote: passes, marked [CHECK].
+  first.consequences = [claim("Communication standard score 68", [ref("o", "she stopped the worksheet to clean up"), ref("p", "Communication 68")])];
+  const parsed = parsedBehaviors(answer);
+  const result = checkMapAnswer("map-behaviors", parsed, withPdf());
+  assert.ok(result.problems.some((problem) => /antecedents\[0\]: the number 7, 8 in/.test(problem)), result.problems.join(" | "));
+  assert.ok(result.problems.some((problem) => /offset: .*gives a threshold that no standing instruction gives/.test(problem)));
+  assert.ok(!result.problems.some((problem) => /consequences\[0\]/.test(problem)));
+  const score = parsed.behaviors[0].consequences[0];
+  assert.ok(result.pdfNumbers.has(score));
+  const parts = toAnswerParts("map-behaviors", parsed, result, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
+  const stored = (parts.behaviors!.items[0] as unknown as { consequences: Array<{ check: string | null }> }).consequences[0];
+  assert.match(stored.check ?? "", /only in a PDF's quote/);
+  // Only PDFs cited: nothing can be checked, as before (D32).
+  first.antecedents = [claim("7 of 8 episodes followed a demand", [ref("p", "demands at home")])];
+  assert.ok(!checkMapAnswer("map-behaviors", parsedBehaviors(answer), withPdf()).problems.some((problem) => /antecedents/.test(problem)));
+});
+
+test("R2-S2: a repair that leaves a field empty keeps the first answer's value; the client is merged field by field too", () => {
+  const found = { obs: "o", interview: "i" };
+  const first = behaviorsAnswer(found, []);
+  (first.behaviors as Array<Record<string, unknown>>)[0].examples = [claim("He spat at the wall", [ref("o", "words that are nowhere")])];
+  // The review's probe: the repair gives a good example and an empty definition.
+  const repaired = behaviorsAnswer(found, [], { behaviors: [{ ...(behaviorsAnswer(found, []).behaviors as Array<Record<string, unknown>>)[0], examples: [claim("The child spat toward his mother's forearm", [ref("o", "spat toward his mother's forearm twice")])], definition: none(), onset: none() }], groups: [], risks: [] });
+  const a = parsedBehaviors(first);
+  const b = parsedBehaviors(repaired);
+  const merged = mergeRepair("map-behaviors", a, b, new Map([["behaviors", new Set([0])]])) as BehaviorsAnswer;
+  assert.equal(merged.behaviors.length, 2);
+  assert.match(merged.behaviors[0].definition?.value ?? "", /forcefully expels saliva/, "the first answer's definition is kept");
+  assert.equal(merged.behaviors[0].examples[0].value, "The child spat toward his mother's forearm", "the repair's example replaces the failed one");
+  assert.equal(merged.groups.length, 1, "the groups the repair left out are kept");
+  // The client: the first answer's age stays when the repair gives only the severity level.
+  const ids = { obs: "o", interview: "i", pdf: "p" };
+  const withAge = factsAnswer(ids, { client: { ...absentClient(), age: claim("7 years", [ref("i", "Mother interview, invented")]) } });
+  const onlySeverity = factsAnswer(ids, { client: { ...absentClient(), severityLevel: claim("Level 2", [ref("i", "Mother interview, invented")]) }, caregivers: [], settings: [], deficits: [], openItems: [] });
+  const pa = parseMapAnswer("map-facts", JSON.stringify(withAge));
+  const pb = parseMapAnswer("map-facts", JSON.stringify(onlySeverity));
+  assert.ok(pa.ok && pb.ok);
+  const client = (mergeRepair("map-facts", pa.answer, pb.answer, new Map([["client", new Set([0])]])) as FactsAnswer).client;
+  assert.equal(client?.age?.value, "7 years");
+  assert.equal(client?.severityLevel?.value, "Level 2");
+});
+
+test("R2-M2: after a whole-answer repair, a key the first answer used twice is not doubled", () => {
+  const found = { obs: "o", interview: "i" };
+  const base = (behaviorsAnswer(found, []).behaviors as Array<Record<string, unknown>>)[0];
+  const named = (key: string, name: string) => ({ ...base, key, name: claim(name, [ref("o", "spat toward his mother's forearm")]) });
+  const first = parsedBehaviors(behaviorsAnswer(found, [], { behaviors: [named("new-1", "Hitting"), named("new-1", "Hitting"), named("new-2", "Kicking")], groups: [], risks: [] }));
+  const repaired = parsedBehaviors(behaviorsAnswer(found, [], { behaviors: [named("new-1", "Hitting"), named("new-3", "Hitting again"), named("new-2", "Kicking")], groups: [], risks: [] }));
+  const merged = mergeRepair("map-behaviors", first, repaired, new Map(), true) as BehaviorsAnswer;
+  assert.deepEqual(
+    merged.behaviors.map((item) => [item.key, item.name?.value]),
+    [
+      ["new-1", "Hitting"],
+      ["new-3", "Hitting again"],
+      ["new-2", "Kicking"],
+    ],
+  );
+});
+
+test("R2-M3: the [CHECK] written on an empty value becomes an open item", () => {
+  const facts = factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { client: { ...absentClient(), severityLevel: claim("", [], "extracted", "the evaluation gives no severity level") } });
+  const parsed = parseMapAnswer("map-facts", JSON.stringify(facts));
+  assert.ok(parsed.ok);
+  const answer = parsed.answer as FactsAnswer;
+  assert.equal(answer.client, null, "the empty value itself is still left out");
+  assert.ok(answer.openItems.some((item) => item.kind === "check" && item.text === "client.severityLevel: the evaluation gives no severity level"));
+});
+
+test("R2-M1: a length written twice is counted once, a range or a disagreement gives nothing", () => {
+  assert.equal(minutesOfLength("a 2-hour observation (120 minutes)"), 120);
+  assert.equal(minutesOfLength("2 hours (90 minutes)"), null);
+  assert.equal(minutesOfLength("1-2 hours"), null);
+  assert.equal(minutesOfLength("30 to 45 minutes"), null);
+  assert.equal(minutesOfLength("1 hour and 30 minutes"), 90);
+  assert.equal(minutesOfLength("1.5 hrs"), 90);
+});
+
+test("R2-M6: a date written another way is the same date: two-digit years, month names, a date without its year", () => {
+  assert.deepEqual(numbersIn("5/14/26"), ["d:5/14/2026"]);
+  assert.deepEqual(numbersIn("May 14, 2026"), ["d:5/14/2026"]);
+  assert.deepEqual(numbersIn("on Nov. 4"), ["d:11/4"]);
+  const answer = behaviorsAnswer({ obs: "o", interview: "i" }, []);
+  const observation = (answer.behaviors as Array<{ baseline: { observations: Array<Record<string, unknown>> } }>)[0].baseline.observations[0];
+  observation.date = claim("11/04/26", [ref("o", "11/04/2026, home, 2 hours")]);
+  observation.value = claim("3 on November 4, 2026", [ref("o", "Spitting counts: 3 on 11/04")]);
+  const result = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext());
+  assert.deepEqual(result.problems.filter((problem) => /observations/.test(problem)), []);
 });

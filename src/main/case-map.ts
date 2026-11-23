@@ -849,7 +849,7 @@ export function applyMapAnswer<D extends WithCaseMap>(
   record: MapExtractionRecord,
   partsBeforeRun: ReadonlySet<MapPartId>,
   now: string,
-): { data: D; written: MapPartId[]; kept: MapPartId[] } {
+): { data: D; written: MapPartId[]; kept: MapPartId[]; problems: string[] } {
   let next = data;
   const written: MapPartId[] = [];
   const kept: MapPartId[] = [];
@@ -936,7 +936,7 @@ export function applyMapAnswer<D extends WithCaseMap>(
     { ...record, problems: capped(problems), ...(record.problemsBeforeRepair ? { problemsBeforeRepair: capped(record.problemsBeforeRepair) } : {}) },
   ].slice(-MAX_EXTRACTIONS);
   next = { ...next, caseMap: { ...map, extractions } };
-  return { data: next, written, kept };
+  return { data: next, written, kept, problems };
 }
 
 /** The ids of the settings the map holds now. */

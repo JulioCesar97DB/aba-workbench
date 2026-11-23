@@ -125,10 +125,11 @@ export const INTENSITIES = ["1", "2", "3"] as const;
  * - "extracted": a source states it;
  * - "ai-drafted": written by the AI from cited facts (a definition), for her to approve;
  * - "hypothesis": a function or a group, with its evidence;
- * - "proposed": a clinical choice that is hers to make (a barrier tag).
+ * - "proposed": a clinical choice that is hers to make (a barrier tag);
+ * - "app": computed by the app from a quoted value (an observation's minutes from its length; review round 2, M5).
  * A kind a newer app writes is kept as it is and shown as "her" would not be: as unknown.
  */
-export const ORIGINS = ["her", "extracted", "ai-drafted", "hypothesis", "proposed"] as const;
+export const ORIGINS = ["her", "extracted", "ai-drafted", "hypothesis", "proposed", "app"] as const;
 export type Origin = (typeof ORIGINS)[number];
 
 /**
@@ -427,10 +428,17 @@ export function minutesOfLength(text: string): number | null {
     if (minutes <= 0) minutes += 12 * 60;
     return fits(minutes);
   }
-  const hours = /(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b/u.exec(plain);
-  const mins = /(\d+)\s*-?\s*(?:minutes?|mins?)\b/u.exec(plain);
-  if (hours || mins) return fits((hours ? Number(hours[1]) * 60 : 0) + (mins ? Number(mins[1]) : 0));
-  return null;
+  // A range of hours or minutes ("1-2 hours", "30 to 45 minutes") is no length: no guess (review round 2, M1).
+  if (/\d+(?:\.\d+)?\s*(?:-|to|or)\s*\d+(?:\.\d+)?\s*-?\s*(?:hours?|hrs?|h|minutes?|mins?)\b/u.test(plain)) return null;
+  // Hours, with the minutes that directly follow them ("1 hour 30 minutes", "1 hour and 30 minutes").
+  const hours = [...plain.matchAll(/(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b(?:\s*(?:and\s+)?(\d+)\s*-?\s*(?:minutes?|mins?)\b)?/gu)];
+  const lengths = hours.map((match) => Number(match[1]) * 60 + (match[2] ? Number(match[2]) : 0));
+  // Minutes written on their own ("45 minutes", or "(120 minutes)" after "2 hours"): the same length said again, or another.
+  const alone = plain.replace(/(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b(?:\s*(?:and\s+)?(\d+)\s*-?\s*(?:minutes?|mins?)\b)?/gu, " ");
+  for (const match of alone.matchAll(/(\d+)\s*-?\s*(?:minutes?|mins?)\b/gu)) lengths.push(Number(match[1]));
+  if (lengths.length === 0) return null;
+  // Every mention must agree: a length written twice is counted once, two different ones give nothing.
+  return lengths.every((length) => length === lengths[0]) ? fits(lengths[0]) : null;
 }
 
 /* What the interface sends: values and [CHECK] texts only. Where each value came from is the main process's to record. */
