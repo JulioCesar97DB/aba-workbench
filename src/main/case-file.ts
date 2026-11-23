@@ -182,6 +182,9 @@ const StoredVersionSchema = z.looseObject({
       ownTextCompared: VersionNumberSchema.nullable().optional(),
       /** The check's tokens, as for a version (absent: no request was answered, or written before they were kept). */
       usage: UsageRecordSchema.optional(),
+      /** What the earlier checks of this version cost and used, before "Check again" replaced them (kept in the totals). */
+      earlierCostUsd: z.number().min(0).optional(),
+      earlierUsage: UsageRecordSchema.optional(),
     })
     .optional(),
 });
@@ -214,6 +217,7 @@ const ArchivedNotesSchema = z.looseObject({
 export type StoredVersion = z.infer<typeof StoredVersionSchema>;
 export type StoredSection = z.infer<typeof StoredSectionSchema>;
 export type GenerationRecord = z.infer<typeof GenerationRecordSchema>;
+export type StoredUsage = z.infer<typeof UsageRecordSchema>;
 
 const CaseFileSchema = z.looseObject({
   schemaVersion: z.literal(CASE_SCHEMA_VERSION),

@@ -138,7 +138,7 @@ export type SectionRequest =
    * Checks a version against her sections, and against her own text of this section when
    * there is one (ownText); the answer is CONSISTENCY_NONE or one "- " line per contradiction.
    */
-  | { kind: "consistency"; currentText: string; ownText: string | null };
+  | { kind: "consistency"; currentText: string; ownText: string | null; herRequest: string | null };
 
 /** The answer of a consistency check that found nothing. */
 export const CONSISTENCY_NONE = "NO CONTRADICTIONS";
@@ -247,11 +247,19 @@ export async function buildSectionPrompt(
       parts.push(currentTextBlock(request.currentText, null));
       const ownText = request.ownText?.trim();
       if (ownText) parts.push(`<her-own-text>\n${quoteForPrompt(ownText)}\n</her-own-text>`);
+      // The change she asked for, when the version answers one: what she asked to change is not a contradiction (review round 1, F1).
+      const herRequest = ownText ? request.herRequest?.trim() : undefined;
+      if (herRequest) parts.push(`<her-request>\n${quoteForPrompt(herRequest)}\n</her-request>`);
       const against = ownText ? "her sections and with her own text of this section in <her-own-text>" : "her sections only";
       parts.push(
         [
           `Consistency check. The text above is a new version of ${what}. Compare it with ${against}: does it contradict any of them in names, numbers, scores, dates, times, behaviors, diagnoses, settings, people or services?`,
-          ...(ownText ? ["Her own text is hers: a fact of it that the new version states differently (a time, a date, a number, a name) is a contradiction, even when the new version marks it [CHECK: ...]. A fact of hers that it leaves out is not."] : []),
+          ...(ownText
+            ? [
+                "Her own text is hers. A fact of it that the new version replaces with another value (a time, a date, a number, a name) is a contradiction, with or without a [CHECK: ...] beside it. Her fact kept as she wrote it, with a [CHECK: ...] beside it quoting what a source says, is not a contradiction, and neither is a fact of hers that the new version leaves out.",
+              ]
+            : []),
+          ...(herRequest ? ["The new version answers what she asked for in <her-request>: a difference from her own text that she asked for there is not a contradiction."] : []),
           "Do not report missing information, style, length, or differences of emphasis; only statements that cannot both be true.",
           `If there is no contradiction, answer exactly: ${CONSISTENCY_NONE}`,
           `Otherwise answer with one line per contradiction, each starting with "- ", naming her section${ownText ? ' (or "Her own text" for her text of this section)' : ""} and saying briefly what differs. Nothing else.`,

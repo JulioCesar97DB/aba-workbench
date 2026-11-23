@@ -177,7 +177,8 @@ export async function stubFileManager(app: ElectronApplication, { fail = false }
  * to end: its exit code, or "still running" (it is then stopped) after `timeoutMs`.
  */
 export async function startSecondCopy(project: string, profile: string, home: string, timeoutMs = 20_000): Promise<number | null | "still running"> {
-  const args = [`--user-data-dir=${profile}`, `--home-folder=${home}`];
+  // --hidden as for every launch here (the packaged app ignores it): should the lock ever fail, no window shows.
+  const args = [`--user-data-dir=${profile}`, `--home-folder=${home}`, "--hidden"];
   const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) => name !== "ELECTRON_RENDERER_URL" && value !== undefined)) as Record<string, string>;
   const child =
     project === "packaged"

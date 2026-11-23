@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createAnthropicProvider } from "../src/lib/providers/anthropic.ts";
 import OpenAI from "openai";
-import { createOpenAIProvider, normalizeUsage, responsesRequest, toProviderError } from "../src/lib/providers/openai.ts";
+import { CHATGPT_TASK_PREAMBLE, createOpenAIProvider, normalizeUsage, responsesRequest, toProviderError } from "../src/lib/providers/openai.ts";
 import { ProviderError } from "../src/lib/providers/types.ts";
 import { collect, options, PDF_BASE64, sseResponse, stubFetch } from "./helpers.ts";
 
@@ -141,7 +141,10 @@ test("ChatGPT sign-in: the token is the bearer; stream and store false; no field
   assert.deepEqual(input.map((m) => m.role), ["developer", "user"], "rules, then sources; no system message (rejected in this flow)");
   assert.deepEqual(input[0].content, [{ type: "input_text", text: "RULES" }]);
   assert.deepEqual(input[1].content.at(-1), { type: "input_text", text: "</sources>" }, "the sources are the last user message");
-  assert.equal(body.instructions, "SECTION RULES AND REQUEST");
+  // The task in instructions, after a fixed line that keeps the developer message's rules in force (review round 1, F3).
+  assert.equal(body.instructions, `${CHATGPT_TASK_PREAMBLE}\n\nSECTION RULES AND REQUEST`);
+  assert.match(CHATGPT_TASK_PREAMBLE, /^The rules in the developer message apply in full and take precedence/);
+  for (const tag of ["her-request", "standing-instructions", "session-notes", "her-sections", "current-text"]) assert.ok(CHATGPT_TASK_PREAMBLE.includes(`<${tag}>`), tag);
   const file = input[1].content.find((part) => part.type === "input_file")!;
   assert.equal(file.file_data, `data:application/pdf;base64,${PDF_BASE64}`, "the PDF bytes reach the provider unchanged");
   assert.equal(events.at(-1)?.type, "done");
@@ -152,8 +155,8 @@ test("ChatGPT sign-in: two requests of one case send the same input; only the in
   const check = responsesRequest({ ...options("gpt-6.2-astra"), credential: chatgpt, prompt: { ...options("gpt-6.2-astra").prompt, task: "Consistency check." } });
   assert.deepEqual(check.input, draft.input);
   assert.deepEqual(check.reasoning, draft.reasoning);
-  assert.equal(draft.instructions, "Draft request.");
-  assert.equal(check.instructions, "Consistency check.");
+  assert.equal(draft.instructions, `${CHATGPT_TASK_PREAMBLE}\n\nDraft request.`);
+  assert.equal(check.instructions, `${CHATGPT_TASK_PREAMBLE}\n\nConsistency check.`);
 });
 
 test("API key: the task stays the last user message, and no instructions are sent", () => {
@@ -178,6 +181,9 @@ test("OpenAI errors with no status say what is known: no connection, no answer i
   });
   await assert.rejects(collect(createOpenAIProvider({ fetch: offline.fetchStub }), { ...options("gpt-6.2-astra"), credential: chatgpt }), { code: "connection_failed" });
   assert.equal(offline.calls.length, 1);
+
+  // Stopped on this side: said so, never as OpenAI's error.
+  assert.deepEqual({ ...toProviderError(new OpenAI.APIUserAbortError(), "chatgpt") }, { ...new ProviderError("cancelled", "The request was stopped before OpenAI finished; nothing was saved.") });
 
   // An error event after the stream began: OpenAI's own code and words.
   const { fetchStub } = stubFetch(() => sseResponse([["error", { type: "error", code: "server_error", message: "The server had an error while processing your request.", param: null, sequence_number: 1 }]]));
@@ -270,4 +276,35 @@ test("Claude refuses a ChatGPT sign-in before anything is sent", async () => {
   const { fetchStub, calls } = stubFetch(() => Response.json({}));
   await assert.rejects(createAnthropicProvider({ fetch: fetchStub }).listModels(chatgpt, new AbortController().signal), { code: "unsupported_credential" });
   assert.equal(calls.length, 0);
+});
+
+test("a connection that drops while OpenAI is answering is named as such (review round 1, F2)", async () => {
+  for (const credential of [chatgpt, { kind: "api-key", apiKey: "test-key-not-real" } as const]) {
+    const { fetchStub, calls } = stubFetch(() => {
+      const encoder = new TextEncoder();
+      let sent = false;
+      // Streams one piece of text, then the socket closes: undici then fails the read with "TypeError: terminated".
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (!sent) {
+            sent = true;
+            controller.enqueue(encoder.encode(`event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", sequence_number: 0, item_id: "m1", output_index: 0, content_index: 0, delta: "Hi", logprobs: [] })}\n\n`));
+          } else controller.error(new TypeError("terminated"));
+        },
+      });
+      return new Response(body, { headers: { "content-type": "text/event-stream" } });
+    });
+    const events: Array<{ type: string }> = [];
+    const error = await (async () => {
+      for await (const event of createOpenAIProvider({ fetch: fetchStub }).generate({ ...options("gpt-6.2-astra"), credential })) events.push(event);
+    })().then(
+      () => null,
+      (e: unknown) => e as ProviderError,
+    );
+    assert.ok(events.some((event) => event.type === "text"), "OpenAI had started answering");
+    assert.ok(error instanceof ProviderError, credential.kind);
+    assert.equal(error.code, "connection_failed");
+    assert.equal(error.message, "The connection to OpenAI dropped while it was answering; nothing was saved.");
+    assert.equal(calls.length, 1, "a stream already under way is never sent again by itself");
+  }
 });
