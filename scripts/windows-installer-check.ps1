@@ -16,8 +16,9 @@
     reinstall  The update path: adds a file of hers to the cases folder and to the app's
                data folder, records every file in both, then runs the installer (-Installer)
                again over the installed app, which first runs the installed app's own
-               uninstaller as every update does. Checks the app and its shortcuts are back
-               and every one of her files is still there, unchanged.
+               uninstaller as every update does. Checks that uninstaller ran (a file put in
+               the install folder is gone), the app and its shortcuts are back, and every
+               one of her files is still there, unchanged.
     uninstall  Records every file in both folders again, uninstalls silently, and checks
                that the app, its shortcuts and its uninstall entry are gone while every one
                of her files is still there, unchanged.
@@ -152,6 +153,12 @@ function Assert-Installed {
   return $executable
 }
 
+# Every process of the app has ended. Electron's crash reporter runs as the same
+# executable and can outlive the window by a moment after a test closes the app.
+function Wait-AppEnded {
+  Wait-Until { -not (Get-Process -Name $ProductName -ErrorAction SilentlyContinue) } 60 "every ABA Workbench process to end"
+}
+
 # Runs the installer silently; a per-user install asks for no administrator rights (the
 # runner would show no prompt, and the install would fail if it did).
 function Invoke-Installer([string]$installer) {
@@ -160,7 +167,7 @@ function Invoke-Installer([string]$installer) {
   $signature = Get-AuthenticodeSignature -LiteralPath $installer
   if ($signature.Status -ne "NotSigned") { Fail "The installer's signature status is $($signature.Status); it should be unsigned (owner's decision)." }
   Pass "the installer is unsigned, as decided"
-  if (Get-Process -Name $ProductName -ErrorAction SilentlyContinue) { Fail "The app is running." }
+  Wait-AppEnded
   # The process ends when the install has (an update first runs the installed app's uninstaller and waits for it).
   $process = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru -Wait
   if ($process.ExitCode -ne 0) { Fail "The installer ended with exit code $($process.ExitCode)." }
@@ -214,9 +221,15 @@ public static extern int SHSetKnownFolderPath(ref Guid rfid, uint dwFlags, IntPt
     if ($null -eq $entry) { Fail "The app is not installed." }
     $executableBefore = Get-InstalledExecutable $entry
     $before = Get-HerFilesBefore "updating"
+    # A file in the install folder, outside her folders: the installed app's uninstaller
+    # removes the install folder whole, so it is gone only if that uninstaller ran first.
+    $marker = Join-Path (Split-Path -Parent $executableBefore) "update-check.txt"
+    Set-Content -LiteralPath $marker -Value "Removed by the installed app's uninstaller." -Encoding ASCII
     Invoke-Installer $Installer
     $executable = Assert-Installed
     if ($executable -ne $executableBefore) { Fail "The update moved the app from $executableBefore to $executable." }
+    if (Test-Path -LiteralPath $marker) { Fail "The installer did not run the installed app's uninstaller first: $marker is still there." }
+    Pass "the installed app's uninstaller ran first (the install folder was replaced)"
     Assert-HerFilesKept $before "Updating"
   }
 
@@ -227,7 +240,7 @@ public static extern int SHSetKnownFolderPath(ref Guid rfid, uint dwFlags, IntPt
     $installFolder = Split-Path -Parent $executable
     $before = Get-HerFilesBefore "uninstalling"
 
-    if (Get-Process -Name $ProductName -ErrorAction SilentlyContinue) { Fail "The app is still running." }
+    Wait-AppEnded
     # The uninstaller copies itself elsewhere and starts again from there, so its first
     # process ends at once: wait for what it removes instead.
     $quiet = $entry.QuietUninstallString
