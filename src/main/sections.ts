@@ -51,10 +51,16 @@ import { runSectionGeneration } from "./section-generation.ts";
  * passed in), so it is unit-tested with the mock provider.
  */
 
-/** Output room per request: a long section with its thinking, a paragraph, a check. */
-const MAX_OUTPUT_TOKENS: Record<SectionRequestInput["kind"] | "consistency", number> = { draft: 32_000, change: 32_000, improve: 32_000, paragraph: 8_000, consistency: 8_000 };
-/** Owner's decision, 2026-11-22: effort high for drafts and whole-text changes, medium for paragraph changes and checks. */
-const EFFORT: Record<SectionRequestInput["kind"] | "consistency", Effort> = { draft: "high", change: "high", improve: "high", paragraph: "medium", consistency: "medium" };
+/**
+ * Owner's decision, 2026-11-23 (review M4): every section request (draft, change,
+ * paragraph change, improve, and the consistency check) runs with the same settings,
+ * effort high and the same output room. Claude keys its cache on these settings too, so
+ * one cache entry, written by the first request of the hour, serves every request after
+ * it; a request with other settings would write its own (tests/section-requests.test.ts
+ * checks the prefix is the same for every kind of request).
+ */
+const EFFORT: Effort = "high";
+const MAX_OUTPUT_TOKENS = 32_000;
 
 export interface SectionServiceOptions {
   cases: Pick<CaseLibrary, "changeCase">;
@@ -288,7 +294,7 @@ export class SectionService {
       requestedModel: args.model.slice(0, 200),
       // Clamped to what the data file reads back (review B1): a provider's answer never makes a case unreadable.
       servedModel: done.servedModel.slice(0, 200),
-      effort: EFFORT[request.kind],
+      effort: EFFORT,
       rulesVersions: built.prepared.rulesVersions,
       sourcesUsed: built.prepared.sourcesUsed.map(({ id: sourceId, title }) => ({ id: sourceId, title })),
       sectionsUsed: built.context,
@@ -311,8 +317,8 @@ export class SectionService {
       provider,
       credential: args.credential,
       model: args.model,
-      effort: EFFORT[request.kind],
-      maxOutputTokens: MAX_OUTPUT_TOKENS[request.kind],
+      effort: EFFORT,
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
       section: id,
       signal,
       save: async ({ text, done }) => {
@@ -375,8 +381,8 @@ export class SectionService {
           provider: this.options.provider(args.providerId),
           credential: args.credential,
           model: args.model,
-          effort: EFFORT.consistency,
-          maxOutputTokens: MAX_OUTPUT_TOKENS.consistency,
+          effort: EFFORT,
+          maxOutputTokens: MAX_OUTPUT_TOKENS,
           section: id,
           signal: args.signal,
           save: async ({ text: checked, done }) => {

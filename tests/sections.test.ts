@@ -14,6 +14,8 @@ import { changeInstructions, EDITING_PASS_MS, INSTRUCTIONS_FILE_NAME, Instructio
 import { SectionService } from "../src/main/sections.ts";
 import type { GenerationUpdateEvent, SectionSaveResult } from "../src/shared/api.ts";
 import { abaMatrixClipboard } from "../src/shared/section-text.ts";
+import { createAnthropicProvider } from "../src/lib/providers/anthropic.ts";
+import { sseResponse, stubFetch } from "./helpers.ts";
 
 const folders: string[] = [];
 after(() => {
@@ -492,4 +494,69 @@ test("nit: an answer longer than a section can be is not saved, with its own rea
   const { service, caseId } = await setup({}, { provider: huge });
   const events = await generate(service, caseId, "crisis-plan", { kind: "draft" });
   assert.deepEqual(events.find((e) => e.type === "saved"), { type: "saved", result: { outcome: "too-long" } });
+});
+
+/* The owner's decision on M4 (2026-11-23): one cache for every request */
+
+function claudeAnswer(text: string, model: string) {
+  const usage = { input_tokens: 100, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+  return sseResponse([
+    ["message_start", { type: "message_start", message: { id: "msg_test", type: "message", role: "assistant", model, content: [], stop_reason: null, stop_sequence: null, stop_details: null, usage } }],
+    ["content_block_start", { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }],
+    ["content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } }],
+    ["content_block_stop", { type: "content_block_stop", index: 0 }],
+    ["message_delta", { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null, stop_details: null }, usage: { output_tokens: 50 } }],
+    ["message_stop", { type: "message_stop" }],
+  ]);
+}
+
+/** A Claude request up to and including its last cache breakpoint: what the cache is read with. */
+function cachedPrefix(body: Record<string, unknown>) {
+  const messages = body.messages as Array<{ role: string; content: Array<{ cache_control?: unknown }> }>;
+  const content = messages[0].content;
+  let last = -1;
+  content.forEach((block, index) => {
+    if (block.cache_control) last = index;
+  });
+  return { ...body, messages: [{ ...messages[0], content: content.slice(0, last + 1) }] };
+}
+
+test("M4: every kind of section request sends Claude the same settings and the same cached prefix, so one cache serves them all", async () => {
+  const { fetchStub, calls } = stubFetch(({ body }) => {
+    const request = body as { model: string; messages: Array<{ content: Array<{ text?: string }> }> };
+    const task = request.messages[0].content.at(-1)?.text ?? "";
+    const text = task.includes("Consistency check")
+      ? "NO CONTRADICTIONS"
+      : task.includes("Paragraph change request")
+        ? "A better second paragraph."
+        : "First paragraph of an invented draft.\n\nSecond paragraph.\n\nThird paragraph.";
+    return claudeAnswer(text, request.model);
+  });
+  const claude = createAnthropicProvider({ fetch: fetchStub });
+  const { service, caseId } = await setup({}, { provider: claude });
+  saved(await service.saveText(caseId, "background-information", "Her own background text.", null));
+  await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  await generate(service, caseId, "medical-necessity", { kind: "paragraph", fromVersion: 1, paragraphIndex: 1, request: "clearer" });
+  await generate(service, caseId, "medical-necessity", { kind: "change", fromVersion: 2, request: "shorter" });
+  await generate(service, caseId, "background-information", { kind: "improve", fromVersion: 1 });
+  const again = await service.prepareCheck(caseId, "medical-necessity", "anthropic", 1);
+  assert.ok(again.outcome === "ready");
+  for await (const event of again.run(new AbortController().signal)) void event;
+
+  const requests = calls.filter((call) => call.url.includes("/v1/messages")).map((call) => call.body!);
+  const tasks = requests.map((body) => {
+    const content = (body.messages as Array<{ content: Array<{ text?: string }> }>)[0].content;
+    return content.at(-1)?.text ?? "";
+  });
+  // Draft, its check, paragraph change, its check, change, its check, improve (no check: nothing of hers
+  // besides Background Information itself to compare with), and the check run again.
+  assert.equal(requests.length, 8);
+  for (const kind of ["Draft request", "Paragraph change request", "Change request", "Improve request", "Consistency check"]) {
+    assert.ok(tasks.some((task) => task.includes(kind)), `a ${kind} was sent`);
+  }
+  const first = cachedPrefix(requests[0]);
+  assert.equal((first as unknown as { output_config: { effort: string } }).output_config.effort, "high");
+  for (const [index, body] of requests.entries()) {
+    assert.deepEqual(cachedPrefix(body), first, `request ${index + 1} (${tasks[index].split("\n").at(-1)?.slice(0, 40)}) has the draft's settings and cached prefix`);
+  }
 });

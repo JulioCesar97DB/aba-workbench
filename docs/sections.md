@@ -128,9 +128,9 @@ Text she typed cannot open or close one of these tags (`quoteForPrompt`).
 
 **Caching.** Claude: two breakpoints (after the system, after the sources) with the one-hour cache (`ttl: "1h"`, writing costs twice the input price instead of 1.25 times; she reads and corrects for longer than five minutes between requests). OpenAI with an API key: 30 minutes, as before; with ChatGPT sign-in, the plan's own cache.
 
-The effort is part of what the cache is keyed on: requests at effort high (drafts, changes, improvements) and at effort medium (paragraph changes and consistency checks) do not share a cache entry. So the first medium-effort request of each hour writes the prefix again (about $0.54 on Fable 5.2, $0.27 on Opus 5.5) instead of reading the one the draft just wrote. Whether to keep the split is the owner's decision, pending; the cost below includes it.
+Claude keys its cache on the request's settings as well as its text (a change of effort invalidates it). So every section request runs with the same settings (owner's decision, 2026-11-23): effort high and 32,000 output tokens for drafts, changes, paragraph changes, improvements and consistency checks alike, with the same system and sources before the breakpoints. The first request of the hour writes the cache and every later request in the hour reads it, the checks and paragraph changes included. A unit test (`tests/sections.test.ts`, "M4") sends every kind of request through the real Claude request builder and checks that everything up to the last cache breakpoint is identical.
 
-**Effort and output room** (`src/main/sections.ts`): drafts, changes and improvements at effort high with 32,000 output tokens; paragraph changes and consistency checks at effort medium with 8,000.
+**Effort and output room** (`src/main/sections.ts`): every request at effort high with 32,000 output tokens (only what is written is billed).
 
 **Expected cost** (Claude with an API key; prices in `src/lib/pricing.ts`, checked 2026-11-21; a real case of about 30,000 tokens of sources, rules about 4,000, the task with her sections about 7,500, a draft about 8,000 output tokens with its thinking):
 
@@ -138,10 +138,11 @@ The effort is part of what the cache is keyed on: requests at effort high (draft
 | --- | --- | --- |
 | First request of the hour (cache written) | about $0.90 | about $0.45 |
 | A draft or whole-text change within the hour | about $0.40 | about $0.20 |
-| A paragraph change | about $0.15 | about $0.07 |
-| A consistency check (after the first medium-effort request of the hour) | about $0.10 | about $0.05 |
-| The first medium-effort request of the hour (paragraph change or check: its own cache write) | add about $0.54 | add about $0.27 |
-| A whole assessment (9 sections, about 3 corrections each, the checks, over 3 to 4 hours) | about $18 | about $9 |
+| A paragraph change (the cache read; more thinking at effort high) | about $0.20 | about $0.10 |
+| A consistency check (the cache read) | about $0.14 | about $0.07 |
+| A whole assessment (9 sections, about 3 corrections each, about 30 checks, one cache write per working hour) | about $18 | about $9 |
+
+What changed with one effort for everything: the extra cache write per hour for medium-effort requests is gone (about $0.54 on Fable 5.2, $0.27 on Opus 5.5 each hour, $1.5 to $2.5 over an assessment on Fable), while each paragraph change and check now thinks at effort high and costs a little more (about +$0.05 and +$0.04 on Fable). Over a whole assessment the two roughly cancel: the estimate stays about $18 on Fable 5.2 and $9 on Opus 5.5. The first real runs should confirm it with `cache_read_input_tokens` on the checks and paragraph changes.
 
 ChatGPT sign-in spends her ChatGPT plan, not money. The real cost of each version is recorded with it (`costUsd`) and shown beside its number.
 
@@ -151,7 +152,7 @@ ChatGPT sign-in spends her ChatGPT plan, not money. The real cost of each versio
 
 - **Structure** (local, free): plain paragraphs only (no headings, lists, bold or tables, which ABA Matrix does not take), and as many paragraphs and words as the section's rules ask when they say so (`paragraphs: 6-9`, `words: 900-1500` in the rules file's front matter; only Medical Necessity has them today).
 - **Missing data** (local, free): every `[MISSING: …]` and `[CHECK: …]` marker, with what it says; markers are highlighted in the text.
-- **Consistency with her sections** (AI): after each new AI version, a second request (same provider and model, effort medium, so it has its own cache entry; see "Caching") checks it against her sections that are hers or approved, and the answer (`NO CONTRADICTIONS`, or one line per contradiction) is saved with the version, with what it cost. With none of her sections yet, nothing is sent ("Nothing to compare yet"). While only the check runs, the button says "Skip the check": the version is already saved. A check that failed, was skipped, or no longer holds because her sections changed since ("Your other sections changed since this check") can be run again with "Check again", which goes through the same preparation as every request (`checkSection`).
+- **Consistency with her sections** (AI): after each new AI version, a second request (same provider, model and settings, reading the cache the draft wrote; see "Caching") checks it against her sections that are hers or approved, and the answer (`NO CONTRADICTIONS`, or one line per contradiction) is saved with the version, with what it cost. With none of her sections yet, nothing is sent ("Nothing to compare yet"). While only the check runs, the button says "Skip the check": the version is already saved. A check that failed, was skipped, or no longer holds because her sections changed since ("Your other sections changed since this check") can be run again with "Check again", which goes through the same preparation as every request (`checkSection`).
 - At a narrow window, where the rail falls below the text, a line near the top ("Checks: 2 to look at") leads to them.
 - **Cost.** Each version shows what it cost, each check its own ("Check: $0.10"), and the Report step what the AI cost for the case so far.
 
