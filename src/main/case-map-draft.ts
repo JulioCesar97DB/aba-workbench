@@ -280,7 +280,7 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
         yield { type: "error", code: "unreadable_answer", message: "The AI's answer could not be read, even after asking it again, so nothing was saved.", status: null };
         return null;
       }
-      const answer = first ? mergeRepair(kind, first.answer, parsed.answer, first.checks.failing, first.checks.whole) : parsed.answer;
+      const answer = first ? mergeRepair(kind, first.answer, parsed.answer, first.checks.failing, first.checks.whole, first.checks.failedClaims) : parsed.answer;
       return outcome(answer, checkMapAnswer(kind, answer, context), true);
     }
     if (parsed.ok) {

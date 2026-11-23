@@ -507,7 +507,7 @@ test("M5: only a refusal that names the schema or the format switches the route 
 test("M6: a ref the checks never reached is stored as not found, never as a PDF's 'not checked'", () => {
   const parsed = parseMapAnswer("map-facts", JSON.stringify(factsAnswer({ obs: "o", interview: "i", pdf: "p" })));
   assert.ok(parsed.ok);
-  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failing: new Map(), whole: false };
+  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failedClaims: new Set(), failing: new Map(), whole: false };
   const parts = toAnswerParts("map-facts", parsed.answer, empty, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
   const role = (parts.caregivers!.items[0] as Record<string, { refs: Array<{ checked: string }> }>).role;
   assert.equal(role.refs[0].checked, "not-found");
@@ -659,7 +659,8 @@ test("R2-S2: a repair that leaves a field empty keeps the first answer's value; 
   const repaired = behaviorsAnswer(found, [], { behaviors: [{ ...(behaviorsAnswer(found, []).behaviors as Array<Record<string, unknown>>)[0], examples: [claim("The child spat toward his mother's forearm", [ref("o", "spat toward his mother's forearm twice")])], definition: none(), onset: none() }], groups: [], risks: [] });
   const a = parsedBehaviors(first);
   const b = parsedBehaviors(repaired);
-  const merged = mergeRepair("map-behaviors", a, b, new Map([["behaviors", new Set([0])]])) as BehaviorsAnswer;
+  const firstChecks = checkMapAnswer("map-behaviors", a, checkContext());
+  const merged = mergeRepair("map-behaviors", a, b, firstChecks.failing, false, firstChecks.failedClaims) as BehaviorsAnswer;
   assert.equal(merged.behaviors.length, 2);
   assert.match(merged.behaviors[0].definition?.value ?? "", /forcefully expels saliva/, "the first answer's definition is kept");
   assert.equal(merged.behaviors[0].examples[0].value, "The child spat toward his mother's forearm", "the repair's example replaces the failed one");
@@ -699,7 +700,7 @@ test("R2-M3: the [CHECK] written on an empty value becomes an open item", () => 
   assert.ok(parsed.ok);
   const answer = parsed.answer as FactsAnswer;
   assert.equal(answer.client, null, "the empty value itself is still left out");
-  assert.ok(answer.openItems.some((item) => item.kind === "check" && item.text === "client.severityLevel: the evaluation gives no severity level"));
+  assert.ok(answer.openItems.some((item) => item.kind === "check" && item.text === "the evaluation gives no severity level"), "no code path in the text (R3-M2)");
 });
 
 test("R2-M1: a length written twice is counted once, a range or a disagreement gives nothing", () => {
@@ -721,4 +722,38 @@ test("R2-M6: a date written another way is the same date: two-digit years, month
   observation.value = claim("3 on November 4, 2026", [ref("o", "Spitting counts: 3 on 11/04")]);
   const result = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext());
   assert.deepEqual(result.problems.filter((problem) => /observations/.test(problem)), []);
+});
+
+/* Review scoped check of f9ee1c6 */
+
+test("R3-M1: a repair that returns a shorter claim list keeps the first answer's claims that passed", () => {
+  const found = { obs: "o", interview: "i" };
+  const first = behaviorsAnswer(found, []);
+  // The probe: two examples, only the first one fails.
+  (first.behaviors as Array<Record<string, unknown>>)[0].examples = [claim("bad", [ref("o", "words that are nowhere at all")]), claim("The child spat toward his mother's forearm", [ref("o", "spat toward his mother's forearm twice")])];
+  const a = parsedBehaviors(first);
+  const checks = checkMapAnswer("map-behaviors", a, checkContext());
+  assert.ok(checks.failedClaims.has(a.behaviors[0].examples[0]));
+  assert.ok(!checks.failedClaims.has(a.behaviors[0].examples[1]));
+  const repaired = behaviorsAnswer(found, [], { behaviors: [{ ...(behaviorsAnswer(found, []).behaviors as Array<Record<string, unknown>>)[0], examples: [claim("He spat once on the floor", [ref("o", "he spat once on the floor")])] }], groups: [], risks: [] });
+  const merged = mergeRepair("map-behaviors", a, parsedBehaviors(repaired), checks.failing, false, checks.failedClaims) as BehaviorsAnswer;
+  assert.deepEqual(
+    merged.behaviors[0].examples.map((example) => example.value),
+    ["The child spat toward his mother's forearm", "He spat once on the floor"],
+    "the example that passed stays; the failed one is replaced",
+  );
+  // The repair giving the same value again does not double it.
+  const again = behaviorsAnswer(found, [], { behaviors: [{ ...(behaviorsAnswer(found, []).behaviors as Array<Record<string, unknown>>)[0], examples: [claim("the child spat toward his mother's forearm", [ref("o", "spat toward his mother's forearm twice")])] }], groups: [], risks: [] });
+  const mergedAgain = mergeRepair("map-behaviors", a, parsedBehaviors(again), checks.failing, false, checks.failedClaims) as BehaviorsAnswer;
+  assert.equal(mergedAgain.behaviors[0].examples.length, 1);
+});
+
+test("R3-M2: the note of an empty value names its item in words, never by a code path", () => {
+  const answer = behaviorsAnswer({ obs: "o", interview: "i" }, []);
+  (answer.behaviors as Array<Record<string, unknown>>)[1].offset = claim("", [], "ai-drafted", "no threshold for the end of an episode was given");
+  const parsed = parseMapAnswer("map-behaviors", JSON.stringify(answer));
+  assert.ok(parsed.ok);
+  const texts = parsed.answer.openItems.map((item) => item.text);
+  assert.ok(texts.includes("Spitting on the floor: no threshold for the end of an episode was given"), texts.join(" | "));
+  assert.ok(!texts.some((text) => /behaviors\[|\.offset/.test(text)));
 });

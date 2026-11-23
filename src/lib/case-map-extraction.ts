@@ -276,21 +276,43 @@ export function parseMapAnswer(kind: MapRequestKind, text: string): { ok: true; 
   if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 20).map((issue) => `${issue.path.join(".") || "(answer)"}: ${issue.message}`) };
   // An empty value is left out, but its note is not lost: it becomes an open item (review round 2, M3).
   const answer = parsed.data;
-  for (const note of notesOfEmptyValues(value)) {
+  for (const note of notesOfEmptyValues(value as Record<string, unknown>)) {
     if (answer.openItems.length >= MAP_PART_LIMITS.openItems) break;
     if (!answer.openItems.some((item) => item.text === note)) answer.openItems.push({ kind: "check", text: note.slice(0, T.text), homeSection: null });
   }
   return { ok: true, answer, raw: value as Record<string, unknown> };
 }
 
-/** The checks written on empty values ("" with a check), with where each was: "client.severityLevel: the evaluation gives no level". */
-function notesOfEmptyValues(value: unknown, where = ""): string[] {
-  if (Array.isArray(value)) return value.flatMap((entry, index) => notesOfEmptyValues(entry, `${where}[${index}]`));
-  if (!isPlain(value)) return [];
-  if (typeof value.value === "string" && Array.isArray(value.refs)) {
-    return value.value.trim() === "" && typeof value.check === "string" && value.check.trim() !== "" ? [`${where}: ${value.check.trim()}`] : [];
+/** The field that names an item of each list, for a note to say which item it is about. */
+const NAMED_BY: Record<string, string> = { caregivers: "role", settings: "name", deficits: "area", strengths: "text", facts: "text", behaviors: "name", risks: "what" };
+
+/**
+ * The checks written on empty values ("" with a check), each as an open item's text: the
+ * note, after the name of the item it is about when the item has one ("Hand biting: no
+ * threshold given"), never a code path (review scoped check, R3-M2).
+ */
+function notesOfEmptyValues(answer: Record<string, unknown>): string[] {
+  const notes: string[] = [];
+  const walk = (value: unknown, owner: string | null) => {
+    if (Array.isArray(value)) return value.forEach((entry) => walk(entry, owner));
+    if (!isPlain(value)) return;
+    if (typeof value.value === "string" && Array.isArray(value.refs)) {
+      if (value.value.trim() === "" && typeof value.check === "string" && value.check.trim() !== "") notes.push(owner ? `${owner}: ${value.check.trim()}` : value.check.trim());
+      return;
+    }
+    for (const entry of Object.values(value)) walk(entry, owner);
+  };
+  for (const [part, entry] of Object.entries(answer)) {
+    if (!Array.isArray(entry) || !NAMED_BY[part]) {
+      walk(entry, null);
+      continue;
+    }
+    for (const item of entry) {
+      const label = isPlain(item) && isPlain(item[NAMED_BY[part]]) ? (item[NAMED_BY[part]] as { value?: unknown }).value : null;
+      walk(item, typeof label === "string" && label.trim() !== "" ? label.trim().slice(0, 80) : null);
+    }
   }
-  return Object.entries(value).flatMap(([key, entry]) => notesOfEmptyValues(entry, where ? `${where}.${key}` : key));
+  return notes;
 }
 
 /* The code checks (D4) */
@@ -390,6 +412,8 @@ export interface CheckResult {
   numbers: Set<AnswerClaim>;
   /** Claims with a number found only in a PDF's quote, which cannot be checked yet: not a problem, but marked [CHECK] (review round 2, S1). */
   pdfNumbers: Set<AnswerClaim>;
+  /** Claims with a problem of their own: a repair may replace them; the others are kept (review scoped check, R3-M1). */
+  failedClaims: Set<AnswerClaim>;
   /** The items with a problem, by list ("client", "caregivers", "behaviors", "report", …) and index: what a repair asks about. */
   failing: Map<string, Set<number>>;
   /** A problem that belongs to no single item (a key used twice): the repair asks about the whole answer. */
@@ -410,6 +434,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   const quotes = new Map<AnswerRef, QuoteCheck>();
   const numbers = new Set<AnswerClaim>();
   const pdfNumbers = new Set<AnswerClaim>();
+  const failedClaims = new Set<AnswerClaim>();
   const failing = new Map<string, Set<number>>();
   let whole = false;
   const sources = new Map(context.sources.map((source) => [source.id, source]));
@@ -464,6 +489,11 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
 
   const visitClaim = (claim: AnswerClaim | null, where: string, options: { threshold?: boolean } = {}) => {
     if (!claim) return;
+    const before = problems.length;
+    checkOneClaim(claim, where, options);
+    if (problems.length > before) failedClaims.add(claim);
+  };
+  const checkOneClaim = (claim: AnswerClaim, where: string, options: { threshold?: boolean }) => {
     claim.refs.forEach((ref, index) => checkRef(ref, `${where}.refs[${index}]`));
     if ((claim.origin === "extracted" || claim.origin === "her") && claim.refs.length === 0) problem(where, "a value a source or her text states needs a ref with its quote.");
     // Only PDFs cited: their text cannot be read yet, so nothing can be checked (D32).
@@ -587,7 +617,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     uniqueKeys(found.groups, "groups (keys)");
     uniqueKeys(found.risks, "risks (keys)");
   }
-  return { problems: [...new Set(problems)], quotes, numbers, pdfNumbers, failing, whole };
+  return { problems: [...new Set(problems)], quotes, numbers, pdfNumbers, failedClaims, failing, whole };
 }
 
 /* The repair (review round 1, B1): only the items that failed are asked about, and the answer is merged back by key */
@@ -630,15 +660,30 @@ const emptyValue = (value: unknown) => value === null || value === undefined || 
  * A claim (an object with a value) is one field; other objects (a baseline, a function) are
  * merged field by field too.
  */
-export function mergeFields<T>(first: T, repaired: T): T {
+export function mergeFields<T>(first: T, repaired: T, failed: ReadonlySet<unknown> = new Set()): T {
   if (!isPlain(first) || !isPlain(repaired) || "value" in repaired) return emptyValue(repaired) ? first : repaired;
   const out: Record<string, unknown> = { ...repaired };
   for (const [key, value] of Object.entries(first)) {
     const next = repaired[key];
     if (emptyValue(next)) out[key] = value;
-    else if (isPlain(value) && isPlain(next) && !("value" in next)) out[key] = mergeFields(value, next);
+    else if (isPlain(value) && isPlain(next) && !("value" in next)) out[key] = mergeFields(value, next, failed);
+    else if (isClaimList(value) && isClaimList(next)) out[key] = mergeClaimList(value, next, failed);
   }
   return out as T;
+}
+
+const isClaimList = (value: unknown): value is AnswerClaim[] => Array.isArray(value) && value.length > 0 && value.every((entry) => isPlain(entry) && typeof entry.value === "string" && Array.isArray(entry.refs));
+
+/**
+ * A claim list after a repair (review scoped check, R3-M1): the first answer's claims that
+ * passed the checks stay, in their order, unless the repair gives the same value; then the
+ * repair's claims. A claim that failed is replaced by what the repair gives, or dropped
+ * when the repair leaves it out, as the repair was asked to fix it.
+ */
+function mergeClaimList(first: AnswerClaim[], repaired: AnswerClaim[], failed: ReadonlySet<unknown>): AnswerClaim[] {
+  const given = new Set(repaired.map((claim) => normalizeForQuote(claim.value)));
+  const kept = first.filter((claim) => !failed.has(claim) && !given.has(normalizeForQuote(claim.value)));
+  return [...kept, ...repaired];
 }
 
 /**
@@ -647,17 +692,17 @@ export function mergeFields<T>(first: T, repaired: T): T {
  * whole-answer repair: the repair's list first, merged the same way, then the first answer's
  * keys it lacks, once each, so a key the first answer used twice is not doubled (review round 2, M2).
  */
-function mergeKeyed<T extends { key: string }>(first: readonly T[], repaired: readonly T[], whole: boolean): T[] {
+function mergeKeyed<T extends { key: string }>(first: readonly T[], repaired: readonly T[], whole: boolean, failed: ReadonlySet<unknown>): T[] {
   const firstByKey = new Map<string, T>();
   for (const item of first) if (!firstByKey.has(item.key)) firstByKey.set(item.key, item);
   if (whole) {
-    const out = repaired.map((item) => (firstByKey.has(item.key) ? mergeFields(firstByKey.get(item.key)!, item) : item));
+    const out = repaired.map((item) => (firstByKey.has(item.key) ? mergeFields(firstByKey.get(item.key)!, item, failed) : item));
     const present = new Set(repaired.map((item) => item.key));
     for (const [key, item] of firstByKey) if (!present.has(key)) out.push(item);
     return out;
   }
   const fromRepair = new Map(repaired.map((item) => [item.key, item]));
-  const out = first.map((item) => (fromRepair.has(item.key) ? mergeFields(item, fromRepair.get(item.key)!) : item));
+  const out = first.map((item) => (fromRepair.has(item.key) ? mergeFields(item, fromRepair.get(item.key)!, failed) : item));
   for (const item of repaired) if (!firstByKey.has(item.key)) out.push(item);
   return out;
 }
@@ -670,19 +715,19 @@ const sameText = (a: string, b: string) => normalizeForQuote(a) === normalizeFor
  * first answer is lost. Unkeyed lists: the report's failed items are replaced by the
  * repair's report items when it gives any; open items are joined without repeats.
  */
-export function mergeRepair(kind: MapRequestKind, first: MapAnswer, repaired: MapAnswer, failing: CheckResult["failing"], whole = false): MapAnswer {
+export function mergeRepair(kind: MapRequestKind, first: MapAnswer, repaired: MapAnswer, failing: CheckResult["failing"], whole = false, failed: ReadonlySet<unknown> = new Set()): MapAnswer {
   const joinOpen = <T extends { text: string }>(a: readonly T[], b: readonly T[]) => [...a, ...b.filter((item) => !a.some((other) => sameText(other.text, item.text)))];
   if (kind === "map-facts") {
     const a = first as FactsAnswer;
     const b = repaired as FactsAnswer;
     const failedReport = failing.get("report") ?? new Set<number>();
     return {
-      client: a.client && b.client ? mergeFields(a.client, b.client) : (b.client ?? a.client),
-      caregivers: mergeKeyed(a.caregivers, b.caregivers, whole),
-      settings: mergeKeyed(a.settings, b.settings, whole),
-      deficits: mergeKeyed(a.deficits, b.deficits, whole),
-      strengths: mergeKeyed(a.strengths, b.strengths, whole),
-      facts: mergeKeyed(a.facts, b.facts, whole),
+      client: a.client && b.client ? mergeFields(a.client, b.client, failed) : (b.client ?? a.client),
+      caregivers: mergeKeyed(a.caregivers, b.caregivers, whole, failed),
+      settings: mergeKeyed(a.settings, b.settings, whole, failed),
+      deficits: mergeKeyed(a.deficits, b.deficits, whole, failed),
+      strengths: mergeKeyed(a.strengths, b.strengths, whole, failed),
+      facts: mergeKeyed(a.facts, b.facts, whole, failed),
       openItems: joinOpen(a.openItems, b.openItems),
       report: b.report.length > 0 ? [...a.report.filter((_item, index) => !failedReport.has(index)), ...b.report] : a.report,
     };
@@ -690,9 +735,9 @@ export function mergeRepair(kind: MapRequestKind, first: MapAnswer, repaired: Ma
   const a = first as BehaviorsAnswer;
   const b = repaired as BehaviorsAnswer;
   return {
-    behaviors: mergeKeyed(a.behaviors, b.behaviors, whole),
-    groups: mergeKeyed(a.groups, b.groups, whole),
-    risks: mergeKeyed(a.risks, b.risks, whole),
+    behaviors: mergeKeyed(a.behaviors, b.behaviors, whole, failed),
+    groups: mergeKeyed(a.groups, b.groups, whole, failed),
+    risks: mergeKeyed(a.risks, b.risks, whole, failed),
     openItems: joinOpen(a.openItems, b.openItems),
   };
 }
