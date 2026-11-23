@@ -354,7 +354,13 @@ test("cases: create a case, list it, open it; the folder holds only its data fil
   const restarted = library(folder).lib;
   const list = await restarted.list();
   assert.deepEqual(list.folder, { displayPath: folder, isDefault: false, state: "ready" });
-  assert.deepEqual(list.cases, [created.case]);
+  // Listed with how far it is (Home, UX-5): nothing yet.
+  assert.deepEqual(list.cases, [
+    {
+      ...created.case,
+      progress: { sources: 0, caseMap: { approved: 0, withContent: 0 }, mapPartToApprove: null, sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started" })) },
+    },
+  ]);
   assert.deepEqual(list.unreadable, []);
   const opened = await restarted.open(created.case.id);
   assert.deepEqual(opened, {

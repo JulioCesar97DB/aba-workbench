@@ -609,19 +609,23 @@ test("a change that cannot be saved is said before the window closes, and on Hom
     await page.getByRole("link", { name: "All cases" }).click();
     await expect(heading(page)).toHaveText("Cases");
     await expect(page.getByText("A change to “M.F. sample case” could not be saved.")).toBeVisible();
+    // The case opens on its summary, whose "Lo siguiente" is the change not saved (owner's proposal §6, rule 1).
     await page.getByRole("link", { name: "Open the case to try again" }).click();
-    await expect(page.getByText("Your last change could not be saved. Check that the cases folder is available, then try again.")).toBeVisible();
+    await expect(heading(page)).toHaveText("Case summary");
+    const next = page.getByTestId("next-thing");
+    await expect(next).toHaveAttribute("data-kind", "unsaved");
+    await expect(next).toContainText("A change was not saved");
 
     // Closing now asks; Go back keeps the window.
     const messages = await stubMessageBox(app, 0);
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
     await expect.poll(messages).toEqual(["A change could not be saved"]);
-    await expect(heading(page)).toHaveText("Documents");
+    await expect(heading(page)).toHaveText("Case summary");
 
-    // The folder is writable again: Try again saves it, and the window closes without asking.
+    // The folder is writable again: Try again saves it, the next thing moves on, and the window closes without asking.
     chmodSync(caseFolder, 0o755);
-    await page.getByRole("button", { name: "Try again" }).click();
-    await expect(page.getByText("All changes saved").first()).toBeVisible();
+    await next.getByRole("button", { name: "Try again" }).click();
+    await expect(next).toHaveAttribute("data-kind", "build-map");
     expect(caseData(path.dirname(caseFolder)).sources[0].text).toBe("Saved part. Lost part.");
     const closed = page.waitForEvent("close");
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());

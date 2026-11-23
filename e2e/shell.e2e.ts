@@ -127,7 +127,11 @@ test("the navigation reaches every screen", async ({ launch, home }) => {
   seedCase(defaultCasesFolder(home));
   const page = await openApp(await launch());
 
+  // A case opens on its summary (owner's decision T6); the case's name in the sidebar leads back to it.
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
+  await expect(heading(page)).toHaveText("Case summary");
+  await expect(page.getByTestId("case-summary-link")).toHaveAttribute("aria-current", "page");
+  await page.getByRole("navigation", { name: "Steps of the case" }).getByRole("link", { name: "Documents" }).click();
   await expect(heading(page)).toHaveText("Documents");
   await expect(page.getByTestId("header-eyebrow")).toHaveText("Step 1 of 5");
   const rail = page.getByRole("complementary", { name: "Documents and checks" });
@@ -146,6 +150,8 @@ test("the navigation reaches every screen", async ({ launch, home }) => {
     await expect(heading(page)).toHaveText(title);
     await expect(steps.getByRole("link", { name: link })).toHaveAttribute("aria-current", "page");
   }
+  await page.getByTestId("case-summary-link").click();
+  await expect(heading(page)).toHaveText("Case summary");
 
   // The report's sections are listed under its step while she is in the report.
   const sections = page.getByRole("navigation", { name: "Sections" });
@@ -205,7 +211,7 @@ test("switching the language changes the screen and survives a restart", async (
   await goTo(page, `/cases/${SAMPLE_CASE.id}/interventions`);
   await expect(heading(page)).toHaveText("Plan");
   await expect(heading(page)).not.toHaveAttribute("lang", "en");
-  await expect(page.getByText(`${SAMPLE_CASE.label} · Paso 3 de 5`)).toBeVisible();
+  await expect(page.getByTestId("header-eyebrow")).toHaveText("Paso 3 de 5");
   // The age in Spanish words, under the case's label in the sidebar.
   await expect(page.getByText("4 años 2 meses")).toBeVisible();
   const steps = page.getByRole("navigation", { name: "Pasos del caso" });
@@ -214,7 +220,7 @@ test("switching the language changes the screen and survives a restart", async (
   for (const subtitle of ["Lo que ya tienes del cliente", "Conductas y funciones", "Intervenciones", "Las 9 secciones", "Todo junto, a ABA Matrix"]) await expect(steps).toContainText(subtitle);
   await expect(steps.locator('[lang="en"]')).toHaveCount(0);
   // Clinical terms stay in English, marked as English: the sentence that names the Interventions.
-  await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText(["Interventions"]);
+  await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText(["Interventions", "Hypothesis Based Interventions"]);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report`);
   const sections = page.getByRole("navigation", { name: "Secciones" });
   await expect(sections.locator('[lang="en"]')).toHaveText(REPORT_SECTIONS.map((section) => section.title));
@@ -309,8 +315,8 @@ test("moving into and out of a case announces the new screen and puts focus on i
 
   // Home -> case: the link that was followed is gone, so focus goes to the new title.
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  await expect(heading(page)).toHaveText("Documents");
-  await expect(announcement(page)).toHaveText("Documents · ABA Workbench");
+  await expect(heading(page)).toHaveText("Case summary");
+  await expect(announcement(page)).toHaveText("Case summary · ABA Workbench");
   await expect(heading(page)).toBeFocused();
 
   // Inside the case the sidebar stays, and so does the focus, on the link followed.

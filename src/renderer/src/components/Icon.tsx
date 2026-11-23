@@ -15,6 +15,8 @@ const PATHS = {
   check: <path d="M2.8 8.4 6.3 11.8 13.2 4.6" />,
   arrow: <path d="M2.5 8h11 M9 3.5 13.5 8 9 12.5" />,
   chevron: <path d="M4 6 8 10 12 6" />,
+  // "›": the case's name in the sidebar, which opens its summary (UX-5).
+  forward: <path d="M6 3.5 10.5 8 6 12.5" />,
   copy: <path d="M5.5 5.5h8v8h-8z M10.5 5.5v-3h-8v8h3" />,
   upload: <path d="M8 10.5v-8 M4.5 6 8 2.5 11.5 6 M2.5 10.5v3h11v-3" />,
   stop: <rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor" stroke="none" />,

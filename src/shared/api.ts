@@ -121,6 +121,26 @@ export interface CaseSummary {
   pdfCount: number;
 }
 
+/**
+ * How far a case is, as Home shows it (owner's decisions T7 and P8: computed from the case's
+ * data each time it is listed, nothing stored): its documents, its case map and its sections.
+ */
+export interface CaseProgress {
+  /** Its documents, not counting removed ones. */
+  sources: number;
+  /** Its case map: parts approved, out of parts with something in them. */
+  caseMap: CaseMapSummary;
+  /** The first part of the map, in the map's order, with something in it and not approved; null when none. */
+  mapPartToApprove: MapPartId | null;
+  /** Each section's state, in the report's order. */
+  sections: Array<Pick<SectionSummary, "id" | "state">>;
+}
+
+/** A case as Home lists it, with how far it is. */
+export interface ListedCase extends CaseSummary {
+  progress: CaseProgress;
+}
+
 /** A PDF in the case's folder: its name only, never a path. */
 export interface CaseFile {
   name: string;
@@ -224,8 +244,8 @@ export interface UnreadableFolder {
 
 export interface CaseList {
   folder: CasesFolderInfo;
-  /** Newest first. Empty when the folder cannot be read. */
-  cases: CaseSummary[];
+  /** Newest first (by creation). Empty when the folder cannot be read. */
+  cases: ListedCase[];
   /** By folder name. */
   unreadable: UnreadableFolder[];
 }

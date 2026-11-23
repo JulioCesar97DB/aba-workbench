@@ -70,16 +70,17 @@ test("create a case, see it in the list, restart the app and open it again", asy
 
   await page.getByRole("link", { name: "All cases" }).click();
   await expect(heading(page)).toHaveText("Cases");
-  const row = page.getByRole("row", { name: /R\.T\. initial assessment/ });
-  await expect(row).toContainText("5 years 3 months");
+  const row = page.getByTestId("case-row").filter({ hasText: "R.T. initial assessment" });
+  await expect(row).toContainText("5 years 3 months · Documents · no documents yet");
 
   await app.close();
   app = await launch();
   page = await openApp(app);
+  // A case opens on its summary (owner's decision T6), at its index address.
   await page.getByRole("link", { name: "R.T. initial assessment" }).click();
-  await expect(heading(page)).toHaveText("Documents");
-  await expect(page.getByText("R.T. initial assessment · Step 1 of 5")).toBeVisible();
-  expect(page.url()).toContain(`#/cases/${data.id}/sources`);
+  await expect(heading(page)).toHaveText("Case summary");
+  expect(page.url()).toMatch(new RegExp(`#/cases/${data.id}$`));
+  await expect(page.getByTestId("next-thing")).toContainText("Add the client's documents");
 });
 
 test("the form checks the label and the age, in Spanish too, and two cases with one label get two folders", async ({ launch, home }) => {
@@ -105,7 +106,7 @@ test("the form checks the label and the age, in Spanish too, and two cases with 
   await goTo(page, "/");
   expect(readdirSync(casesFolder).sort()).toEqual(["Ana", "ana 2"]);
   // Newest first.
-  await expect(page.getByRole("main").getByRole("table").first().getByRole("rowheader")).toHaveText(["ana", "Ana"]);
+  await expect(page.getByTestId("case-name")).toHaveText(["ana", "Ana"]);
 });
 
 test("folders that are not cases show plainly as unreadable and are never changed", async ({ launch, home }) => {
@@ -148,13 +149,16 @@ test("a PDF put into the case's folder shows when the case is opened again, and 
   const app = await launch();
   const page = await openApp(app);
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  await expect(heading(page)).toHaveText("Documents");
+  await expect(heading(page)).toHaveText("Case summary");
+  await page.getByRole("navigation", { name: "Steps of the case" }).getByRole("link", { name: "Documents" }).click();
   const folderPdfs = page.getByRole("region", { name: /in the case's folder you have not added/ });
   await expect(folderPdfs).toHaveCount(0);
 
   writeFileSync(path.join(caseFolder, "vineland-3.pdf"), "%PDF-1.4 invented test file");
   await page.getByRole("link", { name: "All cases" }).click();
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
+  await expect(heading(page)).toHaveText("Case summary");
+  await page.getByRole("navigation", { name: "Steps of the case" }).getByRole("link", { name: "Documents" }).click();
   await expect(folderPdfs).toHaveAccessibleName("There is 1 PDF in the case's folder you have not added");
   await expect(folderPdfs.getByRole("listitem")).toHaveText([/^vineland-3\.pdf · /]);
   const data = JSON.parse(readFileSync(path.join(caseFolder, "aba-case.json"), "utf8"));
@@ -163,7 +167,8 @@ test("a PDF put into the case's folder shows when the case is opened again, and 
   expect(data.createdAt).toBe(SAMPLE_CASE.createdAt);
   expect(readdirSync(caseFolder).sort()).toEqual(["aba-case.json", "vineland-3.pdf"]);
   await page.getByRole("link", { name: "All cases" }).click();
-  await expect(page.getByRole("row", { name: new RegExp(SAMPLE_CASE.label.replace(/\./g, "\\.")) }).getByRole("cell").last()).toHaveText("1");
+  // Saved when it was opened: Home says so.
+  await expect(page.getByTestId("case-row").filter({ hasText: SAMPLE_CASE.label })).toContainText(/today, /);
 });
 
 test("the packaged app refuses a cases folder inside its own install folder, which updating or uninstalling deletes (owner's decision)", async ({ launch, home }, testInfo) => {
@@ -331,7 +336,7 @@ test("a second start of the app on the same profile quits and leaves the first o
   expect(await startSecondCopy(testInfo.project.name, profile, home)).toBe(0);
   expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  await expect(heading(page)).toHaveText("Documents");
+  await expect(heading(page)).toHaveText("Case summary");
 });
 
 test("Settings says so when the cases folder cannot be shown or checked", async ({ app }) => {
@@ -399,5 +404,5 @@ test("a case whose creation was cut short is finished on Home, or shown as unfin
   expect(readFileSync(path.join(casesFolder, "Finished after a crash", "aba-case.json"), "utf8")).toBe(complete);
   expect(readdirSync(path.join(casesFolder, "Cut short"))).toEqual(["aba-case.json.4243.tmp"]);
   await page.getByRole("link", { name: "Finished after a crash" }).click();
-  await expect(heading(page)).toHaveText("Documents");
+  await expect(heading(page)).toHaveText("Case summary");
 });

@@ -4,7 +4,9 @@ import { RouterProvider } from "react-router/dom";
 import { AppInfoProvider } from "./app-info.tsx";
 import { ConnectionsProvider } from "./connections.tsx";
 import { TooltipProvider } from "./components/Tooltip.tsx";
-import { CaseIndex, CaseRoute, ReportScreen, StepScreen } from "./screens/Case.tsx";
+import { CaseRoute, ReportScreen } from "./screens/Case.tsx";
+import { CaseSummaryScreen } from "./screens/CaseSummary.tsx";
+import { PlanScreen, ReviewScreen } from "./screens/ComingLater.tsx";
 import { SectionScreen } from "./screens/Section.tsx";
 import { CaseMapScreen } from "./screens/CaseMap.tsx";
 import { DevCheck } from "./screens/DevCheck.tsx";
@@ -34,15 +36,15 @@ const router = createHashRouter([
         path: "cases/:caseId",
         element: <CaseRoute />,
         children: [
-          { index: true, element: <CaseIndex /> },
+          { index: true, element: <CaseSummaryScreen /> },
           { path: "sources", element: <SourcesScreen /> },
           { path: "sources/text/:sourceId", element: <SourceTextScreen /> },
           { path: "sources/new/:type", element: <SourceTextScreen /> },
           { path: "case-map", element: <CaseMapScreen /> },
-          { path: "interventions", element: <StepScreen step="interventions" /> },
+          { path: "interventions", element: <PlanScreen /> },
           { path: "report", element: <ReportScreen /> },
           { path: "report/:sectionId", element: <SectionScreen /> },
-          { path: "review", element: <StepScreen step="review" /> },
+          { path: "review", element: <ReviewScreen /> },
           { path: "*", element: <NotFound /> },
         ],
       },

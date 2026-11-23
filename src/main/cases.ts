@@ -8,8 +8,10 @@ import {
   type CaseDetail,
   type CaseFile,
   type CaseList,
+  type CaseProgress,
   type CasesFolderInfo,
   type CaseSummary,
+  type ListedCase,
   type CreateCaseResult,
   type OpenCaseResult,
   type UnreadableFolder,
@@ -34,7 +36,8 @@ import {
 } from "./case-sources.ts";
 import { caseFolderNames } from "./case-folder-name.ts";
 import { SectionInputError, sectionSummaries, sessionNotes } from "./case-sections.ts";
-import { caseMapSummary } from "./case-map.ts";
+import { MAP_PARTS } from "../shared/case-map.ts";
+import { caseMapSummary, mapPartView } from "./case-map.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { finishInterruptedSave, isLeftBehind, isTemporaryFileOf, writeFileDurably } from "./durable-write.ts";
 
@@ -100,6 +103,29 @@ export function caseSummary(data: CaseData): CaseSummary {
     updatedAt: data.updatedAt,
     pdfCount: data.files.length,
   };
+}
+
+/**
+ * How far a case is, for Home (owner's decisions T7, P8): read from its data as it is now,
+ * through the sections' and the case map's own read functions; nothing is stored.
+ */
+export function caseProgress(data: CaseData): CaseProgress {
+  const mapPartToApprove =
+    MAP_PARTS.find((part) => {
+      const view = mapPartView(data, part);
+      return view.status !== "approved" && (view.items.length > 0 || view.groups.length > 0);
+    }) ?? null;
+  return {
+    sources: data.sources.filter((source) => !source.removedAt).length,
+    caseMap: caseMapSummary(data),
+    mapPartToApprove,
+    sections: sectionSummaries(data).map(({ id, state }) => ({ id, state })),
+  };
+}
+
+/** A case as Home lists it. */
+export function listedCase(data: CaseData): ListedCase {
+  return { ...caseSummary(data), progress: caseProgress(data) };
 }
 
 /** Reads one folder of the cases folder as a case. Never throws, never writes. */
@@ -366,7 +392,7 @@ export class CaseLibrary {
     this.listedFolder = folder;
     this.unreadableNames = new Set(unreadable.map((entry) => entry.folderName));
     cases.sort(newestFirst);
-    return { folder: info, cases: cases.map(({ data }) => caseSummary(data)), unreadable };
+    return { folder: info, cases: cases.map(({ data }) => listedCase(data)), unreadable };
   }
 
   async create(input: unknown): Promise<CreateCaseResult> {

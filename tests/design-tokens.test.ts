@@ -43,14 +43,15 @@ const TEXT_PAIRS: Array<[text: string, background: string]> = [
   ["warning", "ai-subtle"],
   ["fg-on-accent", "success"], // the current step, done: its check
   ["fg-on-accent", "warning"], // the current step, in progress: its number
-  ["nav", "dot-done"], // a step done: its check
-  ["nav", "dot-draft"], // a step in progress: its number
+  ["nav", "dot-done"], // a step done: its check (the sidebar, the case summary)
+  ["nav", "dot-draft"], // a step in progress: its number (the sidebar, the case summary)
   ["fg", "nav-current"], // the current step, not started: its number
   ["fg-muted", "nav-current"], // the current step's count, "Soon" and subtitle
   ["success", "surface"], // a section's copied line
   ["success", "surface-muted"], // the rail's checks: "None", "Complete"
   ["warning", "surface-muted"], // the rail's checks: "1 to look at"
   ["danger", "surface-muted"], // Documentos' rail: the PDFs too large for the AI
+  ["fg-on-accent-subtle", "surface"], // the case summary: "Lo siguiente"
 ];
 
 const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
