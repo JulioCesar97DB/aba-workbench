@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "composite": true,
+    "lib": [
+      "ES2024"
+    ],
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "electron.vite.config.ts",
+    "playwright.config.ts",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/lib/**/*",
+    "src/shared/**/*",
+    "src/renderer/src/i18n/en.ts",
+    "src/renderer/src/i18n/es.ts",
+    "scripts/**/*",
+    "eval/**/*",
+    "tests/**/*",
+    "e2e/**/*"
+  ]
+}

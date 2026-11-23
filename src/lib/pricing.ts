@@ -4,8 +4,8 @@ import type { TokenUsage, UsageAttempt } from "./providers/types.ts";
  * Standard-tier prices in USD per million tokens, short context, as published on the
  * date below. Used to report what each generation cost. Update when providers change them.
  *
- * cacheWrite is the price of the cache lifetime this project uses: Claude's default
- * 5-minute cache (1.25x input) and OpenAI's default 30-minute cache (1.25x input).
+ * cacheWrite is the price of the cache lifetime this project uses: Claude's 1-hour cache
+ * (2x input; owner's decision, 2026-11-22) and OpenAI's default 30-minute cache (1.25x input).
  */
 export const PRICES_CHECKED_ON = "2026-11-21";
 
@@ -18,12 +18,12 @@ export interface ModelPrice {
 }
 
 export const PRICES: Record<string, ModelPrice> = {
-  "claude-opus-5-5": { input: 4, cacheWrite: 5, cacheRead: 0.2, output: 20, source: "https://platform.claude.com/docs/en/about-claude/pricing" },
-  "claude-fable-5-2": { input: 8, cacheWrite: 10, cacheRead: 0.2, output: 40, source: "https://platform.claude.com/docs/en/about-claude/pricing" },
+  "claude-opus-5-5": { input: 4, cacheWrite: 8, cacheRead: 0.2, output: 20, source: "https://platform.claude.com/docs/en/about-claude/pricing" },
+  "claude-fable-5-2": { input: 8, cacheWrite: 16, cacheRead: 0.2, output: 40, source: "https://platform.claude.com/docs/en/about-claude/pricing" },
   // Models that Claude's server-side fallback ("default") can hand a refused request to.
   // If Anthropic routes to a model not listed here, its cost is unknown and phase0 stops.
-  "claude-opus-5": { input: 5, cacheWrite: 6.25, cacheRead: 0.5, output: 25, source: "https://platform.claude.com/docs/en/about-claude/pricing" },
-  "claude-opus-4-8": { input: 5, cacheWrite: 6.25, cacheRead: 0.5, output: 25, source: "https://platform.claude.com/docs/en/about-claude/pricing" },
+  "claude-opus-5": { input: 5, cacheWrite: 10, cacheRead: 0.5, output: 25, source: "https://platform.claude.com/docs/en/about-claude/pricing" },
+  "claude-opus-4-8": { input: 5, cacheWrite: 10, cacheRead: 0.5, output: 25, source: "https://platform.claude.com/docs/en/about-claude/pricing" },
   "gpt-6.2-astra": { input: 8, cacheWrite: 10, cacheRead: 0.4, output: 40, source: "https://developers.openai.com/api/docs/models/gpt-6.2-astra" },
   "gpt-6.2-sol": { input: 2, cacheWrite: 2.5, cacheRead: 0.1, output: 10, source: "https://developers.openai.com/api/docs/models/gpt-6.2-sol" },
 };

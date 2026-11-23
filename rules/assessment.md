@@ -1,7 +1,7 @@
 ---
 id: assessment
-version: 3
-updated: 2026-11-22
+version: 6
+updated: 2026-11-23
 ---
 
 # Drafting a Behavior Analysis Initial Assessment
@@ -18,13 +18,11 @@ The parents also sign the assessment, and the RBTs who carry out the plan read i
 
 ## How the assessment should read
 
-- Fluent, connected prose with a logical thread. Sections relate to each other: the behaviors and deficits argued in one section are the same ones, with the same names and numbers, that later sections define, measure and treat. Keep names, numbers and terms consistent with the sources so the thread holds.
-- Explain data; never just list it. Each score or count you cite is followed by what it means for this child, in concrete terms of what the child can and cannot do, and where.
+- Fluent, connected prose with a logical thread. Sections relate to each other: the behaviors and deficits argued in one section are the same ones, with the same names and numbers, that later sections define, measure and treat. Keep names, numbers and terms consistent with the sources so the thread holds. The assessment guide gives the reasoning chain, what each of the 22 sections owns, and what must match across them.
+- Explain data; never just list it. Each score or count you cite is followed by what it means for this child (the style guide says how).
 - Attribute every claim inside the sentence: "According to the Comprehensive Diagnostic Evaluation completed by Dr. ... on ...", "His mother reported that ...", "During the home observation on ..., the BCBA observed ...". Reviewers weigh standardized scores and direct observation more than report alone, so make the kind of evidence visible.
 - Be specific: settings, people, times of day, counts, durations, intensity, concrete incidents. One real incident from the sources does more than three adjectives.
-- Use the child's first name and the pronouns the sources use. Use the terms the sources use for diagnoses, instruments, scales and behaviors.
-- Professional, plain clinical English in the third person. Past tense for what happened during the assessment; present tense for the child's current functioning. No filler ("it is important to note"), no hedging stacks, no superlatives.
-- State strengths, then qualify them where they do not hold consistently ("Although [name] can ..., [he/she] does not yet ... without ...").
+- Write the way she writes: voice, person, tense, attribution, her patterns and the sentences she would not write are in the style guide.
 
 ## Nothing invented
 
@@ -35,7 +33,23 @@ This rule outranks every other.
 - When the section needs something the sources do not give, keep the sentence and put a marker where the fact belongs: [MISSING: what is missing and where it would normally come from]. Example: "The scatterplot shows hand flapping in most afternoon blocks ([MISSING: number of episodes per block, not recorded on the scatterplot])."
 - When sources disagree, say so and attribute each version, or mark it: [CHECK: what disagrees].
 - Do not move evidence from one setting to another. If only a parent describes what happens at school, write it as the parent's report, not as a fact about school, and do not imply that anyone observed it.
-- Clinical reasoning that follows from the data is your job: that a deficit limits independence or safety, that a behavior interferes with learning, that a named ABA procedure addresses it. Facts are not your job; they come from the sources.
+- Clinical reasoning that follows from the data is your job (see below). Facts are not your job; they come from the sources.
+
+## Four kinds of content
+
+Every sentence you write is one of four kinds, and each has its own rule.
+
+1. Facts: what the child did, what was reported, scores, dates, people, services. They come only from the sources, her sections, her standing instructions and her session notes, and are attributed in the sentence. Everything under "Nothing invented" is about facts.
+2. Clinical reasoning: what the facts mean, as a behavior analyst reads them. That a score means less independence than same-age peers, that an escape pattern makes a demand the trigger, that a deficit keeps the child out of a setting. When a section says what ABA will do, reasoning may state only what the child needs to learn, as the plain reverse of a deficit the sources document, and the general approach: teaching skills matched to what the behavior gets the child, and caregiver training. Say the general approach in your own words for this child; do not repeat one phrase from paragraph to paragraph. This is yours to write.
+3. Her standard practice: what she does the same way for every child (how she trains caregivers, how she monitors a plan, her usual supports, her discharge periods). It reaches you only through her standing instructions for the section, which are where she confirms it. When her standing instructions give it, write it as her practice. When they do not and the section needs it, keep the sentence and mark it [MISSING: what she needs to give]. Never supply it from what behavior analysts usually do.
+4. Proposals: the clinical choices that are hers to make for this child. Every named procedure (for example differential reinforcement of alternative behavior, functional communication training, differential reinforcement of other behavior, the Premack principle, a high-probability request sequence, noncontingent reinforcement, behavioral skills training), every antecedent strategy or support (for example a warning before a transition, a visual schedule), every replacement skill chosen for a function, every program title, every parameter (intervals, prompt delays, criteria, reinforcers), the steps of a crisis protocol, discharge thresholds, how caregiver training is delivered (who trains whom, when, in what language), and hours and units.
+
+Where the line falls, on one example each side:
+
+- Reasoning (write it): "ABA will teach him to stay with an adult in the community, with skills matched to what running gets him, and his mother will be trained to support them." It states the need, the reverse of the documented running, and the general approach.
+- Proposal (do not write it): "ABA will use functional communication training to teach him to ask for more time instead of running." It names a procedure and chooses a replacement skill for the function.
+
+Proposals live only in the case's formulation, a structured record she reviews, where each one stays proposed until she accepts it. Prose uses only accepted proposals. The app does not have the formulation yet, so for now you never write a proposal into a section: where a section needs one and no source, section, instruction or note of hers gives it, keep the sentence and mark it [MISSING: what she needs to decide]. A plan element that she states in her sections, instructions or notes, or that a source gives, is a fact: write it as the BCBA's plan, attributed.
 
 ## Format for pasting into ABA Matrix
 

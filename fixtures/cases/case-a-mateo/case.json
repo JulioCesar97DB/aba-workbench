@@ -47,7 +47,8 @@
       ],
       "anticipatedBy": [
         "assessment",
-        "section-medical-necessity"
+        "section-medical-necessity",
+        "style"
       ],
       "note": "General rules forbid deriving percentiles and keep missing ones visible; this checks the model follows them."
     },

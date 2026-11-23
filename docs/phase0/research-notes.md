@@ -1,5 +1,7 @@
 # Phase 0 research notes (handoff, 2026-11-21)
 
+> **Note (2026-11-22):** historical. The project has since moved from Next.js on Vercel to an Electron desktop app (see [../desktop.md](../desktop.md)); the Vercel notes below, the 4.5 MB body limit included, no longer apply. Requests are now checked against each provider's documented limit (../desktop.md, "Size of a request").
+
 Research gathered before the build, kept so later phases don't repeat it.
 
 Decisions taken after these notes (owner via coordinator): Anthropic server-side fallbacks ON in the `"default"` form; PDFs over the 4.5 MB body limit are refused with a clear message (no workaround); 5-minute Claude cache; maxDuration 300 s; inline [MISSING]/[CHECK] markers (2026-11-21). On 2026-11-22: aba-workbench will be a local app rather than a Vercel-hosted one, and the real runs are deferred. See REPORT.md.

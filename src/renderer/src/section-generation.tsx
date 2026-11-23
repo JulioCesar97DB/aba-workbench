@@ -1,0 +1,223 @@
+import { useEffect, useSyncExternalStore } from "react";
+import type { DraftingProvider, GenerationUpdate, SectionSaveResult, StartSectionResult } from "../../shared/api.ts";
+import type { ReportSectionId } from "../../shared/report-sections.ts";
+import type { SectionRequestInput } from "../../shared/sections.ts";
+
+/*
+ * The AI's requests from the section screen, one store for the whole app: leaving the
+ * section (or the case) while the AI writes does not lose what it is doing, and coming
+ * back shows it. Each request streams its text; the new version arrives in "saved", and
+ * the check against her sections in "checked".
+ */
+
+export type GenerationOutcome =
+  | { kind: "saved" }
+  /** Stop came while the finished text was being written: the version exists, and the screen says so. */
+  | { kind: "saved-before-stop" }
+  /** A check run again ended (its result is in the version). */
+  | { kind: "checked" }
+  /** A paragraph change answered with more than the paragraph: nothing was saved. */
+  | { kind: "not-one-paragraph" }
+  /** The answer was longer than a section can be: nothing was saved. */
+  | { kind: "too-long" }
+  | { kind: "stopped" }
+  | { kind: "failed"; message: string }
+  | { kind: "incomplete" }
+  | { kind: "refused" }
+  | { kind: "not-saved" };
+
+export interface SectionGeneration {
+  id: string;
+  caseId: string;
+  sectionId: ReportSectionId;
+  /** Null for a check run again ("Check again"). */
+  request: SectionRequestInput | null;
+  /** The AI it was sent to, so "Try again" sends it to the same one. */
+  provider: DraftingProvider;
+  phase: "starting" | "thinking" | "writing" | "checking" | "done";
+  text: string;
+  outcome: GenerationOutcome | null;
+}
+
+const byKey = new Map<string, SectionGeneration>();
+/**
+ * Stop pressed while a request was still being prepared: the main process did not know
+ * its id yet, so the stop is sent again as soon as the request has started.
+ */
+const stopRequested = new Set<string>();
+/** Requests whose start has not returned yet: a Stop on them is remembered (review round 4, L-1), whatever their phase. */
+const notStarted = new Set<string>();
+const listeners = new Set<() => void>();
+let snapshot = 0;
+/** Told each saved section, so the screen and the sidebar show it. */
+type SavedListener = (caseId: string, result: Extract<SectionSaveResult, { outcome: "saved" }>, kind: "version" | "check") => void;
+const savedListeners = new Set<SavedListener>();
+
+const keyOf = (caseId: string, sectionId: string) => `${caseId}/${sectionId}`;
+
+function set(next: SectionGeneration) {
+  byKey.set(keyOf(next.caseId, next.sectionId), next);
+  snapshot++;
+  for (const listener of listeners) listener();
+}
+
+function findById(id: string): SectionGeneration | undefined {
+  for (const generation of byKey.values()) if (generation.id === id) return generation;
+  return undefined;
+}
+
+function apply(update: GenerationUpdate) {
+  const current = findById(update.generationId);
+  if (!current) return;
+  const event = update.event;
+  switch (event.type) {
+    case "status":
+      // A check run again stays "checking" whatever the model is doing.
+      if (current.request !== null) set({ ...current, phase: event.phase });
+      return;
+    case "text":
+      set({ ...current, phase: "writing", text: current.text + event.delta });
+      return;
+    case "refusal":
+      // The provider's contract: a refusal invalidates every word received.
+      set({ ...current, text: "", outcome: { kind: "refused" } });
+      return;
+    case "done":
+      if (!event.complete && !current.outcome) set({ ...current, outcome: { kind: "incomplete" } });
+      return;
+    case "error":
+      set({ ...current, outcome: { kind: "failed", message: event.message } });
+      return;
+    case "saved":
+      if (event.result.outcome === "saved") {
+        const saved = event.result;
+        for (const listener of savedListeners) listener(current.caseId, saved, "version");
+        set({ ...current, phase: "checking", outcome: { kind: "saved" } });
+      } else {
+        const outcome = event.result.outcome;
+        set({ ...current, outcome: outcome === "not-one-paragraph" || outcome === "too-long" ? { kind: outcome } : { kind: "not-saved" } });
+      }
+      return;
+    case "checked":
+      if (event.result.outcome === "saved") {
+        const saved = event.result;
+        for (const listener of savedListeners) listener(current.caseId, saved, "check");
+      }
+      if (current.request === null) set({ ...current, outcome: { kind: "checked" } });
+      return;
+    case "finished":
+      set({
+        ...current,
+        phase: "done",
+        // A version that reached the disk is reported as saved, even when Stop came during the write (review round 4, R4-1).
+        outcome:
+          event.cancelled && current.outcome?.kind === "saved"
+            ? { kind: "saved-before-stop" }
+            : (current.outcome ?? (current.request === null ? { kind: "checked" } : event.cancelled ? { kind: "stopped" } : { kind: "incomplete" })),
+      });
+      return;
+    default:
+      return;
+  }
+}
+
+let subscribed = false;
+function ensureSubscribed() {
+  if (subscribed) return;
+  subscribed = true;
+  window.aba.onGenerationUpdate(apply);
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** Starts a request; the outcome says why it did not start. */
+export async function startSectionGeneration(caseId: string, sectionId: ReportSectionId, provider: DraftingProvider, request: SectionRequestInput): Promise<StartSectionResult["outcome"] | "error"> {
+  ensureSubscribed();
+  const id = crypto.randomUUID();
+  const previous = byKey.get(keyOf(caseId, sectionId));
+  set({ id, caseId, sectionId, request, provider, phase: "starting", text: "", outcome: null });
+  notStarted.add(id);
+  try {
+    const result = await window.aba.startSectionGeneration(caseId, sectionId, id, provider, request);
+    notStarted.delete(id);
+    if (result.outcome === "started" && stopRequested.has(id)) void window.aba.cancelGeneration(id);
+    stopRequested.delete(id);
+    if (result.outcome !== "started") {
+      if (previous) set(previous);
+      else {
+        byKey.delete(keyOf(caseId, sectionId));
+        snapshot++;
+        for (const listener of listeners) listener();
+      }
+    }
+    return result.outcome;
+  } catch {
+    notStarted.delete(id);
+    set({ id, caseId, sectionId, request, provider, phase: "done", text: "", outcome: { kind: "failed", message: "" } });
+    return "error";
+  }
+}
+
+/** "Check again": runs only the consistency check on one version. */
+export async function startSectionCheck(caseId: string, sectionId: ReportSectionId, provider: DraftingProvider, version: number): Promise<StartSectionResult["outcome"] | "error"> {
+  ensureSubscribed();
+  const id = crypto.randomUUID();
+  set({ id, caseId, sectionId, request: null, provider, phase: "checking", text: "", outcome: null });
+  notStarted.add(id);
+  try {
+    const result = await window.aba.checkSection(caseId, sectionId, id, provider, version);
+    notStarted.delete(id);
+    if (result.outcome === "started" && stopRequested.has(id)) void window.aba.cancelGeneration(id);
+    stopRequested.delete(id);
+    if (result.outcome !== "started") set({ id, caseId, sectionId, request: null, provider, phase: "done", text: "", outcome: { kind: "checked" } });
+    return result.outcome;
+  } catch {
+    notStarted.delete(id);
+    set({ id, caseId, sectionId, request: null, provider, phase: "done", text: "", outcome: { kind: "checked" } });
+    return "error";
+  }
+}
+
+/** "Try again" after a request failed: the same request, to the same AI. */
+export function retrySectionGeneration(generation: SectionGeneration): Promise<StartSectionResult["outcome"] | "error"> | null {
+  if (generation.phase !== "done" || generation.outcome?.kind !== "failed" || generation.request === null) return null;
+  return startSectionGeneration(generation.caseId, generation.sectionId, generation.provider, generation.request);
+}
+
+export function stopSectionGeneration(generation: SectionGeneration): void {
+  if (notStarted.has(generation.id)) stopRequested.add(generation.id);
+  void window.aba.cancelGeneration(generation.id);
+}
+
+/** Forgets a finished request's message (she read it, or started another). */
+export function dismissSectionGeneration(caseId: string, sectionId: string): void {
+  const current = byKey.get(keyOf(caseId, sectionId));
+  if (!current || current.phase !== "done") return;
+  byKey.delete(keyOf(caseId, sectionId));
+  snapshot++;
+  for (const listener of listeners) listener();
+}
+
+/** The section's request under way or last finished, or null. */
+export function useSectionGeneration(caseId: string, sectionId: string): SectionGeneration | null {
+  useEffect(ensureSubscribed, []);
+  useSyncExternalStore(subscribe, () => snapshot);
+  return byKey.get(keyOf(caseId, sectionId)) ?? null;
+}
+
+/** Called with every section saved by a request (the new version, then its check). */
+export function useOnSectionSaved(listener: SavedListener): void {
+  useEffect(() => {
+    savedListeners.add(listener);
+    return () => {
+      savedListeners.delete(listener);
+    };
+  }, [listener]);
+}
+
+export function isRunning(generation: SectionGeneration | null): boolean {
+  return generation !== null && generation.phase !== "done";
+}

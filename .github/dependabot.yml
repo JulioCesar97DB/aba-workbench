@@ -1,0 +1,11 @@
+# Keeps the actions in .github/workflows up to date. The workflows pin each
+# action to a commit SHA with the release in a same-line comment; Dependabot
+# updates both. Only GitHub Actions is covered, not npm.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Every pull request in this project goes to dev.
+    target-branch: "dev"

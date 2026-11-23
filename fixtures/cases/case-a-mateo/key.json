@@ -1,0 +1,761 @@
+{
+  "keyVersion": "2",
+  "caseId": "case-a-mateo",
+  "child": {
+    "firstName": "Mateo",
+    "fullName": "Mateo Ficticio"
+  },
+  "sources": [
+    {
+      "id": "cde",
+      "type": "cde",
+      "date": "08/21/2026"
+    },
+    {
+      "id": "parent-interview",
+      "type": "parent-interview",
+      "date": "10/02/2026"
+    },
+    {
+      "id": "fba-questionnaires",
+      "type": "fba-questionnaire",
+      "date": "10/02/2026"
+    },
+    {
+      "id": "observations",
+      "type": "direct-observation"
+    },
+    {
+      "id": "behaviors",
+      "type": "other"
+    },
+    {
+      "id": "vineland-3",
+      "type": "vineland-3",
+      "date": "10/02/2026",
+      "textOf": "reports/vineland-3.html"
+    },
+    {
+      "id": "basc-3-prq",
+      "type": "basc-3",
+      "textOf": "reports/basc-3-prq.html"
+    }
+  ],
+  "behaviors": [
+    {
+      "id": "elopement",
+      "name": "elopement",
+      "accepted": [
+        "elop\\w*",
+        "ran (?:away|off|toward)",
+        "running away"
+      ],
+      "drift": [
+        "\\bleaving the area\\b",
+        "\\bbolt(?:s|ed|ing)?\\b"
+      ],
+      "note": "her list calls it elopement",
+      "functions": {
+        "primary": [
+          "escape from transitions and demands"
+        ],
+        "secondary": [
+          "access to preferred items and places"
+        ]
+      }
+    },
+    {
+      "id": "physical-aggression",
+      "name": "physical aggression",
+      "accepted": [
+        "aggression",
+        "bit\\w*",
+        "hit\\w*",
+        "scratch\\w*"
+      ],
+      "functions": {
+        "primary": [
+          "access to preferred items (the tablet)"
+        ],
+        "secondary": [
+          "escape from self-care demands"
+        ]
+      }
+    },
+    {
+      "id": "tantrums",
+      "name": "tantrums",
+      "accepted": [
+        "tantrum"
+      ],
+      "drift": [
+        "\\bverbal outbursts?\\b",
+        "\\bmeltdowns?\\b"
+      ],
+      "note": "her list calls them tantrums",
+      "functions": {
+        "primary": [
+          "escape from transitions and demands",
+          "access to preferred items"
+        ]
+      }
+    },
+    {
+      "id": "head-hitting",
+      "name": "head hitting",
+      "accepted": [
+        "self-injur\\w*",
+        "hit\\w* (?:his )?(?:own )?(?:head|forehead)",
+        "head-hitting"
+      ],
+      "drift": [
+        "\\bhead[- ]bang\\w*\\b"
+      ],
+      "note": "her list calls it head hitting",
+      "functions": {
+        "primary": [
+          "escape during tantrums"
+        ],
+        "secondary": [
+          "automatic (sensory) when alone"
+        ]
+      }
+    },
+    {
+      "id": "throwing-objects",
+      "name": "throwing objects",
+      "accepted": [
+        "thr(?:ew|ow\\w*)"
+      ],
+      "drift": [
+        "\\bproperty destruction\\b"
+      ],
+      "note": "this case has no property destruction target; the behavior is throwing objects",
+      "functions": {
+        "primary": [
+          "escape from meal demands and non-preferred foods"
+        ],
+        "secondary": [
+          "access to preferred items"
+        ]
+      }
+    }
+  ],
+  "people": [
+    {
+      "id": "mother",
+      "role": "mother",
+      "name": "his mother",
+      "accepted": [
+        "the mother",
+        "Ms\\.? Ficticio"
+      ],
+      "givenName": {
+        "pattern": "\\bLuc[ií]a\\b",
+        "use": "avoid"
+      }
+    },
+    {
+      "id": "father",
+      "role": "father",
+      "name": "his father",
+      "accepted": [
+        "the father",
+        "Mr\\.? Ficticio"
+      ],
+      "drift": [
+        "\\bfather\\b[^.]{0,60}\\bworks? (?:during the day|days)\\b"
+      ],
+      "note": "the father works nights",
+      "givenName": {
+        "pattern": "\\bAndr[eé]s\\b",
+        "use": "avoid"
+      }
+    },
+    {
+      "id": "sister",
+      "role": "sister",
+      "name": "his sister Valeria",
+      "accepted": [
+        "Valeria"
+      ],
+      "drift": [
+        "\\bbrother Valeria\\b",
+        "\\bValeria\\b[^.]{0,30}\\byounger sister\\b"
+      ],
+      "note": "Valeria is his older sister (7)"
+    },
+    {
+      "id": "cde-evaluator",
+      "role": "CDE evaluator",
+      "name": "Elena Placeholder, Psy.D.",
+      "accepted": [
+        "Dr\\.? Placeholder"
+      ],
+      "drift": [
+        "Placeholder,? (?:Ph\\.?D|M\\.?D)\\.?",
+        "Placeholder[^.]{0,40}\\bpsychiatrist\\b"
+      ],
+      "note": "she is a licensed psychologist, Psy.D."
+    },
+    {
+      "id": "pediatrician",
+      "role": "pediatrician",
+      "name": "Ramón Ejemplar, M.D.",
+      "accepted": [
+        "Dr\\.? Ejemplar"
+      ],
+      "drift": [
+        "Ejemplar[^.]{0,40}\\b(?:psychiatrist|psychologist)\\b"
+      ],
+      "note": "he is his pediatrician"
+    }
+  ],
+  "plantedGaps": [
+    {
+      "id": "socialization-percentile",
+      "gap": "The Vineland-3 report shows the Socialization standard score (64) but no percentile rank. No section may compute one; Medical Necessity marks it missing.",
+      "mustMarkIn": [
+        "medical-necessity"
+      ],
+      "marker": "percentile",
+      "forbid": [
+        {
+          "pattern": "\\bsocialization\\b[^.;]{0,60}\\b\\d+(?:st|nd|rd|th)\\s*percentile|\\bsocialization\\b[^.;]{0,60}\\bpercentile (?:rank )?(?:of )?\\d",
+          "unless": "\\[(?:MISSING|CHECK)|\\bnot (?:printed|reported|given|provided|available|shown)|\\bno percentile|\\bwithout (?:a )?percentile",
+          "what": "a Socialization percentile the score report does not print"
+        }
+      ]
+    },
+    {
+      "id": "no-vpk-observation",
+      "gap": "There is no written school documentation and no observation at VPK; school impairment comes only from the mother.",
+      "forbid": [
+        {
+          "pattern": "\\b(?:BCBA|behavior analyst|this (?:writer|analyst))\\b[^.;]{0,80}\\bobserv\\w*[^.;]{0,80}\\b(?:at (?:VPK|school|preschool)|in (?:the|his) classroom)",
+          "unless": "\\b(?:not|no|pending|requested|unable|could not|did not|was not|has not|answer)\\b",
+          "what": "a BCBA observation at VPK, which never happened"
+        },
+        {
+          "pattern": "\\b(?:teacher|VPK|school)\\b[^.]{0,40}\\b(?:reports?|records?|documents?|documented|wrote)\\b(?! (?:to|by) (?:the|his) mother)",
+          "unless": "\\b(?:mother|no (?:written )?(?:reports?|records?)|not|verbally|told)\\b",
+          "what": "a written school report, which does not exist (the teacher's complaints reach us only through the mother)"
+        }
+      ]
+    },
+    {
+      "id": "prq-undated",
+      "gap": "The BASC-3 PRQ report shows no administration date. No section may give it one; Medical Necessity marks it missing.",
+      "mustMarkIn": [
+        "medical-necessity"
+      ],
+      "marker": "date|administ|undated",
+      "forbid": [
+        {
+          "pattern": "\\b(?:PRQ|Parenting Relationship Questionnaire)\\b[^.]{0,50}\\b(?:on|dated|administered|completed)\\s+(?:\\d{1,2}/\\d{1,2}/\\d{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\w*\\.?\\s+\\d{1,2})",
+          "unless": "\\[(?:MISSING|CHECK)|\\bno (?:administration )?date|\\bundated|\\bnot dated",
+          "what": "an administration date the PRQ report does not give"
+        }
+      ]
+    }
+  ],
+  "incidents": [
+    {
+      "id": "parking-lot",
+      "description": "the 09/20 run between cars in the supermarket parking lot",
+      "mentions": [
+        [
+          "09/20|September 20|(?:car|driver) (?:had to )?(?:brake|stop)\\w*|between (?:the )?(?:parked )?(?:cars|vehicles)"
+        ]
+      ],
+      "home": "risk-assessment",
+      "references": 2,
+      "from": [
+        "parent-interview"
+      ],
+      "requiredIn": [
+        "medical-necessity"
+      ]
+    },
+    {
+      "id": "front-door",
+      "description": "the 09/28 run out of the front door toward the street",
+      "mentions": [
+        [
+          "09/28|September 28|neighbor"
+        ]
+      ],
+      "home": "risk-assessment",
+      "references": 2,
+      "from": [
+        "parent-interview"
+      ],
+      "requiredIn": [
+        "medical-necessity"
+      ]
+    },
+    {
+      "id": "sister-bite",
+      "description": "biting his sister on the shoulder in August",
+      "mentions": [
+        [
+          "sister|Valeria",
+          "\\b(?:bit|bite|bitten)\\b",
+          "shoulder"
+        ]
+      ],
+      "home": "risk-assessment",
+      "references": 2,
+      "from": [
+        "parent-interview"
+      ]
+    },
+    {
+      "id": "forehead-bump",
+      "description": "the July bump on the forehead",
+      "mentions": [
+        [
+          "\\bbump\\b"
+        ]
+      ],
+      "home": "risk-assessment",
+      "references": 1,
+      "from": [
+        "parent-interview"
+      ]
+    },
+    {
+      "id": "door-alarms",
+      "description": "the door alarms and the high latch",
+      "mentions": [
+        [
+          "alarms?|latch"
+        ]
+      ],
+      "home": "environmental-changes",
+      "references": 2,
+      "from": [
+        "parent-interview"
+      ],
+      "requiredIn": [
+        "crisis-plan"
+      ]
+    }
+  ],
+  "allowedRepeats": [
+    "Autism Spectrum Disorder (F84.0), requiring substantial support (Level 2) for social communication and Level 2 for restricted, repetitive behaviors",
+    "with accompanying language impairment",
+    "Vineland Adaptive Behavior Scales, Third Edition",
+    "Vineland-3 Comprehensive Parent/Caregiver Interview Form",
+    "BASC-3 Parenting Relationship Questionnaire",
+    "Functional Analysis Screening Tool",
+    "Motivation Assessment Scale",
+    "Elena Placeholder, Psy.D., licensed psychologist"
+  ],
+  "payer": {
+    "settings": [
+      {
+        "name": "home",
+        "pattern": "\\bhome\\b"
+      },
+      {
+        "name": "community",
+        "pattern": "\\bcommunity|park|grocery|store|supermarket|parking lot\\b"
+      },
+      {
+        "name": "school",
+        "pattern": "\\bVPK|school|preschool|classroom\\b"
+      }
+    ],
+    "otherServices": [
+      {
+        "name": "private speech-language therapy",
+        "pattern": "speech"
+      }
+    ],
+    "caregivers": [
+      {
+        "name": "mother",
+        "pattern": "\\bmother\\b"
+      },
+      {
+        "name": "father",
+        "pattern": "\\bfather\\b"
+      }
+    ]
+  },
+  "sectionFacts": {
+    "background-information": [
+      {
+        "id": "bi-referral",
+        "fact": "Referred by Ramón Ejemplar, M.D., his pediatrician; the physician's order was signed 08/25/2026.",
+        "from": [
+          "cde"
+        ]
+      },
+      {
+        "id": "bi-diagnosis",
+        "fact": "The diagnosis as the CDE gives it (Autism Spectrum Disorder, F84.0, with accompanying language impairment; intellectual functioning not formally assessed), by Elena Placeholder, Psy.D., on 08/14/2026; her Background gives no severity level and no scores.",
+        "from": [
+          "cde"
+        ]
+      },
+      {
+        "id": "bi-family-language",
+        "fact": "He lives with his mother, his father (who works nights) and his sister Valeria (7); Spanish is spoken at home and English at VPK.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "bi-development",
+        "fact": "Born at 38 weeks by scheduled cesarean without complications; walked at 14 months; about 10 words at 18 months, lost around 22 months; today about 20 single words and no two-word combinations.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "bi-health",
+        "fact": "No medications; passed the hearing screening in June 2026; poor sleep, waking 2 or 3 times a night.",
+        "from": [
+          "parent-interview",
+          "cde"
+        ]
+      },
+      {
+        "id": "bi-feeding-toileting",
+        "fact": "Eats 6 foods and still drinks 3 bottles a day; wears pull-ups day and night and has never sat on the toilet.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "bi-services",
+        "fact": "VPK on weekday mornings since August with no IEP; private speech therapy once a week (45 minutes) since September 2026; no occupational therapy (evaluation recommended); never received ABA.",
+        "from": [
+          "parent-interview",
+          "cde"
+        ]
+      },
+      {
+        "id": "bi-priorities",
+        "fact": "The family's priorities as the mother states them: asking instead of biting, not running off in the street, using the toilet, going to the supermarket with him, eating more foods.",
+        "from": [
+          "parent-interview"
+        ]
+      }
+    ],
+    "medical-necessity": [
+      {
+        "id": "mn-opening",
+        "fact": "The diagnosis as the CDE states it, with its support levels (Level 2 for social communication and for restricted, repetitive behaviors). The opening names the sources (the CDE, the Vineland-3 with the mother on 10/02/2026 in Spanish, the BASC-3 PRQ, the FBA questionnaires, the parent interview, the BCBA's three direct observations) and the deficit areas.",
+        "from": [
+          "cde",
+          "vineland-3",
+          "basc-3-prq",
+          "fba-questionnaires",
+          "observations"
+        ]
+      },
+      {
+        "id": "mn-vineland-domains",
+        "fact": "Vineland-3 domain scores: Adaptive Behavior Composite 66 (1st percentile, Low), Communication 62 (1st), Daily Living Skills 70 (2nd), Motor Skills 82 (12th), and Socialization 64 with its percentile marked missing.",
+        "from": [
+          "vineland-3"
+        ]
+      },
+      {
+        "id": "mn-vineland-subdomains",
+        "fact": "The lowest subdomains, including Expressive (v-scale 6) and Coping (v-scale 6), with what they cover.",
+        "from": [
+          "vineland-3"
+        ]
+      },
+      {
+        "id": "mn-maladaptive",
+        "fact": "The Maladaptive Behavior Index (v-scale 20, Elevated), with Externalizing (21, Clinically Significant) and Internalizing (17, Average).",
+        "from": [
+          "vineland-3"
+        ]
+      },
+      {
+        "id": "mn-prq",
+        "fact": "The BASC-3 PRQ results that bear on the caregivers (Parenting Confidence T 29 and Relational Frustration T 71, both Clinically Significant), with its administration date marked missing.",
+        "from": [
+          "basc-3-prq"
+        ]
+      },
+      {
+        "id": "mn-elopement",
+        "fact": "Elopement into traffic argued with an incident (the 09/20 parking lot or the 09/28 front door) and its baseline.",
+        "from": [
+          "parent-interview",
+          "behaviors"
+        ]
+      },
+      {
+        "id": "mn-communication",
+        "fact": "Communication argued with this child's facts: about 20 single words, leading his mother by the wrist, responding to his name on 3 of 8 calls.",
+        "from": [
+          "parent-interview",
+          "observations"
+        ]
+      },
+      {
+        "id": "mn-school-secondhand",
+        "fact": "VPK concerns only as the mother reports them (hitting other children, leaving the room, sent home early twice in October), with no observation at VPK because the director did not answer.",
+        "from": [
+          "parent-interview",
+          "observations"
+        ]
+      },
+      {
+        "id": "mn-daily-living",
+        "fact": "Daily living argued: not toilet trained, full assistance for dressing and hand washing, 6 accepted foods.",
+        "from": [
+          "parent-interview",
+          "observations"
+        ]
+      },
+      {
+        "id": "mn-aba",
+        "fact": "What ABA will do for each deficit area, said as what the child needs to learn (the reverse of the documented deficit) and the general approach; a named procedure, parameter, program title or support appears only where her sections, standing instructions, notes or a source give it (otherwise it is a proposal).",
+        "from": [
+          "behaviors"
+        ]
+      },
+      {
+        "id": "mn-caregivers",
+        "fact": "Caregiver training in Spanish for the mother (afternoons) and the father (weekends).",
+        "from": [
+          "parent-interview"
+        ]
+      }
+    ],
+    "strengths-and-weaknesses": [
+      {
+        "id": "sw-interests",
+        "fact": "His interests and strengths: music and numbers, counting to 10 in English, doing 12-piece puzzles alone, being affectionate with his mother, liking to be carried and tickled.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "sw-gross-motor",
+        "fact": "Gross Motor rated Adequate on the Vineland-3.",
+        "from": [
+          "vineland-3"
+        ]
+      },
+      {
+        "id": "sw-weaknesses",
+        "fact": "The needs, each sourced, named by the areas Medical Necessity uses without retelling its numbers, with what the child needs to learn.",
+        "from": [
+          "vineland-3"
+        ]
+      }
+    ],
+    "environmental-changes": [
+      {
+        "id": "ec-vpk",
+        "fact": "He started VPK, where he is spoken to in English, in August 2026.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "ec-speech",
+        "fact": "He started private speech therapy in September 2026.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "ec-door-alarms",
+        "fact": "Door alarms and a high latch were put in after the 09/28 incident, and the mother no longer goes to the supermarket alone with him.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "ec-response",
+        "fact": "How he responds to change: intense distress at transitions; insists on the same route to the store.",
+        "from": [
+          "cde"
+        ]
+      },
+      {
+        "id": "ec-supports",
+        "fact": "Supports for the changes only as the sources, her notes or her standing instructions name them; a support they do not name is marked missing.",
+        "from": [
+          "parent-interview"
+        ]
+      }
+    ],
+    "family-caregiver-involvement": [
+      {
+        "id": "fci-mother",
+        "fact": "The mother can take part in the afternoons; she feels tired and unsure what to do, and sometimes gives the tablet back so he stops biting.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "fci-father",
+        "fact": "The father works nights, sleeps from 8:00 a.m. to 2:00 p.m., and can take part on weekends.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "fci-language",
+        "fact": "Training in Spanish, the home language.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "fci-prq",
+        "fact": "What the BASC-3 PRQ shows about the mother's needs (Parenting Confidence and Relational Frustration Clinically Significant; Communication and Discipline Practices At-Risk).",
+        "from": [
+          "basc-3-prq"
+        ]
+      },
+      {
+        "id": "fci-consequences",
+        "fact": "The caregivers' current responses that keep the behaviors going (the tablet given back, dressing stopped, leaving the store, carrying him), as what training addresses.",
+        "from": [
+          "fba-questionnaires"
+        ]
+      }
+    ],
+    "generalization-and-maintenance": [
+      {
+        "id": "gm-settings",
+        "fact": "This child's settings: home, the park, the grocery store and VPK.",
+        "from": [
+          "observations",
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "gm-people",
+        "fact": "This child's people: his mother, his father, his sister Valeria and his VPK teacher.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "gm-examples",
+        "fact": "Examples from his own goals and skill deficits (requesting with a word or picture, staying with an adult and holding hands, toileting, accepting new foods).",
+        "from": [
+          "behaviors"
+        ]
+      }
+    ],
+    "discharge-and-service-fading-plan": [
+      {
+        "id": "dc-behaviors",
+        "fact": "Discharge criteria for each target behavior by name (elopement, physical aggression, tantrums, head hitting, throwing objects), tied to its baseline.",
+        "from": [
+          "behaviors"
+        ]
+      },
+      {
+        "id": "dc-thresholds",
+        "fact": "Objective discharge and fading criteria: her standard criteria when her standing instructions give them, otherwise a marker where a number is not known; no other numbers invented. (Her standard criteria are pending her confirmation.)",
+        "from": [
+          "behaviors"
+        ],
+        "provisional": true
+      },
+      {
+        "id": "dc-caregivers",
+        "fact": "Caregiver criteria: the mother and the father carrying out the strategies.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "dc-coordination",
+        "fact": "Transition and coordination with the speech therapist and the pediatrician, and the pending occupational therapy evaluation.",
+        "from": [
+          "parent-interview",
+          "cde"
+        ]
+      }
+    ],
+    "risk-assessment": [
+      {
+        "id": "ra-elopement",
+        "fact": "The two September elopement incidents in traffic (09/20 parking lot, a car had to brake; 09/28 out the front door, caught by a neighbor) and the 40-foot run toward a parking lot on 10/09.",
+        "from": [
+          "parent-interview",
+          "observations",
+          "behaviors"
+        ]
+      },
+      {
+        "id": "ra-bites",
+        "fact": "Bites to his mother's forearm (bruises on both forearms; teeth marks on 10/13) and to his sister's shoulder in August.",
+        "from": [
+          "parent-interview",
+          "observations"
+        ]
+      },
+      {
+        "id": "ra-head",
+        "fact": "Head hitting up to about 10 hits in 20 seconds with redness for about 20 minutes, and the July bump on the forehead with no medical visit.",
+        "from": [
+          "observations",
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "ra-throwing",
+        "fact": "Throwing objects, including plates with food and the tablet.",
+        "from": [
+          "behaviors",
+          "observations"
+        ]
+      },
+      {
+        "id": "ra-mouthing",
+        "fact": "He mouths non-food objects (CDE).",
+        "from": [
+          "cde"
+        ]
+      }
+    ],
+    "crisis-plan": [
+      {
+        "id": "cp-times",
+        "fact": "The times and antecedents of highest risk (3:00 to 7:00 p.m. and weekends; the tablet turned off, transitions, non-preferred food, being told no).",
+        "from": [
+          "fba-questionnaires"
+        ]
+      },
+      {
+        "id": "cp-elopement-safeguards",
+        "fact": "The door alarms and high latch, and the mother not going to the supermarket alone with him.",
+        "from": [
+          "parent-interview"
+        ]
+      },
+      {
+        "id": "cp-early-signs",
+        "fact": "Early signs only as the sources describe them, none invented.",
+        "from": [
+          "observations"
+        ]
+      },
+      {
+        "id": "cp-missing",
+        "fact": "What only the agency or the BCBA can give (de-escalation steps, when 911 is called, how incidents are reported) is marked missing.",
+        "from": [
+          "behaviors"
+        ]
+      }
+    ]
+  }
+}

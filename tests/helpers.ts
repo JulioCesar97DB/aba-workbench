@@ -9,7 +9,7 @@ export interface CapturedRequest {
 /** A fetch that records each request and answers from `respond`. No network is touched. */
 export function stubFetch(respond: (request: CapturedRequest) => Response) {
   const calls: CapturedRequest[] = [];
-  const fetchStub = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchStub = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const raw = init?.body;
     const body = typeof raw === "string" ? (JSON.parse(raw) as Record<string, unknown>) : null;
@@ -29,7 +29,7 @@ export const PDF_BASE64 = Buffer.from("%PDF-1.4 invented test file").toString("b
 
 export function options(model: string): GenerateOptions {
   return {
-    apiKey: "test-key-not-real",
+    credential: { kind: "api-key", apiKey: "test-key-not-real" },
     model,
     effort: "high",
     maxOutputTokens: 32_000,

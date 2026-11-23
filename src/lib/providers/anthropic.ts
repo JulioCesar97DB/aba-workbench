@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { isPdfPageLimitError, pdfPageLimitMessage, providerTooLargeMessage } from "../limits.ts";
+import { ANTHROPIC_BASE_URL, pinnedFetch, removeEnvHeaders } from "./endpoints.ts";
 import {
   ProviderError,
   sourceHeader,
@@ -7,6 +9,7 @@ import {
   type GenerateOptions,
   type ModelOption,
   type Provider,
+  type ProviderCredential,
   type ProviderDeps,
   type TokenUsage,
   type UsageAttempt,
@@ -27,17 +30,39 @@ const SERVER_SIDE_FALLBACKS = {
   fallbacks: "default",
 } as const satisfies { betas: Anthropic.Beta.AnthropicBeta[]; fallbacks: "default" };
 
+/** Claude takes only an API key: Anthropic does not let other apps offer Claude.ai sign-in. */
+function apiKeyOf(credential: ProviderCredential): string {
+  if (credential.kind !== "api-key") throw new ProviderError("unsupported_credential", "Claude needs an API key.");
+  return credential.apiKey;
+}
+
 function makeClient(apiKey: string, deps: ProviderDeps): Anthropic {
-  // The key arrives with the request and lives only in this client object. Logging is
-  // off so that ANTHROPIC_LOG=debug can never print a request body.
-  return new Anthropic({ apiKey, maxRetries: 2, logLevel: "off", ...(deps.fetch ? { fetch: deps.fetch } : {}) });
+  // The key arrives with the request and lives only in this client object. Every
+  // setting the SDK would otherwise take from the environment is given here
+  // (endpoints.ts lists them): the official address, no extra headers, no telemetry,
+  // and no logging, so ANTHROPIC_LOG=debug can never print a request body.
+  return new Anthropic({
+    apiKey,
+    baseURL: ANTHROPIC_BASE_URL,
+    defaultHeaders: removeEnvHeaders("ANTHROPIC_CUSTOM_HEADERS"),
+    webhookKey: null,
+    openTelemetry: false,
+    maxRetries: 2,
+    logLevel: "off",
+    fetch: pinnedFetch(ANTHROPIC_BASE_URL, deps.fetch),
+  });
 }
 
 /**
  * system (rules) ▼ | sources ▼ | task
  * Two cache breakpoints: the rules are shared by every case, the sources by every
  * section of one case. The task after the last breakpoint is never written to cache.
+ *
+ * One-hour cache (owner's decision, 2026-11-22): writing it costs twice the input price
+ * instead of 1.25 times, but she reads and corrects for more than five minutes between
+ * requests, so the default five-minute cache would be written again on almost every one.
  */
+const CACHE = { type: "ephemeral" as const, ttl: "1h" as const };
 function buildParams(options: GenerateOptions, includeTask = true) {
   const { prompt } = options;
   const content: Array<Anthropic.Beta.Messages.BetaTextBlockParam | Anthropic.Beta.Messages.BetaRequestDocumentBlock> = [];
@@ -54,7 +79,7 @@ function buildParams(options: GenerateOptions, includeTask = true) {
     }
   }
   const lastSource = content.at(-1);
-  if (lastSource) lastSource.cache_control = { type: "ephemeral" };
+  if (lastSource) lastSource.cache_control = CACHE;
   if (includeTask) content.push({ type: "text", text: prompt.task });
 
   return {
@@ -63,7 +88,7 @@ function buildParams(options: GenerateOptions, includeTask = true) {
     // Current models think adaptively; effort is the control (Opus 5.5 defaults to medium).
     thinking: { type: "adaptive" as const },
     output_config: { effort: options.effort },
-    system: [{ type: "text" as const, text: prompt.system, cache_control: { type: "ephemeral" as const } }],
+    system: [{ type: "text" as const, text: prompt.system, cache_control: CACHE }],
     messages: [{ role: "user" as const, content }],
     ...(SERVER_SIDE_FALLBACKS ?? {}),
   };
@@ -133,20 +158,29 @@ export function toProviderError(error: unknown): ProviderError | null {
   if (error instanceof Anthropic.RateLimitError) {
     return new ProviderError("rate_limited", "Anthropic rate limit reached; try again in a minute.", status);
   }
+  // 413 request_too_large: the size check before sending should prevent it (limits.ts).
+  if (status === 413) {
+    return new ProviderError("request_too_large", providerTooLargeMessage("anthropic"), status);
+  }
   if (error instanceof Anthropic.BadRequestError) {
+    // The documentation does not give the wording of the PDF page-limit error; a refusal
+    // shaped like one is explained, with Claude's own words kept (limits.ts).
+    if (isPdfPageLimitError(error.message)) {
+      return new ProviderError("too_many_pdf_pages", pdfPageLimitMessage(error.message), status);
+    }
     return new ProviderError("bad_request", `Anthropic refused the request: ${error.message.slice(0, 300)}`, status);
   }
   return new ProviderError("provider_error", `Anthropic error ${status ?? ""}`.trim(), status);
 }
 
 export function createAnthropicProvider(deps: ProviderDeps = {}): Provider {
-  const client = (apiKey: string) => makeClient(apiKey, deps);
+  const client = (credential: ProviderCredential) => makeClient(apiKeyOf(credential), deps);
   return {
     id: "anthropic",
 
-    async listModels(apiKey, signal) {
+    async listModels(credential, signal) {
       const models: ModelOption[] = [];
-      for await (const model of client(apiKey).models.list({ limit: 100 }, { signal })) {
+      for await (const model of client(credential).models.list({ limit: 100 }, { signal })) {
         if (model.lifecycle === "retired") continue;
         models.push({ id: model.id, label: model.display_name, createdAt: model.created_at });
       }
@@ -154,7 +188,7 @@ export function createAnthropicProvider(deps: ProviderDeps = {}): Provider {
     },
 
     async *generate(options): AsyncIterable<GenerateEvent> {
-      const stream = client(options.apiKey).beta.messages.stream(buildParams(options), { signal: options.signal });
+      const stream = client(options.credential).beta.messages.stream(buildParams(options), { signal: options.signal });
       for await (const event of stream) {
         if (event.type === "content_block_start") {
           const block = event.content_block;
@@ -191,7 +225,7 @@ export function createAnthropicProvider(deps: ProviderDeps = {}): Provider {
     async prewarm(options) {
       // max_tokens 0 runs prefill only: it writes the cache up to the last breakpoint
       // (the end of the sources) and returns no content. Same settings as the real call.
-      const message = await client(options.apiKey).beta.messages.create(
+      const message = await client(options.credential).beta.messages.create(
         { ...buildParams(options, false), max_tokens: 0 },
         { signal: options.signal },
       );

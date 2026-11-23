@@ -51,7 +51,8 @@
         "severity level"
       ],
       "anticipatedBy": [
-        "payer-florida-molina"
+        "payer-florida-molina",
+        "section-medical-necessity"
       ],
       "note": "The payer facts list a missing severity level among Molina's CDE snags."
     },

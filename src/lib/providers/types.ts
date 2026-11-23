@@ -22,13 +22,44 @@ export interface PromptParts {
   task: string;
 }
 
+/**
+ * How a request proves who it is for. "api-key": the user's own key for the provider
+ * (Claude in the app; both providers in development and in pnpm phase0). "chatgpt": the
+ * access token of Sign in with ChatGPT, which spends the user's ChatGPT plan (OpenAI
+ * only); its requests follow OpenAI's rules for that flow (openai.ts).
+ */
+export type ProviderCredential = { kind: "api-key"; apiKey: string } | { kind: "chatgpt"; accessToken: string };
+
+export function apiKeyCredential(apiKey: string): ProviderCredential {
+  return { kind: "api-key", apiKey };
+}
+
 export interface GenerateOptions {
-  apiKey: string;
+  /** Passed to the provider's client and nowhere else: never logged, never in an error. */
+  credential: ProviderCredential;
   model: string;
   effort: Effort;
   maxOutputTokens: number;
   prompt: PromptParts;
   signal: AbortSignal;
+  /**
+   * An opaque key that groups the requests of one case for the provider's prompt cache
+   * (OpenAI's `prompt_cache_key`, sent on the ChatGPT route only). Never the client's
+   * name or anything she wrote: src/main/cache-key.ts derives it from the case's internal id.
+   */
+  cacheKey?: string | null;
+  /**
+   * Development only (the evaluation's judge, src/lib/judge.ts): the answer must be JSON in
+   * this schema. OpenAI enforces it (text.format, strict); Claude ignores it, and the judge
+   * then reads plain JSON and validates it itself. Never set on her requests.
+   */
+  outputFormat?: OutputFormat | null;
+}
+
+/** A JSON schema the answer must follow. */
+export interface OutputFormat {
+  name: string;
+  schema: Record<string, unknown>;
 }
 
 /** Token counts normalized across providers. The four buckets do not overlap. */
@@ -92,7 +123,8 @@ export interface ProviderDeps {
 
 export interface Provider {
   id: ProviderId;
-  listModels(apiKey: string, signal: AbortSignal): Promise<ModelOption[]>;
+  /** The models this credential can use. A free call, so it also proves the credential works. */
+  listModels(credential: ProviderCredential, signal: AbortSignal): Promise<ModelOption[]>;
   generate(options: GenerateOptions): AsyncIterable<GenerateEvent>;
   /** Writes the cacheable prefix (system + sources) without generating text. */
   prewarm(options: GenerateOptions): Promise<TokenUsage>;
