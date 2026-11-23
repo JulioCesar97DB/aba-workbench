@@ -102,26 +102,21 @@ test("a mock generation streams to completion, with the rules found", async ({ a
   const status = page.getByText(/^Status:/);
   const output = page.locator("pre");
 
-  // Every status the page shows, with the length of the text on screen at that moment, recorded
-  // in the page itself. Polling the status from the test missed the short "Writing" phase on slow
-  // Windows runners (Playwright's retries grow to 1 s, the mock streams for about 2 s).
+  // Every generation update the interface receives through the bridge, in order. What the page
+  // paints is not enough: on Windows runners the renderer went from "Starting" straight to "Done"
+  // without painting the states in between, and polling the status from the test missed the short
+  // "Writing" phase. The updates themselves show that the text arrives in pieces while it is written.
   await page.evaluate(() => {
     // Runs in the interface. Typed by hand: the e2e code is compiled without DOM types.
-    interface Node { textContent: string | null }
+    type Update = { event: { type: string; phase?: string } };
     const inPage = globalThis as unknown as {
-      devCheckSeen: Array<{ status: string; length: number }>;
-      document: { body: object; querySelectorAll(selector: string): ArrayLike<Node>; querySelector(selector: string): Node | null };
-      MutationObserver: new (callback: () => void) => { observe(target: object, options: object): void };
+      devCheckUpdates: string[];
+      aba: { onGenerationUpdate(listener: (update: Update) => void): () => void };
     };
-    const seen: Array<{ status: string; length: number }> = [];
-    inPage.devCheckSeen = seen;
-    const record = () => {
-      const statusText = Array.from(inPage.document.querySelectorAll("p")).find((p) => p.textContent?.startsWith("Status:"))?.textContent ?? "";
-      const length = inPage.document.querySelector("pre")?.textContent?.length ?? 0;
-      const last = seen.at(-1);
-      if (!last || last.status !== statusText || last.length !== length) seen.push({ status: statusText, length });
-    };
-    new inPage.MutationObserver(record).observe(inPage.document.body, { subtree: true, childList: true, characterData: true });
+    inPage.devCheckUpdates = [];
+    inPage.aba.onGenerationUpdate((update) => {
+      inPage.devCheckUpdates.push(update.event.type === "status" ? `status:${update.event.phase}` : update.event.type);
+    });
   });
 
   await page.getByRole("button", { name: "Run mock generation" }).click();
@@ -130,11 +125,13 @@ test("a mock generation streams to completion, with the rules found", async ({ a
   const final = (await output.textContent()) ?? "";
   expect(final).toContain("Rules sent as the cached prefix");
 
-  // Streaming: part of the text was on screen while the generation was still writing.
-  const seen = await page.evaluate(() => (globalThis as unknown as { devCheckSeen: Array<{ status: string; length: number }> }).devCheckSeen);
-  const partial = seen.filter((entry) => entry.status === "Status: Writing" && entry.length > 0);
-  expect(partial.length, `statuses seen: ${JSON.stringify(seen.map((entry) => entry.status))}`).toBeGreaterThan(0);
-  expect(Math.min(...partial.map((entry) => entry.length))).toBeLessThan(final.length);
+  // Streaming: the text arrived in several pieces after "writing" began and before "done".
+  const updates = await page.evaluate(() => (globalThis as unknown as { devCheckUpdates: string[] }).devCheckUpdates);
+  const writing = updates.indexOf("status:writing");
+  const done = updates.indexOf("done");
+  expect(writing, `updates: ${updates.join(", ")}`).toBeGreaterThanOrEqual(0);
+  expect(done, `updates: ${updates.join(", ")}`).toBeGreaterThan(writing);
+  expect(updates.slice(writing, done).filter((type) => type === "text").length, `updates: ${updates.join(", ")}`).toBeGreaterThan(1);
   await expect(page.getByText(/^Rules: /)).toHaveText(/^Rules: assessment \S+, guide \S+, style \S+, examples \S+, payer-florida-molina \S+, instruments \S+, section-medical-necessity \S+$/);
   await expect(page.getByRole("button", { name: "Run mock generation" })).toBeEnabled();
 });
