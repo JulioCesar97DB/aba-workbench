@@ -610,7 +610,7 @@ test("generated: three-letter sheet names spelled with any mark, and every name 
   const failures: string[] = [];
   let count = 0;
   const sheet = { client: { firstName: "Ana", lastName: "Paz Gil", nicknames: ["Ani"], dateOfBirth: "2018-09-05" }, caregivers: [{ firstName: "Eva", lastName: "Gil" }, { firstName: "Luz", lastName: "Rey" }] };
-  const marks = [" ", "-", ".", "_", "/", " / ", "*", "·", "•", ":", "|", "~", "+", ",", ". "];
+  const marks = [" ", "  ", "   ", "-", ".", "_", "/", " / ", "*", "·", "•", ":", "|", "~", "+", ",", ". "];
   for (const name of ["Ana", "ANA", "ana", "Eva", "Luz", "Paz", "Gil", "Rey", "Ani"]) {
     for (const mark of marks) {
       for (const tail of ["", mark.trim()]) {
@@ -635,10 +635,20 @@ test("generated: three-letter sheet names spelled with any mark, and every name 
             failures.push(`${JSON.stringify(form)} -> ${JSON.stringify(result.text)}`);
           }
         }
+        // Two name words of one person spelled out as one run ("A-N-A-P-A-Z", "e v a g i l").
+        for (const mark of marks) {
+          for (const joined of [a + b, (a + b).toUpperCase()]) {
+            const written = [...joined].join(mark);
+            const engine = new Deidentifier(sheet, { today: REVIEW_TODAY });
+            const result = engine.deidentify(`She wrote ${written} today.`);
+            count++;
+            if (residue(result.text).includes(a + b) || reidentify(result.text, engine.map).text !== `She wrote ${written} today.`) failures.push(`${JSON.stringify(written)} -> ${JSON.stringify(result.text)}`);
+          }
+        }
       }
     }
   }
-  t.diagnostic(`${count} spelled three-letter names and joined names, ${failures.length} survived`);
+  t.diagnostic(`${count} spelled three-letter names, spelled joined names and joined names, ${failures.length} survived`);
   assert.deepEqual(failures.slice(0, 20), []);
 });
 

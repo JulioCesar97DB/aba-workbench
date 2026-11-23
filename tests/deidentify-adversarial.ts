@@ -406,6 +406,8 @@ export const R7_PROBES: Probe[] = [
   { group: "B1 spelled", text: "Spelled A N A.", hide: ["A N A"] },
   { group: "B1 spelled", text: "Then a.n.a. and E.V.A. and L-U-Z.", hide: ["a.n.a", "E.V.A", "L-U-Z"] },
   { group: "B1 joined", text: "Follow @anapaz or www.anapaz.com; file ana_paz_cde.pdf; evarey@mail.com.", hide: ["anapaz", "paz_cde", "ana_", "evarey"] },
+  // Found after the round-7 report: a run of spaces as the mark, and a whole name spelled as one run.
+  { group: "B1 spelled", text: "Spelled A  N  A, then A-N-A-P-A-Z and E V A G I L.", hide: ["A  N  A", "A-N-A-P-A-Z", "E V A G I L"] },
 ];
 
 /** H1: names broken across a line break restore exactly, the break kept. */

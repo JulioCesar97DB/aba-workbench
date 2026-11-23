@@ -352,23 +352,29 @@ export function findJoinedNames(folded: Folded, original: string, people: Person
   const out: PartMatch[] = [];
   const upper = (i: number) => /\p{Lu}/u.test(original[folded.from[i]] ?? "");
   const lower = (i: number) => /\p{Ll}/u.test(original[folded.from[i]] ?? "");
+  let runEnd = 0;
+  let runIsLink = false;
+  let runWords = new Set<string>();
   for (const m of text.matchAll(/[\p{L}\p{N}_]+/gu)) {
     const token = m[0];
     const at = m.index;
-    // The run of text without spaces the word sits in: "ana.paz.docx", "www.anapaz.com", "@ana_paz".
-    let runStart = at;
-    while (runStart > 0 && !/\s/u.test(text[runStart - 1])) runStart--;
-    let runEnd = at + token.length;
-    while (runEnd < text.length && !/\s/u.test(text[runEnd])) runEnd++;
-    const run = text.slice(runStart, runEnd).replace(/[.,;:!?)\]]+$/u, "");
+    // The run of text without spaces the word sits in: "ana.paz.docx", "www.anapaz.com", "@ana_paz". Read once per run.
+    if (at >= runEnd) {
+      let runStart = at;
+      while (runStart > 0 && !/\s/u.test(text[runStart - 1])) runStart--;
+      runEnd = at + token.length;
+      while (runEnd < text.length && !/\s/u.test(text[runEnd])) runEnd++;
+      const run = text.slice(runStart, runEnd).replace(/[.,;:!?)\]]+$/u, "");
+      runIsLink = /^[@#]|www\.|:\/\/|@|\.(?:pdf|docx?|xlsx?|csv|txt|rtf|jpe?g|png|heic|gif|mp4|mov|m4a|zip|com|net|org|edu|gov|io)$/u.test(run);
+      // The name words of the sheet in that run, each apart: "ana", "paz", "docx".
+      runWords = new Set(run.split(/[^\p{L}]+/u).filter(Boolean));
+    }
     const handle =
       text[at - 1] === "@" ||
       text[at - 1] === "#" ||
       FILE_EXTENSION.test(text.slice(at + token.length, at + token.length + 8)) ||
       /(?:www\.|:\/\/|\.)$/u.test(text.slice(Math.max(0, at - 6), at)) ||
-      /^[@#]|www\.|:\/\/|@|\.(?:pdf|docx?|xlsx?|csv|txt|rtf|jpe?g|png|heic|gif|mp4|mov|m4a|zip|com|net|org|edu|gov|io)$/u.test(run);
-    // The name words of the sheet in that run, each apart: "ana", "paz", "docx".
-    const runWords = new Set(run.split(/[^\p{L}]+/u).filter(Boolean));
+      runIsLink;
     for (const person of people) {
       for (const { word, role } of person.longWords) {
         for (let k = token.indexOf(word); k !== -1; k = token.indexOf(word, k + 1)) {
@@ -431,13 +437,13 @@ export function findBrokenNames(folded: Folded, original: string, people: Person
       }
     }
   }
-  // Three-letter name words spelled out, the same mark or a single space between every pair of letters, standing alone ("A-N-A", "A N A", "a.n.a.").
+  // Three-letter name words spelled out, the same mark or the same run of spaces between every pair of letters, standing alone ("A-N-A", "A N A", "A  N  A", "a.n.a.").
   for (const person of people) {
     for (const { word, role } of person.longWords.filter((w) => w.word.length === 3)) {
       if (seen.has(`${person.priority}:${word}`)) continue;
       seen.add(`${person.priority}:${word}`);
       const letters = [...word].map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-      const spelled = new RegExp(`(?<![\\p{L}\\p{N}])${letters[0]}([ \\t]*[^\\p{L}\\p{N}\\s][ \\t]*| )${letters.slice(1).join("\\1")}(?:\\1(?![\\p{L}\\p{N}]))?(?![\\p{L}\\p{N}])`, "gu");
+      const spelled = new RegExp(`(?<![\\p{L}\\p{N}])${letters[0]}([ \\t]*[^\\p{L}\\p{N}\\s][ \\t]*|[ \\t]+)${letters.slice(1).join("\\1")}(?:\\1(?![\\p{L}\\p{N}]))?(?![\\p{L}\\p{N}])`, "gu");
       for (const m of folded.text.matchAll(spelled)) {
         // Standing alone: not one more spelled letter on either side ("A N A B", "X.A.N.A").
         const mark = m[1];
@@ -451,7 +457,41 @@ export function findBrokenNames(folded: Folded, original: string, people: Person
       }
     }
   }
-  out.push(...findElongatedNames(folded, people), ...findConcatenatedNames(folded, people));
+  out.push(...findElongatedNames(folded, people), ...findConcatenatedNames(folded, people), ...findSpelledConcatenations(folded, people));
+  return out;
+}
+
+/** The fewest name words of one person that make up `token` exactly ("anapaz" = "ana" + "paz": 2); Infinity when they cannot. */
+function nameWordCount(token: string, words: string[]): number {
+  const best = new Array<number>(token.length + 1).fill(Infinity);
+  best[0] = 0;
+  for (let i = 0; i < token.length; i++) {
+    if (best[i] === Infinity) continue;
+    for (const w of words) if (token.startsWith(w, i) && best[i] + 1 < best[i + w.length]) best[i + w.length] = best[i] + 1;
+  }
+  return best[token.length];
+}
+
+/**
+ * A run of single letters spelled with the same mark or the same spaces between each pair
+ * whose letters are exactly two or more name words of one sheet person ("A-N-A-P-A-Z",
+ * "A N A P A Z", "e.v.a.g.i.l."): hidden whole. (Each three-letter word inside such a run
+ * is otherwise only listed, since the run may spell another word.)
+ */
+function findSpelledConcatenations(folded: Folded, people: Person[]): PartMatch[] {
+  const out: PartMatch[] = [];
+  const run = /(?<![\p{L}\p{N}])\p{L}([ \t]*[^\p{L}\p{N}\s][ \t]*|[ \t]+)\p{L}(?:\1\p{L})+(?:\1(?![\p{L}\p{N}]))?(?![\p{L}\p{N}])/gu;
+  for (const m of folded.text.matchAll(run)) {
+    const token = [...m[0]].filter((ch) => /\p{L}/u.test(ch)).join("");
+    if (token.length < 6 || token.length > 40) continue;
+    for (const person of people) {
+      const count = nameWordCount(token, person.longWords.map((w) => w.word));
+      if (count === Infinity || count < 2) continue;
+      const first = person.longWords.find((w) => token.startsWith(w.word))!;
+      out.push({ person, role: first.role, surnamePart: "", word: first.word, start: m.index, end: m.index + m[0].length, joined: true, spaced: true });
+      break;
+    }
+  }
   return out;
 }
 
@@ -465,15 +505,8 @@ function findConcatenatedNames(folded: Folded, people: Person[]): PartMatch[] {
   for (const m of folded.text.matchAll(/(?<![\p{L}])\p{L}{6,40}(?![\p{L}])/gu)) {
     const token = m[0];
     for (const person of people) {
-      const words = person.longWords.map((w) => w.word);
-      // Fewest words that make up the token, from each position (0 = none).
-      const best = new Array<number>(token.length + 1).fill(Infinity);
-      best[0] = 0;
-      for (let i = 0; i < token.length; i++) {
-        if (best[i] === Infinity) continue;
-        for (const w of words) if (token.startsWith(w, i) && best[i] + 1 < best[i + w.length]) best[i + w.length] = best[i] + 1;
-      }
-      if (best[token.length] === Infinity || best[token.length] < 2) continue;
+      const count = nameWordCount(token, person.longWords.map((w) => w.word));
+      if (count === Infinity || count < 2) continue;
       const first = person.longWords.find((w) => token.startsWith(w.word))!;
       out.push({ person, role: first.role, surnamePart: "", word: first.word, start: m.index, end: m.index + token.length, joined: !isEverydayWord(token), spaced: false });
       break;

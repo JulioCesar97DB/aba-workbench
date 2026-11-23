@@ -96,6 +96,17 @@ test("dates: finding them stays linear on a hostile text (80,000 dates)", () => 
   }
 });
 
+test("long runs without spaces stay linear: single letters with dots, underscores or hyphens, link-like runs", () => {
+  // Each took time growing with the square of its length before (80,000 characters of "a.b.c…": 73 s).
+  for (const unit of ["a.b.c.d.e.f.g.h.i.j.", "ana_b_c_d_paz_", "a-n-a-b-", "a.b@c.d.", "ab%zzcd."]) {
+    const engine = new Deidentifier(SHORT_SHEET, { today: REVIEW_TODAY });
+    const start = performance.now();
+    engine.deidentify(unit.repeat(Math.ceil(400_000 / unit.length)) + "zz");
+    const ms = performance.now() - start;
+    assert.ok(ms < 10_000, `${JSON.stringify(unit)}: ${Math.round(ms)} ms`);
+  }
+});
+
 test("split names: ordinary words that spell a sheet name split in two come through as written, and are listed for review", () => {
   for (const text of SPLIT_CLINICAL) {
     const result = new Deidentifier(SPLIT_SHEET, { today: REVIEW_TODAY }).deidentify(text);

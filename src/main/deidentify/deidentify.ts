@@ -282,7 +282,8 @@ function parseAddress(address: string): SheetAddress {
 }
 
 /** A URL, a query string, an email address or a file name. */
-const LINKS = /(?:https?:\/\/|www\.)[^\s<>"'()[\]]+|mailto:[^\s<>"']+|[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|[^\s/\\<>"'|]+\.(?:pdf|docx?|xlsx?|csv|txt|rtf|jpe?g|png|heic|gif|mp4|mov|m4a|zip)\b|\?[^\s?]*=[^\s]*|[^\s]*%[0-9A-Fa-f]{2}[^\s]*/gu;
+// Each open-ended part starts where its run of characters starts, so a long run ("a.b.c.d…") is read once, not once per character.
+const LINKS = /(?:https?:\/\/|www\.)[^\s<>"'()[\]]+|mailto:[^\s<>"']+|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|(?<![^\s/\\<>"'|])[^\s/\\<>"'|]+\.(?:pdf|docx?|xlsx?|csv|txt|rtf|jpe?g|png|heic|gif|mp4|mov|m4a|zip)\b|\?[^\s?]*=[^\s]*|(?<!\S)[^\s]*%[0-9A-Fa-f]{2}[^\s]*/gu;
 
 /**
  * Whether a sheet sequence could be scores rather than the value: a short one (a two-digit
