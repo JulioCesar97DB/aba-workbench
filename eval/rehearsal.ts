@@ -7,7 +7,8 @@ import type { ElectronApplication } from "@playwright/test";
  * (the route that takes an API key) on a throwaway profile of its own: a draft is a
  * short invented text, a consistency check finds nothing, and the judge answers valid
  * JSON for the items and facts it is asked about, except its first answer of the run,
- * which leaves an item out so the repair request is exercised too. Any other address is refused.
+ * which leaves an item out so the repair request is exercised too; the case map's requests get a
+ * valid, nearly empty map. Any other address is refused.
  */
 
 /** A key only the fake provider accepts. */
@@ -51,6 +52,11 @@ export async function installRehearsalProvider(app: ElectronApplication): Promis
         return JSON.stringify(answer);
       }
       if (task.includes("Consistency check")) return "NO CONTRADICTIONS";
+      // The case map's two requests (scripts/map-verify.mts --rehearse): a valid, nearly empty map.
+      if (task.includes("Map request: case facts")) {
+        return JSON.stringify({ client: null, caregivers: [], settings: [], deficits: [], strengths: [], facts: [], openItems: [{ kind: "missing", text: "Rehearsal: no real map was drafted.", homeSection: null }], report: [] });
+      }
+      if (task.includes("Map request: behaviors")) return JSON.stringify({ behaviors: [], groups: [], risks: [], openItems: [] });
       return [
         "This is a rehearsal draft written by the fake provider of pnpm eval --rehearse; no model wrote it.",
         "Her mother reported the concerns described in the parent interview [MISSING: rehearsal marker].",
