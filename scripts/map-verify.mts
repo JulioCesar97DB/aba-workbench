@@ -210,6 +210,8 @@ const summary = {
     kind: record.kind,
     format: record.format,
     repaired: record.repaired,
+    repairUsed: record.repairUsed,
+    problemsBeforeRepair: record.problemsBeforeRepair,
     problems: record.problems,
     servedModel: (record.generation as Record<string, unknown>).servedModel,
     usage: (record.generation as Record<string, unknown>).usage,

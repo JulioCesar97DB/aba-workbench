@@ -222,6 +222,9 @@ export interface StrengthItem {
 export interface BaselineObservation {
   date: TextClaim | null;
   setting: TextClaim | null;
+  /** How long the observation was, as the notes write it ("3:30 to 5:30 p.m.", "2 hours"), with its quote (review round 1, S7). */
+  length?: TextClaim | null;
+  /** The minutes: hers, or the app's from the length (a ref of kind "app"). */
   minutes: TextClaim | null;
   value: TextClaim | null;
 }
@@ -397,6 +400,37 @@ export function baselineMean(observations: ReadonlyArray<Pick<BaselineObservatio
     sum += Number(raw);
   }
   return Math.round((sum / observations.length) * 100) / 100;
+}
+
+/**
+ * The minutes of an observation from its length as the notes write it (review round 1, S7):
+ * a span of clock times ("3:30 to 5:30 p.m.", "10:00 a.m. to 12:00 p.m."), hours ("2 hours",
+ * "a 2-hour observation", "1.5 hrs") or minutes ("45 minutes"), with hours and minutes
+ * together ("1 hour 30 minutes"). Null when the text is none of these, or the result is not
+ * between 1 and 720 minutes: the app never guesses.
+ */
+export function minutesOfLength(text: string): number | null {
+  const plain = text.toLowerCase().replace(/\u{2013}|\u{2014}/gu, "-");
+  const fits = (minutes: number) => (minutes >= 1 && minutes <= 720 ? Math.round(minutes) : null);
+  const span = /(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\s*(?:to|-|until)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?/u.exec(plain);
+  if (span && (span[2] || span[5] || span[3] || span[6])) {
+    const at = (hour: string, minute: string | undefined, half: string | undefined) => {
+      let h = Number(hour) % 12;
+      if (half?.startsWith("p")) h += 12;
+      return h * 60 + Number(minute ?? 0);
+    };
+    // "3:30 to 5:30 p.m.": the start takes the end's half of the day unless that would put it after the end.
+    let start = at(span[1], span[2], span[3] ?? span[6]);
+    const end = at(span[4], span[5], span[6] ?? span[3]);
+    if (!span[3] && start > end) start = at(span[1], span[2], undefined);
+    let minutes = end - start;
+    if (minutes <= 0) minutes += 12 * 60;
+    return fits(minutes);
+  }
+  const hours = /(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b/u.exec(plain);
+  const mins = /(\d+)\s*-?\s*(?:minutes?|mins?)\b/u.exec(plain);
+  if (hours || mins) return fits((hours ? Number(hours[1]) * 60 : 0) + (mins ? Number(mins[1]) : 0));
+  return null;
 }
 
 /* What the interface sends: values and [CHECK] texts only. Where each value came from is the main process's to record. */

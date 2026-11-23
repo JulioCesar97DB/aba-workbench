@@ -135,7 +135,7 @@ const BehaviorSchema = z.looseObject({
   nonExamples: list(),
   baseline: z
     .looseObject({
-      observations: z.array(z.looseObject({ date: text(T.short), setting: text(T.name), minutes: text(T.short), value: text(T.short) })).max(MAX_MAP_LIST).optional(),
+      observations: z.array(z.looseObject({ date: text(T.short), setting: text(T.name), length: text(T.short), minutes: text(T.short), value: text(T.short) })).max(MAX_MAP_LIST).optional(),
       other: list(),
     })
     .optional(),
@@ -619,7 +619,7 @@ const ITEM_INPUTS: Record<MapPartId, z.ZodType> = {
     examples: listIn(),
     nonExamples: listIn(),
     baseline: z.strictObject({
-      observations: z.array(z.strictObject({ date: textIn(T.short), setting: textIn(T.name), minutes: textIn(T.short), value: textIn(T.short) })).max(MAX_MAP_LIST),
+      observations: z.array(z.strictObject({ date: textIn(T.short), setting: textIn(T.name), length: textIn(T.short).optional(), minutes: textIn(T.short), value: textIn(T.short) })).max(MAX_MAP_LIST),
       other: listIn(),
     }),
     intensity: textIn(T.short),
@@ -811,6 +811,10 @@ export interface MapExtractionRecord {
   generation: Record<string, unknown>;
   format: string;
   repaired: boolean;
+  /** Whether the repair's answer was used; false when it came back unreadable, cut short or failed, and the first answer was saved with its flags (review round 1, B1). */
+  repairUsed?: boolean;
+  /** What the code checks found in the first answer, which the repair was asked to fix (at most 50; review round 1, S6). */
+  problemsBeforeRepair?: string[];
   /** What the code checks still found after the repair (at most 50). */
   problems: string[];
 }
@@ -851,7 +855,8 @@ export function applyMapAnswer<D extends WithCaseMap>(
   const kept: MapPartId[] = [];
   const behaviorIds = new Map<string, string>();
   const order = (Object.keys(parts) as MapPartId[]).sort((a, b) => (a === "behaviors" ? -1 : b === "behaviors" ? 1 : 0));
-  const mapIds = (keys: unknown) => (Array.isArray(keys) ? keys.map((key) => behaviorIds.get(String(key))).filter((id): id is string => id !== undefined) : []);
+  const mapIds = (keys: unknown) => (Array.isArray(keys) ? [...new Set(keys.map((key) => behaviorIds.get(String(key))).filter((id): id is string => id !== undefined))] : []);
+  const problems = [...record.problems];
 
   for (const part of order) {
     const answer = parts[part]!;
@@ -859,6 +864,8 @@ export function applyMapAnswer<D extends WithCaseMap>(
     const status = mapPartView(next, part).status;
     if (status === "approved") {
       kept.push(part);
+      // Her approved behaviors keep their ids: a risk of the AI names them by id (review round 1, S4).
+      if (part === "behaviors") for (const item of currentContent(stored).items) behaviorIds.set(item.id, item.id);
       continue;
     }
     const content = currentContent(stored);
@@ -901,8 +908,15 @@ export function applyMapAnswer<D extends WithCaseMap>(
       for (const item of items) if (!behaviorIds.has(item.id)) behaviorIds.set(item.id, item.id);
       nextContent = settleGroups({ ...nextContent, groups: settle(answer.groups ?? [], content.groups ?? [], nextGroupId, true) }, null, now);
     }
+    // The AI's content never stops the save (review round 1, B2): a link to an id the map
+    // does not have is left out, an item over the limits is left out, and each is recorded.
+    nextContent = { ...nextContent, items: nextContent.items.map((item) => withKnownLinks(item, settingIdsOf(next), problems, part)) };
+    if (!CONTENT_SCHEMAS[part].safeParse(nextContent).success) nextContent = fitting(part, nextContent, problems);
     if (JSON.stringify(nextContent) === JSON.stringify(content)) continue;
-    if (!CONTENT_SCHEMAS[part].safeParse(nextContent).success) refuse(`the AI's ${part} do not fit the case map's limits.`);
+    if (!CONTENT_SCHEMAS[part].safeParse(nextContent).success) {
+      problems.push(`${part}: the AI's content does not fit the case map's limits, so this part was left as it was.`);
+      continue;
+    }
     const number = nextNumber(stored);
     const version: StoredMapVersion = {
       number,
@@ -916,9 +930,39 @@ export function applyMapAnswer<D extends WithCaseMap>(
     written.push(part);
   }
   const map: StoredCaseMap = next.caseMap ?? { parts: {} };
-  const extractions = [...(map.extractions ?? []), { ...record, problems: record.problems.slice(0, MAX_EXTRACTION_PROBLEMS).map((problem) => problem.slice(0, 500)) }].slice(-MAX_EXTRACTIONS);
+  const capped = (list: readonly string[]) => list.slice(0, MAX_EXTRACTION_PROBLEMS).map((problem) => problem.slice(0, 500));
+  const extractions = [
+    ...(map.extractions ?? []),
+    { ...record, problems: capped(problems), ...(record.problemsBeforeRepair ? { problemsBeforeRepair: capped(record.problemsBeforeRepair) } : {}) },
+  ].slice(-MAX_EXTRACTIONS);
   next = { ...next, caseMap: { ...map, extractions } };
   return { data: next, written, kept };
+}
+
+/** The ids of the settings the map holds now. */
+function settingIdsOf(data: WithCaseMap): Set<string> {
+  return new Set(currentContent(storedPart(data, "settings")).items.map((item) => item.id));
+}
+
+/** An item with its setting links narrowed to settings the map has (review round 1, B2); what was left out is recorded. */
+function withKnownLinks(item: StoredItem, settingIds: ReadonlySet<string>, problems: string[], part: MapPartId): StoredItem {
+  if (part !== "behaviors" || !Array.isArray(item.settingIds) || typeof item.editedAt === "string") return item;
+  const known = (item.settingIds as unknown[]).filter((id): id is string => typeof id === "string" && ItemIdSchema.safeParse(id).success && settingIds.has(id));
+  if (known.length === (item.settingIds as unknown[]).length) return item;
+  problems.push(`behaviors: ${item.id} named settings the map does not have; they were left out.`);
+  return { ...item, settingIds: known };
+}
+
+/** The content with each item and group that does not fit the map's limits left out, and recorded (review round 1, B2). */
+function fitting(part: MapPartId, content: Content, problems: string[]): Content {
+  const fits = (item: StoredItem, schema: z.ZodType) => {
+    const ok = schema.safeParse(item).success;
+    if (!ok && typeof item.editedAt !== "string") problems.push(`${part}: ${item.id} does not fit the case map's limits and was left out.`);
+    return ok || typeof item.editedAt === "string";
+  };
+  const items = content.items.filter((item) => fits(item, ITEM_SCHEMAS[part])).slice(0, MAP_PART_LIMITS[part]);
+  const groups = content.groups === undefined ? undefined : content.groups.filter((group) => fits(group, GroupSchema)).slice(0, MAX_MAP_GROUPS);
+  return { ...content, items, ...(groups ? { groups } : {}) };
 }
 
 /** Values only, for a prompt: a claim as its value (and its [CHECK]), everything else as it is. */

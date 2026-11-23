@@ -126,6 +126,7 @@ export const ITEM_FIELDS: Record<MapPartId, FieldSpec[]> = {
           columns: [
             { key: "date", kind: "text", max: T.short },
             { key: "setting", kind: "text", max: T.name },
+            { key: "length", kind: "text", max: T.short },
             { key: "minutes", kind: "text", max: T.short },
             { key: "value", kind: "text", max: T.short },
           ],

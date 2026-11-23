@@ -300,7 +300,8 @@ export interface MapPromptInput {
   /** For the behaviors request: the facts already saved (the settings and their ids), as JSON. */
   mapFacts: string | null;
   format: MapAnswerFormat;
-  repair: { previousAnswer: string; problems: string[] } | null;
+  /** The repair: what of the previous answer it quotes (the items that failed, or the whole answer) and the problems. */
+  repair: { previousAnswer: string; problems: string[]; whole?: boolean } | null;
 }
 
 /**
@@ -347,11 +348,14 @@ export async function buildCaseMapPrompt(input: MapPromptInput, rulesDir: string
         "<previous-answer>",
         quoteForPrompt(input.repair.previousAnswer),
         "</previous-answer>",
-        "Your previous answer could not be used as it is:",
+        input.repair.whole ? "Your previous answer could not be used as it is:" : "These items of your previous answer could not be used as they are:",
         ...input.repair.problems.map((problem) => `- ${problem}`),
-        "Answer again, complete, with these fixed: copy every quote word for word from the place it cites, or leave the value out.",
+        input.repair.whole
+          ? "Answer again, complete, with these fixed."
+          : "Answer with the same JSON shape holding only these items, corrected, each under the same key; leave every other list empty and every other value of the client empty. The items you leave out stay as they were.",
+        "Copy every quote word for word from the place it cites, at least three words. When a value cannot be supported by a quote, leave it empty (value \"\" and no refs) and add an open item that says what is missing.",
       ].join("\n"),
     );
   }
-  return { prompt: { system, sources: input.sources, task: parts.join("\n\n") }, rulesVersions };
+  return { prompt: { system, sources: input.sources, task: parts.join("\n\n"), kind: "case-map" }, rulesVersions };
 }

@@ -80,7 +80,7 @@ Read and written with these limits (`src/shared/case-map.ts`): 30 behaviors and 
 
 **The prompt.** Each request is prepared in `src/main/outgoing.ts` (`prepareMapRequest`) like every request about a case. The system prefix (the whole-assessment rules, guide, style, examples, payer, instruments and requests) and the sources are exactly the section requests', so the cache is shared. The task holds, in order:
 
-1. `rules/case-map.md` (and `rules/behaviors.md` for the behaviors), sent with map requests only (D15);
+1. `rules/case-map.md` (and `rules/behaviors.md` for the behaviors, with its invented definition example), sent with map requests only (D15). The example is not in `examples.md`, so the prefix every section request caches stays as it was (owner's decision on review round 1, S9);
 2. `<her-sections>`: every section that is hers or approved, first (D13): her text wins, and a source that disagrees becomes a [CHECK];
 3. `<her-map>` on an update: the parts she approved, whole, and the items she changed by hand in the others, with their ids;
 4. `<standing-instructions>` (behaviors only): her definition thresholds, once she has confirmed them (D16);
@@ -88,29 +88,40 @@ Read and written with these limits (`src/shared/case-map.ts`): 30 behaviors and 
 6. `<map-facts>` (behaviors only): the settings saved by the first request, with their ids;
 7. the request.
 
+On the ChatGPT route the task opens with a preamble of its own that names these blocks; section requests keep theirs.
+
 **Structured output (D14).** The answer must follow one JSON schema per request (`src/lib/case-map-extraction.ts`):
-- strict on both providers: every property required, objects closed, null as `anyOf`, enums for every list, no length limits;
+- strict on both providers: every property required, objects closed, enums for every fixed list (the measure, a setting's kind and evidence, a strength's kind, a service's "paid"), no length limits;
+- **no union at all**: Claude takes at most 16 parameters with `anyOf` or a type array across a request's strict schemas, and the map has far more nullable values. So nothing is nullable on the wire: an absent value is an empty claim (`value: ""`, no refs), an absent text is `""`, an absent home section is `0`, a group's function or measure that cannot be named is `"none"`. Zod turns each back into `null`, so the stored shape does not change. A test counts the unions (0);
 - Claude enforces it through `output_config.format`, OpenAI (key and ChatGPT sign-in) through `text.format`;
-- a route that refuses the schema (a 400 or "unsupported") is asked the same request as plain JSON, and remembered for the rest of the app's run.
+- a route whose refusal names the schema or the output format is asked the same request as plain JSON, and remembered for the rest of the app's run. Any other refusal (a PDF over a page limit, say) is reported as it is.
 
 **The checks (D4).** The answer is read with Zod (the map's limits), then checked by code:
 - every ref names a source, a section of hers or her notes that was sent;
-- its quote is found word for word (quote marks, dashes, spaces and case aside) in that text;
-- every count, minute, score and percentile is written in one of its quotes;
-- every setting, group and risk link is known; keys are unique; no behavior is in two groups.
+- its quote has at least three words, one of them not a number, and is found word for word in that text. Quote marks, dashes, spaces, case and the source's Markdown (emphasis, table pipes, heading and list markers, escapes) are set aside on both sides;
+- a value a source or her text states (`extracted`, `her`) has a ref;
+- every number of every value is written in one of its quotes, without leading zeros, and a date counts as a date, not as numbers. A value the AI drafts may also take its numbers from her confirmed thresholds; with none confirmed, a number of seconds, feet or minutes in a definition, onset or offset is a problem (D16);
+- every setting, group and risk link is known; keys are unique; no behavior is in two groups; a group's function is a primary function of each member and its measure is each member's.
 
-A PDF's text cannot be read yet, so its quotes are marked "not checked" (D32), and its numbers are not checked either. Any problem gets **one** repair request that quotes the answer and lists the problems. What still fails is saved and flagged: the ref is `checked: "not-found"` and the value gets a [CHECK] saying the quote was not found. Nothing is dropped, and the problems are kept in the request's record.
+A PDF's text cannot be read yet, so its quotes are marked "not checked" (D32), and its numbers are not checked either.
+
+**The repair (D14, review round 1, B1).** When problems are found, **one** repair request quotes only the items that failed (the whole answer when a problem belongs to no single item) and lists the problems. Its items replace the first answer's by key; an item it leaves out keeps the first answer's version. When the repair comes back unreadable, cut short or failed, the first answer is saved as it is. What still fails is saved and flagged: a ref the checks could not find is `checked: "not-found"` and the value gets a [CHECK]. The request's record keeps the problems the first answer had (`problemsBeforeRepair`), whether the repair was used, and the problems left.
+
+**What the AI cannot link.** A behavior's setting the map does not have, or a group's or a risk's behavior that does not exist, is left out with an open item naming it. Saving never stops on the AI's content: an item that does not fit the map's limits is left out and recorded among the request's problems, so one bad value never costs a whole answer.
 
 **Saving (D1, D2, D5).** Each request's parts are saved as soon as they pass, as new versions: `"ai"` for a part that had none before the run, `"update"` otherwise.
 - Ids are made by code. An item whose key is an id the part has had keeps it; any other key gets a new id, never one used before. Groups and risks get their behaviors' ids.
 - An item she changed by hand is kept as hers in place of the AI's, and kept when the AI leaves it out.
 - A part whose version shown she approved is never changed.
-- Intensity is never filled (D19). Barrier tags come in as proposals (D18). Functions and groups are hypotheses.
-- Each request is recorded in `caseMap.extractions`: run, provider, models, rules versions, sources and sections used, tokens, cost, format, whether it was repaired, and the problems left.
+- Intensity is never filled (D19). Barrier tags come in as proposals (D18). Functions and groups are hypotheses. A caregiver's mitigation no source states is a proposal. A value marked as hers stays hers only when a quote of her section or her notes was found.
+- An observation's length is kept as the notes write it ("3:30 to 5:30 p.m."); the app works out its minutes (`minutesOfLength`) and marks them as its own (a ref of kind `"app"`), as it does the baseline mean (D20).
+- On an update, the risks keep their links to the behaviors she approved.
+- Each request is recorded in `caseMap.extractions`: run, provider, models, rules versions, sources and sections used, tokens, cost, format, whether it was repaired and whether the repair was used, the problems before the repair, and the problems left.
 
 **Her thresholds (D16).** The rail offers the thresholds her assessments show (`src/shared/case-map-thresholds.ts`, in our words). She reviews, changes and confirms them once; from then on they are the map's standing instructions (`"case-map"` in `instructions.json`), sent with every behaviors request. Until then the rules have the AI write `[MISSING: your threshold for …]` in each definition.
 
 **On screen.**
+- The AI action is marked **Beta**, with one line saying its evaluation is in progress, in both languages: it ships in v0.2.0 before the map's evaluation (owner's decision, 2026-11-23).
 - The AI action sits in the header, kept in its own component (`src/renderer/src/case-map/MapDraft.tsx`) so it moves as it is into the "Con la IA" side of the two-ways bar when the UX redesign's UX-3 lands.
 - An empty map shows the two ways side by side ("A mano" / "Con la IA").
 - While the AI works, a panel shows the two steps, what is arriving, "It can take 15 to 30 minutes" (measured on the ChatGPT route, pull request 2), and Stop. When a request's parts are saved, the screen shows them at once.

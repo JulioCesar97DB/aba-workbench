@@ -11,7 +11,7 @@ export const THRESHOLDS_DRAFT = [
   "- Leaving the supervising adult (elopement): more than 6 feet away from the supervising adult without permission.",
   "- Leaving the task area: more than 3 feet from the assigned spot without permission.",
   "- Off task: 3 seconds or more without attending to the task.",
-  "- End of an episode: 10 consecutive seconds without the behavior; 3 seconds for brief vocal bursts and for self-injury; 30 seconds for crying.",
+  "- End of an episode: the behavior has stopped for 10 seconds in a row; 3 seconds for brief vocal bursts and for self-injury; 30 seconds for crying.",
   "- Tantrum and screaming: screaming that lasts more than 30 seconds together with other tantrum behaviors is scored as a tantrum, not as screaming.",
-  "- Repetitive movements: counted only when they interrupt a task, a transition or a shared activity for at least 3 seconds; the same movement in free time is not counted.",
+  "- Repetitive movements: counted only when they interrupt a task, a transition or play with others for 3 seconds or longer; during free time, when they interrupt nothing, they are not counted.",
 ].join("\n");

@@ -26,6 +26,9 @@ test("the case map by hand: add a behavior, type it, approve the part, correct i
   await expect(page.getByRole("heading", { name: "With the AI" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Draft the map with the AI" }).first()).toBeDisabled();
   await expect(page.getByText("Connect ChatGPT or Claude to have the AI draft the map.")).toBeVisible();
+  // It ships as a beta, before the map's evaluation (owner's decision, 2026-11-23).
+  await expect(page.getByText("Beta", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Its evaluation is in progress: check each value against your documents.").first()).toBeVisible();
 
   // A behavior, typed by hand: saved as she types, hers.
   await page.getByRole("button", { name: "Add a behavior" }).click();

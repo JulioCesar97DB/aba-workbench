@@ -1,6 +1,6 @@
 ---
 id: case-map
-version: 1
+version: 2
 updated: 2026-11-23
 sources: The owner's decisions D1 to D35 on the case map (2026-11-23), the assessment guide's section map, and the four kinds of content of the whole-assessment rules. Written for these rules; no text from any real assessment.
 confirmed: no, pending review by the BCBA
@@ -23,22 +23,23 @@ You return the map as structured data in the format the request gives. Nothing o
 
 ## Every claim says where it came from
 
-Each value is a claim: its `value`, its `refs`, its `origin` and its `check`.
+Each value is a claim: its `value`, its `refs`, its `origin` and its `check`. A value nobody gives is an empty claim: `value` "", no refs, `check` "".
 
-- **refs**: one or more places it came from. A ref to a source gives the source's `id` from its `<source>` tag; a ref to one of her sections gives the section's id; a ref to her notes gives the id `notes`. Each ref carries a **quote copied word for word** from that place, at most about 40 words: the words that show the value. Do not paraphrase a quote, do not join two passages into one, and do not fix spelling inside it. The app checks every quote against the text it came from.
+- **refs**: one or more places it came from. A ref to a source gives the source's `id` from its `<source>` tag; a ref to one of her sections gives the section's id; a ref to her notes gives the id `notes`. Each ref carries a **quote copied word for word** from that place, at least three words and at most about 40: the words that show the value, with enough around it to be found only there ("3 on 11/04", not "3"). Do not paraphrase a quote, do not join two passages into one, and do not fix spelling inside it. The app checks every quote against the text it came from.
 - **origin**: one of
   - `extracted`: a source states it;
   - `her`: her section or her notes state it;
   - `ai-drafted`: you wrote it from cited facts (a definition, an onset sentence); its refs are the facts you used;
   - `hypothesis`: a function or a group;
   - `proposed`: a clinical choice that is hers to make (a barrier tag, a caregiver mitigation the sources do not give).
-- **check**: the text of a [CHECK] on this value, without brackets, or null. Use it when sources disagree, when her text and a source differ, or when a value needs her eye.
+- **Numbers**: every number in a value (a count, a score, a date, a dose, a number of minutes) is written in one of its quotes. A value you draft (`ai-drafted`) may also take a number from `<standing-instructions>`, and from nowhere else.
+- **check**: the text of a [CHECK] on this value, without brackets, or "" when there is none. Use it when sources disagree, when her text and a source differ, or when a value needs her eye.
 
 ## Nothing invented
 
 The rule outranks everything else in this request.
 
-- A value comes from her sections, her notes or the sources, or it is `ai-drafted` from facts you cite. When the case needs something nobody gives, leave the field null (or the list empty) and add an open item that says what is missing and which section of the assessment needs it.
+- A value comes from her sections, her notes or the sources, or it is `ai-drafted` from facts you cite. When the case needs something nobody gives, leave the value empty (or the list empty) and add an open item that says what is missing and which section of the assessment needs it.
 - Never compute, estimate, average or round a number the sources do not give. The app computes the baseline mean itself.
 - Never move evidence between settings: what a parent reports about school is a report, not a school observation.
 - Never write a severity level, a diagnosis or a score the documents do not state.
@@ -53,13 +54,13 @@ The rule outranks everything else in this request.
 
 ## The parts
 
-- **Client**: age as the sources give it; the diagnosis worded exactly as the evaluation words it; the severity level only if the evaluation states one, otherwise null and an open item; the evaluator and the date; medications; school, grade, schedule and the IEP; each other service with its provider and whether it is a paid service (a school service under an education plan is not a separate paid service); languages.
-- **Caregivers**: each caregiver's role (never a given name unless her sections use it), language, availability, participation, limits, and a mitigation only as a proposal.
+- **Client**: age as the sources give it; the diagnosis worded exactly as the evaluation words it; the severity level only if the evaluation states one, otherwise empty with an open item; the evaluator and the date; medications; school, grade, schedule and the IEP; each other service with its provider and whether it is a paid service (a school service under an education plan is not a separate paid service); languages.
+- **Caregivers**: each caregiver's role (never a given name unless her sections use it), language, availability, participation, limits, and a mitigation for the limits: `extracted` when a source states it, otherwise `proposed`.
 - **Settings**: each setting where behavior was observed by the BCBA or reported, which of the two, by whom, and the dates.
 - **Deficits**: each area in the payer's terms (communication, daily living skills, socialization, safety, and so on), the scores exactly as the score report prints them, the evidence (incidents, reports), and the impact on the child's daily life.
 - **Strengths**: strengths, interests, preferences and reinforcers, each sourced, with the setting when known.
-- **Facts**: facts that matter to a section and fit no other part, a coming move, a change of school, a schedule change. Each with its **home section**: the number of the section of the 22-section template that tells it in full, by the assessment guide's section map. A fact from her session notes is a fact like any other here, with her notes as its ref.
-- **Open items**: every [MISSING] the map needs (what is missing and which section needs it) and any [CHECK] that belongs to no single value.
+- **Facts**: facts that matter to a section and fit no other part, a coming move, a change of school, a schedule change. Each with its **home section**: the number of the section of the 22-section template that tells it in full, by the assessment guide's section map (0 when no section is its home). A fact from her session notes is a fact like any other here, with her notes as its ref.
+- **Open items**: every [MISSING] the map needs (what is missing and which section needs it, 0 when none) and any [CHECK] that belongs to no single value.
 - **Report on her sections**: only when `<her-sections>` holds sections and the request asks for it (see below).
 
 ## Ids

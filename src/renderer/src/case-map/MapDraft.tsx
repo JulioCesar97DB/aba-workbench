@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { THRESHOLDS_DRAFT } from "../../../shared/case-map-thresholds.ts";
 import { trackSave } from "../case-saves.tsx";
@@ -16,13 +16,19 @@ import { dismissMapDraft, isDrafting, startMapDraft, stopMapDraft, useMapDraft, 
  * (the UX redesign, UX-3).
  */
 
-/** "Draft the map with the AI" / "Update the map with the AI": the AI's action, in the AI's color. */
-export function MapAiButton({ caseId, hasMap }: { caseId: string; hasMap: boolean }) {
+/**
+ * "Draft the map with the AI" / "Update the map with the AI": the AI's action, in the AI's
+ * color, marked Beta with one line saying its evaluation is in progress (owner's decision,
+ * 2026-11-23: it ships in v0.2.0 before the map's evaluation). The line describes the
+ * button, so the header's and the empty map's buttons each say it (review round 1, M10).
+ */
+export function MapAiButton({ caseId, hasMap, align = "end" }: { caseId: string; hasMap: boolean; align?: "start" | "end" }) {
   const { t } = useTranslation();
   const providers = useProviders();
   const draft = useMapDraft(caseId);
   const running = isDrafting(draft);
   const [refused, setRefused] = useState<string | null>(null);
+  const noteId = useId();
   async function start() {
     if (!providers.provider) return;
     setRefused(null);
@@ -31,10 +37,16 @@ export function MapAiButton({ caseId, hasMap }: { caseId: string; hasMap: boolea
     if (outcome !== "started") setRefused(outcome);
   }
   return (
-    <span className="inline-flex flex-col items-end gap-1">
-      <Button variant="primary" disabled={running || providers.provider === null} onClick={() => void start()}>
-        {hasMap ? t("caseMap.ai.update") : t("caseMap.ai.draft")}
-      </Button>
+    <span className={align === "end" ? "inline-flex flex-col items-end gap-1" : "inline-flex flex-col items-start gap-1"}>
+      <span className="inline-flex items-center gap-2">
+        <Button variant="primary" disabled={running || providers.provider === null} onClick={() => void start()} aria-describedby={noteId}>
+          {hasMap ? t("caseMap.ai.update") : t("caseMap.ai.draft")}
+        </Button>
+        <span className="rounded-sm border border-accent px-1.5 py-0.5 text-xs font-semibold tracking-wide text-accent uppercase">{t("caseMap.ai.beta")}</span>
+      </span>
+      <span id={noteId} className="text-xs text-fg-muted">
+        {t("caseMap.ai.betaNote")}
+      </span>
       {refused ? (
         <span role="alert" className="text-xs font-medium text-danger">
           {refused === "busy" ? t("caseMap.ai.busy") : refused === "not-connected" ? t("caseMap.ai.notConnected") : t("caseMap.ai.notStarted")}
@@ -144,7 +156,7 @@ export function MapWays({ caseId, onByHand }: { caseId: string; onByHand: () => 
       <section className="flex flex-col items-start gap-2 rounded-lg border border-accent bg-mark p-4">
         <h2 className="text-md font-semibold">{t("caseMap.ways.withAiTitle")}</h2>
         <p className="text-sm">{t("caseMap.ways.withAiBody")}</p>
-        <MapAiButton caseId={caseId} hasMap={false} />
+        <MapAiButton caseId={caseId} hasMap={false} align="start" />
         <p className="text-xs text-fg-muted">{t("caseMap.ai.time")}</p>
       </section>
     </div>
