@@ -166,6 +166,14 @@ end_launch() {
 launch_and_quit() {
   local label=$1 expected=$2
   shift 2
+  # Rosetta translates the app's code as it first runs it, and on a runner's virtual Mac that
+  # is slow: the first release run started the Intel renderer after 95 seconds and was still
+  # starting up 30 seconds after being asked to quit (native: 2 seconds and 1 second).
+  local start_limit=120 quit_limit=30
+  if [ "$expected" = "translated" ]; then
+    start_limit=300
+    quit_limit=180
+  fi
   [ -d "$APP" ] || fail "No app at $APP."
   [ -z "$(pids_with "$APP/Contents/")" ] || fail "The app is already running."
   local profile
@@ -181,9 +189,9 @@ launch_and_quit() {
   # Its main process, then its renderer (a separate helper app, with its own signature).
   local waited=0
   until [ -n "$(pids_with "$renderer")" ]; do
-    if [ "$waited" -ge 120 ]; then
+    if [ "$waited" -ge "$start_limit" ]; then
       ps -o pid=,command= -p "$(pids_with "$PRODUCT" | paste -sd, -)" || true
-      fail "$label: the app's renderer had not started after 120 seconds."
+      fail "$label: the app's renderer had not started after $start_limit seconds."
     fi
     sleep 1
     waited=$((waited + 1))
@@ -211,7 +219,7 @@ launch_and_quit() {
   kill -TERM "$pid"
   waited=0
   while [ -n "$(pids_with "$APP/Contents/")" ]; do
-    if [ "$waited" -ge 30 ]; then fail "$label: the app was still running 30 seconds after it was asked to quit."; fi
+    if [ "$waited" -ge "$quit_limit" ]; then fail "$label: the app was still running $quit_limit seconds after it was asked to quit."; fi
     sleep 1
     waited=$((waited + 1))
   done
