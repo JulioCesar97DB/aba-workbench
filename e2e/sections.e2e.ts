@@ -2,7 +2,7 @@ import type { ElectronApplication, Page } from "@playwright/test";
 import { chmodSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { AbaApi } from "../src/shared/api.ts";
-import { defaultCasesFolder, draftingStubLog, expect, firstScreen, goTo, holdAnswers, SAMPLE_CASE, seedCase, setDraftingFailures, setDraftingSpeed, stubDrafting, test } from "./app.ts";
+import { defaultCasesFolder, draftingStubLog, expect, firstScreen, goTo, holdAnswers, pauseDrafting, SAMPLE_CASE, seedCase, setDraftingFailures, setDraftingSpeed, stubDrafting, test } from "./app.ts";
 
 /*
  * The report's sections as the clinician meets them: drafting one with the AI, changing
@@ -405,7 +405,11 @@ test("out of order: version 1, then ask for changes; the version's answer after 
  * snapshot shown, yet what she just did must be shown: the new version, with her text.
  */
 
-/** Environmental Changes with three versions, the third "Could not be checked" (her Background Information is there to compare), and Check again running slowly. */
+/**
+ * Environmental Changes with three versions, the third "Could not be checked" (her
+ * Background Information is there to compare), Check again held running (the faked
+ * Claude paused), and version 1 shown. Returns what lets the check finish.
+ */
 async function checkingAgain(launch: Parameters<typeof openSection>[0], home: string) {
   const opened = await openSection(launch, home, "background-information", "en", { consistency: "Maybe." });
   const { app, page } = opened;
@@ -421,29 +425,30 @@ async function checkingAgain(launch: Parameters<typeof openSection>[0], home: st
   await page.getByRole("button", { name: "Create version 3" }).click();
   await expect(page.getByTestId("section-checks")).toContainText("Could not be checked", { timeout: 20_000 });
 
-  await setDraftingSpeed(app, 500);
+  const finishCheck = await pauseDrafting(app);
   await page.getByRole("button", { name: "Check again" }).click();
   await expect(page.getByTestId("section-checks")).toContainText("Checking");
   await page.getByRole("button", { name: "Version 1, yours" }).click();
   await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
-  return opened;
+  return { ...opened, finishCheck };
 }
 
 /**
  * Her new version 4 is on disk, then the check ends and saves after it. Her answer is held,
  * so only the check's news can bring version 4 into the version bar.
  */
-async function checkSavedAfterHer(page: Page, caseFile: string) {
+async function checkSavedAfterHer(page: Page, caseFile: string, finishCheck: () => Promise<void>) {
   await expect.poll(() => sectionData(caseFile, "environmental-changes").versions.length).toBe(4);
   expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ currentVersion: 4 });
+  await finishCheck();
   await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(4, { timeout: 20_000 });
 }
 
 test("check overtakes: during a check, version 1 then each line a paragraph; the new version is shown", async ({ launch, home }) => {
-  const { app, page, caseFile } = await checkingAgain(launch, home);
+  const { app, page, caseFile, finishCheck } = await checkingAgain(launch, home);
   const release = await holdAnswers(app, "sections:save-text");
   await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
-  await checkSavedAfterHer(page, caseFile);
+  await checkSavedAfterHer(page, caseFile, finishCheck);
   await expect(page.getByTestId("section-checks")).not.toContainText("Checking");
 
   await release();
@@ -454,11 +459,11 @@ test("check overtakes: during a check, version 1 then each line a paragraph; the
 });
 
 test("check overtakes: during a check, she edits version 1's text; after Done her edit is what the screen shows", async ({ launch, home }) => {
-  const { app, page, caseFile } = await checkingAgain(launch, home);
+  const { app, page, caseFile, finishCheck } = await checkingAgain(launch, home);
   await page.getByRole("button", { name: "Edit the text" }).click();
   const release = await holdAnswers(app, "sections:save-text");
   await page.getByTestId("section-text").fill("Para one.\n\nPara two, edited by her.\n\nPara three.");
-  await checkSavedAfterHer(page, caseFile);
+  await checkSavedAfterHer(page, caseFile, finishCheck);
   expect(sectionData(caseFile, "environmental-changes").versions[3].text).toBe("Para one.\n\nPara two, edited by her.\n\nPara three.");
 
   await release();

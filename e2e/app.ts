@@ -360,8 +360,11 @@ export interface DraftingStubLog {
  */
 export async function stubDrafting(app: ElectronApplication, options: { claudeKey: string; msPerChunk?: number; consistency?: string }): Promise<void> {
   await app.evaluate((_electron, { claudeKey, msPerChunk, consistency }) => {
-    const g = globalThis as unknown as { draftingStub: { requests: Array<{ url: string; body: string | null }>; msPerChunk: number; failures: number }; fetch: typeof fetch };
-    g.draftingStub = { requests: [], msPerChunk: msPerChunk ?? 0, failures: 0 };
+    const g = globalThis as unknown as {
+      draftingStub: { requests: Array<{ url: string; body: string | null }>; msPerChunk: number; failures: number; paused: Promise<void> };
+      fetch: typeof fetch;
+    };
+    g.draftingStub = { requests: [], msPerChunk: msPerChunk ?? 0, failures: 0, paused: Promise.resolve() };
     const stub = g.draftingStub;
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
     const DRAFT = [
@@ -409,6 +412,7 @@ export async function stubDrafting(app: ElectronApplication, options: { claudeKe
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
             for (const [event, data] of events) {
+              await stub.paused;
               if (signal?.aborted) break;
               controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
               if (stub.msPerChunk > 0) await new Promise((resolve) => setTimeout(resolve, stub.msPerChunk));
@@ -432,6 +436,24 @@ export async function setDraftingFailures(app: ElectronApplication, count: numbe
   await app.evaluate((_electron, n) => {
     (globalThis as unknown as { draftingStub: { failures: number } }).draftingStub.failures = n;
   }, count);
+}
+
+/**
+ * Pauses every answer of the faked Claude before its next piece, until the returned
+ * function is called: a test can then do something while a request is surely still
+ * running, however slow the computer is.
+ */
+export async function pauseDrafting(app: ElectronApplication): Promise<() => Promise<void>> {
+  await app.evaluate(() => {
+    const g = globalThis as unknown as { draftingStub: { paused: Promise<void> }; resumeDrafting?: () => void };
+    g.draftingStub.paused = new Promise<void>((resolve) => (g.resumeDrafting = resolve));
+  });
+  return () =>
+    app.evaluate(() => {
+      const g = globalThis as unknown as { draftingStub: { paused: Promise<void> }; resumeDrafting?: () => void };
+      g.draftingStub.paused = Promise.resolve();
+      g.resumeDrafting?.();
+    });
 }
 
 export async function setDraftingSpeed(app: ElectronApplication, msPerChunk: number): Promise<void> {
