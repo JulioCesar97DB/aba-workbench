@@ -57,7 +57,12 @@ const RefSchema = z.looseObject({
 function claimOf<T extends z.ZodType>(value: T) {
   return z.looseObject({
     value,
-    refs: z.array(RefSchema).max(MAX_MAP_REFS + 1),
+    // At most MAX_MAP_REFS refs where it came from, and at most one of hers (review round 2, R2-3):
+    // her edit of any claim that reads back then fits too, so it is never refused.
+    refs: z
+      .array(RefSchema)
+      .max(MAX_MAP_REFS + 1)
+      .refine((refs) => refs.filter((ref) => ref.kind !== "her").length <= MAX_MAP_REFS && refs.filter((ref) => ref.kind === "her").length <= 1),
     origin: WordSchema,
     check: z.string().max(MAP_TEXT_LIMITS.text).nullable(),
   });
@@ -228,6 +233,8 @@ const PartVersionSchema = z.looseObject({
   basedOn: VersionNumberSchema.optional(),
   /** The AI request that made it (caseMap.extractions). */
   extraction: z.string().max(64).optional(),
+  /** She approved it at some time: it is never changed in place again, so what she approved stays recorded (review round 2, R2-1). */
+  approvedOnce: z.literal(true).optional(),
   content: ContentSchema,
 });
 
@@ -432,7 +439,8 @@ function withoutApproval(part: StoredMapPart): StoredMapPart {
 /**
  * Writes the content of a part as she changed it (D1): into her editing pass while it is
  * still the newest version, hers, not approved, and the one shown; otherwise into a new
- * "edited" version based on the one shown. A new version takes the approval away (she
+ * "edited" version based on the one shown. A version she ever approved is never changed in
+ * place, even after she took the approval back. A new version takes the approval away (she
  * approves again), as for a section.
  */
 function writeContent<D extends WithCaseMap>(data: D, part: MapPartId, content: Content, editing: number | null, now: string): { data: D; version: number } {
@@ -440,7 +448,15 @@ function writeContent<D extends WithCaseMap>(data: D, part: MapPartId, content: 
   const newest = stored.versions.at(-1);
   const checked = CONTENT_SCHEMAS[part].safeParse(content);
   if (!checked.success) refuse("the change does not fit the case map's limits.");
-  if (editing !== null && newest && newest.number === editing && newest.kind === "edited" && stored.approvedVersion !== newest.number && currentPartVersion(stored)?.number === newest.number) {
+  if (
+    editing !== null &&
+    newest &&
+    newest.number === editing &&
+    newest.kind === "edited" &&
+    stored.approvedVersion !== newest.number &&
+    newest.approvedOnce !== true &&
+    currentPartVersion(stored)?.number === newest.number
+  ) {
     const versions = [...stored.versions.slice(0, -1), { ...newest, content, updatedAt: now }];
     return { data: withPart(data, part, { ...stored, versions }), version: newest.number };
   }
@@ -504,9 +520,9 @@ function isEmptyLine(claim: unknown): boolean {
 /**
  * Her input merged into the stored item. A claim whose value she kept keeps its refs and
  * origin; a changed or new one is hers. A list of claims is matched by value first, so a
- * line she did not touch keeps where it came from; a line she edited is then paired with
- * the unmatched stored line at the same place, so its earlier refs follow it after hers
- * (review round 1, S4). Empty lines are dropped. An object with an origin of its own (a
+ * line she did not touch keeps where it came from; when no line was added or removed, a
+ * line she edited is then paired with the unmatched stored line at the same place, so its
+ * earlier refs follow it after hers (review round 1, S4; round 2, R2-2). Empty lines are dropped. An object with an origin of its own (a
  * function, a group) becomes hers when anything in it changed. Keys the interface does
  * not send (a newer app's) are kept.
  */
@@ -524,10 +540,13 @@ export function mergeInput(input: unknown, stored: unknown): unknown {
         if (at !== -1) used.add(at);
         return at;
       });
-      // Then each edited line takes the unmatched stored line at its own place, if any.
+      // Then, when no line was added or removed, each edited line takes the unmatched stored
+      // line at its own place; otherwise places do not line up and an edited line is hers
+      // alone (review round 2, R2-2).
+      const samePlaces = lines.length === storedList.length;
       return lines.map((claim, index) => {
         let at = matches[index];
-        if (at === -1 && index < storedList.length && !used.has(index) && isClaim(storedList[index])) {
+        if (samePlaces && at === -1 && !used.has(index) && isClaim(storedList[index])) {
           at = index;
           used.add(index);
         }
@@ -774,5 +793,6 @@ export function approveMapPart<D extends WithCaseMap>(data: D, part: MapPartId, 
   const stored = storedPart(data, part);
   if (number === null) return stored.approvedVersion === null ? data : withPart(data, part, withoutApproval(stored));
   if (!findVersion(stored, number)) return null;
-  return withPart(data, part, { ...stored, approvedVersion: number, approvedAt: now, currentVersion: number });
+  const versions = stored.versions.map((version) => (version.number === number && version.approvedOnce !== true ? { ...version, approvedOnce: true as const } : version));
+  return withPart(data, part, { ...stored, versions, approvedVersion: number, approvedAt: now, currentVersion: number });
 }

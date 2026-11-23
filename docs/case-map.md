@@ -33,7 +33,7 @@ The parts are `client` (one item, id `client`), `caregivers`, `settings`, `defic
 
 - an AI version (`"ai"`, or `"update"` for an update of a map that existed) never changes;
 - her edits go into one `"edited"` version that changes in place while she types (her **editing pass**: the version the last answer named), as long as it is the newest version, the one shown, and not approved; otherwise her edit starts a new version based on the one shown;
-- a new version takes the part's approval away (she approves again); approved content never changes;
+- a new version takes the part's approval away (she approves again); approved content never changes: a version she ever approved carries `"approvedOnce": true` and is never edited in place again, even after she takes the approval back;
 - going back to a version only moves `currentVersion`;
 - removing an item makes a version without it; every earlier version keeps it, and its id is never used again.
 
@@ -47,7 +47,7 @@ Every fact-bearing value is a claim: `{ "value": "…", "refs": [ … ], "origin
 - `origin` is the kind of content (the four kinds of `rules/assessment.md`): `her`, `extracted`, `ai-drafted`, `hypothesis` (functions and groups) or `proposed` (a clinical choice that is hers, such as a barrier tag).
 - `check` is the text of a `[CHECK: …]` on the value.
 
-The interface sends values and `[CHECK]`s only; the main process records provenance. A value she keeps keeps its refs and origin; a value she changes or adds becomes hers (`origin: "her"`, a `her` ref first, every earlier ref kept after it, never cut: a claim holds up to 10 refs plus hers). A list of claims is matched by value first, so a line she did not touch keeps its source; a line she edited then takes the unmatched stored line at the same place, so its earlier refs follow it after hers. A line she added and left empty is not stored. A function or a group becomes hers when anything in it changes. In this pull request she cites no source by hand; the AI's quotes come with the extraction.
+The interface sends values and `[CHECK]`s only; the main process records provenance. A value she keeps keeps its refs and origin; a value she changes or adds becomes hers (`origin: "her"`, a `her` ref first, every earlier ref kept after it, never cut: a claim holds at most 10 refs where it came from plus one of hers, so her edit of any claim that reads back always fits). A list of claims is matched by value first, so a line she did not touch keeps its source; when no line was added or removed in the same save, a line she edited then takes the unmatched stored line at the same place, so its earlier refs follow it after hers (otherwise it is hers alone, never given another line's source). A line she added and left empty is not stored. A function or a group becomes hers when anything in it changes. In this pull request she cites no source by hand; the AI's quotes come with the extraction.
 
 ### Limits (D6)
 
@@ -68,7 +68,7 @@ Read and written with these limits (`src/shared/case-map.ts`): 30 behaviors and 
 - She approves the part shown (in the header), or takes the approval back. For now approving only marks the part as checked by her; the sections start using approved parts in a later pull request, and the screen says so. An approval or a version shown never becomes her editing pass, so an edit after taking an approval back starts a new version and the content she approved stays recorded.
 - The rail lists what is still marked [CHECK] in the part (each opens its item) and the part's versions, newest first, to show another one. Behavior rows show their functions; the baseline shows its mean, computed by the app (D20), or a dash when a count is not a plain number.
 - Lists, rows and evidence stop at 30, and the button says so.
-- After adding an item, its first field takes the focus; after removing one, the Add button does. What she typed in an item is saved before the removal is confirmed.
+- After adding an item, its first field takes the focus once; after removing one, the Add button does. What she typed in an item is saved before the removal is asked; when it cannot be saved, the failure shows with Try again and the removal is not asked.
 - The report on her sections is shown empty until the AI reads her sections (a later pull request); she will only mark its items.
 
 ## Where the code is

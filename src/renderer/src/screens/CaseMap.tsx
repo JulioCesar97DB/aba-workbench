@@ -81,7 +81,9 @@ export function CaseMapScreen() {
       if (result?.outcome !== "saved") return false;
       setState((previous) => (previous.status === "ready" && isOlderRevision(result.map.revision, previous.map.revision) ? previous : { status: "ready", map: result.map }));
       patch(caseId, { caseMap: result.summary });
-      if (ownChange && result.version !== null) editing.current[changedPart] = result.version;
+      // An approval, a take-back or a version shown ends her editing pass: her next change starts a new version (review round 2, R2-1).
+      if (!ownChange) delete editing.current[changedPart];
+      else if (result.version !== null) editing.current[changedPart] = result.version;
       return true;
     },
     [caseId, patch],
@@ -107,6 +109,7 @@ export function CaseMapScreen() {
   );
   // The item just added, whose first field takes the focus; after a removal, the list's Add button does (review round 1, minor 7).
   const [focusItem, setFocusItem] = useState<string | null>(null);
+  const clearFocus = useCallback(() => setFocusItem(null), []);
   const addButton = useRef<HTMLButtonElement | null>(null);
 
   const select = (nextPart: MapPartId, item: string | null) => setParams(item ? { part: nextPart, item } : { part: nextPart });
@@ -203,6 +206,7 @@ export function CaseMapScreen() {
       item={editorItem as unknown as Record<string, unknown>}
       context={editorCollection === "groups" ? groupContext(editorItem.id) : context}
       autoFocus={focusItem === editorItem.id}
+      onFocused={clearFocus}
       editingFor={() => editing.current[part] ?? null}
       onSaved={(result) => accept(result, part, true)}
       onRemove={
@@ -414,6 +418,7 @@ function ItemEditor({
   item,
   context,
   autoFocus,
+  onFocused,
   editingFor,
   onSaved,
   onRemove,
@@ -424,6 +429,8 @@ function ItemEditor({
   item: Record<string, unknown>;
   context: MapFormContext;
   autoFocus: boolean;
+  /** The first field took the focus: it never takes it again (review round 2, R2-4). */
+  onFocused: () => void;
   editingFor: () => number | null;
   onSaved: (result: MapSaveResult | null) => boolean;
   onRemove: (() => void) | null;
@@ -456,8 +463,10 @@ function ItemEditor({
   const sectionRef = useRef<HTMLElement | null>(null);
   // A new item: its first field takes the focus, so she types at once (review round 1, minor 7).
   useEffect(() => {
-    if (autoFocus) sectionRef.current?.querySelector<HTMLElement>("input, textarea, select")?.focus();
-  }, [autoFocus]);
+    if (!autoFocus) return;
+    sectionRef.current?.querySelector<HTMLElement>("input, textarea, select")?.focus();
+    onFocused();
+  }, [autoFocus, onFocused]);
   return (
     <section ref={sectionRef} aria-label={itemTitle(labelPart, item) ?? t("caseMap.untitled")} className="@container flex flex-col gap-4 rounded-lg border border-border p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -469,8 +478,16 @@ function ItemEditor({
           {box.status === "saving" ? t("sources.saving") : box.status === "saved" ? t("caseMap.saved") : ""}
         </span>
         {onRemove ? (
-          // What she typed is saved before she is asked: never sent after the item is gone.
-          <Button size="sm" onClick={() => void box.flush().then(onRemove)}>
+          // What she typed is saved before she is asked: never sent after the item is gone. When
+          // it cannot be saved she is not asked (the failure shows, with Try again: review round 2, R2-5).
+          <Button
+            size="sm"
+            onClick={() =>
+              void box.flush().then((saved) => {
+                if (saved) onRemove();
+              })
+            }
+          >
             {t("caseMap.remove")}
           </Button>
         ) : null}

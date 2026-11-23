@@ -169,6 +169,55 @@ test("case map: her editing pass changes in place; approving, then editing, star
   assert.equal(approveMapPart(data, "caregivers", 9, T3), null);
 });
 
+test("case map: a version she ever approved is never changed in place, even after she took the approval back (review round 2, R2-1)", () => {
+  let data = blank();
+  const added = addMapItem(data, "behaviors", "items", { name: claim("Spitting") }, null, T1);
+  data = added.data;
+  const typed = saveMapItem(data, "behaviors", "items", "beh-1", { definition: claim("Any instance of spitting toward a person.") }, added.version, T1);
+  assert.ok(typed && typed !== "item-not-found");
+  assert.equal(typed.version, 1, "her editing pass");
+  data = approveMapPart(typed.data, "behaviors", 1, T2)!;
+  data = approveMapPart(data, "behaviors", null, T2)!; // she takes it back
+  assert.equal(data.caseMap!.parts.behaviors.versions[0].approvedOnce, true);
+  // Her next keystroke names the same editing pass: it must not touch version 1.
+  const again = saveMapItem(data, "behaviors", "items", "beh-1", { definition: claim("Any instance of spitting toward or at a person.") }, 1, T3);
+  assert.ok(again && again !== "item-not-found");
+  assert.equal(again.version, 2, "a new version");
+  const versions = again.data.caseMap!.parts.behaviors.versions;
+  assert.equal((versions[0].content.items[0] as Record<string, { value: string }>).definition.value, "Any instance of spitting toward a person.", "what she approved stays recorded");
+  assert.equal(versions[1].basedOn, 1);
+  assert.ok(readableCaseFileText(again.data), "the mark reads back");
+});
+
+test("case map: an edited line takes the source of the line at its place only when no line was added or removed (review round 2, R2-2)", () => {
+  const a = { value: "A", refs: [{ kind: "source", sourceId: "11111111-2222-4333-8444-555555555555", quote: "A" }], origin: "extracted", check: null };
+  const b = { value: "B", refs: [{ kind: "source", sourceId: "11111111-2222-4333-8444-555555555555", quote: "B" }], origin: "extracted", check: null };
+  const c = { value: "C", refs: [{ kind: "source", sourceId: "11111111-2222-4333-8444-555555555555", quote: "C" }], origin: "extracted", check: null };
+  // A removed and B edited in one save: B' must not take A's source.
+  const shifted = mergeInput([claim("B edited"), claim("C")], [a, b, c]) as Array<{ refs: Array<{ kind: string; quote?: string }> }>;
+  assert.deepEqual(shifted[0].refs, [{ kind: "her" }]);
+  assert.equal(shifted[1].refs[0].quote, "C");
+  // Same number of lines: the edited line keeps the source of the line it replaced.
+  const inPlace = mergeInput([claim("A"), claim("B edited"), claim("C")], [a, b, c]) as Array<{ refs: Array<{ kind: string; quote?: string }> }>;
+  assert.deepEqual(
+    inPlace[1].refs.map((ref) => ref.quote ?? ref.kind),
+    ["her", "B"],
+  );
+});
+
+test("case map: a stored claim holds at most ten refs where it came from and one of hers (review round 2, R2-3)", () => {
+  const sources = (count: number) => Array.from({ length: count }, (_, index) => ({ kind: "source", quote: `q${index}` }));
+  const withRefs = (refs: unknown[]) => {
+    const data = withAiBehaviors();
+    (data.caseMap!.parts.behaviors.versions[0].content.items[0] as Record<string, unknown>).name = { value: "Spitting", refs, origin: "extracted", check: null };
+    return readCaseFile(serializeCaseFile(data)).ok;
+  };
+  assert.equal(withRefs(sources(10)), true);
+  assert.equal(withRefs([{ kind: "her" }, ...sources(10)]), true);
+  assert.equal(withRefs(sources(11)), false, "eleven sources: damaged, never edited into twelve");
+  assert.equal(withRefs([{ kind: "her" }, { kind: "her" }]), false);
+});
+
 test("case map: removing an item makes a version without it; the earlier version keeps it, and its id is never reused", () => {
   let data = blank();
   data = addMapItem(data, "behaviors", "items", { name: claim("Hair pulling") }, null, T1).data;
