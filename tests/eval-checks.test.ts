@@ -55,6 +55,7 @@ test("statedNumbers: dates, times and values made comparable; instrument names a
   assert.deepEqual(keys, ["date:10-07:2026", "date:10-07:2026", "time:3:30", "value:1000", "value:4.5", "value:1", "value:40"]);
   assert.deepEqual(statedNumbers("from 3:00 to 5:30 p.m.").map(lookupKey), ["time:3:00", "time:5:30"]);
   assert.deepEqual(statedNumbers("15:00").map(lookupKey), ["time:3:00"], "a 24-hour time is the same clock as 3:00 p.m.");
+  assert.deepEqual(statedNumbers("CDE (2026-07-30); el 20/09/2026").map(lookupKey), ["date:07-30:2026", "date:09-20:2026"], "an ISO date, and a Spanish day/month date");
 });
 
 test("numbers: a number in no source is found; dates, times and values in the sources are not", () => {

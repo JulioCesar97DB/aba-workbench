@@ -99,6 +99,13 @@ export function statedNumbers(text: string): StatedNumber[] {
   };
   // Names with digits: Vineland-3, BASC-3, DSM-5, ADOS-2, Conners 4, WISC-V, F84.0, F90.2, Module 3.
   take(/\b[A-Za-z]{2,}-\d+\b|\bF\d{2}\.\d\b|\bConners\s+\d\b|\bModule\s+\d\b/g, () => null);
+  // ISO dates, as the app names a source's date: 2026-10-07.
+  take(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m) => {
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return { kind: "date", raw: m[0], monthDay: `${pad(month)}-${pad(day)}`, year: m[1] };
+  });
   // Dates: 10/07/2026, 10/7/26, 10/07.
   take(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g, (m) => {
     let month = Number(m[1]);
