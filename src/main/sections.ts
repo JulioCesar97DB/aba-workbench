@@ -24,6 +24,7 @@ import {
   contextSections,
   EditingSchema,
   NotesSchema,
+  ownTextBefore,
   saveOwnText,
   SectionIdSchema,
   SectionRequestSchema,
@@ -79,6 +80,17 @@ export interface SectionServiceOptions {
   /** Writes the clipboard (Electron's clipboard.write in the app). */
   writeClipboard: (content: { text: string; html: string }) => Promise<void>;
   log?: (message: string) => void;
+}
+
+/** The tokens of one request as the case's data file keeps them, for a version and for its check alike. */
+function usageRecord(usage: TokenUsage) {
+  return {
+    uncachedInputTokens: usage.uncachedInputTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    outputTokens: usage.outputTokens,
+    reasoningTokens: usage.reasoningTokens,
+  };
 }
 
 function refuse(message: string): never {
@@ -301,12 +313,7 @@ export class SectionService {
       ...(instructions.trim() ? { instructions } : {}),
       ...(sessionNotes(args.data).trim() ? { notes: sessionNotes(args.data) } : {}),
       deidentified: built.prepared.deidentified,
-      usage: {
-        uncachedInputTokens: done.usage.uncachedInputTokens,
-        cacheWriteTokens: done.usage.cacheWriteTokens,
-        cacheReadTokens: done.usage.cacheReadTokens,
-        outputTokens: done.usage.outputTokens,
-      },
+      usage: usageRecord(done.usage),
       // A ChatGPT sign-in spends her plan, not money.
       costUsd: args.credential.kind === "chatgpt" ? null : generationCostUsd(done.servedModel, done.usage, done.attempts),
     });
@@ -364,8 +371,10 @@ export class SectionService {
 
   /**
    * Owner's decision, 2026-11-22: after each new AI version, the AI checks it against her
-   * sections (hers or approved) and the result is saved with the version. With none of
-   * her sections yet, nothing is sent. A failed check leaves the version as it is.
+   * sections (hers or approved) and the result is saved with the version, with its tokens
+   * and cost. Since 2026-11-23 it also compares the version with her own text of this
+   * section (ownTextBefore), so a fact of hers that a request changed is reported. With
+   * nothing of hers to compare, nothing is sent. A failed check leaves the version as it is.
    */
   private async checkConsistency(
     args: { caseId: string; id: ReportSectionId; providerId: DraftingProvider; credential: ProviderCredential; model: string; folder: string; signal: AbortSignal },
@@ -377,13 +386,22 @@ export class SectionService {
     const text = versionText(data, id, version) ?? "";
     const now = () => new Date().toISOString();
     const compared = contextSections(data, id);
+    const own = ownTextBefore(data, id, version);
     let consistency: NonNullable<Parameters<typeof setConsistency>[3]>;
-    if (compared.length === 0) {
-      consistency = { status: "nothing-to-compare", items: [], checkedAt: now(), model: null, costUsd: null, sectionsCompared: [] };
+    if (compared.length === 0 && own === null) {
+      consistency = { status: "nothing-to-compare", items: [], checkedAt: now(), model: null, costUsd: null, sectionsCompared: [], ownTextCompared: null };
     } else {
-      consistency = { status: "failed", items: [], checkedAt: now(), model: args.model, costUsd: null, sectionsCompared: compared.map(({ id: sectionId, version: v }) => ({ id: sectionId, version: v })) };
+      consistency = {
+        status: "failed",
+        items: [],
+        checkedAt: now(),
+        model: args.model,
+        costUsd: null,
+        sectionsCompared: compared.map(({ id: sectionId, version: v }) => ({ id: sectionId, version: v })),
+        ownTextCompared: own?.version ?? null,
+      };
       try {
-        const { prepared } = await this.prepare(data, args.folder, id, { kind: "consistency", currentText: text }, instructions);
+        const { prepared } = await this.prepare(data, args.folder, id, { kind: "consistency", currentText: text, ownText: own?.text ?? null }, instructions);
         let answer: string | null = null;
         const events = runSectionGeneration<null>({
           prepared,
@@ -397,6 +415,7 @@ export class SectionService {
           save: async ({ text: checked, done }) => {
             answer = checked;
             consistency.model = done.servedModel.slice(0, 200);
+            consistency.usage = usageRecord(done.usage);
             consistency.costUsd = args.credential.kind === "chatgpt" ? null : generationCostUsd(done.servedModel, done.usage, done.attempts);
             return null;
           },

@@ -134,8 +134,11 @@ export type SectionRequest =
   | { kind: "change"; currentText: string; request: string }
   | { kind: "paragraph"; currentText: string; paragraphIndex: number; request: string }
   | { kind: "improve"; currentText: string }
-  /** Checks a version against her sections; the answer is CONSISTENCY_NONE or one "- " line per contradiction. */
-  | { kind: "consistency"; currentText: string };
+  /**
+   * Checks a version against her sections, and against her own text of this section when
+   * there is one (ownText); the answer is CONSISTENCY_NONE or one "- " line per contradiction.
+   */
+  | { kind: "consistency"; currentText: string; ownText: string | null };
 
 /** The answer of a consistency check that found nothing. */
 export const CONSISTENCY_NONE = "NO CONTRADICTIONS";
@@ -170,7 +173,7 @@ export interface SectionPromptInput {
 }
 
 /** The tags the section prompt uses: text she typed can never open or close one of them. */
-const PROMPT_TAGS = ["her-sections", "section", "standing-instructions", "session-notes", "current-text", "marked-paragraph", "her-request", "source", "sources"];
+const PROMPT_TAGS = ["her-sections", "section", "standing-instructions", "session-notes", "current-text", "marked-paragraph", "her-request", "her-own-text", "source", "sources"];
 const TAG_PATTERN = new RegExp(`<(/?)(${PROMPT_TAGS.join("|")})\\b`, "giu");
 
 /** Text typed or pasted by her, made unable to break out of the tag it is put in. */
@@ -232,19 +235,30 @@ export async function buildSectionPrompt(
       break;
     case "improve":
       parts.push(currentTextBlock(request.currentText, null));
-      parts.push(`Improve request. The text above is ${what} as she wrote it. Return the improved section, ready to paste.`);
-      break;
-    case "consistency":
-      parts.push(currentTextBlock(request.currentText, null));
       parts.push(
         [
-          `Consistency check. The text above is a new version of ${what}. Compare it with her sections only: does it contradict any of them in names, numbers, scores, dates, behaviors, diagnoses, settings, people or services?`,
-          "Do not report missing information, style, length, or differences of emphasis; only statements that cannot both be true.",
-          `If there is no contradiction, answer exactly: ${CONSISTENCY_NONE}`,
-          'Otherwise answer with one line per contradiction, each starting with "- ", naming her section and saying briefly what differs. Nothing else.',
+          `Improve request. The text above is ${what} as she wrote it.`,
+          "Keep every fact of hers exactly as she wrote it: times, dates, ages, numbers, scores, names, places, frequencies and durations. Never correct, round or replace one, even where a source says otherwise; keep hers and add [CHECK: what the source says] right after it.",
+          "Return the improved section, ready to paste.",
         ].join("\n"),
       );
       break;
+    case "consistency": {
+      parts.push(currentTextBlock(request.currentText, null));
+      const ownText = request.ownText?.trim();
+      if (ownText) parts.push(`<her-own-text>\n${quoteForPrompt(ownText)}\n</her-own-text>`);
+      const against = ownText ? "her sections and with her own text of this section in <her-own-text>" : "her sections only";
+      parts.push(
+        [
+          `Consistency check. The text above is a new version of ${what}. Compare it with ${against}: does it contradict any of them in names, numbers, scores, dates, times, behaviors, diagnoses, settings, people or services?`,
+          ...(ownText ? ["Her own text is hers: a fact of it that the new version states differently (a time, a date, a number, a name) is a contradiction, even when the new version marks it [CHECK: ...]. A fact of hers that it leaves out is not."] : []),
+          "Do not report missing information, style, length, or differences of emphasis; only statements that cannot both be true.",
+          `If there is no contradiction, answer exactly: ${CONSISTENCY_NONE}`,
+          `Otherwise answer with one line per contradiction, each starting with "- ", naming her section${ownText ? ' (or "Her own text" for her text of this section)' : ""} and saying briefly what differs. Nothing else.`,
+        ].join("\n"),
+      );
+      break;
+    }
   }
   return { prompt: { system, sources: input.sources, task: parts.join("\n\n") }, rulesVersions };
 }

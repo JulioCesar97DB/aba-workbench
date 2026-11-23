@@ -32,6 +32,8 @@ export interface SectionGeneration {
   sectionId: ReportSectionId;
   /** Null for a check run again ("Check again"). */
   request: SectionRequestInput | null;
+  /** The AI it was sent to, so "Try again" sends it to the same one. */
+  provider: DraftingProvider;
   phase: "starting" | "thinking" | "writing" | "checking" | "done";
   text: string;
   outcome: GenerationOutcome | null;
@@ -136,7 +138,7 @@ export async function startSectionGeneration(caseId: string, sectionId: ReportSe
   ensureSubscribed();
   const id = crypto.randomUUID();
   const previous = byKey.get(keyOf(caseId, sectionId));
-  set({ id, caseId, sectionId, request, phase: "starting", text: "", outcome: null });
+  set({ id, caseId, sectionId, request, provider, phase: "starting", text: "", outcome: null });
   notStarted.add(id);
   try {
     const result = await window.aba.startSectionGeneration(caseId, sectionId, id, provider, request);
@@ -154,7 +156,7 @@ export async function startSectionGeneration(caseId: string, sectionId: ReportSe
     return result.outcome;
   } catch {
     notStarted.delete(id);
-    set({ id, caseId, sectionId, request, phase: "done", text: "", outcome: { kind: "failed", message: "" } });
+    set({ id, caseId, sectionId, request, provider, phase: "done", text: "", outcome: { kind: "failed", message: "" } });
     return "error";
   }
 }
@@ -163,20 +165,26 @@ export async function startSectionGeneration(caseId: string, sectionId: ReportSe
 export async function startSectionCheck(caseId: string, sectionId: ReportSectionId, provider: DraftingProvider, version: number): Promise<StartSectionResult["outcome"] | "error"> {
   ensureSubscribed();
   const id = crypto.randomUUID();
-  set({ id, caseId, sectionId, request: null, phase: "checking", text: "", outcome: null });
+  set({ id, caseId, sectionId, request: null, provider, phase: "checking", text: "", outcome: null });
   notStarted.add(id);
   try {
     const result = await window.aba.checkSection(caseId, sectionId, id, provider, version);
     notStarted.delete(id);
     if (result.outcome === "started" && stopRequested.has(id)) void window.aba.cancelGeneration(id);
     stopRequested.delete(id);
-    if (result.outcome !== "started") set({ id, caseId, sectionId, request: null, phase: "done", text: "", outcome: { kind: "checked" } });
+    if (result.outcome !== "started") set({ id, caseId, sectionId, request: null, provider, phase: "done", text: "", outcome: { kind: "checked" } });
     return result.outcome;
   } catch {
     notStarted.delete(id);
-    set({ id, caseId, sectionId, request: null, phase: "done", text: "", outcome: { kind: "checked" } });
+    set({ id, caseId, sectionId, request: null, provider, phase: "done", text: "", outcome: { kind: "checked" } });
     return "error";
   }
+}
+
+/** "Try again" after a request failed: the same request, to the same AI. */
+export function retrySectionGeneration(generation: SectionGeneration): Promise<StartSectionResult["outcome"] | "error"> | null {
+  if (generation.phase !== "done" || generation.outcome?.kind !== "failed" || generation.request === null) return null;
+  return startSectionGeneration(generation.caseId, generation.sectionId, generation.provider, generation.request);
 }
 
 export function stopSectionGeneration(generation: SectionGeneration): void {

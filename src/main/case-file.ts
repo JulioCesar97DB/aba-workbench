@@ -124,6 +124,16 @@ export type StoredPdfSource = z.infer<typeof PdfSourceSchema>;
  */
 const VersionNumberSchema = z.int().min(1).max(1_000_000);
 
+/** The tokens of one AI request, as the provider reported them (src/lib/providers/types.ts, TokenUsage). */
+const UsageRecordSchema = z.looseObject({
+  uncachedInputTokens: z.int().min(0),
+  cacheWriteTokens: z.int().min(0),
+  cacheReadTokens: z.int().min(0),
+  outputTokens: z.int().min(0),
+  /** The reasoning share of outputTokens, when the provider reports it (absent in files written before it was kept). */
+  reasoningTokens: z.int().min(0).nullable().optional(),
+});
+
 /** What an AI version was made from and by, so any version can be traced back. */
 const GenerationRecordSchema = z.looseObject({
   provider: z.string().max(32),
@@ -140,12 +150,7 @@ const GenerationRecordSchema = z.looseObject({
   notes: z.string().max(MAX_NOTES_LENGTH * 2).optional(),
   /** Whether the client's details were hidden before sending. */
   deidentified: z.boolean(),
-  usage: z.looseObject({
-    uncachedInputTokens: z.int().min(0),
-    cacheWriteTokens: z.int().min(0),
-    cacheReadTokens: z.int().min(0),
-    outputTokens: z.int().min(0),
-  }),
+  usage: UsageRecordSchema,
   costUsd: z.number().min(0).nullable(),
 });
 
@@ -173,6 +178,10 @@ const StoredVersionSchema = z.looseObject({
       costUsd: z.number().min(0).nullable(),
       /** Her sections it compared against, by id and version. */
       sectionsCompared: z.array(z.looseObject({ id: z.string().max(64), version: VersionNumberSchema })).max(100),
+      /** Her own text of this section it compared against, by version (absent: none, or written before it was compared). */
+      ownTextCompared: VersionNumberSchema.nullable().optional(),
+      /** The check's tokens, as for a version (absent: no request was answered, or written before they were kept). */
+      usage: UsageRecordSchema.optional(),
     })
     .optional(),
 });

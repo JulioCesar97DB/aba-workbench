@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ContextSection } from "../lib/rules.ts";
 import { REPORT_SECTIONS, type ReportSectionId } from "../shared/report-sections.ts";
 import { MAX_NOTES_LENGTH, MAX_REQUEST_LENGTH, MAX_SECTION_TEXT_LENGTH, normalizeLineEndings, type SectionShape } from "../shared/section-text.ts";
-import { sectionState, type ConsistencyResult, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion, type VersionKind } from "../shared/sections.ts";
+import { AI_VERSION_KINDS, sectionState, type ConsistencyResult, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion, type VersionKind } from "../shared/sections.ts";
 import type { CaseData, GenerationRecord, StoredSection, StoredVersion } from "./case-file.ts";
 
 /*
@@ -273,6 +273,26 @@ function ownVersions(section: StoredSection): Set<number> {
     return own;
   };
   return new Set(section.versions.filter((version) => isOwn(version)).map((version) => version.number));
+}
+
+/**
+ * Her own text of a section, for the check of a new AI version of it (owner's request,
+ * 2026-11-23: "Improve" changed her 3:00-6:00 p.m. to 5:30 unflagged): her latest own
+ * version before that version (what she pasted, or her edit of it). Null for a version that is not the
+ * AI's, or when she has no text of her own before it.
+ */
+export function ownTextBefore(data: CaseData, id: ReportSectionId, number: number): { version: number; text: string } | null {
+  const section = storedSection(data, id);
+  const checked = findVersion(section, number);
+  if (!checked || !AI_VERSION_KINDS.includes(kindOf(checked))) return null;
+  // Her own text as the other sections see it (ownVersions): what she pasted and her edits of it, not her edit of an AI draft.
+  const own = ownVersions(section);
+  let found: StoredVersion | null = null;
+  for (const version of section.versions) {
+    if (!own.has(version.number) || version.number >= number || version.text.trim() === "") continue;
+    if (!found || version.number > found.number) found = version;
+  }
+  return found ? { version: found.number, text: found.text } : null;
 }
 
 /** Her other sections that are hers or approved, in the report's order, for a request about `id`. */
