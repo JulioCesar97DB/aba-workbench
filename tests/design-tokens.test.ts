@@ -36,6 +36,11 @@ const TEXT_PAIRS: Array<[text: string, background: string]> = [
   ["danger", "surface"], // error message
   ["fg-on-nav-warning", "nav"], // error message on the sidebar
   ["fg-on-nav-warning", "nav-hover"],
+  ["fg", "ai-subtle"], // what the AI does or proposes
+  ["fg-muted", "ai-subtle"],
+  ["fg-on-accent-subtle", "ai-subtle"],
+  ["accent", "ai-subtle"],
+  ["warning", "ai-subtle"],
 ];
 
 const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
@@ -45,6 +50,9 @@ const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
   ["focus-on-nav", "nav"],
   ["focus-on-nav", "nav-hover"],
   ["dot-empty", "nav"],
+  ["dot-done", "nav"], // a step done, on the sidebar
+  ["dot-draft", "nav"], // a step in progress
+  ["focus", "ai-subtle"],
 ];
 
 function luminance(hex: string): number {

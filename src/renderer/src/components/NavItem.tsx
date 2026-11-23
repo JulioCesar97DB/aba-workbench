@@ -23,6 +23,54 @@ export function NavItem({ to, end, number, children, detail }: { to: string; end
   );
 }
 
+const stepBase =
+  "group flex items-center gap-2.5 rounded-md px-2 text-fg-on-nav no-underline transition-colors hover:bg-nav-hover aria-[current=page]:bg-nav-current aria-[current=page]:font-semibold aria-[current=page]:text-fg-on-nav-current";
+
+export type StepState = "done" | "in-progress" | "not-started" | "later";
+
+/**
+ * A step of the case: a circle with its number (or a check once done) that shows its
+ * state, its name, and a count after it. The state is also said in words to a screen
+ * reader; a step not built yet says "Soon" on screen too. `compact` trims the row to 36 px
+ * while the report's sections are listed under it, so the whole sidebar fits a
+ * 1366x768 window.
+ */
+export function StepNavItem({ to, number, state, stateText, laterTag, detail, compact, children }: { to: string; number: number; state: StepState; stateText: string; laterTag: string; detail?: ReactNode; compact?: boolean; children: ReactNode }) {
+  return (
+    <NavLink to={to} className={cn(stepBase, compact ? "min-h-9" : "min-h-control")}>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "grid size-5.5 shrink-0 place-items-center rounded-full font-mono text-2xs font-semibold tabular-nums",
+          state === "done" && "bg-dot-done text-nav group-aria-[current=page]:bg-success group-aria-[current=page]:text-fg-on-accent",
+          state === "in-progress" && "border-2 border-dot-draft text-dot-draft group-aria-[current=page]:border-warning group-aria-[current=page]:bg-warning group-aria-[current=page]:text-fg-on-accent",
+          state === "not-started" && "border border-dot-empty text-fg-on-nav-muted group-aria-[current=page]:border-fg-muted group-aria-[current=page]:text-fg",
+          state === "later" && "border border-dashed border-dot-empty text-fg-on-nav-muted group-aria-[current=page]:border-fg-muted group-aria-[current=page]:text-fg",
+        )}
+      >
+        {state === "done" ? (
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2.5 6.5l2.2 2.2L9.5 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          number
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        {children}
+        <span className="sr-only">, {stateText}</span>
+      </span>
+      {state === "later" ? (
+        <span aria-hidden="true" className="shrink-0 rounded-sm border border-dashed border-fg-on-nav-muted px-1 text-2xs font-semibold tracking-eyebrow text-fg-on-nav-muted uppercase group-aria-[current=page]:border-fg-muted group-aria-[current=page]:text-fg-muted">
+          {laterTag}
+        </span>
+      ) : detail !== undefined ? (
+        <span className="shrink-0 font-mono text-xs text-fg-on-nav-muted group-aria-[current=page]:text-fg-muted">{detail}</span>
+      ) : null}
+    </NavLink>
+  );
+}
+
 /**
  * A report section: a status dot, its English title, and its state in words after it
  * ("Yours", "v3", "Approved"; read by a screen reader too). The dot repeats the state:
@@ -34,7 +82,7 @@ export function SectionNavItem({ to, title, state, detail, statusLabel }: { to: 
       to={to}
       className={({ isActive }) =>
         cn(
-          "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-fg-on-nav no-underline transition-colors hover:bg-nav-hover",
+          "flex min-h-6.75 items-center gap-2 rounded-md px-2 py-1 text-sm leading-tight text-fg-on-nav no-underline transition-colors hover:bg-nav-hover",
           isActive && "bg-nav-hover font-semibold",
         )
       }

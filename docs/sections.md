@@ -14,10 +14,10 @@ Each section of the report (`src/shared/report-sections.ts`, in ABA Matrix's ord
 - **Copy for ABA Matrix**, in one click: see "Copy for ABA Matrix" below. The message names the version copied, says how many `[MISSING]`/`[CHECK]` markers are still to resolve, and says which version is approved when she copied another one.
 - **Lines that are not paragraphs.** Text pasted with single line breaks reads as one paragraph (many text boxes copy that way). The paste editor and the reading view say so and offer "Treat each line as a paragraph", which makes a new version; her text stays as she pasted it.
 - **Her standing instructions** for each section (the rail), remembered for all her cases.
-- **Her notes for this session** (the sidebar, under the sections), used in every request about this case until she presses "Start a new session", which archives them.
+- **Her notes for today** ("Today's notes" at the foot of the case's sidebar opens them in a panel from the right), used in every request about this case until she presses "Start a new session", which archives them.
 - **Checks** beside the text: structure, missing data and consistency with her sections and her own text (below).
 - **A request that fails** says what is known (for OpenAI: could not be reached; the connection dropped while it was answering, nothing saved; an answer the app could not read, nothing saved; no answer in time; an error OpenAI sent while answering, with its code and words; a problem on its side, with the status) and offers "Try again", which sends the same request to the same AI.
-- The sidebar counts the sections that are hers or approved ("Sections · 3 of 9"), and the sidebar and the Report step show each section's state: not started (hollow dot), "Yours" (green), "v3" (amber: an AI draft waiting), "Approved" (green).
+- The sidebar's Report step counts the sections that are hers or approved ("3/9"); while she is in the report, the sidebar lists the sections under it, and the sidebar and the Report step show each section's state: not started (hollow dot), "Yours" (green), "v3" (amber: an AI draft waiting), "Approved" (green).
 - **Which AI.** The connected provider; with both connected, a "Write with" choice, defaulting to the one she used last. The model is the most capable one unless she chooses the other in Settings ("AI model").
 - **Not ready for real client data.** Until de-identification is plugged in, every section screen says so plainly ("Not ready for real client data yet"), above anything that can send a request.
 

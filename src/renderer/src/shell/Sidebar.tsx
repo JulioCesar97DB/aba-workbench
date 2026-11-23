@@ -1,23 +1,20 @@
-import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import type { SectionSummary } from "../../../shared/sections.ts";
 import type { CaseMapSummary } from "../../../shared/case-map.ts";
-import { useAutosave, useKeptText } from "../autosave.tsx";
-import { onRetried } from "../case-saves.tsx";
-import type { FailedSave } from "../../../shared/sources.ts";
-import { usePatchOpenedCase } from "../open-case.tsx";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router";
+import { Link, NavLink, useLocation } from "react-router";
 import type { Language } from "../../../shared/api.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
-import { CASE_STEPS, casePath, StepLabel } from "../case-steps.tsx";
+import { CASE_STEPS, casePath, StepLabel, type CaseStep } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
-import { NavItem, SectionNavItem } from "../components/NavItem.tsx";
+import { NavItem, SectionNavItem, StepNavItem, type StepState } from "../components/NavItem.tsx";
 import { Tooltip } from "../components/Tooltip.tsx";
 import { useConnections } from "../connections.tsx";
 import { useLanguage } from "../language.tsx";
 import { Eyebrow } from "./WorkArea.tsx";
+import { NotesPanel } from "./NotesPanel.tsx";
 
 /** The reference shows the switch as ES EN. */
 const SWITCH_ORDER: Language[] = ["es", "en"];
@@ -82,6 +79,30 @@ export function sectionStateText(t: TFunction, section: SectionSummary): { short
   }
 }
 
+/** How far a step is, from the case's data (nothing is stored for it): owner's decision T18. */
+function stepState(step: CaseStep, counts: { sources: number; caseMap: CaseMapSummary; ready: number; started: number }): StepState {
+  switch (step) {
+    case "sources":
+      return counts.sources > 0 ? "done" : "not-started";
+    case "case-map":
+      if (counts.caseMap.withContent === 0) return "not-started";
+      return counts.caseMap.approved === counts.caseMap.withContent ? "done" : "in-progress";
+    case "report":
+      if (counts.ready === REPORT_SECTIONS.length) return "done";
+      return counts.started > 0 ? "in-progress" : "not-started";
+    default:
+      // Interventions, and Review and copy: not built yet, said so (owner's decision P3).
+      return "later";
+  }
+}
+
+const STATE_TEXT_KEYS = {
+  done: "nav.stepDone",
+  "in-progress": "nav.stepInProgress",
+  "not-started": "nav.stepNotStarted",
+  later: "nav.stepLater",
+} as const;
+
 export function CaseSidebar({
   caseId,
   caseName,
@@ -89,6 +110,7 @@ export function CaseSidebar({
   sections,
   notes,
   caseMap,
+  sourceCount,
 }: {
   caseId: string;
   caseName: string;
@@ -96,72 +118,97 @@ export function CaseSidebar({
   sections: SectionSummary[];
   notes: string;
   caseMap: CaseMapSummary;
+  sourceCount: number;
 }) {
   const { t } = useTranslation();
   const sectionsHeadingId = useId();
+  const location = useLocation();
   const states = new Map(sections.map((section) => [section.id, section]));
+  const ready = sections.filter((section) => section.state === "hers" || section.state === "approved").length;
+  const started = sections.filter((section) => section.state !== "not-started").length;
+  // The report's sections are listed under its step only while she works on the report or
+  // its review and copy; elsewhere the step's count says enough (owner's decision T18).
+  const inReport = /^\/cases\/[^/]+\/(report|review)(\/|$)/.test(location.pathname);
   return (
     <SidebarFrame
       top={
         <div className="flex flex-col gap-0.5 px-2">
           <Brand />
-          <p className="text-lg font-semibold">{caseName}</p>
+          <p className="text-lg font-semibold break-words">{caseName}</p>
           <p className="text-xs text-fg-on-nav-muted">{caseDetail}</p>
-          <Link to="/" className="mt-1 self-start rounded-sm text-xs text-fg-on-nav underline underline-offset-2 hover:decoration-2">
-            {t("nav.allCases")}
-          </Link>
+          <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs">
+            <Link to="/" className="rounded-sm text-fg-on-nav underline underline-offset-2 hover:decoration-2">
+              {t("nav.allCases")}
+            </Link>
+            <NavLink to="/settings" className="rounded-sm text-fg-on-nav underline underline-offset-2 hover:decoration-2">
+              {t("nav.settings")}
+            </NavLink>
+          </p>
         </div>
       }
-      footerExtra={
-        <NavItem to="/settings">{t("nav.settings")}</NavItem>
-      }
+      footer={<NotesPanel caseId={caseId} notes={notes} />}
     >
       <nav aria-label={t("nav.stepsLabel")}>
         <ol className="flex flex-col gap-0.5">
-          {CASE_STEPS.map((step, index) => (
-            <li key={step}>
-              <NavItem
-                to={casePath(caseId, step)}
-                number={index + 1}
-                // The case map: its parts approved, out of the parts with something in them.
-                detail={step === "case-map" && caseMap.withContent > 0 ? `${caseMap.approved}/${caseMap.withContent}` : undefined}
-              >
-                <StepLabel t={t} step={step} />
-                {step === "case-map" && caseMap.withContent > 0 ? <span className="sr-only">{t("caseMap.sidebarCount", { approved: caseMap.approved, total: caseMap.withContent })}</span> : null}
-              </NavItem>
-            </li>
-          ))}
-        </ol>
-      </nav>
-      <nav aria-labelledby={sectionsHeadingId} className="flex flex-col gap-1">
-        <Eyebrow id={sectionsHeadingId} className="px-2 text-fg-on-nav-muted">
-          {t("nav.sectionsHeading")} · {t("section.reportReady", { done: sections.filter((section) => section.state === "hers" || section.state === "approved").length, total: REPORT_SECTIONS.length })}
-        </Eyebrow>
-        <ul className="flex flex-col">
-          {REPORT_SECTIONS.map((section) => {
-            const summary = states.get(section.id) ?? { id: section.id, state: "not-started" as const, currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0 };
-            const text = sectionStateText(t, summary);
+          {CASE_STEPS.map((step, index) => {
+            const state = stepState(step, { sources: sourceCount, caseMap, ready, started });
+            const detail =
+              step === "sources" && sourceCount > 0
+                ? String(sourceCount)
+                : // The case map: its parts approved, out of the parts with something in them.
+                  step === "case-map" && caseMap.withContent > 0
+                  ? `${caseMap.approved}/${caseMap.withContent}`
+                  : step === "report"
+                    ? `${ready}/${REPORT_SECTIONS.length}`
+                    : undefined;
             return (
-              <li key={section.id}>
-                <SectionNavItem to={casePath(caseId, "report", section.id)} title={section.title} state={summary.state} detail={text.short} statusLabel={text.long} />
+              <li key={step}>
+                <StepNavItem to={casePath(caseId, step)} number={index + 1} state={state} stateText={t(STATE_TEXT_KEYS[state])} laterTag={t("nav.stepLaterTag")} detail={detail} compact={inReport}>
+                  <StepLabel t={t} step={step} />
+                  {step === "case-map" && caseMap.withContent > 0 ? <span className="sr-only">{t("caseMap.sidebarCount", { approved: caseMap.approved, total: caseMap.withContent })}</span> : null}
+                  {step === "report" ? <span className="sr-only">{t("section.reportReady", { done: ready, total: REPORT_SECTIONS.length })}</span> : null}
+                </StepNavItem>
+                {step === "report" && inReport ? (
+                  <nav aria-labelledby={sectionsHeadingId} className="mt-0.5 mb-1 ml-4 border-l border-nav-hover pl-2">
+                    <h2 id={sectionsHeadingId} className="sr-only">
+                      {t("nav.sectionsHeading")} · {t("section.reportReady", { done: ready, total: REPORT_SECTIONS.length })}
+                    </h2>
+                    <ul className="flex flex-col">
+                      {REPORT_SECTIONS.map((section) => {
+                        const summary = states.get(section.id) ?? { id: section.id, state: "not-started" as const, currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0 };
+                        const text = sectionStateText(t, summary);
+                        return (
+                          <li key={section.id}>
+                            <SectionNavItem to={casePath(caseId, "report", section.id)} title={section.title} state={summary.state} detail={text.short} statusLabel={text.long} />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </nav>
+                ) : null}
               </li>
             );
           })}
-        </ul>
+        </ol>
       </nav>
-      <SessionNotes key={caseId} caseId={caseId} initial={notes} />
     </SidebarFrame>
   );
 }
 
-/** The case (or brand) on top, the lists in the middle, scrolling on their own when the window is short, and the footer always in view. */
-function SidebarFrame({ top, children, footerExtra }: { top: ReactNode; children: ReactNode; footerExtra?: ReactNode }) {
+/**
+ * The case (or brand) on top, the lists in the middle, and the footer always in view. The
+ * whole sidebar fits a 1366x768 window, the report's sections listed; on a shorter one the
+ * middle scrolls, as the sidebar's one scroll area, and the footer (today's notes, the AI
+ * connection, the language) stays reachable.
+ */
+function SidebarFrame({ top, children, footer }: { top: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4.5 py-4.5">
+    <div className="flex h-full min-h-0 flex-col gap-3 py-3.5">
       <div className="px-3.5">{top}</div>
-      <div className="flex min-h-0 flex-1 flex-col gap-4.5 overflow-y-auto px-3.5">{children}</div>
-      <div className="px-3.5">
-        <SidebarFooter extra={footerExtra} />
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3.5">{children}</div>
+      <div className="flex flex-col gap-2 px-3.5">
+        {footer}
+        <SidebarFooter />
       </div>
     </div>
   );
@@ -197,7 +244,7 @@ function AiConnectionStatus() {
   );
 }
 
-function SidebarFooter({ extra }: { extra?: ReactNode }) {
+function SidebarFooter() {
   const { t } = useTranslation();
   const { language, savedLanguage, changeLanguage } = useLanguage();
 
@@ -206,8 +253,7 @@ function SidebarFooter({ extra }: { extra?: ReactNode }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {extra}
+    <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-fg-on-nav-muted">
         <AiConnectionStatus />
         <div role="group" aria-label={t("nav.languageLabel")} className="flex gap-0.5">
@@ -228,125 +274,12 @@ function SidebarFooter({ extra }: { extra?: ReactNode }) {
         </div>
       </div>
       {/* Always rendered, even empty, so a screen reader announces the message when it appears. */}
-      <p role="status" className="px-2 text-xs text-fg-on-nav-warning">
+      <p role="status" className="px-2 text-xs text-fg-on-nav-warning empty:hidden">
         {/* The same message as in Settings, from the same state, naming the language that was saved. */}
         {language !== savedLanguage
           ? t("settings.languageNotSaved", { language: t(`languageInSentence.${language}`), previous: t(`languageInSentence.${savedLanguage}`) })
           : null}
       </p>
     </div>
-  );
-}
-
-/**
- * Her notes for this session, under the sections (as in the reference). The AI takes them
- * into account in everything it drafts in this case until she starts a new session, which
- * keeps them in the case's file and empties the box.
- */
-function SessionNotes({ caseId, initial }: { caseId: string; initial: string }) {
-  const { t } = useTranslation();
-  const patch = usePatchOpenedCase();
-  const headingId = useId();
-  const hintId = useId();
-  // A new session starts a new box: its text, and what was saved of it, start empty.
-  const [round, setRound] = useState(0);
-  const [startFailed, setStartFailed] = useState(false);
-
-  async function newSession(flush: () => Promise<boolean>) {
-    // Never start a new session over notes that are not saved (review, low 6): they would be left out of the archive.
-    if (!(await flush())) {
-      setStartFailed(true);
-      return;
-    }
-    const result = await window.aba.startNewSession(caseId).catch(() => null);
-    setStartFailed(result?.outcome !== "saved");
-    if (result?.outcome === "saved") {
-      patch(caseId, { notes: result.notes });
-      setRound((value) => value + 1);
-    }
-  }
-
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2 rounded-lg border border-nav-hover px-3 py-3">
-      <Eyebrow id={headingId} className="text-fg-on-nav-muted">
-        {t("section.notesHeading")}
-      </Eyebrow>
-      <p id={hintId} className="text-xs text-fg-on-nav-muted">
-        {t("section.notesHint")}
-      </p>
-      <NotesBox key={round} caseId={caseId} initial={round === 0 ? initial : ""} labelledBy={headingId} describedBy={hintId} onNewSession={newSession} />
-      {startFailed ? (
-        <p role="alert" className="text-xs font-medium text-fg-on-nav-warning">
-          {t("section.actionFailed")}
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-function NotesBox({
-  caseId,
-  initial,
-  labelledBy,
-  describedBy,
-  onNewSession,
-}: {
-  caseId: string;
-  initial: string;
-  labelledBy: string;
-  describedBy: string;
-  onNewSession: (flush: () => Promise<boolean>) => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const patch = usePatchOpenedCase();
-  const notes = useAutosave({
-    caseId,
-    initial,
-    save: async (text) => {
-      const result = await window.aba.saveSessionNotes(caseId, text);
-      if (result.outcome === "saved") patch(caseId, { notes: result.notes });
-      return result.outcome === "saved";
-    },
-  });
-  // Notes she typed that could not be saved come back in this box after a reload (review round 2, B3).
-  const isMine = useCallback((item: FailedSave) => item.about === "notes" && item.caseId === caseId, [caseId]);
-  const ready = useKeptText(notes, isMine);
-  useEffect(
-    () =>
-      onRetried((item) => {
-        if (isMine(item) && item.text !== null) patch(caseId, { notes: item.text });
-      }),
-    [isMine, caseId, patch],
-  );
-  return (
-    <>
-      <textarea
-        aria-labelledby={labelledBy}
-        aria-describedby={describedBy}
-        data-testid="session-notes"
-        readOnly={!ready}
-        value={notes.value}
-        placeholder={t("section.notesPlaceholder")}
-        onChange={(event) => notes.setValue(event.target.value)}
-        onBlur={() => void notes.flush()}
-        rows={4}
-        className="min-h-24 w-full resize-y rounded-md bg-nav-hover px-2.5 py-2 text-sm text-fg-on-nav placeholder:text-fg-on-nav-muted"
-      />
-      {notes.status === "failed" ? (
-        <p role="alert" className="text-xs font-medium text-fg-on-nav-warning">
-          {t("section.actionFailed")}{" "}
-          <button type="button" onClick={() => void notes.retry()} className="underline">
-            {t("sources.tryAgain")}
-          </button>
-        </p>
-      ) : null}
-      {notes.value.trim() !== "" && notes.status !== "failed" ? (
-        <Tooltip content={t("section.newSessionHint")}>
-          <Button variant="nav" size="sm" className="self-start" onClick={() => void onNewSession(notes.flush)}>
-            {t("section.newSession")}
-          </Button>
-        </Tooltip>
-      ) : null}
-    </>
   );
 }

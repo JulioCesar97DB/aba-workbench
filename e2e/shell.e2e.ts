@@ -146,7 +146,10 @@ test("the navigation reaches every screen", async ({ launch, home }) => {
     await expect(steps.getByRole("link", { name: link })).toHaveAttribute("aria-current", "page");
   }
 
+  // The report's sections are listed under its step while she is in the report.
   const sections = page.getByRole("navigation", { name: "Sections" });
+  await expect(sections).toHaveCount(0);
+  await steps.getByRole("link", { name: "Report" }).click();
   await expect(sections.getByRole("link")).toHaveCount(REPORT_SECTIONS.length);
   for (const section of REPORT_SECTIONS) {
     await sections.getByRole("link", { name: section.title }).click();
@@ -207,10 +210,11 @@ test("switching the language changes the screen and survives a restart", async (
   const steps = page.getByRole("navigation", { name: "Pasos del caso" });
   await expect(steps.getByRole("link", { name: "Fuentes" })).toBeVisible();
   await expect(steps.locator('[lang="en"]')).toHaveText(["Interventions"]);
-  const sections = page.getByRole("navigation", { name: "Secciones" });
-  await expect(sections.locator('[lang="en"]')).toHaveText(REPORT_SECTIONS.map((section) => section.title));
   // The title and the sentence that names the step: both marked English.
   await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText(["Interventions", "Interventions"]);
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/report`);
+  const sections = page.getByRole("navigation", { name: "Secciones" });
+  await expect(sections.locator('[lang="en"]')).toHaveText(REPORT_SECTIONS.map((section) => section.title));
 
   await app.close();
   app = await launch();

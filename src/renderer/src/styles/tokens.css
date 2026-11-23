@@ -56,6 +56,8 @@
   --color-dot-draft: #ffb347; /* a section drafted by the AI, not approved yet, on the sidebar */
   /* A paragraph she marked to change: the accent's light tint, edged in the accent. */
   --color-mark: #fff4dc;
+  /* What the AI does or proposes: the same light amber tint, named for that use (owner's decision T21). */
+  --color-ai-subtle: #fff4dc;
 
   --color-backdrop: rgb(22 32 42 / 0.55);
 
@@ -94,15 +96,20 @@
      script that closes the panel, and tests/design-tokens.test.ts keeps the two equal. */
   --breakpoint-sidebar: 48rem;
   /* The working area (a container) puts the rail beside the content from --container-split
-     (the @split: variant), and widens it from --container-split-wide. */
+     (the @split: variant), and widens it from --container-split-wide (a window about
+     1280 px wide with the sidebar shown). */
   --container-split: 50rem;
-  --container-split-wide: 72rem;
+  --container-split-wide: 64rem;
 
   /* Fixed sizes. Spacing otherwise uses Tailwind's 4px scale (p-2 = 8px, p-4.5 = 18px...). */
   --spacing-control: 2.75rem; /* 44px: buttons, fields and steps, a comfortable target */
   --spacing-control-sm: 2rem; /* 32px: compact buttons inside tables and badges' rows */
   --spacing-sidebar: 16rem; /* 256px */
-  --spacing-rail: 16.25rem; /* 260px: the right rail beside the content */
-  --spacing-rail-wide: 20rem; /* 320px: the rail on a wide working area */
+  --spacing-rail: 17.5rem; /* 280px: the right rail beside the content */
+  --spacing-rail-wide: 18.75rem; /* 300px: the rail on a wide working area */
   --spacing-measure: 74ch; /* longest line of reading text */
+  --spacing-header: 4rem; /* 64px: every screen's header, one row that never changes height */
+  --spacing-reading: 68ch; /* a section's prose */
+  --spacing-form: 40rem; /* forms */
+  --spacing-list: 52rem; /* lists and tables */
 }

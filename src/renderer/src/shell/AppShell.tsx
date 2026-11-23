@@ -9,6 +9,7 @@ import { OpenCaseContext, PatchOpenedCaseContext, SetCaseSourcesContext, useCase
 import { Button } from "../components/Button.tsx";
 import { Dialog, DialogClose } from "../components/Dialog.tsx";
 import { AppSidebar, CaseSidebar } from "./Sidebar.tsx";
+import { TrialBar } from "./TrialBar.tsx";
 import { Eyebrow } from "./WorkArea.tsx";
 
 /*
@@ -16,7 +17,9 @@ import { Eyebrow } from "./WorkArea.tsx";
  * left and the working area (each screen's header, content and right rail) on the right.
  * Inside a case the sidebar shows the case; elsewhere, the app's screens. Below
  * --breakpoint-sidebar the sidebar leaves the screen: a dark bar with a Menu button takes
- * its place and opens it as a panel. Each part scrolls on its own.
+ * its place and opens it as a panel. Above the working area, one slim line says the app is
+ * not ready for real client data. Nothing here scrolls: each screen's WorkArea scrolls its
+ * own content and rail, and the sidebar its own list.
  */
 export function AppShell() {
   const { t } = useTranslation();
@@ -33,6 +36,7 @@ export function AppShell() {
         sections={openCase.case.sections}
         notes={openCase.case.notes}
         caseMap={openCase.case.caseMap}
+        sourceCount={openCase.case.sources.sources.filter((source) => !source.removedAt).length}
         caseDetail={formatAge(t, language, openCase.case.clientAge) ?? t("case.ageNotGiven")}
       />
     ) : (
@@ -49,7 +53,8 @@ export function AppShell() {
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <NarrowBar sidebar={sidebar} />
-        <div className="@container flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <TrialBar />
+        <div className="@container flex min-h-0 flex-1 flex-col">
           <Outlet />
         </div>
       </div>
