@@ -10,6 +10,7 @@ import { Button } from "../components/Button.tsx";
 import { Dialog, DialogClose } from "../components/Dialog.tsx";
 import { AppSidebar, CaseSidebar } from "./Sidebar.tsx";
 import { TrialBar } from "./TrialBar.tsx";
+import { NotesPanel, OpenNotesContext } from "./NotesPanel.tsx";
 import { Eyebrow } from "./WorkArea.tsx";
 
 /*
@@ -28,6 +29,11 @@ export function AppShell() {
   const { state: openCase, setSources, patch } = useCaseLoader(inCase?.params.caseId);
   // A version the AI saved changes the section's state in the sidebar, wherever she is.
   useOnSectionSaved(useCallback((caseId, result) => patch(caseId, { sections: result.sections }), [patch]));
+  // Today's notes: one panel for the open case, opened from the sidebar (review round 1, S1).
+  // Open for the case it was opened in only, so another case never opens with it open.
+  const [notesOpenFor, setNotesOpenFor] = useState<string | null>(null);
+  const openedId = openCase?.outcome === "opened" ? openCase.case.id : null;
+  const openNotes = useCallback(() => setNotesOpenFor(openedId), [openedId]);
   const sidebar =
     openCase?.outcome === "opened" ? (
       <CaseSidebar
@@ -43,6 +49,7 @@ export function AppShell() {
       <AppSidebar />
     );
   return (
+    <OpenNotesContext value={openNotes}>
     <OpenCaseContext value={openCase}>
     <SetCaseSourcesContext value={setSources}>
     <PatchOpenedCaseContext value={patch}>
@@ -58,11 +65,21 @@ export function AppShell() {
           <Outlet />
         </div>
       </div>
+      {openCase?.outcome === "opened" ? (
+        <NotesPanel
+          key={openCase.case.id}
+          caseId={openCase.case.id}
+          notes={openCase.case.notes}
+          open={notesOpenFor === openCase.case.id}
+          onOpenChange={(next) => setNotesOpenFor(next ? openCase.case.id : null)}
+        />
+      ) : null}
       <RouteAnnouncer />
     </div>
     </PatchOpenedCaseContext>
     </SetCaseSourcesContext>
     </OpenCaseContext>
+    </OpenNotesContext>
   );
 }
 
@@ -114,9 +131,9 @@ function NarrowBar({ sidebar }: { sidebar: ReactNode }) {
         <div
           data-surface="nav"
           className="flex min-h-0 flex-1 flex-col"
-          // Following a link closes the panel.
+          // Following a link closes the panel, and so does opening today's notes.
           onClickCapture={(event) => {
-            if ((event.target as Element).closest("a")) setOpen(false);
+            if ((event.target as Element).closest("a, [data-closes-menu]")) setOpen(false);
           }}
         >
           <div className="flex justify-end px-3.5 pt-2">

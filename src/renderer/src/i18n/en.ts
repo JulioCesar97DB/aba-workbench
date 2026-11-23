@@ -29,6 +29,9 @@ export const en = {
     stepNotStarted: "not started",
     stepLater: "not in the app yet",
     stepLaterTag: "Soon",
+    sourcesCount_one: "{{count}} source",
+    sourcesCount_other: "{{count}} sources",
+    reportCount: "{{done}} of {{total}} ready",
     languageLabel: "Screen language",
   },
   /** Each language's own name, as the language switch and the Select show it. */
@@ -41,9 +44,9 @@ export const en = {
     en: "English",
     es: "Spanish",
   },
-  /** The sidebar's line about the AI connections; it links to Settings. */
   /** The slim line above every screen while client details are not hidden before sending (owner's decision T12). */
   trial: {
+    region: "Trial version",
     label: "Trial version.",
     bar: "It does not hide the client's details before sending them to the AI yet.",
     more: "What this means",
@@ -51,6 +54,7 @@ export const en = {
     body: "The app does not hide the client's details before sending yet. Use invented cases only until this notice is gone.",
     close: "Got it",
   },
+  /** The sidebar's line about the AI connections; it links to Settings. */
   ai: {
     notConnected: "AI not connected",
     connectedBoth: "ChatGPT and Claude connected",
@@ -338,6 +342,7 @@ export const en = {
     notesOpen: "Today's notes",
     notesHas: "(has notes)",
     notesClose: "Close",
+    notesUnsaved: "Not saved",
     notesPlaceholder: "For example: the mother confirmed today that the school started the communication plan.",
     newSession: "Start a new session",
     newSessionHint: "Today's notes are kept in the case; the AI stops using them.",

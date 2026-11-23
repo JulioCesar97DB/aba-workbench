@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router";
 import { cn } from "./cn.ts";
+import type { StepState } from "../step-states.ts";
 
 /*
  * Links of the dark sidebar. The current one is marked aria-current="page" (by NavLink)
@@ -26,11 +27,10 @@ export function NavItem({ to, end, number, children, detail }: { to: string; end
 const stepBase =
   "group flex items-center gap-2.5 rounded-md px-2 text-fg-on-nav no-underline transition-colors hover:bg-nav-hover aria-[current=page]:bg-nav-current aria-[current=page]:font-semibold aria-[current=page]:text-fg-on-nav-current";
 
-export type StepState = "done" | "in-progress" | "not-started" | "later";
-
 /**
  * A step of the case: a circle with its number (or a check once done) that shows its
- * state, its name, and a count after it. The state is also said in words to a screen
+ * state (filled green once done, filled amber while in progress, hollow before, dashed
+ * when not built yet), its name, and a count after it. The state is also said in words to a screen
  * reader; a step not built yet says "Soon" on screen too. `compact` trims the row to 36 px
  * while the report's sections are listed under it, so the whole sidebar fits a
  * 1366x768 window.
@@ -43,7 +43,7 @@ export function StepNavItem({ to, number, state, stateText, laterTag, detail, co
         className={cn(
           "grid size-5.5 shrink-0 place-items-center rounded-full font-mono text-2xs font-semibold tabular-nums",
           state === "done" && "bg-dot-done text-nav group-aria-[current=page]:bg-success group-aria-[current=page]:text-fg-on-accent",
-          state === "in-progress" && "border-2 border-dot-draft text-dot-draft group-aria-[current=page]:border-warning group-aria-[current=page]:bg-warning group-aria-[current=page]:text-fg-on-accent",
+          state === "in-progress" && "bg-dot-draft text-nav group-aria-[current=page]:bg-warning group-aria-[current=page]:text-fg-on-accent",
           state === "not-started" && "border border-dot-empty text-fg-on-nav-muted group-aria-[current=page]:border-fg-muted group-aria-[current=page]:text-fg",
           state === "later" && "border border-dashed border-dot-empty text-fg-on-nav-muted group-aria-[current=page]:border-fg-muted group-aria-[current=page]:text-fg",
         )}
@@ -65,7 +65,10 @@ export function StepNavItem({ to, number, state, stateText, laterTag, detail, co
           {laterTag}
         </span>
       ) : detail !== undefined ? (
-        <span className="shrink-0 font-mono text-xs text-fg-on-nav-muted group-aria-[current=page]:text-fg-muted">{detail}</span>
+        // Shown only: the step's label says the count in words (review M6).
+        <span aria-hidden="true" className="shrink-0 font-mono text-xs text-fg-on-nav-muted group-aria-[current=page]:text-fg-muted">
+          {detail}
+        </span>
       ) : null}
     </NavLink>
   );

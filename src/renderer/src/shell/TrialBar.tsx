@@ -10,7 +10,9 @@ import { Dialog, DialogClose, DialogDescription } from "../components/Dialog.tsx
 export function TrialBar() {
   const { t } = useTranslation();
   return (
-    <div
+    // A landmark of its own, so moving by landmarks reaches it too (review M10).
+    <aside
+      aria-label={t("trial.region")}
       data-testid="not-ready-notice"
       data-region="trial-bar"
       className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-border bg-warning-subtle px-5 py-1 text-xs text-warning"
@@ -31,6 +33,6 @@ export function TrialBar() {
           <DialogClose render={<Button variant="primary" />}>{t("trial.close")}</DialogClose>
         </div>
       </Dialog>
-    </div>
+    </aside>
   );
 }

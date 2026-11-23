@@ -26,11 +26,23 @@ export function PageHeader({ title, titleLang, meta, afterTitle, actions }: { ti
     >
       <div className="flex min-w-0 flex-col justify-center gap-0.5 @split:flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 @split:flex-nowrap">
-          <h1 id="page-title" tabIndex={-1} lang={titleLang} title={title} className="min-w-0 text-lg font-semibold break-words @split:truncate">
+          <h1
+            id="page-title"
+            tabIndex={-1}
+            lang={titleLang}
+            // The whole title as a tooltip only when it is cut (review M8).
+            onPointerEnter={(event) => {
+              const element = event.currentTarget;
+              if (element.scrollWidth > element.clientWidth) element.title = title;
+              else element.removeAttribute("title");
+            }}
+            className="min-w-0 text-lg font-semibold break-words @split:truncate"
+          >
             {title}
           </h1>
           {afterTitle ? (
-            <div className="flex min-w-0 items-center [scrollbar-width:thin] @split:shrink-[4] @split:overflow-x-auto @split:[&>*]:flex-nowrap">{afterTitle}</div>
+            // Room above and below, so a version's focus ring is not cut by the strip's edges (review M4).
+            <div className="-my-1 flex min-w-0 items-center py-1 [scrollbar-width:none] @split:shrink-[4] @split:overflow-x-auto @split:[&>*]:flex-nowrap">{afterTitle}</div>
           ) : null}
         </div>
         {meta ? <p className="min-w-0 font-mono text-xs text-fg-muted @split:truncate">{meta}</p> : null}

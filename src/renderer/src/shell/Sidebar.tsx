@@ -7,14 +7,15 @@ import { Link, NavLink, useLocation } from "react-router";
 import type { Language } from "../../../shared/api.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
-import { CASE_STEPS, casePath, StepLabel, type CaseStep } from "../case-steps.tsx";
+import { CASE_STEPS, casePath, StepLabel } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
-import { NavItem, SectionNavItem, StepNavItem, type StepState } from "../components/NavItem.tsx";
+import { NavItem, SectionNavItem, StepNavItem } from "../components/NavItem.tsx";
+import { readySections, stepCount, stepState, type StepState } from "../step-states.ts";
 import { Tooltip } from "../components/Tooltip.tsx";
 import { useConnections } from "../connections.tsx";
 import { useLanguage } from "../language.tsx";
 import { Eyebrow } from "./WorkArea.tsx";
-import { NotesPanel } from "./NotesPanel.tsx";
+import { NotesButton } from "./NotesPanel.tsx";
 
 /** The reference shows the switch as ES EN. */
 const SWITCH_ORDER: Language[] = ["es", "en"];
@@ -79,29 +80,12 @@ export function sectionStateText(t: TFunction, section: SectionSummary): { short
   }
 }
 
-/** How far a step is, from the case's data (nothing is stored for it): owner's decision T18. */
-function stepState(step: CaseStep, counts: { sources: number; caseMap: CaseMapSummary; ready: number; started: number }): StepState {
-  switch (step) {
-    case "sources":
-      return counts.sources > 0 ? "done" : "not-started";
-    case "case-map":
-      if (counts.caseMap.withContent === 0) return "not-started";
-      return counts.caseMap.approved === counts.caseMap.withContent ? "done" : "in-progress";
-    case "report":
-      if (counts.ready === REPORT_SECTIONS.length) return "done";
-      return counts.started > 0 ? "in-progress" : "not-started";
-    default:
-      // Interventions, and Review and copy: not built yet, said so (owner's decision P3).
-      return "later";
-  }
-}
-
-const STATE_TEXT_KEYS = {
+const STATE_TEXT_KEYS: Record<StepState, "nav.stepDone" | "nav.stepInProgress" | "nav.stepNotStarted" | "nav.stepLater"> = {
   done: "nav.stepDone",
   "in-progress": "nav.stepInProgress",
   "not-started": "nav.stepNotStarted",
   later: "nav.stepLater",
-} as const;
+};
 
 export function CaseSidebar({
   caseId,
@@ -124,8 +108,8 @@ export function CaseSidebar({
   const sectionsHeadingId = useId();
   const location = useLocation();
   const states = new Map(sections.map((section) => [section.id, section]));
-  const ready = sections.filter((section) => section.state === "hers" || section.state === "approved").length;
-  const started = sections.filter((section) => section.state !== "not-started").length;
+  const inputs = { sources: sourceCount, caseMap, sections };
+  const ready = readySections(sections);
   // The report's sections are listed under its step only while she works on the report or
   // its review and copy; elsewhere the step's count says enough (owner's decision T18).
   const inReport = /^\/cases\/[^/]+\/(report|review)(\/|$)/.test(location.pathname);
@@ -146,27 +130,26 @@ export function CaseSidebar({
           </p>
         </div>
       }
-      footer={<NotesPanel caseId={caseId} notes={notes} />}
+      footer={<NotesButton caseId={caseId} notes={notes} />}
     >
       <nav aria-label={t("nav.stepsLabel")}>
         <ol className="flex flex-col gap-0.5">
           {CASE_STEPS.map((step, index) => {
-            const state = stepState(step, { sources: sourceCount, caseMap, ready, started });
-            const detail =
-              step === "sources" && sourceCount > 0
-                ? String(sourceCount)
-                : // The case map: its parts approved, out of the parts with something in them.
-                  step === "case-map" && caseMap.withContent > 0
-                  ? `${caseMap.approved}/${caseMap.withContent}`
-                  : step === "report"
-                    ? `${ready}/${REPORT_SECTIONS.length}`
-                    : undefined;
+            const state = stepState(step, inputs);
+            const count = stepCount(step, inputs);
+            const spoken =
+              count === null
+                ? null
+                : count.spoken.key === "caseMap"
+                  ? t("caseMap.sidebarCount", count.spoken.values as { approved: number; total: number })
+                  : count.spoken.key === "sources"
+                    ? t("nav.sourcesCount", count.spoken.values as { count: number })
+                    : t("nav.reportCount", count.spoken.values as { done: number; total: number });
             return (
               <li key={step}>
-                <StepNavItem to={casePath(caseId, step)} number={index + 1} state={state} stateText={t(STATE_TEXT_KEYS[state])} laterTag={t("nav.stepLaterTag")} detail={detail} compact={inReport}>
+                <StepNavItem to={casePath(caseId, step)} number={index + 1} state={state} stateText={t(STATE_TEXT_KEYS[state])} laterTag={t("nav.stepLaterTag")} detail={count?.shown} compact={inReport}>
                   <StepLabel t={t} step={step} />
-                  {step === "case-map" && caseMap.withContent > 0 ? <span className="sr-only">{t("caseMap.sidebarCount", { approved: caseMap.approved, total: caseMap.withContent })}</span> : null}
-                  {step === "report" ? <span className="sr-only">{t("section.reportReady", { done: ready, total: REPORT_SECTIONS.length })}</span> : null}
+                  {spoken ? <span className="sr-only">, {spoken}</span> : null}
                 </StepNavItem>
                 {step === "report" && inReport ? (
                   <nav aria-labelledby={sectionsHeadingId} className="mt-0.5 mb-1 ml-4 border-l border-nav-hover pl-2">
@@ -253,7 +236,7 @@ function SidebarFooter() {
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-fg-on-nav-muted">
         <AiConnectionStatus />
         <div role="group" aria-label={t("nav.languageLabel")} className="flex gap-0.5">
@@ -274,7 +257,7 @@ function SidebarFooter() {
         </div>
       </div>
       {/* Always rendered, even empty, so a screen reader announces the message when it appears. */}
-      <p role="status" className="px-2 text-xs text-fg-on-nav-warning empty:hidden">
+      <p role="status" className="px-2 text-xs text-fg-on-nav-warning [&:not(:empty)]:mt-1">
         {/* The same message as in Settings, from the same state, naming the language that was saved. */}
         {language !== savedLanguage
           ? t("settings.languageNotSaved", { language: t(`languageInSentence.${language}`), previous: t(`languageInSentence.${savedLanguage}`) })

@@ -27,6 +27,8 @@
     "src/shared/**/*",
     "src/renderer/src/i18n/en.ts",
     "src/renderer/src/i18n/es.ts",
+    "src/renderer/src/steps.ts",
+    "src/renderer/src/step-states.ts",
     "scripts/**/*",
     "eval/**/*",
     "tests/**/*",

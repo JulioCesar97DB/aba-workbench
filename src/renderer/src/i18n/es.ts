@@ -27,6 +27,9 @@ export const es: Messages = {
     stepNotStarted: "sin empezar",
     stepLater: "todavía no está en la app",
     stepLaterTag: "Pronto",
+    sourcesCount_one: "{{count}} fuente",
+    sourcesCount_other: "{{count}} fuentes",
+    reportCount: "{{done}} de {{total}} listas",
     languageLabel: "Idioma de la pantalla",
   },
   languages: {
@@ -38,6 +41,7 @@ export const es: Messages = {
     es: "español",
   },
   trial: {
+    region: "Versión de prueba",
     label: "Versión de prueba.",
     bar: "Aún no oculta los datos del cliente antes de enviarlos a la IA.",
     more: "Qué significa",
@@ -327,6 +331,7 @@ export const es: Messages = {
     notesOpen: "Notas de hoy",
     notesHas: "(tiene notas)",
     notesClose: "Cerrar",
+    notesUnsaved: "Sin guardar",
     notesPlaceholder: "Por ejemplo: la mamá confirmó hoy que la escuela ya aplica el plan de comunicación.",
     newSession: "Empezar una sesión nueva",
     newSessionHint: "Las notas de hoy se guardan en el caso; la IA deja de usarlas.",

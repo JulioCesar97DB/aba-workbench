@@ -1,5 +1,5 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import type { ReactElement, ReactNode } from "react";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { cn } from "./cn.ts";
 
 /*
@@ -7,7 +7,9 @@ import { cn } from "./cn.ts";
  * close it, focus returns to the trigger). Three shapes: "center", a small message box;
  * "sheet", a panel from the left edge (the navigation on a narrow window); and "panel", a
  * light panel from the right edge that leaves the screen usable beside it (today's notes):
- * it is not modal, so a press outside it closes it and still reaches what was pressed.
+ * it is not modal, so a press outside it closes it and still reaches what was pressed, and
+ * it stays mounted while closed (hidden), so what it holds lives as long as the screen does:
+ * a box saved as she types keeps its one queue of saves, its status and what is waiting.
  */
 
 export interface DialogProps {
@@ -22,6 +24,8 @@ export interface DialogProps {
   popupClassName?: string;
   /** Hides the title visually; it still names the dialog for a screen reader. */
   titleHidden?: boolean;
+  /** Where focus goes when it opens (Base UI's initialFocus): by default the first control in it. */
+  initialFocus?: ComponentProps<typeof BaseDialog.Popup>["initialFocus"];
 }
 
 const popupClasses = {
@@ -30,17 +34,17 @@ const popupClasses = {
   sheet:
     "fixed inset-y-0 left-0 flex w-[min(20rem,calc(100vw-3rem))] flex-col overflow-hidden shadow-popup transition-transform data-ending-style:-translate-x-full data-starting-style:-translate-x-full",
   panel:
-    "fixed inset-y-0 right-0 z-20 flex w-[min(22rem,calc(100vw-3rem))] flex-col gap-3 overflow-y-auto border-l border-border bg-surface p-5 text-fg shadow-popup transition-transform data-ending-style:translate-x-full data-starting-style:translate-x-full",
+    "fixed inset-y-0 right-0 flex w-[min(22rem,calc(100vw-3rem))] flex-col gap-3 overflow-y-auto border-l border-border bg-surface p-5 text-fg shadow-popup transition-transform data-ending-style:translate-x-full data-starting-style:translate-x-full",
 };
 
-export function Dialog({ trigger, title, children, variant = "center", open, onOpenChange, popupClassName, titleHidden }: DialogProps) {
+export function Dialog({ trigger, title, children, variant = "center", open, onOpenChange, popupClassName, titleHidden, initialFocus }: DialogProps) {
   const modal = variant !== "panel";
   return (
     <BaseDialog.Root open={open} onOpenChange={onOpenChange ? (next) => onOpenChange(next) : undefined} modal={modal}>
       {trigger ? <BaseDialog.Trigger render={trigger} /> : null}
-      <BaseDialog.Portal>
+      <BaseDialog.Portal keepMounted={!modal}>
         {modal ? <BaseDialog.Backdrop className="fixed inset-0 bg-backdrop transition-opacity data-ending-style:opacity-0 data-starting-style:opacity-0" /> : null}
-        <BaseDialog.Popup className={cn(popupClasses[variant], popupClassName)}>
+        <BaseDialog.Popup className={cn(popupClasses[variant], popupClassName)} initialFocus={initialFocus}>
           <BaseDialog.Title className={titleHidden ? "sr-only" : "text-lg font-semibold"}>{title}</BaseDialog.Title>
           {children}
         </BaseDialog.Popup>
