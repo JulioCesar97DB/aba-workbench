@@ -196,7 +196,7 @@
     ],
     "discharge-and-service-fading-plan": [
       { "id": "dc-behaviors", "fact": "Discharge criteria for each target behavior by name (physical aggression, verbal outbursts, property destruction, leaving the area and school refusal, hand biting), tied to its baseline.", "from": ["behaviors"] },
-      { "id": "dc-thresholds", "fact": "Thresholds the sources do not give are marked missing, not invented.", "from": ["behaviors"] },
+      { "id": "dc-thresholds", "fact": "Objective criteria: her standard ones (goals substantially met; fading once the reduction goals hold for 3 consecutive months with the caregivers carrying out the plan independently; services end after 6 consecutive months without clinically significant target behavior), or a marker where a number is not known; no other numbers invented.", "from": ["behaviors"] },
       { "id": "dc-skills", "fact": "Criteria for the replacement and acquisition skills (for example requesting a break, safe street crossing, showering).", "from": ["behaviors"] },
       { "id": "dc-caregivers", "fact": "Caregiver criteria: the mother and the grandmother carrying out the strategies.", "from": ["parent-interview"] },
       { "id": "dc-coordination", "fact": "Transition and coordination with the school and the psychiatrist under the releases signed 10/28/2026.", "from": ["followup"] },

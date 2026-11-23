@@ -64,7 +64,7 @@ export const RUBRIC: readonly RubricItem[] = [
     stage: "body",
     sections: "all",
     anchors: {
-      2: "Paragraphs and words within the limits (rules front matter, or her stated shape), plain paragraphs only.",
+      2: "Paragraphs and words within her range for the section (from her own assessments), plain paragraphs only (a numbered protocol is allowed in the Crisis Plan).",
       1: "Slightly off: one paragraph, or within 15% of the word limit.",
       0: "Further off, or headings, lists, bold or tables.",
     },
@@ -132,7 +132,7 @@ export const RUBRIC: readonly RubricItem[] = [
     stage: "body",
     sections: "all",
     anchors: {
-      2: "Says in full only what this section owns (the section map); refers to what other sections own in a clause, by name.",
+      2: "Says in full only what this section owns; refers to what other sections own in a clause, by name. Her deliberate repeats (the family's priorities, the safety response) are fine.",
       1: "One passage retells what another section owns (a session note told again, another section's counts, the crisis plan inside the risk assessment).",
       0: "Large parts retell other sections.",
     },
@@ -168,8 +168,8 @@ export const RUBRIC: readonly RubricItem[] = [
     stage: "body",
     sections: "all",
     anchors: {
-      2: "Plain clinical English in the third person; past tense for what happened, present for current functioning; people by relation; length proportionate to what the section owns.",
-      1: "One lapse (a caregiver by her given name, wordy or padded passages, a tense slip).",
+      2: "Her habits (listed with the section): first name for the child, caregivers by relation, the BCBA in the third person, active plain clinical English, present for current functioning, past for history and observations, will for the plan, no blame, no promised outcomes.",
+      1: "One lapse (a caregiver by her given name, a padded passage, a tense slip, a promised outcome).",
       0: "Several lapses.",
     },
   },
@@ -263,37 +263,77 @@ export function keyFactsScore(statuses: ReadonlyArray<"present" | "partial" | "a
 }
 
 /**
- * What she has set for each section's structure and shape (aba-assessment-template.md and
- * the section rules on dev), given to the judge for the "structure" item. Fixed with the
- * rubric's version, not taken from the rules under test, so a rules change cannot move the bar.
+ * What she does in each section, from her decisions (aba-assessment-template.md) and from
+ * her own recent assessments (patterns only, restated here in our words; nothing of them is
+ * copied), given to the judge for the "structure" and "style" items. Fixed with the
+ * rubric's version, never taken from the rules under test, so a rules change cannot move the bar.
  */
 export const SECTION_EXPECTATIONS: Record<ReportSectionId, readonly string[]> = {
   "background-information": [
-    "Narrative covering, as the sources give them: the family, household and languages; the diagnosis as the CDE states it, by whom and when; medication; developmental and medical history; school and its plan; other therapies (school services under the IEP are part of the IEP, not separate services); prior ABA; the behaviors of concern that led to the referral, named briefly.",
-    "Cites the CDE, the IEP and the parents for what it states.",
+    "About six paragraphs, in this order: the household, languages, the parents' involvement and the family's priorities; then the diagnosis, medications, pregnancy and birth, medical history and specialists; then milestones and the history of communication; then school and its plan, past therapies, and prior ABA with why it ended; then the daily-living and behavior concerns, each by its source; then social life, play, sensory needs and transitions.",
+    "Every claim names its source; where two sources disagree, both are given side by side. No severity level and no test scores in this section. Missing information is said plainly.",
+    "School services under the IEP are part of the IEP, not separate services.",
   ],
   "medical-necessity": [
-    "Her own structure, in order: (1) an opening paragraph naming everything used to support the clinical need for ABA and the areas where deficits were found; (2) a Vineland-3 paragraph with the specific scores and percentiles; (3) one paragraph per deficit area, in the opening's order, each argued with what the CDE, the parents and direct observation say; (4) a closing paragraph saying all of this supports the medical necessity of ABA and how ABA strategies would improve the deficits.",
-    "Each deficit paragraph: the score or report, a concrete incident from this child's life, why it limits independence or participation, then what ABA will do, naming the procedure or skill.",
-    "Fluent and very specific; explains the data rather than listing it.",
+    "Her own structure, in order: (1) an opening that says the need for ABA is supported by the sources it names, then names the affected areas together; (2) the Vineland-3 composite and domain scores with percentiles, written as prose and tied at once to what the caregiver describes; (3) one paragraph per functional area (for example daily living, communication, flexibility and escape, safety, peers and community), each: the deficit, one concrete reported or observed example, its impact on the family, safety or participation, then what ABA will teach, by the program or procedure's name; (4) a paragraph on the direct observations; (5) a closing that individualized ABA is medically necessary, where and how it will be delivered, caregiver training, coordination with the school, and how effectiveness will be measured (fewer prompts, more independence, more access).",
+    "About eight or nine paragraphs. Never hours. Fluent and very specific; explains the data rather than listing it.",
   ],
-  "strengths-and-weaknesses": ["Strengths concrete and sourced; a strength stated then qualified where it does not hold, the qualification a fact from the sources; weaknesses name the deficit areas briefly, in the same names Medical Necessity uses."],
-  "environmental-changes": ["Each change in the child's environment (recent, current or coming): who reported it, when, how the child responds, and the supports planned; a support the sources do not name is marked missing."],
-  "family-caregiver-involvement": ["Who takes part in caregiver training, their availability, languages and capacity; what training covers and why (the parent interview, the BASC-3 PRQ); limited participation, its impact and the mitigation; procedures named, not described."],
+  "strengths-and-weaknesses": [
+    "Prose, two or three paragraphs, no bullets. Strengths first, each sourced and tied to how it will help treatment; then the weaknesses, each sourced, by the names Medical Necessity uses; a closing sentence on how ABA will address the needs.",
+    "Where a strength does not hold consistently, it is qualified by a fact from the sources, never a guess.",
+  ],
+  "environmental-changes": [
+    "Two or three paragraphs. First how the child reacts to changes of place, routine or people, with sourced examples drawn together; then the changes reported (recent, current, coming: who reported them and when) and concrete supports for them.",
+    "Her usual supports are standard ones (a predictable session routine, a visual schedule updated when plans change, advance notice and choices, the same start, break and finish cues, practicing small changes first, prompts to ask for help, a break or more time, the same cues at home and school, a record of staffing or schedule changes): writing them is her structure, not an invented fact. A support tied to a person, date or service the sources do not give is invented.",
+  ],
+  "family-caregiver-involvement": [
+    "The narrative part only (ABA Matrix holds the caregiver goals): one to four paragraphs on the caregivers' involvement and priorities, who takes part and when, training through Behavioral Skills Training adapted to the home language, and the family's current responses described without blame; limited participation, its impact and the mitigation.",
+    "Procedures named, not described.",
+  ],
   "generalization-and-maintenance": [
-    "Exactly two paragraphs, as she described them.",
-    "Generalization: taught with the same SD, then practiced across this child's settings and people; the prompt hierarchy adjusted as proficiency grows; examples from this child's goals.",
-    "Maintenance: weekly probes that the skill is still performed; reinforcement from continuous to intermittent; prompt fading; closes by saying that if performance drops, the removed reinforcement schedule and prompts are reinstated and removed again once the level is regained.",
+    "Exactly two paragraphs, for the plan as a whole.",
+    "Generalization: taught with the same SD, then practiced with varied people, settings, materials and routines of this child; prompts faded while visual supports stay; natural consequences; examples from this child's goals.",
+    "Maintenance: probes after mastery (weekly); reinforcement thinned from continuous to intermittent; if performance drops, the removed reinforcement and prompts are reinstated and removed again once the level is regained. Coordination with other providers, with the caregiver's authorization, may appear here.",
   ],
-  "discharge-and-service-fading-plan": ["Discharge criteria tied to this child's behaviors, skills and caregivers, objective; thresholds the sources do not give are marked missing; how services fade; the transition with other providers. The three-phase table is hers, not described."],
-  "risk-assessment": ["Each documented risk with its evidence: the behavior, how often, how severe, where, who is exposed, injuries and near misses, with the source; no risk rating; no crisis responses (those are the Crisis Plan's)."],
-  "crisis-plan": ["Early signs and times of risk, the family's current responses as reported, caregiver duties and monitoring; no invented de-escalation technique; no restraint or seclusion; what only the agency or the BCBA can give is marked missing."],
+  "discharge-and-service-fading-plan": [
+    "Two or three paragraphs (the three-phase table is hers, in ABA Matrix, and is not described).",
+    "Her standard criteria: discharge when the goals are substantially met, when there is no progress despite reasonable changes to the plan, or when circumstances prevent continuing; fading starts once the reduction goals have held for three consecutive months, the caregiver carries out the plan independently and the replacement skills are used consistently; services end after six consecutive months without clinically significant target behavior; fading pauses if skills slip. Tied to this child's behaviors, skills and caregivers, and to the transition with other providers.",
+  ],
+  "risk-assessment": [
+    "Three or four paragraphs, no risk rating: first the risks to carrying out the plan (cues that differ across people and settings, prompt dependence); then the behavior risks in prose, from the most dangerous to those that only interfere, each with its evidence and source; then that least-restrictive, function-based procedures answer them, pointing to the Crisis Plan by name; then training, fidelity checks and how the plan is adjusted.",
+    "No crisis responses (those are the Crisis Plan's).",
+  ],
+  "crisis-plan": [
+    "The child-specific part scales with the risk: for the highest-risk behavior a numbered protocol; when no behavior needs one, a plain statement that no behavior-specific crisis plan is needed, the non-crisis responses and one safety scenario (supervision distance, when to call 911); or the scope (behaviors covered, teaching suspended, line-of-sight distance, when to call 911 or Poison Control, who is notified), one paragraph per dangerous behavior and the follow-up.",
+    "No physical restraint or restrictive procedure. Monitoring: data per definition, weekly review of the data by the BCBA, fidelity observations of the RBT and the caregiver, whether the caregiver finds the plan practical, what changes when progress is slow, documentation. The family's current responses as reported. What only the agency gives is marked missing.",
+  ],
 };
 
+/** Habits across every section (her assessments), for the judge's "style" item. */
+export const STYLE_EXPECTATIONS: readonly string[] = [
+  "The child by first name; caregivers by relation (his mother, her parents, the caregiver), rarely by their own names; the BCBA as \"the BCBA\".",
+  "Third person, active voice, plain clinical English: present tense for current functioning, past for history and observations, \"will\" for the plan.",
+  "Programs and strategies by the same exact names wherever they appear.",
+  "Repeated on purpose only: the family's priorities and the safety response. Never a score table again.",
+  "No bullets in narrative sections; no blame of the family; no promised outcomes; harmless movement is not a target; speech or eye contact never required.",
+  "Missing or conflicting information is stated, never guessed.",
+];
+
 /**
- * Shapes she stated where the section's rules give none: Generalization and Maintenance is
- * exactly two paragraphs. The rules' own front matter wins where it has limits.
+ * The shape of each section in her own recent assessments (paragraphs and words, rounded
+ * to her range). The rubric measures against her shape, not the rules under test; a
+ * section whose length she does not keep steady has none.
  */
-export const FALLBACK_SHAPES: Partial<Record<ReportSectionId, { paragraphs: { min: number; max: number } | null; words: { min: number; max: number } | null }>> = {
-  "generalization-and-maintenance": { paragraphs: { min: 2, max: 2 }, words: null },
+export const SECTION_SHAPES: Partial<Record<ReportSectionId, { paragraphs: { min: number; max: number } | null; words: { min: number; max: number } | null }>> = {
+  "background-information": { paragraphs: { min: 5, max: 7 }, words: { min: 600, max: 850 } },
+  "medical-necessity": { paragraphs: { min: 8, max: 9 }, words: { min: 950, max: 1150 } },
+  "strengths-and-weaknesses": { paragraphs: { min: 2, max: 3 }, words: { min: 300, max: 450 } },
+  "environmental-changes": { paragraphs: { min: 2, max: 3 }, words: { min: 300, max: 450 } },
+  "family-caregiver-involvement": { paragraphs: { min: 1, max: 4 }, words: { min: 200, max: 400 } },
+  "generalization-and-maintenance": { paragraphs: { min: 2, max: 2 }, words: { min: 200, max: 280 } },
+  "discharge-and-service-fading-plan": { paragraphs: { min: 2, max: 3 }, words: null },
+  "risk-assessment": { paragraphs: { min: 3, max: 4 }, words: { min: 300, max: 400 } },
 };
+
+/** Sections where her own text uses a numbered list (the crisis protocol): the shape check lets numbered lines through there. */
+export const NUMBERED_LISTS_ALLOWED: readonly ReportSectionId[] = ["crisis-plan"];

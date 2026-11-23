@@ -79,16 +79,18 @@ export function checkMarkers(section: ReportSectionId, text: string, key: CaseKe
 /* 2. Shape --------------------------------------------------------------------------- */
 
 /**
- * Paragraphs and words within the section's limits (from its rules' front matter, or the
- * rubric's fallback where her decisions set one), and plain paragraphs only. Within 15%
- * of a word limit, or one paragraph off, is minor.
+ * Paragraphs and words within her range for the section (eval/rubric.ts, SECTION_SHAPES),
+ * and plain paragraphs only. Within 15% of a word limit, or one paragraph off, is minor.
+ * Where her own text uses a numbered protocol (the Crisis Plan), numbered lines are allowed.
  */
-export function checkShape(section: ReportSectionId, text: string, shape: SectionShape): Finding[] {
-  return checkStructure(text, shape).map((issue): Finding => {
-    if (issue.kind === "formatting") return { check: "shape", section, severity: "major", message: `Paragraph ${issue.paragraph + 1} has a heading, list, bold or table; ABA Matrix takes plain paragraphs.` };
+export function checkShape(section: ReportSectionId, text: string, shape: SectionShape, allowNumbered = false): Finding[] {
+  const paragraphs = splitParagraphs(text);
+  return checkStructure(text, shape).flatMap((issue): Finding[] => {
+    if (issue.kind === "formatting" && allowNumbered && paragraphs[issue.paragraph].split("\n").every((line) => !/^\s*(#{1,6}\s|[-*•]\s|\|)/u.test(line) && !/\*\*[^*]+\*\*|__[^_]+__/u.test(line))) return [];
+    if (issue.kind === "formatting") return [ { check: "shape", section, severity: "major", message: `Paragraph ${issue.paragraph + 1} has a heading, list, bold or table; ABA Matrix takes plain paragraphs.` }];
     const off = issue.count < issue.min ? issue.min - issue.count : issue.count - issue.max;
     const minor = issue.kind === "paragraphs" ? off <= 1 : off <= Math.ceil(0.15 * (issue.count < issue.min ? issue.min : issue.max));
-    return { check: "shape", section, severity: minor ? "minor" : "major", message: `${issue.count} ${issue.kind}; the limit is ${issue.min} to ${issue.max}.` };
+    return [{ check: "shape", section, severity: minor ? "minor" : "major", message: `${issue.count} ${issue.kind}; her range is ${issue.min} to ${issue.max}.` }];
   });
 }
 
@@ -256,7 +258,7 @@ export function checkDataDensity(section: ReportSectionId, text: string): Findin
 /* 7. Banned patterns ------------------------------------------------------------------- */
 
 /** Patterns she would not write (rules/style.md on step 0, the quality runs' findings), checked outside markers and quotes. */
-export const BANNED_PATTERNS: Array<{ id: string; pattern: RegExp; what: string; unless?: RegExp }> = [
+export const BANNED_PATTERNS: Array<{ id: string; pattern: RegExp; what: string; unless?: RegExp; sections?: readonly ReportSectionId[] }> = [
   { id: "meta-not-evidence", pattern: /\bthese are\b[^.]{0,100}\bnot evidence\b/iu, what: "a comment on the evidence (meta sentence)" },
   { id: "meta-depend", pattern: /\bwill depend on whether\b[^.]{0,160}\bnot on\b/iu, what: "a comment on the evidence (meta sentence)" },
   { id: "meta-section", pattern: /\b(?:this|the following|the present) (?:section|paragraph|report)s? (?:describes?|outlines?|presents?|summarizes?|will|is intended|addresses|provides?)\b/iu, what: "a sentence about the text" },
@@ -270,6 +272,26 @@ export const BANNED_PATTERNS: Array<{ id: string; pattern: RegExp; what: string;
   { id: "first-person", pattern: /\b(?:I|[Ww]e|[Oo]ur|us)\b(?!['’])/u, what: "the first person (the BCBA is written in the third person)" },
   { id: "addressed", pattern: /\b(?:please|you (?:should|may|can|will)|the reader)\b/iu, what: "a sentence addressed to her or the reader" },
   { id: "ai-voice", pattern: /\bas an (?:AI|language model)\b|\bI (?:cannot|can't|don't have)\b/iu, what: "the model speaking as itself" },
+  { id: "promise", pattern: /\b(?:guarantee\w*|will (?:eliminate|cure|ensure|fix)|is certain to)\b/iu, what: "a promised outcome" },
+  {
+    id: "hours",
+    pattern: /\b\d+(?:\s*(?:to|-)\s*\d+)?\s*(?:hours?|hrs?)\s*(?:per|a|each|\/)\s*week\b/iu,
+    unless: /\b(?:CDE|evaluator|recommend\w*|IEP|school|minutes)\b/iu,
+    what: "hours of service (only Summary and Recommendations gives hours)",
+  },
+  {
+    id: "scores-in-background",
+    pattern: /\b(?:standard score|percentile|v-scale|T-score|comparison score|composite)\b/iu,
+    what: "test scores in Background Information (her Background gives none)",
+    sections: ["background-information"],
+  },
+  {
+    id: "severity-in-background",
+    pattern: /\blevel\s*[123]\b|\brequiring (?:very substantial |substantial )?support\b/iu,
+    unless: /\[(?:MISSING|CHECK)/u,
+    what: "a severity level in Background Information (hers gives none)",
+    sections: ["background-information"],
+  },
   {
     id: "restraint",
     pattern: /\b(?:restrain\w*|restraint|seclusion|secluded|physical hold\w*|prone hold|basket hold)\b/iu,
@@ -283,6 +305,7 @@ export function checkBannedPatterns(section: ReportSectionId, text: string): Fin
   const findings: Finding[] = [];
   for (const sentence of sentences(withoutQuotes(withoutMarkers(text)))) {
     for (const banned of BANNED_PATTERNS) {
+      if (banned.sections && !banned.sections.includes(section)) continue;
       if (!banned.pattern.test(sentence.text)) continue;
       if (banned.unless?.test(sentence.text)) continue;
       findings.push({ check: "banned-patterns", section, severity: "major", message: `Banned pattern (${banned.id}): ${banned.what}.`, excerpt: clip(sentence.text) });
@@ -420,6 +443,8 @@ export function checkPayerReadiness(section: ReportSectionId, text: string, key:
 /* All of them ------------------------------------------------------------------------- */
 
 export interface CheckContext {
+  /** Sections where numbered lines are allowed (eval/rubric.ts, NUMBERED_LISTS_ALLOWED). */
+  numberedListsAllowed?: readonly ReportSectionId[];
   key: CaseKey;
   /** The number index of the case's sources and her inputs (numberIndex). */
   numbers: ReadonlySet<string>;
@@ -437,7 +462,7 @@ export function runChecks(texts: Partial<Record<ReportSectionId, string>>, conte
   for (const [id, text] of Object.entries(texts) as Array<[ReportSectionId, string]>) {
     findings.push(
       ...checkMarkers(id, text, context.key),
-      ...checkShape(id, text, context.shapes[id] ?? { paragraphs: null, words: null }),
+      ...checkShape(id, text, context.shapes[id] ?? { paragraphs: null, words: null }, context.numberedListsAllowed?.includes(id) ?? false),
       ...checkNumbers(id, text, context.numbers),
       ...checkNames(id, text, context.key),
       ...checkDataDensity(id, text),

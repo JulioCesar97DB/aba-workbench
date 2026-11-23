@@ -148,7 +148,7 @@
   "sectionFacts": {
     "background-information": [
       { "id": "bi-referral", "fact": "Referred by Ramón Ejemplar, M.D., his pediatrician; the physician's order was signed 08/25/2026.", "from": ["cde"] },
-      { "id": "bi-diagnosis", "fact": "The diagnosis worded as the CDE states it (Autism Spectrum Disorder, F84.0, Level 2 for social communication and Level 2 for restricted, repetitive behaviors, with accompanying language impairment; intellectual functioning not formally assessed), by Elena Placeholder, Psy.D., on 08/14/2026.", "from": ["cde"] },
+      { "id": "bi-diagnosis", "fact": "The diagnosis as the CDE gives it (Autism Spectrum Disorder, F84.0, with accompanying language impairment; intellectual functioning not formally assessed), by Elena Placeholder, Psy.D., on 08/14/2026; her Background gives no severity level and no scores.", "from": ["cde"] },
       { "id": "bi-family-language", "fact": "He lives with his mother, his father (who works nights) and his sister Valeria (7); Spanish is spoken at home and English at VPK.", "from": ["parent-interview"] },
       { "id": "bi-development", "fact": "Born at 38 weeks by scheduled cesarean without complications; walked at 14 months; about 10 words at 18 months, lost around 22 months; today about 20 single words and no two-word combinations.", "from": ["parent-interview"] },
       { "id": "bi-health", "fact": "No medications; passed the hearing screening in June 2026; poor sleep, waking 2 or 3 times a night.", "from": ["parent-interview", "cde"] },
@@ -156,7 +156,7 @@
       { "id": "bi-services", "fact": "VPK on weekday mornings since August with no IEP; private speech therapy once a week (45 minutes) since September 2026; no occupational therapy (evaluation recommended); never received ABA.", "from": ["parent-interview", "cde"] }
     ],
     "medical-necessity": [
-      { "id": "mn-opening", "fact": "The opening names the sources (the CDE, the Vineland-3 with the mother on 10/02/2026 in Spanish, the BASC-3 PRQ, the FBA questionnaires, the parent interview, the BCBA's three direct observations) and the deficit areas.", "from": ["cde", "vineland-3", "basc-3-prq", "fba-questionnaires", "observations"] },
+      { "id": "mn-opening", "fact": "The diagnosis as the CDE states it, with its support levels (Level 2 for social communication and for restricted, repetitive behaviors). The opening names the sources (the CDE, the Vineland-3 with the mother on 10/02/2026 in Spanish, the BASC-3 PRQ, the FBA questionnaires, the parent interview, the BCBA's three direct observations) and the deficit areas.", "from": ["cde", "vineland-3", "basc-3-prq", "fba-questionnaires", "observations"] },
       { "id": "mn-vineland-domains", "fact": "Vineland-3 domain scores: Adaptive Behavior Composite 66 (1st percentile, Low), Communication 62 (1st), Daily Living Skills 70 (2nd), Motor Skills 82 (12th), and Socialization 64 with its percentile marked missing.", "from": ["vineland-3"] },
       { "id": "mn-vineland-subdomains", "fact": "The lowest subdomains, including Expressive (v-scale 6) and Coping (v-scale 6), with what they cover.", "from": ["vineland-3"] },
       { "id": "mn-maladaptive", "fact": "The Maladaptive Behavior Index (v-scale 20, Elevated), with Externalizing (21, Clinically Significant) and Internalizing (17, Average).", "from": ["vineland-3"] },
@@ -195,7 +195,7 @@
     ],
     "discharge-and-service-fading-plan": [
       { "id": "dc-behaviors", "fact": "Discharge criteria for each target behavior by name (elopement, physical aggression, tantrums, head hitting, throwing objects), tied to its baseline.", "from": ["behaviors"] },
-      { "id": "dc-thresholds", "fact": "Thresholds the sources do not give are marked missing, not invented.", "from": ["behaviors"] },
+      { "id": "dc-thresholds", "fact": "Objective criteria: her standard ones (goals substantially met; fading once the reduction goals hold for 3 consecutive months with the caregivers carrying out the plan independently; services end after 6 consecutive months without clinically significant target behavior), or a marker where a number is not known; no other numbers invented.", "from": ["behaviors"] },
       { "id": "dc-caregivers", "fact": "Caregiver criteria: the mother and the father carrying out the strategies.", "from": ["parent-interview"] },
       { "id": "dc-coordination", "fact": "Transition and coordination with the speech therapist and the pediatrician, and the pending occupational therapy evaluation.", "from": ["parent-interview", "cde"] }
     ],
