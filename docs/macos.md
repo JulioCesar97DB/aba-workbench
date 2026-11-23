@@ -35,6 +35,6 @@ The script refuses to run anywhere but a GitHub Actions runner (`GITHUB_ACTIONS`
 
 A launch that fails shows the app's log messages and any crash report, stops the app and removes its profile before the step ends.
 
-Then it writes the image's SHA-256 (`shasum -a 256`, the same line as `sha256sum`) and keeps both files with the run (14 days). The **publish** job waits for both installer jobs, checks both SHA-256 files and creates one pre-release with the four files.
+Then it writes the image's SHA-256 (`shasum -a 256`, the same line as `sha256sum`) and keeps both files with the run (14 days). The **publish** job waits for both installer jobs, checks both SHA-256 files and creates one release with the four files (a pre-release for a tag with a suffix; [docs/windows.md](windows.md)).
 
 What CI cannot show: the Gatekeeper block and "Open Anyway" (the image built on the runner is never quarantined, and the dialog needs a person), an Intel Mac itself (the x86_64 code runs under Rosetta on Apple Silicon), and the window as she sees it (the Playwright window tests run on the unpacked arm64 app in `ci.yml`, not on the universal one).
