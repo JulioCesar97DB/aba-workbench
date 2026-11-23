@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { checkBannedPatterns, checkShape, CHECK_IDS, type Finding } from "../eval/checks/checks.ts";
-import { baselineCopy, caseMedians, compareRuns, exitCodeFor, failsInMost, localPathsIn, medianAnswer, medianScore, noiseOf, normalizeRun, rescoreRun, scoreSection, summaryMarkdown, verdictLine, type CaseRun, type RunResult, type SectionResult } from "../eval/results.ts";
+import { baselineCopy, caseMedians, compareRuns, exitCodeFor, failsInMost, incompleteParts, keepsEarlierJudge, localPathsIn, medianAnswer, medianScore, noiseOf, normalizeRun, rescoreRun, scoreSection, summaryMarkdown, verdictLine, type CaseRun, type JudgeRecord, type RunResult, type SectionResult } from "../eval/results.ts";
 import { codeScore, keyFactsScore, RUBRIC, RUBRIC_VERSION, SECTION_EXPECTATIONS, SECTION_PAYER_FACTS, SECTION_SHAPES, STYLE_EXPECTATIONS, type CodeItem } from "../eval/rubric.ts";
 import { buildJudgePrompt, JudgeInputSchema, judgeAnswerSchema, parseJudgeAnswer, type JudgeInput } from "../src/lib/judge.ts";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
@@ -398,4 +398,79 @@ test("baselines hold no local path in any run (review B4), and normalizeRun read
   assert.equal(read.runs, 3);
   assert.deepEqual(read.cases[0].runs.map((r) => r.run), [1, 2, 3]);
   assert.deepEqual(read.cases[0].medians, clean.cases[0].medians);
+});
+
+/* Review round 1 of the 3-run evaluation: failed drafts and unscored baseline items. */
+
+/** A Medical Necessity section whose draft failed in that run: no text, nothing scored, no judge. */
+const failedDraft = (id: SectionResult["id"] = "medical-necessity"): SectionResult => ({
+  ...section(id, [], { "numbers-sourced": null, thread: null }),
+  text: null,
+  words: 0,
+  draftError: "provider_unavailable: the provider did not answer",
+  judge: null,
+});
+
+test("S1: a baseline run with a failed draft never turns a check that failed in most runs into a false new failure, and is said so", () => {
+  // The check failed in baseline runs 1 and 2; run 2's draft is gone, so only 1 of 3 has the finding.
+  const baseline = runs([[mn(true)], [failedDraft()], [mn(false)]]);
+  const now = runs([[mn(true)], [mn(true)], [mn(false)]]);
+  const comparison = compareRuns(now, baseline);
+  assert.deepEqual(comparison.newFailures, [], "no false new failure");
+  assert.deepEqual(comparison.checksNotCompared, [{ caseId: "case-b-sofia", section: "medical-necessity", drafted: 2, runs: 3 }]);
+  assert.deepEqual(comparison.baselineUnscored.map((u) => `${u.item} ${u.fromRuns.map(String).join(",")}`), ["numbers-sourced 1,null,2", "thread 2,null,2"]);
+  assert.equal(comparison.status, "pass");
+  assert.match(verdictLine(comparison), /Not compared: 2 items the baseline could not score; the checks of 1 section with a baseline run missing its draft\./);
+  const summary = summaryMarkdown(now, comparison, "b", baseline);
+  assert.match(summary, /## Not compared: the baseline could not score these\n\n- case-b-sofia MN numbers-sourced \(baseline runs 1·–·2\)/);
+  assert.match(summary, /## Checks not compared: a baseline run has no draft of the section\n\n- case-b-sofia MN: drafted in 2 of 3 baseline runs/);
+  // The hidden drop of the review's probe: every MN score at 0 now is listed, never silent.
+  const zero = runs([[section("medical-necessity", [numbersFinding(), numbersFinding(), numbersFinding()], { "numbers-sourced": 0, thread: 0 })], [section("medical-necessity", [numbersFinding(), numbersFinding(), numbersFinding()], { "numbers-sourced": 0, thread: 0 })], [section("medical-necessity", [numbersFinding(), numbersFinding(), numbersFinding()], { "numbers-sourced": 0, thread: 0 })]]);
+  assert.equal(compareRuns(zero, baseline).baselineUnscored.length, 2);
+});
+
+test("S1: a failed draft in one current run leaves its items unscored (hard), with the way to fill each kind of gap", () => {
+  const baseline = runs([[mn(false)], [mn(false)], [mn(false)]]);
+  const now = runs([[mn(false)], [failedDraft()], [mn(false)]]);
+  const comparison = compareRuns(now, baseline);
+  assert.equal(comparison.status, "regression");
+  assert.deepEqual(comparison.unscored.map((u) => u.item), ["numbers-sourced", "thread"]);
+  assert.deepEqual(comparison.newFailures, []);
+  assert.match(summaryMarkdown(now, comparison, "b", baseline), /A missing judge answer is filled with `--from-run <this run>`; a failed draft needs a new run\./);
+});
+
+test("S2: a baseline item left unscored by a judge request that failed is listed as not compared, not dropped", () => {
+  const judgeFailed = { ...mn(false), scores: { "numbers-sourced": 2 as const, thread: null }, judge: { ...mn(false).judge!, answers: [], error: "server_is_overloaded: try again" } };
+  const baseline = runs([[judgeFailed], [mn(false, 2)], [mn(false, 2)]]);
+  const now = runs([[mn(false, 0)], [mn(false, 0)], [mn(false, 0)]]);
+  const comparison = compareRuns(now, baseline);
+  assert.deepEqual(comparison.judgeDrops, []);
+  assert.deepEqual(comparison.baselineUnscored.map((u) => u.item), ["thread"]);
+  assert.match(verdictLine(comparison), /Not compared: 1 item the baseline could not score\./);
+});
+
+test("S1: a run with a failed draft, a judge error or an unscored item is never accepted", () => {
+  assert.deepEqual(incompleteParts(runs([[mn(false)], [mn(false)], [mn(false)]])), []);
+  assert.deepEqual(incompleteParts(runs([[mn(false)], [failedDraft()], [mn(false)]])), ["case-b-sofia run 2 MN: no draft (provider_unavailable: the provider did not answer)"]);
+  const judgeError = { ...mn(false), scores: { "numbers-sourced": 2 as const, thread: null }, judge: { ...mn(false).judge!, answers: [], error: "repair failed" } };
+  assert.deepEqual(incompleteParts(runs([[judgeError], [mn(false)], [mn(false)]])), ["case-b-sofia run 1 MN: judge error (repair failed)"]);
+  const unscored = { ...mn(false), scores: { "numbers-sourced": 2 as const, thread: null } };
+  assert.deepEqual(incompleteParts(runs([[mn(false)], [mn(false)], [unscored]])), ["case-b-sofia run 3 MN: not scored: thread"]);
+});
+
+test("m4: --from-run keeps an earlier judge answer only from the same judge with every sample; --rejudge never", () => {
+  const record = (overrides: Partial<JudgeRecord> = {}): JudgeRecord => ({ ...mn(false).judge!, answers: [{ section: "medical-necessity", items: [], keyFacts: [] }], ...overrides });
+  assert.equal(keepsEarlierJudge(record(), "judge-a", 1, false), true);
+  assert.equal(keepsEarlierJudge(record(), "judge-a", 1, true), false, "--rejudge");
+  assert.equal(keepsEarlierJudge(record(), "judge-b", 1, false), false, "another judge");
+  assert.equal(keepsEarlierJudge(record(), "judge-a", 3, false), false, "fewer samples than asked");
+  assert.equal(keepsEarlierJudge(record({ answers: [], error: "timeout" }), "judge-a", 1, false), false, "a failed judge request is judged again");
+  assert.equal(keepsEarlierJudge(null, "judge-a", 1, false), false);
+});
+
+test("m2: one run against a 3-run baseline says its hard verdict is not reliable", () => {
+  const baseline = runs([[mn(false)], [mn(false)], [mn(false)]]);
+  const note = compareRuns(run([mn(false)]), baseline).notes.find((n) => n.startsWith("Runs per case differ"));
+  assert.match(note ?? "", /3 runs in the baseline, 1 now; .*this run's hard verdict is not reliable.*Run 3 to decide\./);
+  assert.doesNotMatch(compareRuns(baseline, run([mn(false)])).notes.join(" "), /not reliable/, "more runs than the baseline: no warning");
 });

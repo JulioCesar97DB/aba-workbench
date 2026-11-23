@@ -45,8 +45,10 @@ import {
   addUsage,
   baselineCopy,
   compareRuns,
-  exitCodeFor,
   caseMedians,
+  exitCodeFor,
+  incompleteParts,
+  keepsEarlierJudge,
   normalizeRun,
   RESULTS_VERSION,
   RUN_COUNTS,
@@ -798,7 +800,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
           const earlier = priorCase?.runs[r].sections.find((section) => section.id === id)?.judge ?? null;
           const fingerprint = judgeFingerprint(judgeInputFor(loaded, id, loadedSources, "json-schema"), loaded, id, judgeModel, options.samples);
           // --from-run keeps an answer of this same judge; --rejudge always judges again.
-          if (!options.rejudgeAll && earlier && earlier.answers.length === options.samples && earlier.fingerprint === fingerprint) {
+          if (keepsEarlierJudge(earlier, fingerprint, options.samples, options.rejudgeAll)) {
             judged.set(id, earlier);
             continue;
           }
@@ -959,10 +961,13 @@ async function main(options: Options, home: string, profile: string): Promise<nu
   return exitCodeFor(comparison, run);
 }
 
-/** Saves a run as an accepted baseline: never an invalid run or one from a dirty checkout, and never with a local path (review B4, S9, S10). */
+/** Saves a run as an accepted baseline: never an invalid or incomplete run or one from a dirty checkout, and never with a local path (review B4, S9, S10; 3-run review S1). */
 function accept(run: RunResult, name: string, summary: string): void {
   if (!run.valid) fail(`an invalid run is never accepted (${run.invalidReason}).`);
   if (run.drafting.dirty || run.judging.dirty) fail("a run from a checkout with uncommitted changes in rules/, src/ or eval/ is never accepted: commit them and run again.");
+  // Review S1 (3-run evaluation): a run with a failed draft, a judge error or an unscored item never becomes the bar.
+  const incomplete = incompleteParts(run);
+  if (incomplete.length > 0) fail(`a run with a failed draft, a judge error or an unscored item is never accepted; fill it with --from-run (a missing judge answer) or run again (a failed draft) before accepting: ${incomplete.slice(0, 5).join("; ")}${incomplete.length > 5 ? `; and ${incomplete.length - 5} more` : ""}.`);
   const copy = baselineCopy(run, { home: homedir(), user: userInfo().username });
   const target = path.join(BASELINES_DIR, name);
   mkdirSync(target, { recursive: true });

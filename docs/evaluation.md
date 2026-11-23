@@ -46,7 +46,9 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
   The rules change does not go to her.
 - **No hard regression** (exit code 0). Judge item medians that went up or down are listed **apart from the verdict**, for the sections both runs had the same judge in every run.
 - **Noise stays visible, not in the verdict.** A drop in one run of three leaves the median and the majority as they were. The summary shows every run's score for every item (**bold** where the runs disagree), and each change in the lists comes with its runs, as in `2 → 1 (runs 2·2·2 → 1·1·2)`.
+- **Not compared, and said so:** an item the baseline could not score is listed under "Not compared: the baseline could not score these", never skipped in silence. The checks of a section that some baseline run has no draft of are not compared either (the failing count would be read against runs that never had a text) and are listed under "Checks not compared". The verdict line names both.
 - **Run counts:** `--runs` takes 1, 3 or 5, an odd count, so a median and a majority never tie (owner's choice). A baseline with another run count is still compared, each side on its own medians, with a note; results from before runs (such as `dev-2026-11-23`) are read as a single run.
+  - **Fewer runs than the baseline:** a 1-run comparison with a 3-run baseline carries one run's drafting and judging noise, which the medians were brought in to absorb. Its hard verdict is not reliable, and the note says so: each single run of `dev-step0-2026-11-23`, compared with that baseline's own medians, reads REGRESSION. Run as many runs as the baseline to decide.
 - **NOT COMPARED** (exit code 3): another rubric version, another provider (a rehearsal against a real run) or another drafting mode.
 - **INVALID** (exit code 1): a window, the Dock icon or the focus showed, or the app asked for a dialog.
 
@@ -71,7 +73,7 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 | `pnpm eval --cases case-b-sofia` | Only these cases |
 | `pnpm eval --mode independent` | Drafts without approving, so no consistency checks |
 | `pnpm eval --baseline <name>` | Compares with `eval/baselines/<name>/` instead of the newest |
-| `pnpm eval --accept <name>` | Also saves the run as `eval/baselines/<name>/`, with every path stripped (commit it). Refused for an invalid run, a rehearsal, or a checkout with uncommitted changes in `rules/`, `src/` or `eval/` |
+| `pnpm eval --accept <name>` | Also saves the run as `eval/baselines/<name>/`, with every path stripped (commit it). Refused for an invalid run, a rehearsal, a checkout with uncommitted changes in `rules/`, `src/` or `eval/`, and a run with a failed draft, a judge error or an unscored item in any run (fill it with `--from-run`, or run again for a failed draft) |
 | `pnpm eval --label <text>`, `--no-build` | Names the run folder; uses the apps as already built |
 
 **The eval profile** is `~/.aba-workbench-eval/profile`. It is owner-only and kept signed in between runs (owner's decision), so the owner signs in once. A fresh temporary home folder is used for every run and deleted at the end, even when the run fails.

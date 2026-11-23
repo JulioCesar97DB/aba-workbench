@@ -388,11 +388,22 @@ export interface Comparison {
   judgeRises: ItemChange[];
   /** Sections whose judge items were not compared: another judge (fingerprint) in one of the runs. */
   judgeNotCompared: Array<{ caseId: string; section: ReportSectionId }>;
+  /**
+   * Not compared, and said so (review round 1 of the 3-run evaluation, S2): items the baseline
+   * could not score (some run of it has no draft, or no judge answer, even after it was judged
+   * again in this run), so a drop there cannot be seen.
+   */
+  baselineUnscored: Array<{ caseId: string; section: ReportSectionId; item: string; fromRuns: Array<Score | null> }>;
+  /**
+   * Sections whose checks were not compared because a run of the baseline has no draft of them
+   * (review S1): its failing count would be read against runs that never had a text.
+   */
+  checksNotCompared: Array<{ caseId: string; section: ReportSectionId; drafted: number; runs: number }>;
 }
 
 /** Compares a run with the last accepted one (already rescored with the current checks: rescoreRun). */
 export function compareRuns(current: RunResult, baseline: RunResult): Comparison {
-  const comparison: Comparison = { status: "pass", notes: [], codeDrops: [], codeRises: [], newFailures: [], unscored: [], judgeDrops: [], judgeRises: [], judgeNotCompared: [] };
+  const comparison: Comparison = { status: "pass", notes: [], codeDrops: [], codeRises: [], newFailures: [], unscored: [], judgeDrops: [], judgeRises: [], judgeNotCompared: [], baselineUnscored: [], checksNotCompared: [] };
   const blockers: string[] = [];
   if (!current.valid) {
     comparison.status = "invalid";
@@ -411,7 +422,13 @@ export function compareRuns(current: RunResult, baseline: RunResult): Comparison
   if (current.model !== baseline.model) comparison.notes.push(`The drafting model differs: ${baseline.model ?? "unknown"} in the baseline, ${current.model ?? "unknown"} now.`);
   if (current.judgeFormat !== baseline.judgeFormat) comparison.notes.push(`The judge format differs: ${baseline.judgeFormat ?? "none"} in the baseline, ${current.judgeFormat ?? "none"} now.`);
   if (current.judgeSamples !== baseline.judgeSamples) comparison.notes.push(`Judge samples per run differ: ${baseline.judgeSamples} in the baseline, ${current.judgeSamples} now.`);
-  if (current.runs !== baseline.runs) comparison.notes.push(`Runs per case differ: ${plural(baseline.runs, "run", "runs")} in the baseline, ${current.runs} now; each side is compared on its own medians.`);
+  if (current.runs !== baseline.runs) {
+    comparison.notes.push(
+      `Runs per case differ: ${plural(baseline.runs, "run", "runs")} in the baseline, ${current.runs} now; each side is compared on its own medians.${
+        current.runs < baseline.runs ? ` With fewer runs than the baseline, this run's hard verdict is not reliable: one run's drafting and judging noise is what the medians were brought in to absorb (owner's decision, 2026-11-23). Run ${baseline.runs} to decide.` : ""
+      }`,
+    );
+  }
   for (const c of current.cases) if (!baseline.cases.some((b) => b.caseId === c.caseId)) comparison.notes.push(`Case ${c.caseId} is new: the baseline has no run of it, so it is not compared.`);
   for (const baseCase of baseline.cases) {
     const nowCase = current.cases.find((c) => c.caseId === baseCase.caseId);
@@ -427,7 +444,10 @@ export function compareRuns(current: RunResult, baseline: RunResult): Comparison
       const sameJudge = baseJudge !== null && baseJudge === sharedFingerprint(nowCase, baseSection.id);
       let judgeSkipped = false;
       for (const [item, before] of Object.entries(baseSection.scores)) {
-        if (before === null) continue;
+        if (before === null) {
+          comparison.baselineUnscored.push({ caseId: baseCase.caseId, section: baseSection.id, item, fromRuns: baseSection.spread[item] ?? [] });
+          continue;
+        }
         const after = nowSection.scores[item] ?? null;
         const runs = { fromRuns: baseSection.spread[item] ?? [], toRuns: nowSection.spread[item] ?? [] };
         const change = { caseId: baseCase.caseId, section: baseSection.id, item };
@@ -448,6 +468,12 @@ export function compareRuns(current: RunResult, baseline: RunResult): Comparison
       }
       if (judgeSkipped) comparison.judgeNotCompared.push({ caseId: baseCase.caseId, section: baseSection.id });
       if (baseSection.drafted === 0 || nowSection.drafted === 0) continue;
+      // Review S1: a baseline run without this draft would make a check that failed in most of its
+      // runs read as passing (its failing count is only over runs with a text); not compared, said so.
+      if (baseSection.drafted < baseCase.runs.length) {
+        comparison.checksNotCompared.push({ caseId: baseCase.caseId, section: baseSection.id, drafted: baseSection.drafted, runs: baseCase.runs.length });
+        continue;
+      }
       for (const check of CODE_CHECKS) {
         if (failsInMost(baseSection.failing[check], baseCase.runs.length)) continue;
         if (!failsInMost(nowSection.failing[check], nowCase.runs.length)) continue;
@@ -484,7 +510,11 @@ export function verdictLine(comparison: Comparison | null, run?: RunResult): str
   if (!comparison) return "No accepted baseline to compare with: this run is not compared.";
   if (comparison.status === "invalid") return `INVALID: ${comparison.notes.join(" ")}`;
   if (comparison.status === "not-compared") return `NOT COMPARED: ${comparison.notes.filter((note) => note.startsWith("Not compared")).map((note) => note.replace(/^Not compared: /, "").replace(/\.$/, "")).join("; ")}.`;
-  const judge = `Judge item medians, apart from the verdict: ${comparison.judgeDrops.length} down, ${comparison.judgeRises.length} up${comparison.judgeNotCompared.length > 0 ? `, ${plural(comparison.judgeNotCompared.length, "section", "sections")} not comparable` : ""}.`;
+  const gaps = [
+    ...(comparison.baselineUnscored.length > 0 ? [`${plural(comparison.baselineUnscored.length, "item", "items")} the baseline could not score`] : []),
+    ...(comparison.checksNotCompared.length > 0 ? [`the checks of ${plural(comparison.checksNotCompared.length, "section", "sections")} with a baseline run missing its draft`] : []),
+  ];
+  const judge = `Judge item medians, apart from the verdict: ${comparison.judgeDrops.length} down, ${comparison.judgeRises.length} up${comparison.judgeNotCompared.length > 0 ? `, ${plural(comparison.judgeNotCompared.length, "section", "sections")} not comparable` : ""}.${gaps.length > 0 ? ` Not compared: ${gaps.join("; ")}.` : ""}`;
   if (comparison.status === "pass") return `No hard regression: no code item's median went down, no check that passed in the baseline fails in most runs now, and nothing went unscored. ${judge}`;
   const parts: string[] = [];
   if (comparison.codeDrops.length > 0) parts.push(`${plural(comparison.codeDrops.length, "code item median", "code item medians")} went down`);
@@ -625,19 +655,63 @@ export function summaryMarkdown(run: RunResult, comparison: Comparison | null, b
         ...comparison.newFailures.map((f) => `- ${f.caseId} ${SHORT[f.section]} ${f.check}: fails in ${f.failing} of ${f.runs} runs (baseline ${f.baselineFailing} of ${f.baselineRuns}): ${f.findings.slice(0, 3).join(" / ")}`),
         "",
       );
-    if (comparison.unscored.length > 0) lines.push("## Hard: not scored in every run this time", "", ...comparison.unscored.map((u) => `- ${u.caseId} ${SHORT[u.section]} ${u.item} (runs ${runsCell(u.toRuns)})`), "");
+    if (comparison.unscored.length > 0)
+      lines.push(
+        "## Hard: not scored in every run this time",
+        "",
+        "A missing judge answer is filled with `--from-run <this run>`; a failed draft needs a new run.",
+        "",
+        ...comparison.unscored.map((u) => `- ${u.caseId} ${SHORT[u.section]} ${u.item} (runs ${runsCell(u.toRuns)})`),
+        "",
+      );
     lines.push(...list("## Code item medians that went up", comparison.codeRises));
     lines.push(
       ...list(`## Judge item medians that went down (apart from the verdict; ${plural(run.runs, "run", "runs")} × ${plural(run.judgeSamples, "sample", "samples")})`, comparison.judgeDrops),
       ...list("## Judge item medians that went up", comparison.judgeRises),
     );
     if (comparison.judgeNotCompared.length > 0) lines.push("## Judge items not compared (another judge)", "", ...comparison.judgeNotCompared.map((s) => `- ${s.caseId} ${SHORT[s.section]}`), "");
+    if (comparison.baselineUnscored.length > 0)
+      lines.push("## Not compared: the baseline could not score these", "", ...comparison.baselineUnscored.map((u) => `- ${u.caseId} ${SHORT[u.section]} ${u.item} (baseline runs ${runsCell(u.fromRuns)})`), "");
+    if (comparison.checksNotCompared.length > 0)
+      lines.push("## Checks not compared: a baseline run has no draft of the section", "", ...comparison.checksNotCompared.map((c) => `- ${c.caseId} ${SHORT[c.section]}: drafted in ${c.drafted} of ${c.runs} baseline runs`), "");
   }
   lines.push("Sections: " + REPORT_SECTIONS.map((s) => `${SHORT[s.id]} ${s.title}`).join("; ") + ".", "");
   return lines.join("\n");
 }
 
 /* Baselines ---------------------------------------------------------------------------- */
+
+/**
+ * What keeps a run from becoming the bar (review round 1 of the 3-run evaluation, S1): a run
+ * of a case with a failed draft, a judge error or an item it could not score. An item missing
+ * in any run is unscored until it is filled (owner's choice, 2026-11-23), so such a run is
+ * never accepted. Empty when the run is complete.
+ */
+export function incompleteParts(run: RunResult): string[] {
+  const found: string[] = [];
+  for (const c of run.cases) {
+    for (const r of c.runs) {
+      for (const s of r.sections) {
+        const where = `${c.caseId} run ${r.run} ${SHORT[s.id]}`;
+        if (s.text === null || s.draftError) found.push(`${where}: no draft${s.draftError ? ` (${s.draftError})` : ""}`);
+        else if (s.judge?.error) found.push(`${where}: judge error (${s.judge.error})`);
+        else {
+          const missing = Object.entries(s.scores).filter(([, score]) => score === null).map(([item]) => item);
+          if (missing.length > 0) found.push(`${where}: not scored: ${missing.join(", ")}`);
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Whether --from-run keeps an earlier run's judge record for a section (review m4): only an
+ * answer from this same judge (fingerprint) with every sample; --rejudge never keeps one.
+ */
+export function keepsEarlierJudge(earlier: JudgeRecord | null | undefined, fingerprint: string, samples: number, rejudgeAll: boolean): earlier is JudgeRecord {
+  return !rejudgeAll && !!earlier && earlier.error === null && earlier.answers.length === samples && earlier.fingerprint === fingerprint;
+}
 
 /**
  * A run as it may be committed (review B4): labels only, never a path. Fails closed: if any

@@ -50,7 +50,7 @@ Every rules change passes the evaluation set before it reaches the BCBA (owner's
 
 `pnpm eval` compares the medians of a run with those of the last accepted run (`eval/baselines/`):
 
-- **Medians:** each item's score is the median of the runs (with 3 runs, the middle one). An item that any run could not score (a failed draft, or no valid judge answer) is **unscored** until `--from-run` fills it.
+- **Medians:** each item's score is the median of the runs (with 3 runs, the middle one). An item that any run could not score (a failed draft, or no valid judge answer) is **unscored**. A missing judge answer is filled with `--from-run`; a failed draft needs a new run.
 - **Checks:** a check passes when it finds nothing in most runs (at least 2 of 3) and fails when it finds something in most runs.
 - **Rescoring:** every stored run of the baseline is checked again with the current checks before the comparison, so a change to the checks never reads as a change of the rules.
 - **Same judge:** where the baseline was judged by another judge (another prompt, inputs, model or number of samples per run: its fingerprint), its drafts are judged again in the same run by this judge, run by run.
@@ -59,6 +59,7 @@ The verdict is one of:
 
 - **REGRESSION** (hard; exit code 2): a code item's median went down, a check that passed in the baseline fails in most runs now, or an item scored in the baseline is unscored now. A change with a hard regression does not go to her. A drop in one run of three moves neither the median nor the majority, so it is noise, shown in the spread, not a regression.
 - **Judge item medians are reported apart from the verdict:** up and down, for the sections both runs had the same judge in every run.
+- **Not compared, and said so:** an item the baseline could not score, and the checks of a section that a baseline run has no draft of, are listed apart in the summary instead of being skipped. A run with a failed draft, a judge error or an unscored item is never accepted as a baseline, so this only happens when a judge request for the baseline fails during the comparison.
 - **NOT COMPARED** (exit code 3): the runs used another rubric version, another provider or another drafting mode.
 - **INVALID** (exit code 1): a window, the Dock icon or the focus showed during the run, or the app asked for a dialog. Such a run is never compared or accepted.
 
