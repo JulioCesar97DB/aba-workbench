@@ -481,6 +481,28 @@ function examplesOf(checkout: string): string[] {
   return files.flatMap((file) => extractExamples(readFileSync(file, "utf8")));
 }
 
+/**
+ * What the app recorded with each version (the model that answered, its tokens, the rules
+ * versions, its consistency check), read from the case's data file in the run's own
+ * temporary home: the interface shows less than the file keeps. Only the case file is
+ * read, never the profile's credentials.
+ */
+function recordedVersions(home: string, caseId: string): Map<ReportSectionId, Map<number, unknown>> {
+  const found = new Map<ReportSectionId, Map<number, unknown>>();
+  const folder = path.join(home, "ABA Workbench");
+  if (!existsSync(folder)) return found;
+  for (const entry of readdirSync(folder, { withFileTypes: true })) {
+    const file = path.join(folder, entry.name, "aba-case.json");
+    if (!entry.isDirectory() || !existsSync(file)) continue;
+    const data = JSON.parse(readFileSync(file, "utf8")) as { id?: string; sections?: Record<string, { versions?: Array<{ number: number }> }> };
+    if (data.id !== caseId) continue;
+    for (const [id, section] of Object.entries(data.sections ?? {})) {
+      found.set(id as ReportSectionId, new Map((section.versions ?? []).map((version) => [version.number, version])));
+    }
+  }
+  return found;
+}
+
 function rulesVersionsOf(texts: Map<ReportSectionId, { detail: unknown }>): Record<string, string> {
   const all: Record<string, string> = {};
   for (const { detail } of texts.values()) Object.assign(all, (detail as { generation?: { rulesVersions?: Record<string, string> } }).generation?.rulesVersions ?? {});
@@ -536,6 +558,11 @@ async function main(): Promise<void> {
           drafted = await draftSections(page, caseId);
         }
         texts = await currentTexts(page, caseId);
+        const recorded = recordedVersions(home, caseId);
+        for (const [id, entry] of texts) {
+          const stored = recorded.get(id)?.get(entry.version);
+          if (stored) entry.detail = stored;
+        }
       } finally {
         if (!prior && draftCheckout !== judgeCheckout) await closeApp(app, "draft");
       }
@@ -612,7 +639,7 @@ async function main(): Promise<void> {
     judgePromptVersion: JUDGE_PROMPT_VERSION,
     drafting: fromRun
       ? fromRun.drafting
-      : { checkout: draftCheckout, commit: git(draftCheckout, "rev-parse", "HEAD"), branch: git(draftCheckout, "rev-parse", "--abbrev-ref", "HEAD"), dirty: git(draftCheckout, "status", "--porcelain") !== "", rulesVersions: rulesVersionsCache ?? {} },
+      : { checkout: draftCheckout, commit: git(draftCheckout, "rev-parse", "HEAD"), branch: git(draftCheckout, "rev-parse", "--abbrev-ref", "HEAD"), dirty: git(draftCheckout, "status", "--porcelain", "--untracked-files=no") !== "", rulesVersions: rulesVersionsCache ?? {} },
     judging: { checkout: judgeCheckout, commit: git(judgeCheckout, "rev-parse", "HEAD") },
     provider: rehearse ? "rehearsal (fake provider)" : "openai (ChatGPT sign-in)",
     model,
