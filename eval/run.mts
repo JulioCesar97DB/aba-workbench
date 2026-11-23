@@ -22,6 +22,7 @@
  *   pnpm eval --accept <name>           also save this run as eval/baselines/<name>/
  *   pnpm eval --label <text>            names the run's folder
  *   pnpm eval --no-build                use the apps as they are built (default: pnpm build in each checkout first)
+ *   pnpm eval --from-run <run folder>   take that run's drafts: check them again, and ask the judge only where it has no answer
  */
 import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
@@ -47,6 +48,14 @@ const BASELINES_DIR = path.join(ROOT, "eval", "baselines");
 const EVAL_PROFILE = path.join(homedir(), ".aba-workbench-eval", "profile");
 /** How long one request may take before the run gives up on it. */
 const REQUEST_TIMEOUT_MS = 6 * 60_000;
+/**
+ * Errors on the provider's side that a second try may get past (an overloaded server, a
+ * dropped connection, no answer in time). A failed request saves nothing, so it is sent
+ * once more after a pause; anything else is not retried.
+ */
+const TRANSIENT = /server_is_overloaded|provider_unavailable|chatgpt_unavailable|timeout|connection_failed|overloaded/;
+const RETRY_PAUSE_MS = 30_000;
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const { values: args } = parseArgs({
   options: {
@@ -59,6 +68,7 @@ const { values: args } = parseArgs({
     accept: { type: "string" },
     label: { type: "string" },
     "no-build": { type: "boolean", default: false },
+    "from-run": { type: "string" },
   },
 });
 
@@ -72,6 +82,10 @@ const mode = args.mode as "chained" | "independent";
 const rehearse = args.rehearse === true;
 const provider = rehearse ? ("anthropic" as const) : ("openai" as const);
 const judgeCheckout = ROOT;
+/** --from-run: an earlier run whose drafts are checked again and judged where the judge had no answer. */
+const fromRun: RunResult | null = args["from-run"] ? (JSON.parse(readFileSync(path.join(path.resolve(args["from-run"]), "results.json"), "utf8")) as RunResult) : null;
+if (fromRun && args["draft-app"]) fail("--from-run drafts nothing, so it takes no --draft-app.");
+if (fromRun && rehearse !== fromRun.provider.startsWith("rehearsal")) fail("--from-run takes a run of the same kind (real or rehearsal).");
 const draftCheckout = args["draft-app"] ? path.resolve(args["draft-app"]) : ROOT;
 if (!existsSync(path.join(draftCheckout, "package.json"))) fail(`--draft-app ${draftCheckout} is not a checkout of the app.`);
 if (args.accept !== undefined && !/^[a-z0-9][a-z0-9._-]{0,60}$/i.test(args.accept)) fail("--accept takes a short name (letters, digits, dot, dash, underscore).");
@@ -89,7 +103,8 @@ function selectedCases(): LoadedCase[] {
     .filter((entry) => entry.isDirectory() && existsSync(path.join(CASES_DIR, entry.name, "key.json")))
     .map((entry) => entry.name)
     .sort();
-  const wanted = args.cases ? args.cases.split(",").map((name) => name.trim()) : all;
+  // --from-run takes that run's cases unless --cases names some.
+  const wanted = args.cases ? args.cases.split(",").map((name) => name.trim()) : fromRun ? fromRun.cases.map((c) => c.caseId) : all;
   for (const name of wanted) if (!all.includes(name)) fail(`no case ${name} with a key in fixtures/cases (cases: ${all.join(", ")}).`);
   return wanted.map((name) => loadCase(path.join(CASES_DIR, name)));
 }
@@ -330,7 +345,15 @@ async function draftSections(page: Page, caseId: string): Promise<Map<ReportSect
     process.stdout.write(`  draft ${id} ... `);
     requests.drafts++;
     requests.total++;
-    const outcome = await runGeneration(page, "draft", { caseId, sectionId: id, provider, request: { kind: "draft" } });
+    let outcome = await runGeneration(page, "draft", { caseId, sectionId: id, provider, request: { kind: "draft" } });
+    const firstError = outcome.events.find((event) => event.type === "error") as { code: string; message: string } | undefined;
+    if (firstError && TRANSIENT.test(`${firstError.code} ${firstError.message}`)) {
+      process.stdout.write(`(${firstError.code}; trying once more in ${RETRY_PAUSE_MS / 1000} s) `);
+      await pause(RETRY_PAUSE_MS);
+      requests.drafts++;
+      requests.total++;
+      outcome = await runGeneration(page, "draft", { caseId, sectionId: id, provider, request: { kind: "draft" } });
+    }
     const start = outcome.start as { outcome: string };
     const saved = outcome.events.find((event) => event.type === "saved") as { result: { outcome: string; section?: { currentVersion: number | null } } } | undefined;
     const error = outcome.events.find((event) => event.type === "error") as { code: string; message: string } | undefined;
@@ -381,7 +404,8 @@ async function judgeSection(page: Page, caseId: string, loaded: LoadedCase, sect
   let input = judgeInputFor(loaded, section, loadedSources, record.format);
   const itemIds = input.items.map((item) => item.id);
   const factIds = input.keyFacts.map((fact) => fact.id);
-  const send = async (request: JudgeInput) => {
+  let retried = false;
+  const send = async (request: JudgeInput): Promise<{ text: string; error: { code: string; message: string } | null }> => {
     record.requests++;
     requests.total++;
     if (request.repair) requests.repairs++;
@@ -392,6 +416,12 @@ async function judgeSection(page: Page, caseId: string, loaded: LoadedCase, sect
     if (done) record.usage = done.usage;
     const error = outcome.events.find((event) => event.type === "error") as { code: string; message: string } | undefined;
     const start = outcome.start as { outcome: string };
+    if (error && TRANSIENT.test(`${error.code} ${error.message}`) && !retried) {
+      retried = true;
+      process.stdout.write(`(${error.code}; trying once more in ${RETRY_PAUSE_MS / 1000} s) `);
+      await pause(RETRY_PAUSE_MS);
+      return send(request);
+    }
     return { text: outcome.text, error: start.outcome !== "started" ? { code: start.outcome, message: `not started: ${start.outcome}` } : (error ?? (done?.complete ? null : { code: "incomplete", message: "the answer was cut short" })) };
   };
   let answer = await send(input);
@@ -470,8 +500,8 @@ async function main(): Promise<void> {
   const startedAt = new Date().toISOString();
   console.log(`Evaluation run ${label}: ${cases.map((c) => c.key.caseId).join(", ")}; ${mode} drafting; ${rehearse ? "REHEARSAL with a fake provider (no request leaves the computer)" : "ChatGPT sign-in of the eval profile"}.`);
 
-  build(draftCheckout);
-  if (draftCheckout !== judgeCheckout) build(judgeCheckout);
+  if (!fromRun) build(draftCheckout);
+  if (fromRun || draftCheckout !== judgeCheckout) build(judgeCheckout);
 
   const caseResults: CaseResult[] = [];
   let model: string | null = null;
@@ -481,22 +511,37 @@ async function main(): Promise<void> {
       const plan = sourcePlan(loaded);
       const loadedSources = new Set([...plan.map((source) => source.id), ...(loaded.key.inputs.notes ? ["notes"] : [])]);
 
-      // Draft with the app under test.
-      let { app, page } = await launch(draftCheckout, "draft", profile, home);
+      const prior = fromRun ? (fromRun.cases.find((c) => c.caseId === loaded.key.caseId) ?? fail(`the run ${fromRun.label} has no case ${loaded.key.caseId}.`)) : null;
+
+      // Draft with the app under test (or, with --from-run, put the earlier run's drafts in place).
+      let { app, page } = await launch(prior ? judgeCheckout : draftCheckout, prior ? "judge" : "draft", profile, home);
       let caseId: string;
       let drafted: Map<ReportSectionId, Drafted>;
       let texts: Map<ReportSectionId, { version: number; text: string; detail: unknown }>;
       try {
         model = await connect(page, app);
         caseId = await loadIntoApp(page, loaded, plan);
-        drafted = await draftSections(page, caseId);
+        if (prior) {
+          drafted = new Map();
+          for (const section of prior.sections) {
+            drafted.set(section.id, { version: section.version, error: section.draftError, seconds: section.generation?.seconds ?? 0, checked: section.consistency !== null && section.consistency.status !== "nothing-to-compare" });
+            if (section.text === null) continue;
+            const saved = await aba(page, (api, input) => {
+              const { caseId: c, id, text } = input as { caseId: string; id: ReportSectionId; text: string };
+              return api.saveSectionText(c, id, text, null);
+            }, { caseId, id: section.id, text: section.text });
+            if (saved.outcome !== "saved") fail(`could not put back the draft of ${section.id}.`);
+          }
+        } else {
+          drafted = await draftSections(page, caseId);
+        }
         texts = await currentTexts(page, caseId);
       } finally {
-        if (draftCheckout !== judgeCheckout) await closeApp(app, "draft");
+        if (!prior && draftCheckout !== judgeCheckout) await closeApp(app, "draft");
       }
 
       // Judge with this branch's app (the same one when no --draft-app was given).
-      if (draftCheckout !== judgeCheckout) {
+      if (!prior && draftCheckout !== judgeCheckout) {
         ({ app, page } = await launch(judgeCheckout, "judge", profile, home));
         if (rehearse) await installRehearsalProvider(app);
         const opened = await aba(page, (api, id) => api.openCase(id as string), caseId);
@@ -506,13 +551,18 @@ async function main(): Promise<void> {
       try {
         for (const { id } of REPORT_SECTIONS) {
           if (!texts.has(id)) continue;
+          const earlier = prior?.sections.find((section) => section.id === id)?.judge ?? null;
+          if (earlier?.answer) {
+            judged.set(id, earlier);
+            continue;
+          }
           process.stdout.write(`  judge ${id} ... `);
           const record = await judgeSection(page, caseId, loaded, id, loadedSources);
           judged.set(id, record);
           console.log(record.error ? `FAILED (${record.error})` : `${record.format}${record.repaired ? ", repaired" : ""}, ${record.seconds.toFixed(1)} s`);
         }
       } finally {
-        await closeApp(app, draftCheckout !== judgeCheckout ? "judge" : "draft");
+        await closeApp(app, prior || draftCheckout !== judgeCheckout ? "judge" : "draft");
       }
 
       // The checks, the scores, the record.
@@ -526,6 +576,10 @@ async function main(): Promise<void> {
         const detail = entry?.detail as { generation?: { usage?: Usage; servedModel?: string; rulesVersions?: Record<string, string> }; consistency?: { status: string; items: string[] } | null } | undefined;
         const mine = findings.filter((finding) => finding.section === id);
         const judge = judged.get(id) ?? null;
+        const before = prior?.sections.find((section) => section.id === id) ?? null;
+        if (before) {
+          return { ...before, findings: mine, scores: scoreSection(id, mine, judge?.answer ?? null, before.text !== null), judge };
+        }
         return {
           id,
           version: entry?.version ?? null,
@@ -542,7 +596,7 @@ async function main(): Promise<void> {
         };
       });
       caseResults.push({ caseId: loaded.key.caseId, keyVersion: loaded.key.keyVersion, sourcesLoaded: [...loadedSources], sections });
-      if (!rulesVersionsCache) rulesVersionsCache = rulesVersionsOf(texts);
+      if (!rulesVersionsCache) rulesVersionsCache = prior ? fromRun!.drafting.rulesVersions : rulesVersionsOf(texts);
     }
   } finally {
     rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
@@ -556,14 +610,25 @@ async function main(): Promise<void> {
     finishedAt: new Date().toISOString(),
     rubricVersion: RUBRIC_VERSION,
     judgePromptVersion: JUDGE_PROMPT_VERSION,
-    drafting: { checkout: draftCheckout, commit: git(draftCheckout, "rev-parse", "HEAD"), branch: git(draftCheckout, "rev-parse", "--abbrev-ref", "HEAD"), dirty: git(draftCheckout, "status", "--porcelain") !== "", rulesVersions: rulesVersionsCache ?? {} },
+    drafting: fromRun
+      ? fromRun.drafting
+      : { checkout: draftCheckout, commit: git(draftCheckout, "rev-parse", "HEAD"), branch: git(draftCheckout, "rev-parse", "--abbrev-ref", "HEAD"), dirty: git(draftCheckout, "status", "--porcelain") !== "", rulesVersions: rulesVersionsCache ?? {} },
     judging: { checkout: judgeCheckout, commit: git(judgeCheckout, "rev-parse", "HEAD") },
     provider: rehearse ? "rehearsal (fake provider)" : "openai (ChatGPT sign-in)",
     model,
-    mode,
-    judgeFormat,
-    requests,
-    launches,
+    mode: fromRun ? fromRun.mode : mode,
+    judgeFormat: judgeFormat ?? fromRun?.judgeFormat ?? null,
+    requests: fromRun
+      ? {
+          drafts: fromRun.requests.drafts + requests.drafts,
+          checks: fromRun.requests.checks + requests.checks,
+          judges: fromRun.requests.judges + requests.judges,
+          repairs: fromRun.requests.repairs + requests.repairs,
+          total: fromRun.requests.total + requests.total,
+        }
+      : requests,
+    launches: [...(fromRun?.launches ?? []), ...launches],
+    ...(fromRun ? { fromRun: fromRun.label } : {}),
     cases: caseResults,
   };
 
@@ -586,6 +651,7 @@ async function main(): Promise<void> {
     console.log(`Accepted as the baseline ${path.relative(ROOT, target)} (commit it).`);
   }
   console.log(`\n${summaryMarkdown(run, comparison, baseline?.name ?? null).split("\n").slice(0, 7).join("\n")}`);
+  if (fromRun) console.log(`This run made ${requests.total} new requests (${requests.judges} judge, ${requests.repairs} repairs).`);
   console.log(`\nResults: ${path.relative(ROOT, runDir)}/ (results.json, summary.md, drafts/).`);
   if (comparison?.regressed) process.exitCode = 2;
 }

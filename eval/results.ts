@@ -80,6 +80,8 @@ export interface RunResult {
   judgeFormat: JudgeFormat | null;
   requests: { drafts: number; checks: number; judges: number; repairs: number; total: number };
   launches: LaunchCheck[];
+  /** Set when this run re-scored and re-judged an earlier run's drafts (pnpm eval --from-run): that run's label. */
+  fromRun?: string;
   cases: CaseResult[];
 }
 
@@ -190,6 +192,7 @@ export function summaryMarkdown(run: RunResult, comparison: Comparison | null, b
   lines.push(
     `- Drafted by ${run.drafting.branch} at ${run.drafting.commit.slice(0, 7)}${run.drafting.dirty ? " (uncommitted changes)" : ""}; judged by ${run.judging.commit.slice(0, 7)}.`,
     `- Rubric v${run.rubricVersion}, judge prompt v${run.judgePromptVersion}, judge format ${run.judgeFormat ?? "none"}; ${run.provider}, ${run.model ?? "model unknown"}; ${run.mode} drafting.`,
+    ...(run.fromRun ? [`- Re-judged from run ${run.fromRun}: its drafts, checked again, and the judge asked again only where it had no answer. Requests below are both runs together.`] : []),
     `- Requests: ${run.requests.total} (${run.requests.drafts} drafts, ${run.requests.checks} consistency checks, ${run.requests.judges} judge, ${run.requests.repairs} repairs). ${run.startedAt} to ${run.finishedAt}.`,
     `- Windows: ${run.launches.map((launch) => `${launch.role} ${launch.at}: ${launch.visibleWindows} visible, dock ${launch.dockVisible === null ? "n/a" : launch.dockVisible ? "VISIBLE" : "hidden"}, ${launch.focusedWindows} focused`).join("; ")}.`,
     "",

@@ -409,7 +409,7 @@ export const PAYER_ITEMS: PayerItem[] = [
   { id: "fci-availability", section: "family-caregiver-involvement", what: "The caregivers' availability for training", test: has(/\b(?:availab\w*|evenings?|weekends?|saturdays?|after \d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?)\b/iu) },
   { id: "fci-language", section: "family-caregiver-involvement", what: "The language training is delivered in", test: has(/\b(?:spanish|english|language|bilingual|interpret\w*)\b/iu) },
   { id: "fci-training", section: "family-caregiver-involvement", what: "What caregiver training covers", test: has(/\btrain(?:ing|ed)?\b/iu) },
-  { id: "gm-across", section: "generalization-and-maintenance", what: "Generalization across settings and people", test: has(/\bgeneraliz\w*\b|\b(?:across|different|other|new) (?:settings|people|environments)\b|\bsettings and people\b|\bpeople and (?:in )?(?:different )?settings\b/iu) },
+  { id: "gm-across", section: "generalization-and-maintenance", what: "Generalization across settings and people", test: has(/\bgeneraliz\w*\b|\b(?:across|different|other|new|varied|varying) (?:settings|people|environments|adults|places)\b|\bsettings and people\b|\bpeople and (?:in )?(?:different )?settings\b|\b(?:person|people|adult|activity|setting|place|routine)s?\b[^.]{0,40}\bchang\w*/iu) },
   { id: "gm-probes", section: "generalization-and-maintenance", what: "Maintenance probes", test: has(/\bprob(?:e|es|ed|ing)\b/iu) },
   { id: "gm-thinning", section: "generalization-and-maintenance", what: "Reinforcement thinned from continuous to intermittent", test: has(/\bintermittent\b|\bthin\w*\b/iu) },
   {
