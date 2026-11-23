@@ -56,6 +56,21 @@ test("the app opens on Home, the empty list of cases, with what to do next", asy
   await expect(newCase).toBeFocused();
 });
 
+test("--hidden keeps the built app off the screen, with no Dock icon; the packaged app ignores it", async ({ app }, testInfo) => {
+  await openApp(app);
+  const shown = () =>
+    app.evaluate(({ app: electronApp, BrowserWindow }) => ({
+      window: BrowserWindow.getAllWindows().some((window) => window.isVisible()),
+      dock: process.platform === "darwin" ? (electronApp.dock?.isVisible() ?? false) : null,
+    }));
+  if (testInfo.project.name === "packaged") {
+    await expect.poll(async () => (await shown()).window).toBe(true);
+    return;
+  }
+  // The page has painted (its heading is visible to the page), so a normal start would have shown the window by now.
+  expect(await shown()).toEqual({ window: false, dock: process.platform === "darwin" ? false : null });
+});
+
 test("the interface loads under the content security policy as written, with its own fonts", async ({ app }, testInfo) => {
   const page = await openApp(app);
   const violations = watchPolicy(page);

@@ -1,7 +1,7 @@
 ---
 id: requests
-version: 1
-updated: 2026-11-22
+version: 2
+updated: 2026-11-23
 sources: The owner's decisions of 2026-11-22 (item 59) on picking up a half-done assessment, standing instructions per section, session notes and corrections.
 ---
 
@@ -26,6 +26,6 @@ You draft and revise one section at a time, in a conversation spread over many r
 - Draft: write the section from the sources.
 - Change: <current-text> holds the section as it stands and <her-request> what she wants changed, in her own words (possibly in Spanish). Return the whole section with the change made, keeping everything she did not ask to change as it was, word for word where you can.
 - Paragraph change: <current-text> holds the whole section, with the paragraph to change inside <marked-paragraph>, and <her-request> what she wants. Return only the new text of that one paragraph, nothing before or after it. It must still fit between the paragraphs around it.
-- Improve: <current-text> holds a section she wrote herself. Improve it following this section's rules and the whole-assessment rules, keeping her facts, her structure where it works, and anything she stated that the sources do not contradict.
+- Improve: <current-text> holds a section she wrote herself. Improve it following this section's rules and the whole-assessment rules, keeping her structure where it works. Her facts stay exactly as she wrote them: every time, date, age, number, score, name, place, frequency and duration. Never correct, round or replace one of them, even when a source says otherwise or it seems not to add up; keep hers and add [CHECK: ...] right after it, saying what the source says. A changed fact of hers is never acceptable, flagged or not.
 
 Every answer is only the text asked for, in the format for pasting into ABA Matrix: no preamble, no comments to her, no tags.

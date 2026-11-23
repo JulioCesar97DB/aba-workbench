@@ -21,6 +21,7 @@ import { useOpenedCase, usePatchOpenedCase, useSetCaseSources } from "../open-ca
 import {
   dismissSectionGeneration,
   isRunning,
+  retrySectionGeneration,
   startSectionCheck,
   startSectionGeneration,
   stopSectionGeneration,
@@ -928,10 +929,17 @@ function GenerationOutcomeMessage({ generation }: { generation: SectionGeneratio
               : outcome.kind === "too-long"
                 ? t("section.tooLong")
                 : t("section.failed", { message: outcome.message || t("section.unknownError") });
+  // A failed request can be sent again as it was (the first Improve of the real runs failed on a dropped connection, 2026-11-23).
+  const canRetry = outcome.kind === "failed" && generation.request !== null;
   return (
-    <p role="alert" className={cn("rounded-md border px-3.5 py-2 text-sm font-medium", outcome.kind === "stopped" ? "border-border text-fg" : "border-danger text-danger")}>
-      {message}
-    </p>
+    <div role="alert" className={cn("flex flex-wrap items-center gap-3 rounded-md border px-3.5 py-2", outcome.kind === "stopped" ? "border-border" : "border-danger")}>
+      <p className={cn("text-sm font-medium", outcome.kind === "stopped" ? "text-fg" : "text-danger")}>{message}</p>
+      {canRetry ? (
+        <Button size="sm" data-testid="section-try-again" onClick={() => void retrySectionGeneration(generation)}>
+          {t("sources.tryAgain")}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 

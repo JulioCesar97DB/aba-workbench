@@ -17,7 +17,7 @@ import { SectionService } from "./sections.ts";
 import { IPC_CHANNELS } from "../shared/api.ts";
 import { defaultCasesFolder } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
-import { resolveHomeFolder, resolveRulesDir } from "./paths.ts";
+import { resolveHiddenMode, resolveHomeFolder, resolveRulesDir } from "./paths.ts";
 import { APP_ORIGIN, registerAppScheme, serveRenderer } from "./protocol.ts";
 import { denyAllPermissions, hardenWebContents } from "./security.ts";
 import { defaultLanguage, SETTINGS_FILE_NAME, SettingsStore } from "./settings.ts";
@@ -41,6 +41,18 @@ const rendererDir = fileURLToPath(new URL("../renderer", import.meta.url));
  */
 const isFirstInstance = app.requestSingleInstanceLock();
 if (!isFirstInstance) app.quit();
+
+/*
+ * Hidden mode, development only (src/main/paths.ts): the window is made and works as
+ * usual but is never shown, the app has no Dock icon and never becomes the active app
+ * (macOS's "accessory" policy), and the page is not throttled for being hidden, so the
+ * window tests and scripts can run while someone works on the same computer.
+ */
+const hidden = resolveHiddenMode({ isPackaged: app.isPackaged, requested: app.commandLine.hasSwitch("hidden") });
+if (hidden && process.platform === "darwin") {
+  app.setActivationPolicy("accessory");
+  app.dock?.hide();
+}
 
 hardenWebContents();
 registerAppScheme();
@@ -178,6 +190,8 @@ function createWindow(): void {
     // The sidebar's color (--color-nav), so the window does not flash white before the interface paints.
     backgroundColor: WINDOW_BACKGROUND,
     show: false,
+    // Hidden mode: not in the taskbar (Windows, Linux) either.
+    skipTaskbar: hidden,
     title: app.getName(),
     webPreferences: {
       preload: preloadPath,
@@ -186,10 +200,12 @@ function createWindow(): void {
       nodeIntegration: false,
       // No developer tools in the packaged app, by any path (owner's decision, 2026-11-22; src/main/app-menu.ts).
       devTools: !app.isPackaged,
+      // A hidden window would otherwise have its timers slowed (the saves wait on them).
+      backgroundThrottling: !hidden,
     },
   });
   mainWindow = window;
-  window.once("ready-to-show", () => window.show());
+  if (!hidden) window.once("ready-to-show", () => window.show());
   // Set once the close guard lets the window close: an unload the page then holds is that close, not a reload.
   let closing = false;
   window.on(
@@ -246,7 +262,7 @@ function createWindow(): void {
 }
 
 app.on("second-instance", () => {
-  if (!mainWindow) return;
+  if (!mainWindow || hidden) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();

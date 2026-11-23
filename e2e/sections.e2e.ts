@@ -2,7 +2,7 @@ import type { ElectronApplication, Page } from "@playwright/test";
 import { chmodSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { AbaApi } from "../src/shared/api.ts";
-import { defaultCasesFolder, draftingStubLog, expect, goTo, SAMPLE_CASE, seedCase, setDraftingSpeed, stubDrafting, test } from "./app.ts";
+import { defaultCasesFolder, draftingStubLog, expect, goTo, SAMPLE_CASE, seedCase, setDraftingFailures, setDraftingSpeed, stubDrafting, test } from "./app.ts";
 
 /*
  * The report's sections as the clinician meets them: drafting one with the AI, changing
@@ -159,6 +159,24 @@ test("pick up a section she already wrote, improve it, and draft another that bu
   expect(versions).toHaveLength(2);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report`);
   await screenshot(page, "section-9-report-es");
+});
+
+test("a failed request says what went wrong and offers Try again, which sends the same request again", async ({ launch, home }) => {
+  const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
+  await setDraftingFailures(app, 1);
+  await page.getByRole("button", { name: /Draft it with the AI/ }).click();
+  const failure = page.getByRole("alert").filter({ hasText: "The AI could not finish" });
+  await expect(failure).toContainText("stubbed failure");
+  await expect(failure).toContainText("Nothing was saved");
+  await screenshot(page, "section-10-failed-en");
+  await failure.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByTestId("section-view")).toContainText("ABA will teach", { timeout: 20_000 });
+  await expect(failure).toHaveCount(0);
+  expect(sectionData(caseFile, "crisis-plan").versions.map((v: { kind: string }) => v.kind)).toEqual(["draft"]);
+  const log = await draftingStubLog(app);
+  const drafts = log.requests.filter((r) => r.url.includes("/v1/messages")).map((r) => r.body ?? "");
+  expect(drafts).toHaveLength(2);
+  expect(drafts[1]).toBe(drafts[0]);
 });
 
 test("stopping a draft saves nothing and says so; without an AI connected, drafting points to Settings", async ({ launch, home }) => {

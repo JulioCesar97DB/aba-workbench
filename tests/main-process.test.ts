@@ -4,7 +4,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { runDevCheckGeneration } from "../src/main/dev-check.ts";
 import { GenerationRegistry, MAX_RUNNING_PER_WINDOW } from "../src/main/generations.ts";
-import { resolveHomeFolder, resolveRendererFile, resolveRulesDir } from "../src/main/paths.ts";
+import { resolveHiddenMode, resolveHomeFolder, resolveRendererFile, resolveRulesDir } from "../src/main/paths.ts";
 import { isTrustedFrame } from "../src/main/trust.ts";
 import type { GenerationEvent } from "../src/lib/generation-events.ts";
 import type { GenerationUpdate } from "../src/shared/api.ts";
@@ -162,6 +162,13 @@ test("development check: the mock streams through the real rules to a complete d
   assert.equal(seen.at(-1)?.type, "done");
   const text = seen.map((e) => (e.type === "text" ? e.delta : "")).join("");
   assert.match(text, /MOCK OUTPUT/);
+});
+
+test("hidden mode: --hidden hides the app in development only; the packaged app ignores it", () => {
+  assert.equal(resolveHiddenMode({ isPackaged: false, requested: true }), true);
+  assert.equal(resolveHiddenMode({ isPackaged: false, requested: false }), false);
+  assert.equal(resolveHiddenMode({ isPackaged: true, requested: true }), false);
+  assert.equal(resolveHiddenMode({ isPackaged: true, requested: false }), false);
 });
 
 test("home folder: --home-folder stands in for it in development only; the packaged app ignores it", () => {

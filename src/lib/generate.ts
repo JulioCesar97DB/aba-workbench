@@ -53,6 +53,8 @@ export interface PromptGenerationRequest {
   prompt: PromptParts;
   rulesVersions: Record<string, string>;
   signal: AbortSignal;
+  /** The case's opaque prompt-cache key (src/main/cache-key.ts); none outside a case. */
+  cacheKey?: string | null;
 }
 
 /**
@@ -75,6 +77,7 @@ export async function* runPromptGeneration(request: PromptGenerationRequest): As
     maxOutputTokens: request.maxOutputTokens,
     prompt,
     signal,
+    cacheKey: request.cacheKey ?? null,
   };
   yield {
     type: "meta",

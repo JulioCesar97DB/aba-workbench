@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { ContextSection } from "../lib/rules.ts";
 import { REPORT_SECTIONS, type ReportSectionId } from "../shared/report-sections.ts";
 import { MAX_NOTES_LENGTH, MAX_REQUEST_LENGTH, MAX_SECTION_TEXT_LENGTH, normalizeLineEndings, type SectionShape } from "../shared/section-text.ts";
-import { sectionState, type ConsistencyResult, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion, type VersionKind } from "../shared/sections.ts";
-import type { CaseData, GenerationRecord, StoredSection, StoredVersion } from "./case-file.ts";
+import { AI_VERSION_KINDS, sectionState, type ConsistencyResult, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion, type VersionKind } from "../shared/sections.ts";
+import type { CaseData, GenerationRecord, StoredSection, StoredUsage, StoredVersion } from "./case-file.ts";
 
 /*
  * A case's report sections, inside its data file (src/main/case-file.ts, version 3):
@@ -87,7 +87,12 @@ export function sectionSummary(data: CaseData, id: ReportSectionId): SectionSumm
 
 /** What the AI cost for this section so far: every version and every check whose price is known (review, low 2). */
 function sectionCost(section: StoredSection): number {
-  return section.versions.reduce((sum, version) => sum + (version.generation?.costUsd ?? 0) + (version.consistency?.costUsd ?? 0), 0);
+  return section.versions.reduce((sum, version) => sum + (version.generation?.costUsd ?? 0) + checksCost(version), 0);
+}
+
+/** What the checks of one version cost: the latest, and every earlier one that "Check again" replaced (review round 1, P1). */
+function checksCost(version: StoredVersion): number {
+  return (version.consistency?.costUsd ?? 0) + (version.consistency?.earlierCostUsd ?? 0);
 }
 
 export function sectionSummaries(data: CaseData): SectionSummary[] {
@@ -109,7 +114,7 @@ function versionView(version: StoredVersion, context: ReadonlyArray<{ id: string
     costUsd: generation?.costUsd ?? null,
     sourcesUsed: generation?.sourcesUsed.map(({ id, title }) => ({ id, title })) ?? [],
     consistency: version.consistency ? consistencyView(version.consistency, context) : null,
-    checkCostUsd: version.consistency?.costUsd ?? null,
+    checkCostUsd: version.consistency && (version.consistency.costUsd !== null || (version.consistency.earlierCostUsd ?? 0) > 0) ? checksCost(version) : null,
     text: version.text,
   };
 }
@@ -125,12 +130,37 @@ function consistencyView(stored: NonNullable<StoredVersion["consistency"]>, cont
   return { status, items: stored.items, stale: key(stored.sectionsCompared) !== key(context) };
 }
 
-/** Saves the consistency check's result on a version. Null when the version is gone. */
+/** Two token records added up (an absent one counts as nothing). */
+function addUsage(a: StoredUsage | undefined, b: StoredUsage | undefined): StoredUsage | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  const reasoning = a.reasoningTokens == null && b.reasoningTokens == null ? null : (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0);
+  return {
+    uncachedInputTokens: a.uncachedInputTokens + b.uncachedInputTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    reasoningTokens: reasoning,
+  };
+}
+
+/**
+ * Saves the consistency check's result on a version. Null when the version is gone. A
+ * check run again replaces the result, but what the earlier checks of the version cost
+ * and used is carried over (earlierCostUsd, earlierUsage), so a failed "Check again"
+ * never takes money already spent out of the totals (review round 1, P1).
+ */
 export function setConsistency(data: CaseData, id: ReportSectionId, number: number, consistency: NonNullable<StoredVersion["consistency"]>): CaseData | null {
   const section = storedSection(data, id);
   const index = section.versions.findIndex((version) => version.number === number);
   if (index === -1) return null;
   const versions = [...section.versions];
+  const earlier = versions[index].consistency;
+  if (earlier) {
+    const earlierCostUsd = (earlier.earlierCostUsd ?? 0) + (earlier.costUsd ?? 0);
+    const earlierUsage = addUsage(earlier.earlierUsage, earlier.usage);
+    consistency = { ...consistency, ...(earlierCostUsd > 0 ? { earlierCostUsd } : {}), ...(earlierUsage ? { earlierUsage } : {}) };
+  }
   versions[index] = { ...versions[index], consistency };
   return withSection(data, id, { ...section, versions });
 }
@@ -273,6 +303,47 @@ function ownVersions(section: StoredSection): Set<number> {
     return own;
   };
   return new Set(section.versions.filter((version) => isOwn(version)).map((version) => version.number));
+}
+
+/**
+ * Whether she wrote a version by hand: her pasted or typed text ("hers"), or any edit she
+ * made by hand ("edited"), her edit of an AI version included. Every fact in it is her
+ * decision. Not the same as ownVersions, which decides what the other sections may build
+ * on (an edit of an unapproved AI draft is not final for them, review B2).
+ */
+function isHandWritten(version: StoredVersion): boolean {
+  return !version.generation && (version.kind === "hers" || version.kind === "edited");
+}
+
+/**
+ * Her own text of a section, for the check of a new AI version of it (owner's request,
+ * 2026-11-23: "Improve" changed her 3:00-6:00 p.m. to 5:30 unflagged), with what she
+ * asked for since. Both come from one walk back along the version's lineage (each
+ * version's basedOn): her text is the first version on it that she wrote or edited by
+ * hand, her edit of an AI version included (review round 1, F1: a fact she fixed by hand
+ * is her latest word on it), and the requests are those of the change and paragraph
+ * versions passed on the way, oldest first (review round 2, R2: a hand edit on another
+ * branch of her versions is not what this version came from). A lineage that starts
+ * with a draft, from no text of hers, falls back to her latest hand-written version
+ * before it. Null for a version that is not the AI's, or when she wrote nothing by hand.
+ */
+export function ownTextBefore(data: CaseData, id: ReportSectionId, number: number): { version: number; text: string; requests: string[] } | null {
+  const section = storedSection(data, id);
+  const checked = findVersion(section, number);
+  if (!checked || !AI_VERSION_KINDS.includes(kindOf(checked))) return null;
+  const requests: string[] = [];
+  let version: StoredVersion | undefined = checked;
+  for (let steps = 0; version && steps <= section.versions.length; steps++) {
+    if (isHandWritten(version) && version.text.trim() !== "") return { version: version.number, text: version.text, requests };
+    if (version.generation && version.request?.trim()) requests.unshift(version.request.trim());
+    version = version.basedOn === undefined || version.basedOn >= version.number ? undefined : findVersion(section, version.basedOn);
+  }
+  let latest: StoredVersion | null = null;
+  for (const candidate of section.versions) {
+    if (!isHandWritten(candidate) || candidate.number >= number || candidate.text.trim() === "") continue;
+    if (!latest || candidate.number > latest.number) latest = candidate;
+  }
+  return latest ? { version: latest.number, text: latest.text, requests } : null;
 }
 
 /** Her other sections that are hers or approved, in the report's order, for a request about `id`. */

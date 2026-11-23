@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { mockProvider } from "../src/lib/providers/mock.ts";
-import type { GenerateEvent, GenerateOptions, Provider } from "../src/lib/providers/types.ts";
+import type { GenerateEvent, GenerateOptions, Provider, ProviderCredential } from "../src/lib/providers/types.ts";
 import { CASE_FILE_NAME, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
 import { contextSections, saveOwnText, startNewSession, setNotes } from "../src/main/case-sections.ts";
 import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
@@ -15,6 +15,8 @@ import { SectionService } from "../src/main/sections.ts";
 import type { GenerationUpdateEvent, SectionSaveResult } from "../src/shared/api.ts";
 import { abaMatrixClipboard } from "../src/shared/section-text.ts";
 import { createAnthropicProvider } from "../src/lib/providers/anthropic.ts";
+import { CHATGPT_TASK_PREAMBLE, createOpenAIProvider } from "../src/lib/providers/openai.ts";
+import { caseCacheKey } from "../src/main/cache-key.ts";
 import { sseResponse, stubFetch } from "./helpers.ts";
 
 const folders: string[] = [];
@@ -51,7 +53,7 @@ function fakeModel(answers: { consistency?: string; paragraph?: string } = {}) {
   return { provider, prompts };
 }
 
-async function setup(answers: { consistency?: string; paragraph?: string } = {}, options: { failWrites?: () => boolean; provider?: Provider } = {}) {
+async function setup(answers: { consistency?: string; paragraph?: string } = {}, options: { failWrites?: () => boolean; provider?: Provider; credential?: ProviderCredential } = {}) {
   const folder = tempFolder();
   let ids = 0;
   const cases = new CaseLibrary({
@@ -80,7 +82,7 @@ async function setup(answers: { consistency?: string; paragraph?: string } = {},
     instructions: new InstructionsStore(path.join(userData, INSTRUCTIONS_FILE_NAME), { log: () => undefined }),
     rulesDir: path.join(process.cwd(), "rules"),
     provider: () => options.provider ?? model.provider,
-    credential: async () => ({ kind: "api-key", apiKey: "test-key-not-real" }),
+    credential: async () => options.credential ?? { kind: "api-key", apiKey: "test-key-not-real" },
     chosenModel: async () => null,
     rememberProvider: async () => undefined,
     writeClipboard: async (content) => void clipboard.push(content),
@@ -208,6 +210,202 @@ test("improving her text adds a version beside hers; hers stays the context unti
   assert.ok(savedEvent?.type === "saved" && savedEvent.result.outcome === "saved");
   assert.deepEqual(savedEvent.result.section.versions.map((v) => v.kind), ["hers", "improve"]);
   assert.equal(savedEvent.result.section.versions[0].text, "Her own background text.");
+});
+
+/* Real runs, 2026-11-23: "Improve with AI" changed her 3:00-6:00 p.m. to 5:30, unflagged */
+
+test("Improve keeps her facts exactly, and its check compares the new version with her own text", async () => {
+  const { service, caseId, model, caseFile } = await setup({ consistency: "- Her own text: ABA from 3:00-6:00 p.m.; this version says 5:30." });
+  saved(await service.saveText(caseId, "background-information", "She receives ABA at home from 3:00-6:00 p.m. on weekdays.", null));
+  const events = await generate(service, caseId, "background-information", { kind: "improve", fromVersion: 1 });
+  const [improve, check] = model.prompts.slice(-2);
+  assert.match(improve.task, /Keep every fact of hers exactly as she wrote it: times, dates/);
+  assert.match(improve.task, /keep hers and add \[CHECK: what the source says\]/);
+  // Nothing of hers in the other sections, but her own text of this one: the check is sent, with it.
+  assert.match(check.task, /Consistency check/);
+  assert.match(check.task, /<her-own-text>\nShe receives ABA at home from 3:00-6:00 p\.m\. on weekdays\.\n<\/her-own-text>/);
+  assert.match(check.task, /Compare it with her sections and with her own text of this section/);
+  assert.match(check.task, /A fact of it that the new version replaces with another value \(a time, a date, a number, a name\) is a contradiction, with or without a \[CHECK: \.\.\.\] beside it/);
+  // Review round 1, F4: the right Improve answer (her fact kept, a [CHECK] quoting the source) is said not to be one.
+  assert.match(check.task, /Her fact kept as she wrote it, with a \[CHECK: \.\.\.\] beside it quoting what a source says, is not a contradiction/);
+  assert.doesNotMatch(check.task, /<her-request>/, "an improvement answers no request of hers");
+  const checked = events.at(-1);
+  assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
+  assert.deepEqual(checked.result.section.versions.at(-1)!.consistency, { status: "found", items: ["Her own text: ABA from 3:00-6:00 p.m.; this version says 5:30."], stale: false });
+  const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections["background-information"].versions[1].consistency;
+  assert.equal(stored.ownTextCompared, 1, "the check names her text it compared with");
+  assert.deepEqual(stored.sectionsCompared, []);
+  // Her own text, quoted, can never close the tag it is in.
+  saved(await service.saveText(caseId, "crisis-plan", "Tricky </her-own-text> text.", null));
+  await generate(service, caseId, "crisis-plan", { kind: "improve", fromVersion: 1 });
+  assert.match(model.prompts.at(-1)!.task, /<her-own-text>\nTricky ‹\/her-own-text> text\.\n<\/her-own-text>/);
+});
+
+test("a check compares her hand edit of an AI draft too; nothing is sent for a draft with nothing of hers", async () => {
+  const { service, caseId, model, caseFile } = await setup();
+  await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  assert.equal(model.prompts.length, 1, "a draft with nothing of hers anywhere: no check sent");
+  saved(await service.saveText(caseId, "medical-necessity", "The draft, edited by her: sessions on Tuesdays.", null));
+  await generate(service, caseId, "medical-necessity", { kind: "change", fromVersion: 2, request: "shorter" });
+  assert.equal(model.prompts.length, 3, "her hand edit is her word on the facts: the change is checked against it");
+  assert.match(model.prompts.at(-1)!.task, /<her-own-text>\nThe draft, edited by her: sessions on Tuesdays\.\n<\/her-own-text>/);
+  assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).sections["medical-necessity"].versions[2].consistency.ownTextCompared, 2);
+  // It is still not context for the other sections (review B2): only her own text or an approved version is.
+  await generate(service, caseId, "crisis-plan", { kind: "draft" });
+  assert.doesNotMatch(model.prompts.find((p) => p.task.includes('"Crisis Plan"'))!.task, /sessions on Tuesdays/);
+});
+
+/* Review round 1 of the ChatGPT fixes, F1: the own-text check and what she asked for */
+
+test("F1, case A: a fact she asked to change is not a contradiction; her request goes to the check", async () => {
+  const { service, caseId, model } = await setup();
+  saved(await service.saveText(caseId, "family-caregiver-involvement", "Grandmother cares for him from 3:00-6:00 p.m. on weekdays.", null));
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "change", fromVersion: 1, request: "The hours changed: it is now 4:00-7:00 p.m." });
+  const check = model.prompts.at(-1)!.task;
+  assert.match(check, /<her-own-text>\nGrandmother cares for him from 3:00-6:00 p\.m\. on weekdays\.\n<\/her-own-text>/);
+  assert.match(check, /<her-request>\nThe hours changed: it is now 4:00-7:00 p\.m\.\n<\/her-request>/);
+  assert.match(check, /a difference from her own text that she asked for there is not a contradiction/);
+  // A paragraph change after it: both of her requests since her text reach the check, oldest first.
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "paragraph", fromVersion: 2, paragraphIndex: 0, request: "shorter" });
+  assert.match(model.prompts.at(-1)!.task, /<her-request>\nThe hours changed: it is now 4:00-7:00 p\.m\.\n\nshorter\n<\/her-request>/);
+});
+
+test("F1, case B: after she fixes a fact by hand in an AI version, later versions are checked against her fix", async () => {
+  const { service, caseId, model, caseFile } = await setup();
+  saved(await service.saveText(caseId, "background-information", "ABA at home from 3:00-6:00 p.m.", null));
+  await generate(service, caseId, "background-information", { kind: "improve", fromVersion: 1 });
+  // She resolves the [CHECK] by hand in the AI's version: an edit of version 2.
+  saved(await service.setCurrent(caseId, "background-information", 2));
+  saved(await service.saveText(caseId, "background-information", "ABA at home from 3:00-5:30 p.m. (confirmed).", null));
+  await generate(service, caseId, "background-information", { kind: "change", fromVersion: 3, request: "shorter" });
+  const check = model.prompts.at(-1)!.task;
+  assert.match(check, /<her-own-text>\nABA at home from 3:00-5:30 p\.m\. \(confirmed\)\.\n<\/her-own-text>/);
+  assert.doesNotMatch(check, /3:00-6:00/, "never the older text she corrected");
+  assert.match(check, /<her-request>\nshorter\n<\/her-request>/, "only what she asked after her fix");
+  const versions = JSON.parse(readFileSync(caseFile, "utf8")).sections["background-information"].versions;
+  assert.deepEqual(versions.map((v: { kind: string }) => v.kind), ["hers", "improve", "edited", "change"]);
+  assert.equal(versions[3].consistency.ownTextCompared, 3);
+});
+
+test("the case's cache key is opaque: a fixed shape, the same for one case, different for each, and never the id itself", () => {
+  const a = "3f0c1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5b";
+  const b = "3f0c1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5c";
+  assert.match(caseCacheKey(a), /^aba-[A-Za-z0-9_-]{32}$/);
+  assert.equal(caseCacheKey(a), caseCacheKey(a));
+  assert.notEqual(caseCacheKey(a), caseCacheKey(b));
+  for (const part of a.split("-")) assert.ok(!caseCacheKey(a).includes(part), part);
+});
+
+/* Review round 2 of the ChatGPT fixes */
+
+test("R1: a fact she set by a request is her fact; the check is told a later version that puts the old value back contradicts it", async () => {
+  const { service, caseId, model } = await setup();
+  saved(await service.saveText(caseId, "family-caregiver-involvement", "Grandmother cares for him from 3:00-6:00 p.m.", null));
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "change", fromVersion: 1, request: "The hours changed: it is now 4:00-7:00 p.m." });
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "change", fromVersion: 2, request: "shorter" });
+  const check = model.prompts.at(-1)!.task;
+  assert.match(check, /<her-own-text>\nGrandmother cares for him from 3:00-6:00 p\.m\.\n<\/her-own-text>/);
+  assert.match(check, /<her-request>\nThe hours changed: it is now 4:00-7:00 p\.m\.\n\nshorter\n<\/her-request>/);
+  assert.match(
+    check,
+    /Where she asked in <her-request> for a fact to change, the value she asked for is now her fact: a new version that keeps her old value or gives a third one is a contradiction \(unless a later request of hers changed it again\)\./,
+  );
+  // Without a request of hers (an improvement of her text) the line is not there.
+  saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
+  await generate(service, caseId, "crisis-plan", { kind: "improve", fromVersion: 1 });
+  assert.doesNotMatch(model.prompts.at(-1)!.task, /the value she asked for is now her fact/);
+});
+
+test("R2: her own text and her requests come from the version's own lineage, not from a hand edit on another branch", async () => {
+  const { service, caseId, model, caseFile } = await setup();
+  saved(await service.saveText(caseId, "family-caregiver-involvement", "Grandmother cares for him from 3:00-6:00 p.m.", null));
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "change", fromVersion: 1, request: "The hours changed: it is now 4:00-7:00 p.m." });
+  // She goes back to her text and edits it by hand (a branch from version 1), then asks for a change of version 2.
+  saved(await service.setCurrent(caseId, "family-caregiver-involvement", 1));
+  saved(await service.saveText(caseId, "family-caregiver-involvement", "Grandmother cares for him from 3:00-6:00 p.m. on weekdays.", null));
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "change", fromVersion: 2, request: "shorter" });
+  const versions = JSON.parse(readFileSync(caseFile, "utf8")).sections["family-caregiver-involvement"].versions;
+  assert.deepEqual(versions.map((v: { kind: string; basedOn?: number }) => [v.kind, v.basedOn ?? null]), [["hers", null], ["change", 1], ["edited", 1], ["change", 2]]);
+  const check = model.prompts.at(-1)!.task;
+  assert.match(check, /<her-own-text>\nGrandmother cares for him from 3:00-6:00 p\.m\.\n<\/her-own-text>/, "version 1, which version 4 came from");
+  assert.match(check, /<her-request>\nThe hours changed: it is now 4:00-7:00 p\.m\.\n\nshorter\n<\/her-request>/, "every request on the way, so 4:00-7:00 is not a false alarm");
+  assert.equal(versions[3].consistency.ownTextCompared, 1);
+  // A draft, which comes from no text of hers, is still compared with her latest hand-written version before it.
+  await generate(service, caseId, "family-caregiver-involvement", { kind: "draft" });
+  assert.match(model.prompts.at(-1)!.task, /<her-own-text>\nGrandmother cares for him from 3:00-6:00 p\.m\. on weekdays\.\n<\/her-own-text>/);
+  assert.doesNotMatch(model.prompts.at(-1)!.task, /<her-request>/);
+});
+
+test("P1: a failed or stopped Check again never takes the earlier check's cost out of the totals", async () => {
+  const model = fakeModel();
+  let failChecks = false;
+  const provider: Provider = {
+    ...model.provider,
+    async *generate(options) {
+      if (failChecks && options.prompt.task.includes("Consistency check")) throw new Error("fetch failed (test)");
+      yield* model.provider.generate(options);
+    },
+  };
+  const { service, caseId, caseFile } = await setup({}, { provider });
+  saved(await service.saveText(caseId, "background-information", "Her own background text.", null));
+  await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  const before = await service.get(caseId, "medical-necessity");
+  assert.ok(before.outcome === "read");
+  const firstCheck = before.section.versions[0].checkCostUsd!;
+  assert.ok(firstCheck > 0);
+  const total = before.section.costUsd;
+
+  failChecks = true;
+  const again = await service.prepareCheck(caseId, "medical-necessity", "anthropic", 1);
+  assert.ok(again.outcome === "ready");
+  for await (const event of again.run(new AbortController().signal)) void event;
+  const after = await service.get(caseId, "medical-necessity");
+  assert.ok(after.outcome === "read");
+  assert.equal(after.section.versions[0].consistency?.status, "failed");
+  assert.equal(after.section.costUsd, total, "the section total keeps what the first check cost");
+  assert.equal(after.section.versions[0].checkCostUsd, firstCheck, "the version's checks cost what they cost");
+  const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections["medical-necessity"].versions[0].consistency;
+  assert.equal(stored.earlierCostUsd, firstCheck);
+  assert.deepEqual(stored.earlierUsage, { uncachedInputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500, reasoningTokens: null });
+
+  // A check stopped before it ends saves nothing, so the earlier record stays as it was.
+  failChecks = false;
+  const stopped = await service.prepareCheck(caseId, "medical-necessity", "anthropic", 1);
+  assert.ok(stopped.outcome === "ready");
+  const controller = new AbortController();
+  controller.abort();
+  for await (const event of stopped.run(controller.signal)) void event;
+  const still = await service.get(caseId, "medical-necessity");
+  assert.ok(still.outcome === "read");
+  assert.equal(still.section.costUsd, total);
+
+  // A successful one adds its own cost to the earlier ones.
+  const ok = await service.prepareCheck(caseId, "medical-necessity", "anthropic", 1);
+  assert.ok(ok.outcome === "ready");
+  for await (const event of ok.run(new AbortController().signal)) void event;
+  const last = await service.get(caseId, "medical-necessity");
+  assert.ok(last.outcome === "read");
+  assert.ok(Math.abs(last.section.costUsd - (total + firstCheck)) < 1e-12);
+  assert.ok(Math.abs(last.section.versions[0].checkCostUsd! - 2 * firstCheck) < 1e-12);
+});
+
+test("a check records its tokens and cost, as a version does", async () => {
+  const { service, caseId, caseFile } = await setup();
+  saved(await service.saveText(caseId, "background-information", "Her own background text.", null));
+  const events = await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  const checked = events.at(-1);
+  assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
+  const version = checked.result.section.versions.at(-1)!;
+  assert.ok(version.checkCostUsd !== null && version.checkCostUsd > 0, "the check's cost is shown");
+  const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections["medical-necessity"].versions[0];
+  const tokens = { uncachedInputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500, reasoningTokens: null };
+  assert.deepEqual(stored.consistency.usage, tokens);
+  assert.deepEqual(stored.generation.usage, tokens, "a version keeps the reasoning tokens too");
+  assert.equal(stored.consistency.costUsd, version.checkCostUsd);
+  // Read back as the app reads it.
+  const read = await service.get(caseId, "medical-necessity");
+  assert.ok(read.outcome === "read");
+  assert.equal(read.section.costUsd, (version.costUsd ?? 0) + (version.checkCostUsd ?? 0));
 });
 
 test("copy for ABA Matrix puts plain text and minimal HTML on the clipboard and counts the markers", async () => {
@@ -548,9 +746,9 @@ test("M4: every kind of section request sends Claude the same settings and the s
     const content = (body.messages as Array<{ content: Array<{ text?: string }> }>)[0].content;
     return content.at(-1)?.text ?? "";
   });
-  // Draft, its check, paragraph change, its check, change, its check, improve (no check: nothing of hers
-  // besides Background Information itself to compare with), and the check run again.
-  assert.equal(requests.length, 8);
+  // Draft, its check, paragraph change, its check, change, its check, improve and its check (against her
+  // own Background Information text, since 2026-11-23), and the check run again.
+  assert.equal(requests.length, 9);
   for (const kind of ["Draft request", "Paragraph change request", "Change request", "Improve request", "Consistency check"]) {
     assert.ok(tasks.some((task) => task.includes(kind)), `a ${kind} was sent`);
   }
@@ -559,6 +757,69 @@ test("M4: every kind of section request sends Claude the same settings and the s
   for (const [index, body] of requests.entries()) {
     assert.deepEqual(cachedPrefix(body), first, `request ${index + 1} (${tasks[index].split("\n").at(-1)?.slice(0, 40)}) has the draft's settings and cached prefix`);
   }
+});
+
+/** An OpenAI answer, streamed as the Responses API does. */
+function openaiAnswer(text: string, model: string) {
+  const response = { id: "resp_test", object: "response", model, status: "completed", output: [], usage: { input_tokens: 100, input_tokens_details: { cached_tokens: 0 }, output_tokens: 50, output_tokens_details: { reasoning_tokens: 10 }, total_tokens: 150 } };
+  return sseResponse([
+    ["response.output_text.delta", { type: "response.output_text.delta", sequence_number: 0, item_id: "m1", output_index: 0, content_index: 0, delta: text, logprobs: [] }],
+    ["response.completed", { type: "response.completed", sequence_number: 1, response }],
+  ]);
+}
+
+test("ChatGPT sign-in: every kind of section request sends the same settings and input; only the instructions change, so implicit caching serves them all", async () => {
+  const { fetchStub, calls } = stubFetch(({ body }) => {
+    const request = body as { model: string; instructions: string };
+    const text = request.instructions.includes("Consistency check")
+      ? "NO CONTRADICTIONS"
+      : request.instructions.includes("Paragraph change request")
+        ? "A better second paragraph."
+        : "First paragraph of an invented draft.\n\nSecond paragraph.\n\nThird paragraph.";
+    return openaiAnswer(text, request.model);
+  });
+  const { service, caseId, caseFile, cases } = await setup({}, { provider: createOpenAIProvider({ fetch: fetchStub }), credential: { kind: "chatgpt", accessToken: "chatgpt-access-token-not-real" } });
+  saved(await service.saveText(caseId, "background-information", "Her own background text.", null));
+  await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  await generate(service, caseId, "medical-necessity", { kind: "paragraph", fromVersion: 1, paragraphIndex: 1, request: "clearer" });
+  await generate(service, caseId, "medical-necessity", { kind: "change", fromVersion: 2, request: "shorter" });
+  await generate(service, caseId, "background-information", { kind: "improve", fromVersion: 1 });
+  // The test's service sends every provider id to this one OpenAI provider; "anthropic" keeps the model the other requests used.
+  const again = await service.prepareCheck(caseId, "medical-necessity", "anthropic", 1);
+  assert.ok(again.outcome === "ready");
+  for await (const event of again.run(new AbortController().signal)) void event;
+  const requests = calls.map((call) => call.body!);
+  assert.equal(requests.length, 9, "draft, paragraph change, change and improve, each with its check, and a check run again");
+  for (const kind of ["Draft request", "Paragraph change request", "Change request", "Improve request", "Consistency check"]) {
+    assert.ok(requests.some((body) => String(body.instructions).includes(kind)), `a ${kind} was sent`);
+  }
+  const { instructions: firstTask, ...first } = requests[0];
+  assert.match(String(firstTask), /Draft request/);
+  // Review round 1, F3: the whole-assessment rules keep their force over the task.
+  for (const body of requests) assert.ok(String(body.instructions).startsWith(`${CHATGPT_TASK_PREAMBLE}\n\n`));
+  // Owner's decision, 2026-11-23: one opaque cache key for every request of the case, whatever its kind.
+  const key = caseCacheKey(caseId);
+  for (const body of requests) assert.equal(body.prompt_cache_key, key);
+  for (const secret of [caseId, "Invented case", "Her own background text", "invented"]) assert.ok(!key.toLowerCase().includes(secret.toLowerCase()), secret);
+  // Another case gets another key.
+  const other = await cases.create({ label: "Another invented case" });
+  assert.ok(other.outcome === "created");
+  await cases.addTextSource(other.case.id, { type: "cde", text: "Invented notes for a second child who does not exist." });
+  await generate(service, other.case.id, "crisis-plan", { kind: "draft" });
+  const last = calls.at(-1)!.body!;
+  assert.equal(last.prompt_cache_key, caseCacheKey(other.case.id));
+  assert.notEqual(last.prompt_cache_key, key);
+  assert.deepEqual(first.reasoning, { effort: "high" });
+  for (const [index, body] of requests.entries()) {
+    const { instructions, ...rest } = body;
+    assert.equal(typeof instructions, "string");
+    assert.deepEqual(rest, first, `request ${index + 1} sends the draft's settings and input`);
+  }
+  // A ChatGPT plan has no price per request: no cost, but the tokens are kept, reasoning included.
+  const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections["medical-necessity"].versions[0];
+  assert.equal(stored.generation.costUsd, null);
+  assert.deepEqual(stored.consistency.usage, { uncachedInputTokens: 100, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 50, reasoningTokens: 10 });
+  assert.equal(stored.consistency.costUsd, null);
 });
 
 /* Review round 2 */
