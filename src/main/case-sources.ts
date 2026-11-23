@@ -138,9 +138,30 @@ export function setRemoved(data: CaseData, id: string, removed: boolean, now: st
   return { ...data, sources };
 }
 
-/** One line of a text's first words: what the list shows to recognize it. */
+/**
+ * A text with the marks of Markdown taken out, for showing only (owner's decision T15): a
+ * text pasted from ChatGPT or a notes app often has them. Heading marks ("## "), quote marks
+ * ("> "), bullets ("- ", "* ", "+ "), rules ("---"), a table's lines (its "| --- |" row goes,
+ * its cells are joined with " · "), bold and italic stars or underscores
+ * around words, and backticks. Numbered lists stay (their numbers say something). The saved
+ * text is never changed.
+ */
+export function withoutMarkdownMarks(text: string): string {
+  return text
+    .replace(/^[ \t]*\|?(?:[ \t]*:?-{3,}:?[ \t]*\|)+[ \t]*:?-{0,}:?[ \t]*$/gmu, "")
+    .replace(/^[ \t]*\|(.*)\|[ \t]*$/gmu, (_row, cells: string) => cells.split("|").map((cell) => cell.trim()).join(" · "))
+    .replace(/^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$/gmu, "")
+    .replace(/^[ \t]{0,3}#{1,6}(?:[ \t]+|$)/gmu, "")
+    .replace(/^[ \t]*>[ \t]?/gmu, "")
+    .replace(/^[ \t]*[-*+][ \t]+/gmu, "")
+    .replace(/(\*\*|__)(?=\S)([^\n]*?\S)\1/gu, "$2")
+    .replace(/(^|[^\p{L}\p{N}*_])([*_])(?=\S)([^*_\n]*?\S)\2(?![\p{L}\p{N}])/gmu, "$1$3")
+    .replace(/`([^`\n]+)`/gu, "$1");
+}
+
+/** One line of a text's first words, without Markdown's marks: what the list shows to recognize it. */
 export function textPreview(text: string, length = 160): string {
-  const line = text.slice(0, length * 4).replace(/\s+/gu, " ").trim();
+  const line = withoutMarkdownMarks(text.slice(0, length * 4)).replace(/\s+/gu, " ").trim();
   if (line.length <= length) return line;
   // Cut between whole characters (a surrogate pair is never split).
   return `${[...line.slice(0, length + 1)].slice(0, -1).join("").trimEnd()}…`;

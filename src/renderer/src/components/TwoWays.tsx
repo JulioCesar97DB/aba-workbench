@@ -31,19 +31,26 @@ export function TwoWays({
   hand,
   ai,
   aiConnected = true,
+  connectWithoutActions = false,
   active,
 }: {
   /** "cards" while the step is empty; "bar" once it has content. */
   layout: "cards" | "bar";
   hand: Way;
   ai: Way;
-  /** False when no AI is connected: the AI side's actions become "Conectar la IA" (to Settings). Ignored when `ai.actions` is empty. */
+  /** False when no AI is connected: the AI side's actions become "Conectar la IA" (to Settings). Ignored when `ai.actions` is empty, unless `connectWithoutActions`. */
   aiConnected?: boolean;
+  /**
+   * Also offer "Conectar la IA" on an AI side with no actions of its own (one that only says
+   * what the AI does with the step later, Documentos) while no AI is connected (P7: inside
+   * every AI card).
+   */
+  connectWithoutActions?: boolean;
   /** The way she is using now (the bar), marked by a bar on its edge and in words to a screen reader. */
   active?: "hand" | "ai";
 }) {
   const { t } = useTranslation();
-  const connect = !aiConnected && ai.actions !== undefined;
+  const connect = !aiConnected && (ai.actions !== undefined || connectWithoutActions);
   const aiSide: Way = connect
     ? {
         ...ai,
