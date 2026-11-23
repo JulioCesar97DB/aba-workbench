@@ -312,7 +312,6 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
       }
     >
       <div className="flex max-w-measure flex-col gap-4">
-        <NotReadyNotice />
         {failures.map((item) => (
           <div key={item.id} role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-danger px-3.5 py-2 text-md font-medium text-danger">
             <span>{t(`section.failedSave.${item.about}`)}</span>
@@ -430,17 +429,6 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         <ProviderLine providers={providers} />
       </div>
     </WorkArea>
-  );
-}
-
-/** The plain warning that the app is not ready for real client data: de-identification is not plugged in yet. */
-function NotReadyNotice() {
-  const { t } = useTranslation();
-  return (
-    <div data-testid="not-ready-notice" className="flex flex-col gap-1 rounded-md border border-warning bg-warning-subtle px-3.5 py-2.5 text-warning">
-      <p className="text-sm font-semibold">{t("section.notReadyTitle")}</p>
-      <p className="text-sm">{t("section.notReadyBody")}</p>
-    </div>
   );
 }
 

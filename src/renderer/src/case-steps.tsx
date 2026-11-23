@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { Term } from "./components/Term.tsx";
 import { TERMS } from "./i18n/terms.ts";
 
-/** The five steps of a case, in order. Their path is also their id. */
-export const CASE_STEPS = ["sources", "case-map", "interventions", "report", "review"] as const;
-export type CaseStep = (typeof CASE_STEPS)[number];
+import { CASE_STEPS, type CaseStep } from "./steps.ts";
+
+export { CASE_STEPS, type CaseStep };
 
 export function casePath(caseId: string, step: CaseStep = "sources", sectionId?: string): string {
   return sectionId ? `/cases/${caseId}/${step}/${sectionId}` : `/cases/${caseId}/${step}`;

@@ -46,12 +46,33 @@ async function openSection(launch: (options?: { language?: "en" | "es" }) => Pro
 
 /** A section as the case's data file holds it (none before the case is first saved with sections). */
 const sectionData = (caseFile: string, id: string) => (JSON.parse(readFileSync(caseFile, "utf8")).sections ?? {})[id];
+/**
+ * Opens today's notes from the foot of the sidebar (owner's decision T4), unless they are
+ * open already. A panel still sliding closed (Escape, a press outside) is not open: Base UI
+ * marks it data-closed at once, so the helper waits for it to be gone, then opens it again.
+ */
+async function openNotes(page: Page) {
+  const box = page.getByTestId("session-notes");
+  const panel = box.locator("xpath=ancestor::*[@role='dialog'][1]");
+  if ((await box.isVisible()) && (await panel.getAttribute("data-open")) !== null) return box;
+  await expect(box).toBeHidden();
+  await page.getByTestId("notes-open").click();
+  await expect(panel).toHaveAttribute("data-open", "");
+  await expect(box).toBeVisible();
+  return box;
+}
+
 const sidebarItem = (page: Page, title: string, language: "en" | "es" = "en") => page.getByRole("navigation", { name: language === "en" ? "Sections" : "Secciones" }).getByRole("link", { name: new RegExp(title.replace("/", "\\/")) });
 
 test("draft a section, change one paragraph, ask for changes, go back, approve and copy for ABA Matrix", async ({ launch, home }) => {
   const { app, page, caseFile } = await openSection(launch, home, "medical-necessity");
   await expect(heading(page)).toHaveText("Medical Necessity Criteria");
-  await expect(page.getByTestId("not-ready-notice")).toContainText("Not ready for real client data yet");
+  // The slim line above every screen; its explanation opens from it.
+  await expect(page.getByTestId("not-ready-notice")).toContainText("Trial version.");
+  await page.getByTestId("not-ready-notice").getByRole("button", { name: "What this means" }).click();
+  await expect(page.getByRole("dialog", { name: "Not ready for real client data yet" })).toBeVisible();
+  await page.getByRole("button", { name: "Got it" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.getByRole("heading", { name: "How do you want to start this section?" })).toBeVisible();
   await screenshot(page, "section-1-start-en");
 
@@ -118,7 +139,12 @@ test("draft a section, change one paragraph, ask for changes, go back, approve a
 
 test("pick up a section she already wrote, improve it, and draft another that builds on it (Spanish)", async ({ launch, home }) => {
   const { app, page, caseFile } = await openSection(launch, home, "background-information", "es");
-  await expect(page.getByText("Todavía no está lista para datos reales de clientes")).toBeVisible();
+  // The slim line above every screen, in Spanish; its explanation opens from it.
+  await expect(page.getByTestId("not-ready-notice")).toContainText("Versión de prueba.");
+  await page.getByTestId("not-ready-notice").getByRole("button", { name: "Qué significa" }).click();
+  await expect(page.getByRole("dialog", { name: "Todavía no está lista para datos reales de clientes" })).toBeVisible();
+  await page.getByRole("button", { name: "Entendido" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
   await page.getByRole("button", { name: /Ya la escribí/ }).click();
   const herText = "The child is a 4-year-old boy who lives at home with his parents.\n\nSpanish and English are spoken at home.";
   await page.getByTestId("section-text").fill(herText);
@@ -131,7 +157,7 @@ test("pick up a section she already wrote, improve it, and draft another that bu
   // Her standing instructions and today's notes.
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/medical-necessity`);
   await page.getByTestId("section-instructions").fill("Cada área con su puntaje, un ejemplo de casa y uno de la escuela.");
-  await page.getByTestId("session-notes").fill("La mamá confirmó hoy que la escuela ya aplica el plan de comunicación.");
+  await (await openNotes(page)).fill("La mamá confirmó hoy que la escuela ya aplica el plan de comunicación.");
   await page.getByTestId("session-notes").blur();
   await page.getByRole("button", { name: /Redactarla con la IA/ }).click();
   const view = page.getByTestId("section-view");
@@ -206,7 +232,7 @@ test("her edits, instructions and notes survive a restart; the file keeps every 
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByTestId("section-view")).toContainText("edited.");
   await page.getByTestId("section-instructions").fill("Two paragraphs, examples from this child's goals.");
-  await page.getByTestId("session-notes").fill("Invented note.");
+  await (await openNotes(page)).fill("Invented note.");
   await page.getByTestId("session-notes").blur();
   await expect(page.getByText("Remembered for all your cases.")).toBeVisible();
   await app.close();
@@ -217,8 +243,69 @@ test("her edits, instructions and notes survive a restart; the file keeps every 
   await expect(page2.getByTestId("section-view")).toContainText("Generalization paragraph, edited.");
   await expect(page2.getByRole("button", { name: "Version 1" })).toBeVisible();
   await expect(page2.getByTestId("section-instructions")).toHaveValue("Two paragraphs, examples from this child's goals.");
-  await expect(page2.getByTestId("session-notes")).toHaveValue("Invented note.");
+  await expect(await openNotes(page2)).toHaveValue("Invented note.");
   expect(sectionData(caseFile, "generalization-and-maintenance").versions.map((v: { kind: string }) => v.kind)).toEqual(["hers", "edited"]);
+});
+
+test("today's notes: closed right after typing, opened again and added to, nothing is lost; a new session archives them", async ({ launch, home }) => {
+  const { page, caseFile } = await openSection(launch, home, "crisis-plan");
+  const notes = await openNotes(page);
+  await notes.fill("The mother said the school changes its schedule.");
+  // Closed at once, inside the typing pause: the same box opens again on the same text (UX-1 review, S1).
+  await page.keyboard.press("Escape");
+  await expect(notes).toBeHidden();
+  await openNotes(page);
+  await expect(notes).toHaveValue("The mother said the school changes its schedule.");
+  // The caret is after what she wrote, so typing at once adds to it (UX-1 review, M5).
+  await page.keyboard.type(" Call on Monday.");
+  // A press outside closes the panel too, and still reaches what was pressed.
+  await heading(page).click();
+  await expect(notes).toBeHidden();
+  await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("The mother said the school changes its schedule. Call on Monday.");
+  await expect(page.getByTestId("notes-open")).toContainText("Today's notes");
+
+  // A new session keeps today's notes in the case and empties the box; nothing is deleted.
+  await openNotes(page);
+  await expect(page.getByText("Today's notes are kept in the case; the AI stops using them.")).toBeVisible();
+  await page.getByRole("button", { name: "Start a new session" }).click();
+  await expect(notes).toHaveValue("");
+  await expect.poll(() => caseJson(caseFile).sessionNotes).toBeUndefined();
+  expect(caseJson(caseFile).sessionNotesArchive.map((archived: { text: string }) => archived.text)).toEqual(["The mother said the school changes its schedule. Call on Monday."]);
+  await notes.fill("A new day.");
+  await notes.blur();
+  await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("A new day.");
+  expect(caseJson(caseFile).sessionNotesArchive).toHaveLength(1);
+});
+
+test("today's notes: a save that fails is said on the notes button on every screen of the case until it is saved", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const { page, caseFile } = await openSection(launch, home, "crisis-plan");
+  const caseFolder = path.dirname(caseFile);
+  const button = page.getByTestId("notes-open");
+  chmodSync(caseFolder, 0o555);
+  try {
+    const notes = await openNotes(page);
+    await notes.fill("Not saved yet.");
+    await page.keyboard.press("Escape");
+    await expect(button).toContainText("Not saved");
+    // On the case map, which shows no list of failures of its own, the button still says so.
+    await goTo(page, `/cases/${SAMPLE_CASE.id}/case-map`);
+    await expect(button).toContainText("Not saved");
+    // In the panel: what she typed, and Try again.
+    await openNotes(page);
+    await expect(notes).toHaveValue("Not saved yet.");
+    // The box saves when it loses focus: leave it while the folder is still read-only, so
+    // that save fails too and Try again stays (otherwise the click itself would save it).
+    await notes.blur();
+    const panel = page.getByRole("dialog", { name: "Today's notes" });
+    await expect(panel.getByRole("alert")).toBeVisible();
+    chmodSync(caseFolder, 0o755);
+    await panel.getByRole("button", { name: "Try again" }).click();
+    await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("Not saved yet.");
+    await expect(button).not.toContainText("Not saved");
+  } finally {
+    chmodSync(caseFolder, 0o755);
+  }
 });
 
 /* Review round 1 */
@@ -490,7 +577,7 @@ test("B3 round 2, notes: after a reload the kept notes are back in the box, and 
   test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
   const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
   const caseFolder = path.dirname(caseFile);
-  const notes = page.getByTestId("session-notes");
+  const notes = await openNotes(page);
   await notes.fill("Saved note.");
   await notes.blur();
   await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("Saved note.");
@@ -502,12 +589,13 @@ test("B3 round 2, notes: after a reload the kept notes are back in the box, and 
     await expect(alert).toBeVisible();
     await reloadWindow(app, page);
     await expect(alert).toBeVisible();
-    await expect(page.getByTestId("session-notes")).toHaveValue("Saved note. Pre-reload addition the mother told me.");
+    await expect(await openNotes(page)).toHaveValue("Saved note. Pre-reload addition the mother told me.");
     chmodSync(caseFolder, 0o755);
     await page.getByRole("alert").filter({ hasText: "Your notes for this session" }).getByRole("button", { name: "Try again" }).click();
     await expect(alert).toBeHidden();
     expect(caseJson(caseFile).sessionNotes.text).toBe("Saved note. Pre-reload addition the mother told me.");
-    const box = page.getByTestId("session-notes");
+    // Pressing Try again, outside the notes panel, closed it: it opens again on the saved notes.
+    const box = await openNotes(page);
     await caretAtEnd(box);
     await box.pressSequentially(" Later.");
     await box.blur();
@@ -587,7 +675,7 @@ test("R3-1: deleting text while saves fail never brings the older text back over
   test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
   const { page, caseFile } = await openSection(launch, home, "crisis-plan");
   const caseFolder = path.dirname(caseFile);
-  const notes = page.getByTestId("session-notes");
+  const notes = await openNotes(page);
   await notes.fill("Start.");
   await notes.blur();
   await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("Start.");
@@ -620,7 +708,7 @@ test("R3-1: deleting text while saves fail, then a reload: the box shows her new
   test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
   const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
   const caseFolder = path.dirname(caseFile);
-  const notes = page.getByTestId("session-notes");
+  const notes = await openNotes(page);
   await notes.fill("Start.");
   await notes.blur();
   await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("Start.");
@@ -633,7 +721,7 @@ test("R3-1: deleting text while saves fail, then a reload: the box shows her new
     const alert = page.getByText("Your notes for this session could not be saved. They are kept");
     await expect(alert).toBeVisible();
     await reloadWindow(app, page);
-    const box = page.getByTestId("session-notes");
+    const box = await openNotes(page);
     await expect(box).toHaveValue("Mother said A.");
     chmodSync(caseFolder, 0o755);
     await caretAtEnd(box);
@@ -667,8 +755,8 @@ test("R4-1: Stop pressed at once, 25 rounds on one screen: the screen and the fi
   const stopOrSkip = page.getByRole("button", { name: /^(Stop|Skip the check)$/ });
   const stoppedMessage = page.getByText("Stopped. Nothing was saved; your versions are unchanged.");
   const tally = { saved: 0, stopped: 0 };
-  // The section has loaded (the notice is drawn with it).
-  await expect(page.getByTestId("not-ready-notice")).toBeVisible();
+  // The section has loaded: it asks how to start it.
+  await expect(page.getByRole("heading", { name: "How do you want to start this section?" })).toBeVisible();
   for (let round = 1; round <= 25; round++) {
     const before = versionsOnDisk();
     if (before > 0) await page.getByLabel("Ask for changes in your own words").fill(`round ${round}`);

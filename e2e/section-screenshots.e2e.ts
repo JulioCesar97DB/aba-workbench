@@ -32,12 +32,13 @@ for (const language of ["en", "es"] as Language[]) {
 
     // Not started.
     await section("background-information");
-    await expect(page.getByTestId("not-ready-notice")).toBeVisible();
+    await expect(page.getByRole("button", { name: es ? /Ya la escribí/ : /I already wrote it/ })).toBeVisible();
     await shot(page, "01-not-started");
 
     // Hers: pasted from ABA Matrix.
     await page.getByRole("button", { name: es ? /Ya la escribí/ : /I already wrote it/ }).click();
     await page.getByTestId("section-text").fill("Mateo is a 4-year-old boy who lives at home with his mother, father and older brother. Spanish and English are spoken at home.\n\nHe was diagnosed with Autism Spectrum Disorder by a developmental pediatrician, as documented in the CDE. He attends a VPK program five mornings a week and receives speech therapy once a week.");
+    await page.getByTestId("notes-open").click();
     await page.getByTestId("session-notes").fill(es ? "La mamá confirmó hoy que la escuela ya aplica el plan de comunicación." : "The mother confirmed today that the school started the communication plan.");
     await page.getByTestId("session-notes").blur();
     await shot(page, "02-pasting-hers");
