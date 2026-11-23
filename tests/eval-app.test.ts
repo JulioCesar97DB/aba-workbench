@@ -9,6 +9,7 @@ import { responsesRequest } from "../src/lib/providers/openai.ts";
 import type { GenerateEvent, GenerateOptions, Provider } from "../src/lib/providers/types.ts";
 import { CASE_FILE_NAME } from "../src/main/case-file.ts";
 import { caseCacheKey } from "../src/main/cache-key.ts";
+import { askUnlessHidden } from "../src/main/close-guard.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
 import { INSTRUCTIONS_FILE_NAME, InstructionsStore } from "../src/main/instructions.ts";
 import { resolveJudgeEnabled } from "../src/main/paths.ts";
@@ -39,6 +40,7 @@ const JUDGE: JudgeInput = {
   expectations: ["Two paragraphs."],
   keyFacts: [{ id: "f1", fact: "A fact." }],
   caseNotes: [],
+  payerFacts: ["Discharge grounds as the payer lists them."],
   format: "json-schema",
   repair: null,
 };
@@ -105,12 +107,42 @@ test("judge: scores the current versions through the app's own path, with the JS
   assert.equal(judged.outputFormat?.name, JUDGE_SCHEMA_NAME);
   assert.equal(judged.cacheKey, caseCacheKey(caseId));
   const meta = events.find((event) => event.type === "meta") as { rulesVersions: Record<string, string> } | undefined;
-  assert.deepEqual(meta?.rulesVersions, { judge: "1", rubric: "1" });
+  assert.deepEqual(meta?.rulesVersions, { judge: "2", rubric: "1" });
 
   const plain = await service.prepareJudge(caseId, "medical-necessity", "openai", { ...JUDGE, format: "plain-json" });
   assert.ok(plain.outcome === "ready");
   await collect(plain.run);
   assert.equal(sent.at(-1)!.outputFormat, null);
+});
+
+test("judge: her session notes and her standing instructions for the section reach the judge's prompt (review B2)", async () => {
+  const { service, caseId, sent } = await setup();
+  const draft = await service.prepareGeneration(caseId, "environmental-changes", "openai", { kind: "draft" });
+  assert.ok(draft.outcome === "ready");
+  await collect(draft.run);
+  assert.equal((await service.saveNotes(caseId, "The YMCA program accepted her on 11/20.")).outcome, "saved");
+  assert.equal((await service.saveInstructions("environmental-changes", "Give her standard supports.")).outcome, "saved");
+  const ready = await service.prepareJudge(caseId, "environmental-changes", "openai", JUDGE);
+  assert.ok(ready.outcome === "ready");
+  await collect(ready.run);
+  const task = sent.at(-1)!.prompt.task;
+  assert.match(task, /<session-notes>\nThe YMCA program accepted her on 11\/20\.\n<\/session-notes>/);
+  assert.match(task, /<standing-instructions>\nGive her standard supports\.\n<\/standing-instructions>/);
+  assert.match(task, /<payer-facts>\n- Discharge grounds as the payer lists them\.\n<\/payer-facts>/);
+});
+
+test("hidden mode never shows the unsaved-changes dialog: it closes and logs (review S9)", async () => {
+  const logged: string[] = [];
+  let asked = 0;
+  const ask = async () => {
+    asked++;
+    return "stay" as const;
+  };
+  assert.equal(await askUnlessHidden(true, ask, (line) => logged.push(line))("failed"), "close");
+  assert.equal(asked, 0);
+  assert.match(logged[0], /Hidden mode: closed without asking about unsaved changes \(failed\)/);
+  assert.equal(await askUnlessHidden(false, ask, (line) => logged.push(line))("timeout"), "stay");
+  assert.equal(asked, 1);
 });
 
 test("judge: refuses input that is not a judge request, and a section with no text", async () => {

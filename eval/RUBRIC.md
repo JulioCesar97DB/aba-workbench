@@ -1,45 +1,63 @@
 ---
 id: rubric
-version: 1
+version: 2
 updated: 2026-11-23
 ---
 
 # The evaluation rubric
 
-Every rules change passes the evaluation set before it reaches the BCBA (owner's decision, 2026-11-23). This rubric is how the set is scored. `eval/rubric.ts` holds the same rubric as data; `tests/eval-rubric.test.ts` keeps the two in step. A change to an item's meaning, its anchors, or how it is scored raises the version. Two runs are compared item by item only when they use the same version.
+Every rules change passes the evaluation set before it reaches the BCBA (owner's decision, 2026-11-23). This rubric is how the set is scored. `eval/rubric.ts` holds the same rubric as data; `tests/eval-rubric.test.ts` keeps the two in step. A change to an item's meaning, its anchors, or how it is scored raises the version. Two runs are compared only when they use the same version.
+
+**Version 2** (review round 1) changes:
+
+- Medical Necessity's "ABA will…" names what the child needs to learn, never a procedure before her plan is approved.
+- Her standard practice counts only when her standing instructions give it.
+- The caregiver given-name rule is not scored until she answers.
+- Payer readiness is scored as its anchor says.
+- The judge reads the session notes, her standing instructions and the payer facts of each section.
 
 ## How it is scored
 
 - Each item is scored **0, 1 or 2 for each section**.
-- **Code** scores some items from the automatic checks (`eval/checks/checks.ts`). These checks run on every saved version, cost nothing and give the same answer every time.
-- **The judge** scores the rest: ChatGPT on the owner's plan, one request per section, sent through the app (`src/lib/judge.ts`). It gets the case's sources, the section under review, the other eight drafts, this rubric, her structure for the section, her habits, and the case key's facts for the section.
-- The judge's instructions and her expectations live in the rubric, not in `rules/`. A rules change therefore cannot move the bar it is measured against.
-- The bar is her own practice. The structure, the shapes and the habits come from her decisions (the decisions file) and from the patterns of her own recent assessments, written here in our words. Nothing of hers is copied.
+- **Code** scores some items from the automatic checks (`eval/checks/checks.ts`, checks version 2). These run on every saved version, cost nothing and give the same answer every time.
+- **The judge** scores the rest: ChatGPT on the owner's plan, one request per section, sent through the app (`src/lib/judge.ts`, prompt version 2). It gets:
+  - the case's sources, her session notes and her standing instructions for the section;
+  - the section under review and the other eight drafts;
+  - this rubric, her structure for the section, her habits, the payer facts of the section, and the case key's facts for the section.
+
+  With `--judge-samples n` each section is judged n times and the median is scored.
+- **Her own bar, fixed in the rubric:** her expectations and the payer facts live here, not in `rules/`, so a rules change cannot move the bar it is measured against. The structure, the shapes and the habits come from her decisions and from the patterns of her own recent assessments, written in our words; nothing of hers is copied.
+- **Rules pending her answer are never counted.** A finding under such a rule (a caregiver called by her given name) is listed as provisional and not scored. A key fact that rests on her unconfirmed standard practice is left out of the judge's list. Neither is part of the verdict.
 
 ### Code scores
 
 - **Markers, shape, examples:**
   - no finding: 2;
-  - only minor findings: 1 (a malformed marker, or a shape slightly off);
+  - only minor findings: 1 (a malformed marker, a shape slightly off);
   - any major finding: 0.
-- **The counted checks** (number provenance, names, repetition, data density, banned patterns, payer readiness):
+- **Payer readiness:** every item there 2; one missing 1; two or more missing 0.
+- **The counted checks** (number provenance, names, repetition, data density, banned patterns):
   - no finding: 2;
   - one or two: 1;
   - three or more: 0.
-- **Key facts** (scored from the judge's answers): the judge marks each fact present (1), partial (½) or absent (0).
+- **Key facts** (from the judge's answers): each fact present (1), partial (½) or absent (0).
   - at least 90%: 2;
   - at least 70%: 1;
   - otherwise: 0.
 
-## The gate
+## The verdict
 
-`pnpm eval` compares a run with the last accepted run. It says plainly whether a rules change fails the gate. It fails when:
+`pnpm eval` compares a run with the last accepted run (`eval/baselines/`):
 
-- a rubric item went down in any section of any case;
-- a check that found nothing in the baseline finds something now;
-- an item scored in the baseline could not be scored this time (a failed draft, or no valid judge answer).
+- **Rescoring:** the baseline's stored drafts are checked again with the current checks before the comparison, so a change to the checks never reads as a change of the rules.
+- **Same judge:** where the baseline was judged by another judge (another prompt, inputs, model or number of samples: its fingerprint), its drafts are judged again in the same run by this judge.
 
-A change that fails the gate does not go to her.
+The verdict is one of:
+
+- **REGRESSION** (hard; exit code 2): a code item went down, a check that found nothing in the baseline finds something now, or an item scored in the baseline could not be scored now (a failed draft, or no valid judge answer). A change with a hard regression does not go to her.
+- **Judge items are reported apart from the verdict:** up and down, for the sections both runs had the same judge. A single judge sample has a noise not measured yet. Whether one sample or the median of three decides is the owner's call, pending.
+- **NOT COMPARED** (exit code 3): the runs used another rubric version, another provider or another drafting mode.
+- **INVALID** (exit code 1): a window, the Dock icon or the focus showed during the run. Such a run is never compared or accepted.
 
 ## Items scored today (stage: report body, the nine narrative sections)
 
@@ -47,25 +65,25 @@ A change that fails the gate does not go to her.
 | --- | --- | --- | --- | --- |
 | `markers` Markers correct | code | Every planted gap the section must mark is marked; no section fills a planted gap; every marker well formed | Only malformed markers | A planted gap unmarked where it must be, or filled with something the sources do not say |
 | `shape` Shape | code | Paragraphs and words within her range for the section (table below); plain paragraphs only (a numbered protocol is allowed in the Crisis Plan) | One paragraph off, or within 15% of the word range | Further off, or headings, bullets, bold or tables |
-| `numbers-sourced` Every number exists in a source | code | None unsourced | One or two | Three or more |
-| `names` Names match the case key | code | No behavior, person or procedure name drifts from the key, and no caregiver is called by a given name | One or two | Three or more |
-| `repetition` No repetition beyond a reference | code | No 12-word run shared with another section; no incident told outside its home in more sections than allowed | One or two | Three or more |
-| `data-density` No list of numbers | code | No sentence with 3 or more values (not dates or times) and no clause of meaning | One or two | Three or more |
-| `banned-patterns` No banned patterns | code | None of: meta sentences, filler, sentences about the text, first person, addressing the reader, promised outcomes, hours of service, scores or a severity level in Background Information, restraint or seclusion | One or two | Three or more |
+| `numbers-sourced` Every number exists in a source | code | None unsourced; a duration, interval or percentage needs its unit too ("3 minutes", "6 months") | One or two | Three or more |
+| `names` Names match the case key | code | No behavior, person or procedure name drifts from the key (a caregiver's given name: provisional, not scored) | One or two | Three or more |
+| `repetition` No repetition beyond a reference | code | No 12-word run shared with another section; no incident told, by its own details, outside its home and the sections whose facts require it in more sections than allowed | One or two | Three or more |
+| `data-density` No list of numbers | code | No sentence with 3 or more values (not dates or times) and no clause saying what they mean, in it or in the next sentence | One or two | Three or more |
+| `banned-patterns` No banned patterns | code | None of: meta sentences, filler, sentences about the text, first person, addressing the reader, promised outcomes, hours of service (unless the CDE's or the IEP's recommendation), scores or a severity level in Background Information, restraint or seclusion | One or two | Three or more |
 | `examples-not-copied` No example copied | code | No 10-word run of an invented example from the rules | – | Any |
-| `payer-readiness` Payer items present | code | Every payer item that applies to the section (list below) | One missing | Two or more |
+| `payer-readiness` Payer items present | code | Every payer item that applies to the section (list below), in the prose | One missing | Two or more |
 | `data-explained` Data explained, not listed | judge | Every score, count or duration says what it means for this child; the most impairing data are argued with incidents | Mostly, with a run that reads as a list | Mostly listed |
 | `thread` Thread with the assessment | judge | Same behaviors, deficits, people and numbers as the other sections, by the same names; connects to what they define, measure or treat; no contradiction | One loose end | Reads on its own, or contradicts |
 | `ownership` Stays in its own lane | judge | Says in full only what it owns; refers to the rest in a clause (her deliberate repeats, the family's priorities and the safety response, are fine) | One passage retells another section | Large parts do |
 | `attribution` Every fact attributed | judge | Every fact names its source in the sentence; the kind of evidence is clear | A few unattributed, or second-hand written as observed | Mostly missing, or a report presented as observation |
 | `structure` Her structure | judge | Follows her structure for the section (below), in order | A part missing or out of order | Does not follow it |
-| `style` Her habits | judge | Her habits (below) | One lapse | Several |
-| `nothing-invented` Nothing invented | judge | Every clinical fact is in the sources or her inputs; no unmarked clinical proposal (her standard supports and discharge criteria are hers, not proposals) | One small step beyond the sources | An invented fact, or several unmarked proposals |
-| `key-facts` The section's facts | judge (per fact), then code | At least 90% of the key's facts for the section | At least 70% | Less |
+| `style` Her habits | judge | Her habits (below); how caregivers are named is not scored | One lapse | Several |
+| `nothing-invented` Nothing invented | judge | Every clinical fact is in the sources, the session notes or her standing instructions; text the payer requires of the section is not invented; no clinical proposal (a named procedure, parameter, program title, support or criterion) that none of them gives, unless marked | One small step beyond them | An invented fact, or several unmarked proposals |
+| `key-facts` The section's facts | judge (per fact), then code | At least 90% of the key's facts for the section (provisional facts left out) | At least 70% | Less |
 
 ## Items for later stages (defined, not scored yet)
 
-These items wait for the sections the AI does not write yet. They are scored once the pipeline reaches those sections (the case formulation and the plan; owner's decision, 2026-11-23).
+These are scored once the pipeline reaches the case formulation and the plan (owner's decision, 2026-11-23).
 
 | Item | Stage | 2 |
 | --- | --- | --- |
@@ -94,33 +112,39 @@ These are the ranges her recent assessments keep. Where her length varies, no li
 
 `SECTION_EXPECTATIONS` in `eval/rubric.ts` gives this in full. In short:
 
-- **Background Information:** household, languages and priorities; diagnosis, medication, birth and medical history; milestones and communication; school, past therapies and prior ABA; concerns by source; social life, play, sensory needs and transitions. Disagreements between sources are shown side by side. No scores and no severity level.
-- **Medical Necessity:** an opening that names the supporting sources and the affected areas; the Vineland-3 in prose, tied to what the caregiver describes; one paragraph per functional area (deficit, one concrete example, impact, what ABA will teach by name); a direct-observation paragraph; a closing on why individualized ABA is necessary, where, how, caregiver training, school coordination and how effectiveness is measured. Never hours.
-- **Strengths and Weaknesses:** strengths first, each tied to how it helps treatment; then the weaknesses, sourced; a closing on how ABA addresses them.
-- **Environmental Changes:** how the child reacts to change, with examples; then the changes and concrete supports. Her standard supports count as her structure.
+- **Background Information:** household, languages and priorities; diagnosis (without its severity level), medication, birth and medical history; milestones and communication; school, past therapies and prior ABA; concerns by source; social life, play, sensory needs and transitions. Disagreements between sources side by side. No scores.
+- **Medical Necessity:**
+  - an opening that names the supporting sources and the affected areas;
+  - the Vineland-3 in prose, tied to what the caregiver describes;
+  - one paragraph per functional area: the deficit, one concrete example, its impact, and what ABA will do, said as **what the child needs to learn** (the reverse of the documented deficit) and the general approach;
+  - a paragraph on what the direct observations showed;
+  - a closing on why individualized ABA is necessary, where and how, caregiver training, how it complements the other services, and how effectiveness is measured.
+
+  Before her plan is approved, a named procedure, parameter, program title or support (DRA, FCT, DRO, Premack, high-p, NCR, BST, a warning, a visual schedule) is a proposal: it belongs here only where her sections, standing instructions, notes or a source give it. The diagnosis carries its severity level as the CDE states it, or a marker. Never hours.
+- **Strengths and Weaknesses:** strengths first, each tied to how it helps treatment; then the needs, sourced; a closing on how ABA addresses them.
+- **Environmental Changes:** how the child reacts to change, with examples; then the changes and their supports as her plan, instructions, notes or a source give them. Her standard supports count as her structure only when her standing instructions give them; otherwise an unnamed support is marked missing. (Her standard supports are pending her confirmation.)
 - **Family/Caregiver Involvement:** involvement and priorities, who takes part and when, Behavioral Skills Training in the home language, current responses described without blame.
 - **Generalization and Maintenance:** two paragraphs, as she described them.
-- **Discharge:** her standard criteria tied to this child (goals substantially met; fading after the reduction goals hold three consecutive months with the caregivers independent; services end after six consecutive months without clinically significant behavior; fading pauses if skills slip).
+- **Discharge:** the payer's discharge grounds, then criteria tied to this child, how services step down and the transition. Her standard criteria and thresholds count only when her standing instructions give them; otherwise a number none of the inputs gives is marked missing. (Pending her confirmation.)
 - **Risk Assessment:** risks to carrying out the plan first; then behavior risks from most to least dangerous; then least-restrictive procedures and a pointer to the Crisis Plan; then training and fidelity. No rating.
 - **Crisis Plan:** scaled to the risk: a numbered protocol for the highest-risk behavior, or a plain statement that none is needed with one safety scenario. Always the monitoring. Never restraint.
 
 ## Her habits (for the judge)
 
-- The child's first name. Caregivers by relation, rarely by their own names. "The BCBA".
+- The child's first name; "the BCBA". How caregivers are named is pending her answer and not scored.
 - Third person, active voice. Present tense for current functioning, past for history and observations, "will" for the plan.
 - Programs and strategies by the same names everywhere.
 - Deliberate repeats only: the family's priorities and the safety response.
 - No bullets in the narrative, no blame of the family, no promised outcomes. Harmless movement is never a target; speech and eye contact are never required.
 - Missing or conflicting information is stated, never guessed.
 
-## Payer readiness items (narrative sections)
+## Payer facts the judge reads, and payer readiness items code checks
 
-These come from Florida Medicaid policy 4.2.1 and 6.2.2 and the Molina guide (sections 2 to 5 and 8), and apply to the narrative sections. Each is a pattern check in `PAYER_ITEMS`.
+`SECTION_PAYER_FACTS` in `eval/rubric.ts` gives the judge, per section, what Florida Medicaid policy 4.2.1 and 6.2.2 and the Molina guide (sections 2 to 5 and 8) require. Examples: the AHCA discharge grounds, and caregiver training that increases as the transition nears. Text the payer requires is not invented.
 
-- **Background Information:**
-  - the diagnosis as the CDE states it;
-  - every other service;
-  - prior ABA, or that there was none.
+Code checks these items (`PAYER_ITEMS`), in the prose; a marker counts only where a marker is the right answer:
+
+- **Background Information:** the diagnosis as the CDE states it; every other service; prior ABA, or that there was none.
 - **Medical Necessity:**
   - the diagnosis;
   - impairment in two or more settings;
@@ -130,38 +154,32 @@ These come from Florida Medicaid policy 4.2.1 and 6.2.2 and the Molina guide (se
   - how progress is measured.
 - **Strengths and Weaknesses:** strengths documented.
 - **Environmental Changes:** supports for the changes, or a marker.
-- **Family/Caregiver Involvement:**
-  - each caregiver by role;
-  - their availability;
-  - the language of training;
-  - what training covers.
-- **Generalization and Maintenance:**
-  - generalization across settings and people;
-  - maintenance probes;
-  - reinforcement thinned.
+- **Family/Caregiver Involvement:** each caregiver by role; their availability; the language of training; what training covers.
+- **Generalization and Maintenance:** generalization across settings and people; maintenance probes; reinforcement thinned.
 - **Discharge:**
   - objective criteria, or markers;
-  - caregiver criteria;
+  - caregiver criteria, or a marker for their number;
   - how services step down;
   - the transition.
-- **Risk Assessment:**
-  - every target behavior;
-  - injuries and near misses.
-- **Crisis Plan:**
-  - when emergency services are called, or a marker;
-  - early signs.
+- **Risk Assessment:** every target behavior; injuries and near misses.
+- **Crisis Plan:** when emergency services are called, or a marker; early signs.
 
 ## The case keys
 
-Each invented case has a `key.json` next to its `case.json` (`eval/key.ts` gives the schema). It holds:
+Each invented case has a `key.json` next to its `case.json` (`eval/key.ts` gives the schema; key version 2). It holds:
 
 - how each source is loaded;
 - the expected behaviors, with their names, accepted variants, drifting names and functions;
 - the people;
-- the planted gaps (where each must be marked, and what would fill one wrongly);
-- incidents and notes with their home section and how many other sections may refer to them (provisional where her section map is not settled);
+- the planted gaps: where each must be marked, with the marker it needs, and what would fill one wrongly;
+- the incidents and notes:
+  - each told only by its own details;
+  - with its home section by step 0's section map (`rules/guide.md`);
+  - the sections whose facts require it;
+  - how many other sections may refer to it;
+  - and whether the home is provisional (shown in the summary);
 - phrases allowed to repeat;
 - the payer parameters;
-- the facts each section must contain.
+- the facts each section must contain, placed in their home by the same map. A fact marked provisional (her standard practice) is not counted.
 
 The harness takes every case folder that has a key.

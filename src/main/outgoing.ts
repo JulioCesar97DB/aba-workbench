@@ -102,11 +102,19 @@ async function loadSources(input: readonly OutgoingSource[]): Promise<SourceDocu
  * goes through the same preparation as her requests, so de-identification, when it plugs
  * in, covers it too: the case's sources and its drafted sections are the case's content.
  */
-export async function prepareJudgeRequest(input: { section: SectionId; judge: JudgeInput; sections: readonly JudgedSection[]; sources: OutgoingSource[] }): Promise<PreparedRequest> {
+export async function prepareJudgeRequest(input: {
+  section: SectionId;
+  judge: JudgeInput;
+  sections: readonly JudgedSection[];
+  sources: OutgoingSource[];
+  /** Her session notes and her standing instructions for the section, as the drafts got them (review B2). */
+  notes: string | null;
+  instructions: string | null;
+}): Promise<PreparedRequest> {
   const sources = await loadSources(input.sources);
   return {
     [prepared]: true,
-    prompt: buildJudgePrompt(input.judge, input.section, input.sections, sources),
+    prompt: buildJudgePrompt(input.judge, input.section, input.sections, sources, { notes: input.notes, instructions: input.instructions }),
     rulesVersions: { judge: JUDGE_PROMPT_VERSION, rubric: input.judge.rubricVersion },
     sourcesUsed: input.sources.map(({ id, title }) => ({ id, title })),
     deidentified: false,

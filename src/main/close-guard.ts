@@ -17,6 +17,24 @@ import type { Language } from "../shared/api.ts";
  */
 export const SAVE_WAIT_MS = 5_000;
 
+/**
+ * The answer to "some changes could not be saved" when the app runs hidden (development,
+ * --hidden: the window tests and pnpm eval). No dialog may ever show then, so the window
+ * closes and the problem is logged (review S9 of the evaluation harness); otherwise the
+ * user is asked.
+ */
+export function askUnlessHidden(
+  hidden: boolean,
+  ask: (problem: UnsavedProblem) => Promise<"stay" | "close">,
+  log: (message: string) => void,
+): (problem: UnsavedProblem) => Promise<"stay" | "close"> {
+  if (!hidden) return ask;
+  return async (problem) => {
+    log(`Hidden mode: closed without asking about unsaved changes (${problem}).`);
+    return "close";
+  };
+}
+
 export type UnsavedProblem = "failed" | "timeout";
 
 export interface CloseGuardOptions {

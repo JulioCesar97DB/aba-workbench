@@ -52,10 +52,19 @@ test("sentences: split after a period, not after Dr., M.S. or p.m.", () => {
 
 test("statedNumbers: dates, times and values made comparable; instrument names are not numbers", () => {
   const keys = statedNumbers("On October 7, 2026 (10/07/2026) at 3:30 p.m., the Vineland-3 and DSM-5 gave 1,000 and 4.5 and the 1st percentile; F84.0; 40%.").map(lookupKey);
-  assert.deepEqual(keys, ["date:10-07:2026", "date:10-07:2026", "time:3:30", "value:1000", "value:4.5", "value:1", "value:40"]);
+  assert.deepEqual(keys, ["date:10-07:2026", "date:10-07:2026", "time:3:30", "value:1000", "value:4.5", "value:1", "qty:40:percent"]);
   assert.deepEqual(statedNumbers("from 3:00 to 5:30 p.m.").map(lookupKey), ["time:3:00", "time:5:30"]);
   assert.deepEqual(statedNumbers("15:00").map(lookupKey), ["time:3:00"], "a 24-hour time is the same clock as 3:00 p.m.");
   assert.deepEqual(statedNumbers("CDE (2026-07-30); el 20/09/2026").map(lookupKey), ["date:07-30:2026", "date:09-20:2026"], "an ISO date, and a Spanish day/month date");
+});
+
+test("numbers: a duration, an interval or a percentage needs its unit in a source (review S6)", () => {
+  const index = numberIndex(["Diego (6) was hit 3 times. Outbursts lasted 6 to 15 minutes; a 2-hour observation. Embarazo de 38 semanas. Age equivalent 7:2."]);
+  const unsourced = (text: string) => checkNumbers("discharge-and-service-fading-plan", text, index).map((f) => f.message);
+  assert.deepEqual(unsourced("A DRO interval of 3 minutes will be used, reset after 6 seconds."), ['"3" is in no source.', '"6" is in no source.']);
+  assert.deepEqual(unsourced("Services end after 3 consecutive months."), ['"3" is in no source.']);
+  assert.deepEqual(unsourced("She hit 3 times; outbursts of 6 minutes and 15 minutes over a 2-hour visit; Diego, 6 years old, at 38 weeks."), []);
+  assert.deepEqual(unsourced("An age equivalent of 7 years 2 months."), [], "a score report's years:months supports it");
 });
 
 test("numbers: a number in no source is found; dates, times and values in the sources are not", () => {
@@ -97,9 +106,9 @@ test("shape: limits from the rules, minor when slightly off, formatting always m
 test("names: drift names and a caregiver's given name are found; quoted speech is not", () => {
   const key = testKey();
   const findings = checkNames("risk-assessment", 'Rosa said the leaving the area happened twice. She said "Rosa is mean."', key);
-  assert.deepEqual(findings.map((f) => f.message), [
-    'Behavior "elopement" called "leaving the area".',
-    "The mother is called by her or his given name (1 times); her style refers to caregivers by relation (provisional, pending her answer).",
+  assert.deepEqual(findings.map((f) => [f.message, f.provisional ?? false]), [
+    ['Behavior "elopement" called "leaving the area".', false],
+    ["The mother is called by her or his given name (1 times): provisional, pending her answer, not scored.", true],
   ]);
   assert.deepEqual(checkNames("risk-assessment", "Her mother reported elopement.", key), []);
 });
@@ -113,30 +122,41 @@ test("repetition: a 12-word run shared by two sections, both told; allowed phras
   assert.deepEqual(checkRepetition({ "background-information": diagnosis, "medical-necessity": diagnosis }, key, new Set()), []);
 });
 
-test("repetition: an incident told outside its home in more sections than allowed", () => {
+test("repetition: an incident is a retelling only with its own details, never in its home or where a key fact requires it, and only beyond the allowance (review S7)", () => {
   const key = caseB.key;
-  const loaded = new Set(["notes"]);
-  const ymca = "The mother confirmed that the YMCA program accepted her.";
-  const two = checkRepetition({ "environmental-changes": ymca, "family-caregiver-involvement": ymca.replace("confirmed", "said") }, key, loaded);
-  assert.deepEqual(two.filter((f) => /YMCA/.test(f.message)), [], "home plus one reference is allowed");
-  const three = checkRepetition({ "environmental-changes": "YMCA one.", "family-caregiver-involvement": "YMCA two.", "discharge-and-service-fading-plan": "YMCA three." }, key, loaded);
-  assert.deepEqual(three.map((f) => f.section).sort(), ["discharge-and-service-fading-plan", "family-caregiver-involvement"]);
-  assert.deepEqual(checkRepetition({ "environmental-changes": "YMCA.", "risk-assessment": "YMCA.", "crisis-plan": "YMCA." }, key, new Set()), [], "a note that was not given is not checked");
+  const loaded = new Set(["notes", "observations"]);
+  const note = "On 11/20/2026 the mother confirmed that the YMCA program accepted Sofía.";
+  const told = (texts: Record<string, string>) => checkRepetition(texts as never, key, loaded).filter((f) => /Retells/.test(f.message)).map((f) => f.section);
+  assert.deepEqual(told({ "environmental-changes": note, "family-caregiver-involvement": "The YMCA staff will learn her cues.", "generalization-and-maintenance": "Practice continues at the YMCA program." }), [], "naming the program is not retelling the note");
+  assert.deepEqual(told({ "environmental-changes": note, "family-caregiver-involvement": note, "discharge-and-service-fading-plan": note, "risk-assessment": note }), ["discharge-and-service-fading-plan", "risk-assessment"], "one reference allowed (the first in report order); the later ones are flagged");
+  const street = "On 10/10/2026 she pulled her wrist free and ran across the street.";
+  assert.deepEqual(told({ "medical-necessity": street, "risk-assessment": street, "crisis-plan": "If Sofía runs toward the street, the adult follows the protocol.", "discharge-and-service-fading-plan": "Safe street crossing instead of running into the street." }), [], "Medical Necessity must tell it; a plan for the street is not the incident");
+  assert.deepEqual(told({ "environmental-changes": "YMCA accepted her.", "risk-assessment": "YMCA accepted her.", "crisis-plan": "YMCA accepted her." }).length, 1);
+  assert.deepEqual(checkRepetition({ "environmental-changes": note, "risk-assessment": note, "crisis-plan": note }, key, new Set()).filter((f) => /Retells/.test(f.message)), [], "a note that was not given is not checked");
 });
 
-test("data density: three numbers with no clause of meaning", () => {
+test("data density: three values with no clause of meaning, in that sentence or the next (review S4)", () => {
   assert.equal(checkDataDensity("medical-necessity", "She had 3, 1 and 2 episodes of aggression.").length, 1);
-  assert.deepEqual(checkDataDensity("medical-necessity", "She had 3, 1 and 2 episodes of aggression, which limits her time with peers."), []);
-  assert.deepEqual(checkDataDensity("medical-necessity", "Her standard score of 66 places her below 99 of 100 same-age peers."), []);
+  assert.deepEqual(checkDataDensity("medical-necessity", "Her standard score of 66 places her well below most same-age peers, at 1 in 100, with 3 more below."), []);
+  const hers = "On the Vineland-3, Sofía obtained an Adaptive Behavior Composite of 72, a Communication score of 75 and a Socialization score of 68. These findings are reflected in her mother's account of mornings.";
+  assert.deepEqual(checkDataDensity("medical-necessity", hers), [], "her pattern: the scores, then what they show");
+  assert.equal(checkDataDensity("medical-necessity", "She scored 72, 75 and 68 and does not like tests.").length, 1, "'does not' anywhere is not an interpretation");
+  assert.equal(checkDataDensity("medical-necessity", "She scored 72, 75 and 68.\n\nThese findings are reflected in her day.").length, 1, "the next paragraph does not explain this one");
 });
 
-test("banned patterns: meta sentences, filler, first person and restraint; markers and quotes are not prose", () => {
+test("banned patterns: meta sentences, filler, first person, hours, promises and restraint; markers and quotes are not prose", () => {
   const found = (text: string) => checkBannedPatterns("discharge-and-service-fading-plan", text).map((f) => f.message.replace(/^Banned pattern \(([^)]+)\).*$/, "$1"));
   assert.deepEqual(found("These are school goals, not evidence that Sofía has met them."), ["meta-not-evidence"]);
   assert.deepEqual(found("It is important to note that she improved."), ["filler-important"]);
   assert.deepEqual(found("We will teach her to wait."), ["first-person"]);
+  assert.deepEqual(found("Fading begins in Phase I, then Tier I supports end."), [], "a Roman numeral is not the first person (review M9)");
   assert.deepEqual(found("Staff will use a physical hold if needed."), ["restraint"]);
+  assert.deepEqual(found("If Sofía does not stop hitting, staff will use a basket hold until she is calm."), ["restraint"], "a negation elsewhere in the sentence does not excuse it (review S5)");
   assert.deepEqual(found("No restraint or seclusion is used."), []);
+  assert.deepEqual(found("ABA services of 25 hours per week will be delivered at home and school."), ["hours"], "review S5");
+  assert.deepEqual(found("The CDE recommended 25 to 30 hours per week of ABA."), []);
+  assert.deepEqual(found("ABA will eliminate her aggression."), ["promise"]);
+  assert.deepEqual(found("The RBT will ensure the door is locked."), [], "procedural, not a promise (review M9)");
   assert.deepEqual(found('She said "I hate you, we are done."'), [], "her quoted words are hers");
   assert.deepEqual(found("[MISSING: please confirm the date we agreed.]"), []);
 });
@@ -161,14 +181,26 @@ test("examples: extracted by convention, and a copied run of 10 words found", ()
   assert.deepEqual(checkExamples("medical-necessity", "Sofía scored 72 on Daily Living Skills, below most peers.", examples), []);
 });
 
-test("payer readiness: the items of a section, each found or listed as missing", () => {
+test("payer readiness: the items of a section, each found in the prose (not in a marker) or listed as missing (review S11)", () => {
   const key = testKey();
-  const findings = checkPayerReadiness("medical-necessity", "Autism Spectrum Disorder limits her at home.", key);
+  const findings = checkPayerReadiness("medical-necessity", "Autism Spectrum Disorder limits her at home and gets her attention.", key);
   const ids = findings.map((f) => /\(([^)]+)\)/.exec(f.message)?.[1]);
-  assert.deepEqual(ids, ["mn-settings", "mn-functions", "mn-caregiver-training", "mn-measurement"]);
+  assert.deepEqual(ids, ["mn-settings", "mn-functions", "mn-caregiver-training", "mn-measurement"], "'attention' alone is not a function");
   const complete = "Autism Spectrum Disorder limits her at home and at school. Her aggression serves escape. Caregiver training will teach her mother. Progress will be measured with session data.";
   assert.deepEqual(checkPayerReadiness("medical-necessity", complete, key), []);
+  assert.equal(checkPayerReadiness("medical-necessity", complete.replace("Caregiver training will teach her mother.", "[MISSING: caregiver training plan]"), key).length, 1, "a marker is not the item");
+  const gm = (text: string) => checkPayerReadiness("generalization-and-maintenance", text, key).map((f) => /\(([^)]+)\)/.exec(f.message)?.[1]);
+  assert.deepEqual(gm("Skills generalize. Weekly probes. The team keeps thinking about it."), ["gm-thinning"], "'thinking' is not thinning");
+  const fci = (text: string) => checkPayerReadiness("family-caregiver-involvement", text, key).map((f) => /\(([^)]+)\)/.exec(f.message)?.[1]);
+  assert.deepEqual(fci("Her mother is available on evenings for training; her body language is tense."), ["fci-language"], "'body language' is not the language of training");
+  const dc = "Her mother will carry out the safety protocol during the routines she manages with [MISSING: required level of independent, correct implementation for each caregiver].";
+  assert.ok(!checkPayerReadiness("discharge-and-service-fading-plan", dc, key).some((f) => /dc-caregiver/.test(f.message)), "the caregiver criterion's number may be a marker (step 3)");
   for (const item of PAYER_ITEMS) assert.ok(REPORT_SECTIONS.some((s) => s.id === item.section), item.id);
+});
+
+test("planted gaps: a sentence with the BCBA's observation and, after a semicolon, the IEP's school incident fills nothing (step 3)", () => {
+  const sentence = "The BCBA observed Property destruction 3 times in 6 hours; at school, the teacher documented in the IEP that Sofía threw a chair and the class evacuated.";
+  assert.deepEqual(checkMarkers("risk-assessment", sentence, caseB.key), []);
 });
 
 test("runChecks runs every check on every section", () => {
@@ -195,6 +227,12 @@ test("case keys: every case folder with a key loads, and its key matches its cas
   }
 });
 
+test("case keys: a gap that must be marked needs a marker pattern (review M1)", () => {
+  const gap = { id: "g", gap: "A gap.", mustMarkIn: ["medical-necessity"] };
+  assert.equal(CaseKeySchema.safeParse({ ...caseA.key, plantedGaps: [gap] }).success, false);
+  assert.equal(CaseKeySchema.safeParse({ ...caseA.key, plantedGaps: [{ ...gap, marker: "date" }] }).success, true);
+});
+
 test("case keys: a key that names a source the case lacks is refused", () => {
   const problems = keyProblems(caseA.caseFile, { ...caseA.key, incidents: [{ ...caseA.key.incidents[0], from: ["iep"] }] });
   assert.deepEqual(problems, [`incident ${caseA.key.incidents[0].id} comes from unknown source iep`]);
@@ -208,13 +246,14 @@ function sourceText(folder: string, file: string): string {
 
 test("case keys: the numbers in each key's facts are in that case's sources", () => {
   for (const loaded of [caseA, caseB]) {
+    // A provisional fact rests on her standard practice, which no source gives yet.
     const files = [
       ...loaded.caseFile.sources.map((source) => loaded.key.sources.find((s) => s.id === source.id)?.textOf ?? source.file).filter((file) => !file.endsWith(".pdf")),
       ...loaded.key.extraSources.map((source) => source.file),
     ];
     const index = numberIndex([...files.map((file) => sourceText(loaded.folder, file)), loaded.key.inputs.notes ?? ""]);
     for (const [section, facts] of Object.entries(loaded.key.sectionFacts)) {
-      for (const fact of facts ?? []) {
+      for (const fact of (facts ?? []).filter((f) => !f.provisional)) {
         const findings = checkNumbers(section as never, fact.fact, index);
         assert.deepEqual(findings.map((f) => f.message), [], `${loaded.key.caseId} ${fact.id}`);
       }

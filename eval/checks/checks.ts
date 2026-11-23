@@ -5,9 +5,16 @@
  * model, so all of it is unit-tested (tests/eval-checks.test.ts).
  */
 import { checkStructure, findMarkers, type SectionShape } from "../../src/shared/section-text.ts";
-import type { ReportSectionId } from "../../src/shared/report-sections.ts";
+import { REPORT_SECTIONS, type ReportSectionId } from "../../src/shared/report-sections.ts";
 import type { CaseKey, CaseKeyName } from "../key.ts";
 import { lookupKey, normalize, numberIndex, sentences, splitParagraphs, statedNumbers, words } from "./text.ts";
+
+/**
+ * The checks' version. A change to what a check finds raises it. The compare runs the
+ * current checks again on the baseline's stored texts anyway (review B3), so it is
+ * recorded to read old results, not to gate the comparison.
+ */
+export const CHECKS_VERSION = "2";
 
 export const CHECK_IDS = ["markers", "shape", "numbers", "names", "repetition", "data-density", "banned-patterns", "examples", "payer-readiness"] as const;
 export type CheckId = (typeof CHECK_IDS)[number];
@@ -24,6 +31,11 @@ export interface Finding {
    * shape a little off). Every finding is listed in the results either way.
    */
   severity: "major" | "minor";
+  /**
+   * A finding under a rule pending her answer (a caregiver called by her given name):
+   * listed, never scored and never part of the verdict (review S1).
+   */
+  provisional?: boolean;
 }
 
 const rx = (pattern: string) => new RegExp(pattern, "iu");
@@ -154,7 +166,15 @@ export function checkNames(section: ReportSectionId, text: string, key: CaseKey)
   for (const person of key.people) {
     if (person.givenName?.use !== "avoid") continue;
     const count = [...prose.matchAll(rxg(person.givenName.pattern))].length;
-    if (count > 0) findings.push({ check: "names", section, severity: "major", message: `The ${person.role} is called by her or his given name (${count} times); her style refers to caregivers by relation (provisional, pending her answer).` });
+    if (count > 0) {
+      findings.push({
+        check: "names",
+        section,
+        severity: "major",
+        provisional: true,
+        message: `The ${person.role} is called by her or his given name (${count} times): provisional, pending her answer, not scored.`,
+      });
+    }
   }
   return findings;
 }
@@ -208,17 +228,20 @@ export function checkRepetition(texts: Partial<Record<ReportSectionId, string>>,
   }
   for (const incident of key.incidents) {
     if (!incident.from.every((id) => loadedSources.has(id))) continue;
-    const telling = Object.entries(texts)
-      .filter(([, text]) => sentences(withoutMarkers(text ?? "")).some((sentence) => incident.mentions.some((all) => all.every((pattern) => rx(pattern).test(sentence.text)))))
-      .map(([section]) => section as ReportSectionId);
-    const outside = telling.filter((section) => section !== incident.home);
-    if (outside.length <= incident.references) continue;
-    for (const section of outside) {
+    // In report order, so "beyond the allowance" means the later sections (review S7).
+    const telling = REPORT_SECTIONS.map(({ id }) => id).filter((id) => {
+      const text = texts[id];
+      return text !== undefined && sentences(withoutMarkers(text)).some((sentence) => incident.mentions.some((all) => all.every((pattern) => rx(pattern).test(sentence.text))));
+    });
+    // Its home, and the sections whose own key facts require it, never count against it.
+    const outside = telling.filter((section) => section !== incident.home && !incident.requiredIn.includes(section));
+    const beyond = outside.slice(incident.references);
+    for (const section of beyond) {
       findings.push({
         check: "repetition",
         section,
         severity: "major",
-        message: `Retells "${incident.description}", whose home is ${incident.home}; ${outside.length} sections outside it tell it (${outside.join(", ")}), ${incident.references} allowed.`,
+        message: `Retells "${incident.description}", whose home is ${incident.home}${incident.provisional ? " (provisional home)" : ""}: ${outside.length} sections outside it tell it (${outside.join(", ")}), ${incident.references} allowed.`,
       });
     }
   }
@@ -227,14 +250,19 @@ export function checkRepetition(texts: Partial<Record<ReportSectionId, string>>,
 
 /* 6. Data density ---------------------------------------------------------------------- */
 
-/** Words that make a clause say what numbers mean (a comparison, a consequence, an explanation). */
+/**
+ * Clauses that say what numbers mean: an interpretation, a comparison with peers, a
+ * consequence for the child. Narrow on purpose (review S4): a sentence that merely has
+ * "does not", "needs" or "risk" somewhere is not an interpretation.
+ */
 const MEANING = new RegExp(
   [
-    "because", "which (?:means|shows|indicates|places|puts|limits|reflects|suggests)", "meaning", "means", "so that", "therefore", "as a result", "thus",
-    "indicat\\w*", "suggest\\w*", "reflect\\w*", "show(?:s|ed|ing)? that", "compared (?:with|to)", "than (?:most|same-age|peers|other|typical|expected)",
-    "below (?:average|what|the|expected|same)", "above (?:average|the)", "same-age", "peers", "in a group of", "out of (?:every )?\\d+ children", "would be expected",
-    "limit\\w*", "interfer\\w*", "prevent\\w*", "keep\\w* (?:her|him|them) from", "unable", "cannot", "could not", "does not", "did not", "affect\\w*", "impact\\w*",
-    "risk", "danger\\w*", "injur\\w*", "miss(?:es|ed|ing)?", "lost", "needs?", "requir\\w*", "so (?:she|he|they|the)", "leaving (?:her|him)", "for (?:her|his) age",
+    "because", "which (?:means|shows|indicates|places|puts|limits|reflects|suggests)", "meaning that", "means that", "so that", "therefore", "as a result",
+    "indicat(?:es|ing|ed) that", "suggest(?:s|ing|ed) that", "reflect(?:s|ed|ing)?", "show(?:s|ed|ing)? that", "compared (?:with|to)",
+    "than (?:most|same-age|peers|other children|typical|expected)", "(?:well|far|just) below", "below (?:average|what|expected|same-age|most)", "above average",
+    "same-age peers", "in a group of", "out of (?:every )?\\d+ children", "would be expected", "for (?:her|his|their) age",
+    "these (?:findings|scores|results|ratings|numbers)", "limit(?:s|ed|ing)? (?:her|his|their)", "interfer(?:es|ed|ing) with", "prevent(?:s|ed|ing)? (?:her|him|them)",
+    "keep(?:s)? (?:her|him|them) from", "unable to", "puts? (?:her|him|them|others) at risk",
   ].join("|"),
   "iu",
 );
@@ -242,23 +270,38 @@ const MEANING = new RegExp(
 /** How many numbers a sentence needs before it must also say what they mean. */
 export const DENSE_NUMBERS = 3;
 
-/** Sentences with three or more values (not dates or times) and no clause saying what they mean: a list, not an argument. */
+/**
+ * Sentences with three or more values (not dates or times) and no clause saying what they
+ * mean, in that sentence or the next one of the same paragraph (her pattern: the scores,
+ * then "These findings are reflected in…"): a list, not an argument.
+ */
 export function checkDataDensity(section: ReportSectionId, text: string): Finding[] {
   const findings: Finding[] = [];
-  for (const sentence of sentences(withoutMarkers(text))) {
+  const all = sentences(withoutMarkers(text));
+  all.forEach((sentence, index) => {
     // Data are values (scores, counts, durations); dates, years and clock times say when, not how much.
     const count = statedNumbers(sentence.text).filter((number) => number.kind === "value" && !/^(?:19|20)\d\d$/.test(number.value)).length;
-    if (count >= DENSE_NUMBERS && !MEANING.test(sentence.text)) {
-      findings.push({ check: "data-density", section, severity: "major", message: `${count} numbers and no clause of meaning.`, excerpt: clip(sentence.text) });
-    }
-  }
+    if (count < DENSE_NUMBERS || MEANING.test(sentence.text)) return;
+    const next = all[index + 1];
+    if (next && next.paragraph === sentence.paragraph && MEANING.test(next.text)) return;
+    findings.push({ check: "data-density", section, severity: "major", message: `${count} numbers and no clause of meaning.`, excerpt: clip(sentence.text) });
+  });
   return findings;
 }
 
 /* 7. Banned patterns ------------------------------------------------------------------- */
 
 /** Patterns she would not write (rules/style.md on step 0, the quality runs' findings), checked outside markers and quotes. */
-export const BANNED_PATTERNS: Array<{ id: string; pattern: RegExp; what: string; unless?: RegExp; sections?: readonly ReportSectionId[] }> = [
+export const BANNED_PATTERNS: Array<{
+  id: string;
+  pattern: RegExp;
+  what: string;
+  /** Not a finding when the sentence matches this. */
+  unless?: RegExp;
+  /** Not a finding when the sentence matches every one of these. */
+  unlessAll?: readonly RegExp[];
+  sections?: readonly ReportSectionId[];
+}> = [
   { id: "meta-not-evidence", pattern: /\bthese are\b[^.]{0,100}\bnot evidence\b/iu, what: "a comment on the evidence (meta sentence)" },
   { id: "meta-depend", pattern: /\bwill depend on whether\b[^.]{0,160}\bnot on\b/iu, what: "a comment on the evidence (meta sentence)" },
   { id: "meta-section", pattern: /\b(?:this|the following|the present) (?:section|paragraph|report)s? (?:describes?|outlines?|presents?|summarizes?|will|is intended|addresses|provides?)\b/iu, what: "a sentence about the text" },
@@ -269,14 +312,21 @@ export const BANNED_PATTERNS: Array<{ id: string; pattern: RegExp; what: string;
   { id: "filler-overall", pattern: /(?:^|[.!?]\s+)overall,/iu, what: "filler" },
   { id: "hedge-stack", pattern: /\b(?:may|might|could) (?:possibly|potentially|perhaps)\b/iu, what: "a hedging stack" },
   { id: "superlative", pattern: /\bextremely\b|\bvery significant(?:ly)?\b/iu, what: "a superlative" },
-  { id: "first-person", pattern: /\b(?:I|[Ww]e|[Oo]ur|us)\b(?!['’])/u, what: "the first person (the BCBA is written in the third person)" },
+  {
+    id: "first-person",
+    // Not a Roman numeral: "Phase I", "Tier I", "Level I" (review M9).
+    pattern: /(?<!\b(?:Phase|Tier|Level|Type|Part|Module|Class|Stage|Grade|Step) )\b(?:I|[Ww]e|[Oo]ur|us)\b(?!['’])/u,
+    what: "the first person (the BCBA is written in the third person)",
+  },
   { id: "addressed", pattern: /\b(?:please|you (?:should|may|can|will)|the reader)\b/iu, what: "a sentence addressed to her or the reader" },
   { id: "ai-voice", pattern: /\bas an (?:AI|language model)\b|\bI (?:cannot|can't|don't have)\b/iu, what: "the model speaking as itself" },
-  { id: "promise", pattern: /\b(?:guarantee\w*|will (?:eliminate|cure|ensure|fix)|is certain to)\b/iu, what: "a promised outcome" },
+  // "will ensure" is procedural ("the RBT will ensure the door is locked"), not a promise (review M9).
+  { id: "promise", pattern: /\b(?:guarantee\w*|will (?:eliminate|cure|fix)|is certain to)\b/iu, what: "a promised outcome" },
   {
     id: "hours",
     pattern: /\b\d+(?:\s*(?:to|-)\s*\d+)?\s*(?:hours?|hrs?)\s*(?:per|a|each|\/)\s*week\b/iu,
-    unless: /\b(?:CDE|evaluator|recommend\w*|IEP|school|minutes)\b/iu,
+    // Only a recommendation attributed to the CDE or the IEP may give hours here (review S5).
+    unlessAll: [/\b(?:CDE|evaluator|psychologist|IEP)\b/iu, /\brecommend\w*/iu],
     what: "hours of service (only Summary and Recommendations gives hours)",
   },
   {
@@ -295,7 +345,8 @@ export const BANNED_PATTERNS: Array<{ id: string; pattern: RegExp; what: string;
   {
     id: "restraint",
     pattern: /\b(?:restrain\w*|restraint|seclusion|secluded|physical hold\w*|prone hold|basket hold)\b/iu,
-    unless: /\b(?:no|not|never|without|prohibit\w*|avoid\w*)\b/iu,
+    // The negation must govern the restraint itself, not any verb in the sentence (review S5).
+    unless: /\b(?:no|not|never|without|prohibit\w*|avoid\w*)\b[^.;,]{0,25}\b(?:restrain\w*|restraint|seclusion|secluded|physical hold\w*|prone hold|basket hold|holds?)\b/iu,
     what: "restraint or seclusion proposed (Florida Medicaid policy 5.2)",
   },
 ];
@@ -308,6 +359,7 @@ export function checkBannedPatterns(section: ReportSectionId, text: string): Fin
       if (banned.sections && !banned.sections.includes(section)) continue;
       if (!banned.pattern.test(sentence.text)) continue;
       if (banned.unless?.test(sentence.text)) continue;
+      if (banned.unlessAll && banned.unlessAll.every((pattern) => pattern.test(sentence.text))) continue;
       findings.push({ check: "banned-patterns", section, severity: "major", message: `Banned pattern (${banned.id}): ${banned.what}.`, excerpt: clip(sentence.text) });
     }
   }
@@ -380,7 +432,8 @@ export interface PayerItem {
   test: (text: string, key: CaseKey) => { ok: boolean; detail?: string };
 }
 
-const has = (pattern: RegExp) => (text: string) => ({ ok: pattern.test(text) });
+/** Found in the prose: a marker does not count as the item being there (review S11). */
+const has = (pattern: RegExp) => (text: string) => ({ ok: pattern.test(withoutMarkers(text)) });
 const hasMarkerOr = (pattern: RegExp, marker: RegExp) => (text: string) => ({ ok: pattern.test(withoutMarkers(text)) || findMarkers(text).some((m) => marker.test(m.note)) });
 function allOf(names: Array<{ name: string; pattern: string }>, text: string, atLeast = names.length) {
   const missing = names.filter((entry) => !rx(entry.pattern).test(text)).map((entry) => entry.name);
@@ -394,7 +447,7 @@ export const PAYER_ITEMS: PayerItem[] = [
   { id: "bi-prior-aba", section: "background-information", what: "Prior ABA, or that there was none", test: has(/\b(?:prior|previous|never|no)\b[^.]{0,60}\b(?:ABA|applied behavior analysis)\b|\b(?:ABA|applied behavior analysis)\b[^.]{0,40}\b(?:before|previously|never)\b/iu) },
   { id: "mn-diagnosis", section: "medical-necessity", what: "The diagnosis as the CDE states it", test: has(/\bautism spectrum disorder\b/iu) },
   { id: "mn-settings", section: "medical-necessity", what: "Impairment shown in two or more settings", test: (text, key) => allOf(key.payer.settings, text, Math.min(2, key.payer.settings.length)) },
-  { id: "mn-functions", section: "medical-necessity", what: "The hypothesized functions of the behaviors", test: has(/\b(?:function\w*|escape|avoid\w*|attention|tangible|access to (?:preferred )?(?:items|activities|the tablet)|automatic|sensory)\b/iu) },
+  { id: "mn-functions", section: "medical-necessity", what: "The hypothesized functions of the behaviors", test: has(/\bfunctions?\b|\bmaintained by\b|\b(?:escape|tangible|automatic(?:ally)?|sensory)\b|\baccess to (?:preferred )?(?:items|activities|the tablet|attention)\b/iu) },
   {
     id: "mn-complements",
     section: "medical-necessity",
@@ -407,18 +460,23 @@ export const PAYER_ITEMS: PayerItem[] = [
   { id: "ec-supports", section: "environmental-changes", what: "Supports planned for the changes, or a marker where none is named", test: hasMarkerOr(/\bsupport\w*\b/iu, /\bsupport/iu) },
   { id: "fci-caregivers", section: "family-caregiver-involvement", what: "Each caregiver who takes part, named by role", test: (text, key) => allOf(key.payer.caregivers, text) },
   { id: "fci-availability", section: "family-caregiver-involvement", what: "The caregivers' availability for training", test: has(/\b(?:availab\w*|evenings?|weekends?|saturdays?|after \d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?)\b/iu) },
-  { id: "fci-language", section: "family-caregiver-involvement", what: "The language training is delivered in", test: has(/\b(?:spanish|english|language|bilingual|interpret\w*)\b/iu) },
+  { id: "fci-language", section: "family-caregiver-involvement", what: "The language training is delivered in", test: has(/\b(?:spanish|english|bilingual|interpret\w*)\b|\b(?:home|primary|preferred|first) language\b|\bin (?:her|his|their) (?:own )?language\b/iu) },
   { id: "fci-training", section: "family-caregiver-involvement", what: "What caregiver training covers", test: has(/\btrain(?:ing|ed)?\b/iu) },
   { id: "gm-across", section: "generalization-and-maintenance", what: "Generalization across settings and people", test: has(/\bgeneraliz\w*\b|\b(?:across|different|other|new|varied|varying) (?:settings|people|environments|adults|places)\b|\bsettings and people\b|\bpeople and (?:in )?(?:different )?settings\b|\b(?:person|people|adult|activity|setting|place|routine)s?\b[^.]{0,40}\bchang\w*/iu) },
   { id: "gm-probes", section: "generalization-and-maintenance", what: "Maintenance probes", test: has(/\bprob(?:e|es|ed|ing)\b/iu) },
-  { id: "gm-thinning", section: "generalization-and-maintenance", what: "Reinforcement thinned from continuous to intermittent", test: has(/\bintermittent\b|\bthin\w*\b/iu) },
+  { id: "gm-thinning", section: "generalization-and-maintenance", what: "Reinforcement thinned from continuous to intermittent", test: has(/\bintermittent\b|\bthin(?:s|ned|ning)?\b/iu) },
   {
     id: "dc-objective",
     section: "discharge-and-service-fading-plan",
     what: "Objective, individualized discharge criteria (or markers where her numbers are missing)",
     test: hasMarkerOr(/\b\d+\s*(?:%|percent|consecutive|weeks?|months?|sessions?|instances|episodes|or fewer|or less|of \d+)\b/iu, /\b(?:criteri\w*|threshold\w*|discharge|mastery)\b/iu),
   },
-  { id: "dc-caregiver", section: "discharge-and-service-fading-plan", what: "Caregiver criteria: implementing the strategies on their own", test: has(/\b(?:caregiver|parent|mother|father|grandmother)s?\b[^.]{0,120}\b(?:fidelity|independent\w*|implement\w*|accura\w*|consistent\w*)\b/iu) },
+  {
+    id: "dc-caregiver",
+    section: "discharge-and-service-fading-plan",
+    what: "Caregiver criteria: implementing the strategies on their own (a marker where her number is missing counts)",
+    test: hasMarkerOr(/\b(?:caregiver|parent|mother|father|grandmother)s?\b[^.]{0,120}\b(?:fidelity|independent\w*|implement\w*|accura\w*|consistent\w*)\b/iu, /\b(?:caregiver|parent|mother|father|grandmother|fidelity|independen\w*|implement\w*)/iu),
+  },
   { id: "dc-fading", section: "discharge-and-service-fading-plan", what: "How services step down", test: has(/\b(?:fad\w*|reduc\w*|titrat\w*|step\w* down|decreas\w*|tapered?)\b/iu) },
   { id: "dc-transition", section: "discharge-and-service-fading-plan", what: "The transition: coordination with other providers or community supports", test: has(/\b(?:transition\w*|coordinat\w*|refer\w*|community (?:resources|supports?)|lower level of care)\b/iu) },
   { id: "ra-behaviors", section: "risk-assessment", what: "Every target behavior's risk", test: (text, key) => allOf(key.behaviors.map((b) => ({ name: b.name, pattern: [escape(b.name), ...b.accepted].join("|") })), text) },

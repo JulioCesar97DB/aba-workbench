@@ -280,7 +280,8 @@ export class SectionService {
     const run = async function* (this: SectionService, signal: AbortSignal): AsyncGenerator<Exclude<GenerationUpdateEvent, { type: "finished" }>> {
       let prepared: PreparedRequest;
       try {
-        prepared = await prepareJudgeRequest({ section: id, judge, sections, sources: outgoingSourcesOf(data, folder) });
+        const instructions = await this.options.instructions.get(id);
+        prepared = await prepareJudgeRequest({ section: id, judge, sections, sources: outgoingSourcesOf(data, folder), notes: sessionNotes(data), instructions });
       } catch (error) {
         this.log(`A judge request could not be prepared (${(error as NodeJS.ErrnoException).code ?? "error"}).`);
         yield { type: "error", code: "prepare_failed", message: "The case's sources could not be read.", status: null };

@@ -15,7 +15,11 @@ import { quoteForPrompt, SECTIONS, type SectionId } from "./rules.ts";
  * here and repaired once (eval/run.mts).
  */
 
-export const JUDGE_PROMPT_VERSION = "1";
+/**
+ * Version 2 (review round 1): the judge reads the session notes and the section's standing
+ * instructions (B2) and the payer facts of the section; every input is quoted (M5).
+ */
+export const JUDGE_PROMPT_VERSION = "2";
 
 /** How the answer is asked for: enforced by the provider's JSON schema, or plain JSON in the text. */
 export type JudgeFormat = "json-schema" | "plain-json";
@@ -36,6 +40,8 @@ export const JudgeInputSchema = z.strictObject({
   keyFacts: z.array(z.strictObject({ id: z.string().regex(/^[a-z0-9-]{1,60}$/), fact: z.string().min(1).max(1000) })).max(30),
   /** What the key says about the case that the judge needs (behavior names and functions, planted gaps). */
   caseNotes: z.array(z.string().min(1).max(1000)).max(30),
+  /** What the payer requires of this section: text it requires is not invented. */
+  payerFacts: z.array(z.string().min(1).max(1500)).max(10),
   format: z.enum(["json-schema", "plain-json"]),
   /** The previous answer and what was wrong with it, for the one repair request. */
   repair: z.strictObject({ previousAnswer: z.string().max(60_000), problems: z.array(z.string().max(500)).min(1).max(30) }).nullable(),
@@ -54,7 +60,7 @@ const JUDGE_SYSTEM = [
   "",
   "How to score:",
   "- Score each rubric item 0, 1 or 2 by its anchors, for the section under review only. The other sections are there so you can judge the thread and what each section owns; do not score them.",
-  "- Read the sources: a fact is invented when no source and no session note gives it. A clinical proposal (a strategy, a parameter, a support, a criterion) the sources do not give is invented unless it is marked [MISSING: ...] or [CHECK: ...].",
+  "- Read the sources, the session notes and her standing instructions for the section: a fact is invented when none of them gives it. Text the payer requires of the section (<payer-facts>) is not invented. A clinical proposal (a named procedure, a parameter, a program title, a support, a criterion) that none of them gives is invented unless it is marked [MISSING: ...] or [CHECK: ...].",
   "- Who owns what: Background Information owns the history, family, diagnosis wording, medication, school and other services; Medical Necessity owns the argument for need and the scores explained; Strengths and Weaknesses owns strengths and names the deficit areas without their numbers; Environmental Changes owns the changes and their supports; Family/Caregiver Involvement owns who takes part and what training covers; Generalization and Maintenance owns generalization and maintenance; Discharge owns the criteria and how services step down; Risk Assessment owns each risk and its evidence; Crisis Plan owns the responses. A section refers to what another owns in a clause, by name.",
   "- For each key fact, answer present, partial or absent, and quote the words that show it (empty when absent).",
   "- reason: one or two sentences saying why, naming what is wrong when the score is below 2. evidence: up to three short quotes from the section under review (empty when there is nothing to quote).",
@@ -95,8 +101,21 @@ export function judgeAnswerSchema(section: SectionId, itemIds: readonly string[]
 /** The name the schema is sent under. */
 export const JUDGE_SCHEMA_NAME = "rubric_scores";
 
+/** The judge's own tags: text inside its prompt can open or close none of them, nor any tag of her requests. */
+const JUDGE_TAGS = /<(\/?)(rubric|her-structure|payer-facts|case-key|key-facts|other-sections|section-under-review|previous-answer)\b/giu;
+function quoteForJudge(text: string): string {
+  return quoteForPrompt(text).replace(JUDGE_TAGS, (_whole, slash: string, name: string) => `‹${slash}${name}`);
+}
+
+/** What she gave for the case, as the drafts got it: her session notes and her standing instructions for this section. */
+export interface JudgeHerInputs {
+  notes: string | null;
+  instructions: string | null;
+}
+
 /** The judge's prompt: its fixed instructions, the case's sources (cached across the judge requests of a case), then the task. */
-export function buildJudgePrompt(input: JudgeInput, section: SectionId, sections: readonly JudgedSection[], sources: SourceDocument[]): PromptParts {
+export function buildJudgePrompt(input: JudgeInput, section: SectionId, sections: readonly JudgedSection[], sources: SourceDocument[], her: JudgeHerInputs = { notes: null, instructions: null }): PromptParts {
+  const q = quoteForJudge;
   const title = SECTIONS[section].title;
   const under = sections.find((s) => s.id === section);
   const others = sections.filter((s) => s.id !== section);
@@ -104,17 +123,23 @@ export function buildJudgePrompt(input: JudgeInput, section: SectionId, sections
   parts.push(
     [
       "<rubric>",
-      ...input.items.map((item) => `- ${item.id}: ${item.title}\n  2: ${item.anchors["2"]}\n  1: ${item.anchors["1"]}\n  0: ${item.anchors["0"]}`),
+      ...input.items.map((item) => `- ${item.id}: ${q(item.title)}\n  2: ${q(item.anchors["2"])}\n  1: ${q(item.anchors["1"])}\n  0: ${q(item.anchors["0"])}`),
       "</rubric>",
     ].join("\n"),
   );
-  if (input.expectations.length > 0) parts.push(["<her-structure>", ...input.expectations.map((line) => `- ${line}`), "</her-structure>"].join("\n"));
-  if (input.caseNotes.length > 0) parts.push(["<case-key>", ...input.caseNotes.map((line) => `- ${line}`), "</case-key>"].join("\n"));
-  parts.push(["<key-facts>", ...(input.keyFacts.length > 0 ? input.keyFacts.map((fact) => `- ${fact.id}: ${fact.fact}`) : ["(none for this section)"]), "</key-facts>"].join("\n"));
+  if (input.expectations.length > 0) parts.push(["<her-structure>", ...input.expectations.map((line) => `- ${q(line)}`), "</her-structure>"].join("\n"));
+  if (input.payerFacts.length > 0) parts.push(["<payer-facts>", ...input.payerFacts.map((line) => `- ${q(line)}`), "</payer-facts>"].join("\n"));
+  if (input.caseNotes.length > 0) parts.push(["<case-key>", ...input.caseNotes.map((line) => `- ${q(line)}`), "</case-key>"].join("\n"));
+  parts.push(["<key-facts>", ...(input.keyFacts.length > 0 ? input.keyFacts.map((fact) => `- ${fact.id}: ${q(fact.fact)}`) : ["(none for this section)"]), "</key-facts>"].join("\n"));
+  // What she gave the drafts besides the sources (review B2): her notes are a source of facts, her instructions are hers.
+  const notes = her.notes?.trim();
+  if (notes) parts.push(`<session-notes>\n${q(notes)}\n</session-notes>`);
+  const instructions = her.instructions?.trim();
+  if (instructions) parts.push(`<standing-instructions>\n${q(instructions)}\n</standing-instructions>`);
   if (others.length > 0) {
-    parts.push(`<other-sections>\n${others.map((s) => `<section title="${SECTIONS[s.id].title}">\n${quoteForPrompt(s.text)}\n</section>`).join("\n\n")}\n</other-sections>`);
+    parts.push(`<other-sections>\n${others.map((s) => `<section title="${SECTIONS[s.id].title}">\n${q(s.text)}\n</section>`).join("\n\n")}\n</other-sections>`);
   }
-  parts.push(`<section-under-review title="${title}">\n${quoteForPrompt(under?.text ?? "")}\n</section-under-review>`);
+  parts.push(`<section-under-review title="${title}">\n${q(under?.text ?? "")}\n</section-under-review>`);
   const shape = `{"section": "${section}", "items": [{"id": "<rubric item id>", "score": 0 | 1 | 2, "reason": "...", "evidence": ["..."]}], "keyFacts": [{"id": "<key fact id>", "status": "present" | "partial" | "absent", "quote": "..."}]}`;
   parts.push(
     input.format === "json-schema"
@@ -125,7 +150,7 @@ export function buildJudgePrompt(input: JudgeInput, section: SectionId, sections
     parts.push(
       [
         "<previous-answer>",
-        quoteForPrompt(input.repair.previousAnswer),
+        q(input.repair.previousAnswer),
         "</previous-answer>",
         "Your previous answer could not be used:",
         ...input.repair.problems.map((problem) => `- ${problem}`),

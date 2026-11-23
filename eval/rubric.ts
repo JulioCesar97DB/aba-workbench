@@ -10,7 +10,14 @@
 import type { CheckId, Finding } from "./checks/checks.ts";
 import type { ReportSectionId } from "../src/shared/report-sections.ts";
 
-export const RUBRIC_VERSION = "1";
+/**
+ * Version 2 (review round 1): Medical Necessity's "ABA will…" names what the child needs to
+ * learn, never a procedure before her plan is approved (B1); her standard practice counts
+ * only when her standing instructions give it (S2); the caregiver given-name rule is not
+ * scored until she answers (S1); payer readiness is scored as its anchor says (S11); the
+ * judge sees the payer facts of each section.
+ */
+export const RUBRIC_VERSION = "2";
 
 export type Score = 0 | 1 | 2;
 
@@ -168,8 +175,8 @@ export const RUBRIC: readonly RubricItem[] = [
     stage: "body",
     sections: "all",
     anchors: {
-      2: "Her habits (listed with the section): first name for the child, caregivers by relation, the BCBA in the third person, active plain clinical English, present for current functioning, past for history and observations, will for the plan, no blame, no promised outcomes.",
-      1: "One lapse (a caregiver by her given name, a padded passage, a tense slip, a promised outcome).",
+      2: "Her habits (listed with the section): first name for the child, the BCBA in the third person, active plain clinical English, present for current functioning, past for history and observations, will for the plan, no blame, no promised outcomes. How caregivers are named is pending her answer and is not scored.",
+      1: "One lapse (a padded passage, a tense slip, a promised outcome).",
       0: "Several lapses.",
     },
   },
@@ -180,7 +187,7 @@ export const RUBRIC: readonly RubricItem[] = [
     stage: "body",
     sections: "all",
     anchors: {
-      2: "Every clinical fact is in the sources or her inputs; no clinical proposal (a strategy, parameter, support or criterion) the sources do not give, unless marked.",
+      2: "Every clinical fact is in the sources, the session notes or her standing instructions; text the payer requires of the section (its payer facts) is not invented; no clinical proposal (a named procedure, parameter, program title, support or criterion) that none of them gives, unless marked.",
       1: "One small step beyond the sources (an inference stated as fact, an unmarked proposal).",
       0: "An invented clinical fact, or several unmarked proposals.",
     },
@@ -246,12 +253,15 @@ export const JUDGE_ITEM_IDS = RUBRIC.filter((item) => item.scoredBy === "judge" 
  * to a few shows it).
  */
 export function codeScore(item: CodeItem, findings: readonly Finding[]): Score {
-  const mine = findings.filter((finding) => finding.check === item.check);
+  // A finding under a rule pending her answer is listed but never scored (review S1).
+  const mine = findings.filter((finding) => finding.check === item.check && !finding.provisional);
   const major = mine.filter((finding) => finding.severity === "major").length;
   if (mine.length === 0) return 2;
   if (item.check === "examples") return major > 0 ? 0 : 1;
   if (item.check === "markers") return major > 0 ? 0 : 1;
   if (item.check === "shape") return major > 0 ? 0 : 1;
+  // As its anchor says: one missing 1, two or more 0 (review S11).
+  if (item.check === "payer-readiness") return major === 1 ? 1 : 0;
   return major <= 2 ? 1 : 0;
 }
 
@@ -275,7 +285,8 @@ export const SECTION_EXPECTATIONS: Record<ReportSectionId, readonly string[]> = 
     "School services under the IEP are part of the IEP, not separate services.",
   ],
   "medical-necessity": [
-    "Her own structure, in order: (1) an opening that says the need for ABA is supported by the sources it names, then names the affected areas together; (2) the Vineland-3 composite and domain scores with percentiles, written as prose and tied at once to what the caregiver describes; (3) one paragraph per functional area (for example daily living, communication, flexibility and escape, safety, peers and community), each: the deficit, one concrete reported or observed example, its impact on the family, safety or participation, then what ABA will teach, by the program or procedure's name; (4) a paragraph on the direct observations; (5) a closing that individualized ABA is medically necessary, where and how it will be delivered, caregiver training, coordination with the school, and how effectiveness will be measured (fewer prompts, more independence, more access).",
+    "Her own structure, in order: (1) an opening that says the need for ABA is supported by the sources it names, then names the affected areas together; (2) the Vineland-3 composite and domain scores with percentiles, written as prose and tied at once to what the caregiver describes; (3) one paragraph per functional area (for example daily living, communication, flexibility and escape, safety, peers and community), each: the deficit, one concrete reported or observed example, its impact on the family, safety or participation, then what ABA will do, said as what the child needs to learn (the reverse of the documented deficit) and the general approach; (4) a paragraph on what the direct observations showed; (5) a closing that individualized ABA is medically necessary, where and how it will be delivered, caregiver training, how it complements rather than duplicates the other services, and how effectiveness will be measured (fewer prompts, more independence, more access).",
+    "Before her plan is approved, a named procedure, parameter, program title or support (DRA, FCT, DRO, Premack, high-p requests, NCR, BST, a warning, a visual schedule) is a proposal: it belongs here only where her sections, standing instructions, notes or a source give it (owner's decision, 2026-11-23). The diagnosis is given with its severity level as the CDE states it, or a marker where the CDE gives none.",
     "About eight or nine paragraphs. Never hours. Fluent and very specific; explains the data rather than listing it.",
   ],
   "strengths-and-weaknesses": [
@@ -284,7 +295,7 @@ export const SECTION_EXPECTATIONS: Record<ReportSectionId, readonly string[]> = 
   ],
   "environmental-changes": [
     "Two or three paragraphs. First how the child reacts to changes of place, routine or people, with sourced examples drawn together; then the changes reported (recent, current, coming: who reported them and when) and concrete supports for them.",
-    "Her usual supports are standard ones (a predictable session routine, a visual schedule updated when plans change, advance notice and choices, the same start, break and finish cues, practicing small changes first, prompts to ask for help, a break or more time, the same cues at home and school, a record of staffing or schedule changes): writing them is her structure, not an invented fact. A support tied to a person, date or service the sources do not give is invented.",
+    "Supports for the changes as her plan, her standing instructions, her notes or a source give them. When her standing instructions give her standard supports, writing them is her structure; otherwise a support none of them names is marked missing, not proposed. (Her standard supports are pending her confirmation.)",
   ],
   "family-caregiver-involvement": [
     "The narrative part only (ABA Matrix holds the caregiver goals): one to four paragraphs on the caregivers' involvement and priorities, who takes part and when, training through Behavioral Skills Training adapted to the home language, and the family's current responses described without blame; limited participation, its impact and the mitigation.",
@@ -297,7 +308,7 @@ export const SECTION_EXPECTATIONS: Record<ReportSectionId, readonly string[]> = 
   ],
   "discharge-and-service-fading-plan": [
     "Two or three paragraphs (the three-phase table is hers, in ABA Matrix, and is not described).",
-    "Her standard criteria: discharge when the goals are substantially met, when there is no progress despite reasonable changes to the plan, or when circumstances prevent continuing; fading starts once the reduction goals have held for three consecutive months, the caregiver carries out the plan independently and the replacement skills are used consistently; services end after six consecutive months without clinically significant target behavior; fading pauses if skills slip. Tied to this child's behaviors, skills and caregivers, and to the transition with other providers.",
+    "Discharge grounds as the payer gives them (see the payer facts), then criteria tied to this child's behaviors, skills and caregivers, how services step down, and the transition with other providers. When her standing instructions give her standard criteria and thresholds, they are her structure; otherwise a number none of the inputs gives is marked missing. (Her standard criteria are pending her confirmation.)",
   ],
   "risk-assessment": [
     "Three or four paragraphs, no risk rating: first the risks to carrying out the plan (cues that differ across people and settings, prompt dependence); then the behavior risks in prose, from the most dangerous to those that only interfere, each with its evidence and source; then that least-restrictive, function-based procedures answer them, pointing to the Crisis Plan by name; then training, fidelity checks and how the plan is adjusted.",
@@ -309,9 +320,33 @@ export const SECTION_EXPECTATIONS: Record<ReportSectionId, readonly string[]> = 
   ],
 };
 
+/**
+ * What the payer requires of each narrative section, in our words (Florida Medicaid policy
+ * 4.2.1 and 6.2.2; the Molina guide, sections 2 to 5 and 8), given to the judge: text the
+ * payer requires is not invented, and a section that leaves it out is incomplete. Fixed with
+ * the rubric's version, never taken from the rules under test.
+ */
+export const SECTION_PAYER_FACTS: Record<ReportSectionId, readonly string[]> = {
+  "background-information": ["The diagnosis as the CDE states it, every other service the child receives, and any earlier ABA are documented."],
+  "medical-necessity": [
+    "Medical necessity rests on behavior that impairs a major life activity, shown across settings (home, school, community), with the behaviors' hypothesized functions.",
+    "ABA complements, and does not duplicate, the child's other services; caregiver training is part of the treatment; how progress will be measured is stated.",
+  ],
+  "strengths-and-weaknesses": ["Strengths and needs are documented from the sources."],
+  "environmental-changes": ["Changes in the child's environment and the supports for them are documented."],
+  "family-caregiver-involvement": ["Caregiver participation is documented (who, availability, language); when a caregiver cannot take part, the reason and the mitigation are given. Caregiver training covers the plan's strategies."],
+  "generalization-and-maintenance": ["Each skill has a plan for generalization across settings and people and for maintenance."],
+  "discharge-and-service-fading-plan": [
+    "Discharge grounds (AHCA, as Molina lists them): the child no longer meets medical necessity criteria; no longer engages in the maladaptive behaviors; data show the behaviors no longer stand in the way of major life activities; the level of impairment no longer justifies services; or the parent or guardian withdraws consent.",
+    "A transition plan has objective, individualized criteria for a lower level of care that include the caregiver, hours that step down as goals are met, community resources that keep the gains, and caregiver training that increases as the transition nears.",
+  ],
+  "risk-assessment": ["Each behavior's risk is documented with its evidence (frequency, severity, injuries); restraint and seclusion are never part of the plan."],
+  "crisis-plan": ["The crisis plan says how a crisis is handled and when emergency services are called; restraint and seclusion are never used."],
+};
+
 /** Habits across every section (her assessments), for the judge's "style" item. */
 export const STYLE_EXPECTATIONS: readonly string[] = [
-  "The child by first name; caregivers by relation (his mother, her parents, the caregiver), rarely by their own names; the BCBA as \"the BCBA\".",
+  "The child by first name; the BCBA as \"the BCBA\". (How caregivers are named is pending her answer: do not score it.)",
   "Third person, active voice, plain clinical English: present tense for current functioning, past for history and observations, \"will\" for the plan.",
   "Programs and strategies by the same exact names wherever they appear.",
   "Repeated on purpose only: the family's priorities and the safety response. Never a score table again.",

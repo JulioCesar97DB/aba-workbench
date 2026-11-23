@@ -61,7 +61,44 @@ export function sentences(text: string): Array<{ text: string; paragraph: number
 export type StatedNumber =
   | { kind: "date"; raw: string; monthDay: string; year: string | null }
   | { kind: "time"; raw: string; clock: string }
-  | { kind: "value"; raw: string; value: string };
+  | {
+      kind: "value";
+      raw: string;
+      value: string;
+      /**
+       * The unit right after it, when it is a duration, an interval, a distance or a
+       * percentage ("3 minutes", "a 2-hour observation", "40%", "6 to 15 minutes"): such a
+       * number must be found with the same unit in a source (review S6). Null for a bare count.
+       */
+      unit: Unit | null;
+    };
+
+export type Unit = "second" | "minute" | "hour" | "day" | "week" | "month" | "year" | "percent" | "foot";
+
+const UNITS: Array<[RegExp, Unit]> = [
+  [/^(?:s|secs?|seconds?|segundos?)$/iu, "second"],
+  [/^(?:mins?|minutes?|minutos?)$/iu, "minute"],
+  [/^(?:h|hrs?|hours?|horas?)$/iu, "hour"],
+  [/^(?:days?|días?|dias?)$/iu, "day"],
+  [/^(?:wks?|weeks?|semanas?)$/iu, "week"],
+  [/^(?:months?|mes|meses)$/iu, "month"],
+  [/^(?:yrs?|years?|años?)$/iu, "year"],
+  [/^(?:%|percent)$/i, "percent"],
+  [/^(?:ft|feet|foot)$/i, "foot"],
+];
+/** Units in English, and in Spanish for sources written in Spanish ("38 semanas", "14 meses"). */
+/** What may stand between a number and its unit: a hyphen, and one of a few words ("3 consecutive months", "20 school days"). */
+const UNIT_AFTER = /^\s*(?:-\s*)?(?:(?:consecutive|full|more|additional|school|calendar|straight|separate|clock|whole)\s+)?(%|\p{L}+)/iu;
+const RANGE_AFTER = /^\s*(?:to|-|and|or|through)\s*\d+(?:\.\d+)?/i;
+
+function unitAt(text: string, end: number): Unit | null {
+  let after = text.slice(end);
+  const range = RANGE_AFTER.exec(after);
+  if (range) after = after.slice(range[0].length);
+  const word = UNIT_AFTER.exec(after)?.[1];
+  if (!word) return null;
+  return UNITS.find(([pattern]) => pattern.test(word))?.[1] ?? null;
+}
 
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const MONTH_PATTERN = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
@@ -88,11 +125,13 @@ export function canonicalValue(raw: string): string {
  */
 export function statedNumbers(text: string): StatedNumber[] {
   const found: StatedNumber[] = [];
-  let rest = text.normalize("NFC").replace(/[–—]/g, "-");
-  const take = (pattern: RegExp, make: (match: RegExpExecArray) => StatedNumber | null) => {
+  const original = text.normalize("NFC").replace(/[–—]/g, "-");
+  let rest = original;
+  const take = (pattern: RegExp, make: (match: RegExpExecArray, end: number) => StatedNumber | null) => {
     rest = rest.replace(pattern, (...args: unknown[]) => {
       const match = args.slice(0, -2) as unknown as RegExpExecArray;
-      const made = make(match);
+      const offset = args.at(-2) as number;
+      const made = make(match, offset + String(args[0]).length);
       if (made) found.push(made);
       return " ".repeat(String(args[0]).length);
     });
@@ -117,7 +156,7 @@ export function statedNumbers(text: string): StatedNumber[] {
     return { kind: "date", raw: m[0], monthDay: `${pad(month)}-${pad(day)}`, year };
   });
   // Month and year with a slash: 03/2026.
-  take(/\b(\d{1,2})\/(\d{4})\b/g, (m) => ({ kind: "value", raw: m[0], value: m[2] }));
+  take(/\b(\d{1,2})\/(\d{4})\b/g, (m) => ({ kind: "value", raw: m[0], value: m[2], unit: null }));
   // Dates in words: October 7, 2026; October 7; 7 October 2026.
   take(new RegExp(`\\b(${MONTH_PATTERN})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "gi"), (m) => {
     const month = monthIndex(m[1]) + 1;
@@ -140,25 +179,30 @@ export function statedNumbers(text: string): StatedNumber[] {
   });
   // Age written as years:months (9:4) is caught above as a time; ages in words stay values below.
   // Anything else with digits: 1,000; 4.5; 1st; 40%; 76-86 (two values).
-  take(/(?<![\p{L}\d.])\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\p{L}\d])\d+(?:\.\d+)?(?:st|nd|rd|th)?(?![\p{L}\d])/gu, (m) => {
+  take(/(?<![\p{L}\d.])\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\p{L}\d])\d+(?:\.\d+)?(?:st|nd|rd|th)?(?![\p{L}\d])/gu, (m, end) => {
     const raw = m[0];
-    return { kind: "value", raw, value: canonicalValue(raw.replace(/(st|nd|rd|th)$/, "")) };
+    const ordinal = /(st|nd|rd|th)$/.test(raw);
+    return { kind: "value", raw, value: canonicalValue(raw.replace(/(st|nd|rd|th)$/, "")), unit: ordinal ? null : unitAt(original, end) };
   });
   return found;
 }
 
-/** Every key a number can be found under in a source: a date by month-day and by its year, a time by its clock, a value by itself. */
+/** Every key a number can be found under in a source: a date by month-day and by its year, a time by its clock, a value by itself and with its unit. */
 export function numberKeys(number: StatedNumber): string[] {
   if (number.kind === "date") return [`date:${number.monthDay}`, ...(number.year ? [`value:${Number(number.year)}`, `date:${number.monthDay}:${number.year}`] : [])];
   if (number.kind === "time") return [`time:${number.clock}`];
-  return [`value:${number.value}`];
+  return [`value:${number.value}`, ...(number.unit ? [`qty:${number.value}:${number.unit}`] : [])];
 }
 
-/** The keys under which a number in an output must be found in the sources (the most specific one for a dated date). */
+/**
+ * The key under which a number in an output must be found in the sources: the most
+ * specific one for a dated date, and value with unit for a quantity. Ages are the one
+ * exception: sources often give them bare ("Diego (6)"), so years match a bare value.
+ */
 export function lookupKey(number: StatedNumber): string {
   if (number.kind === "date") return number.year ? `date:${number.monthDay}:${number.year}` : `date:${number.monthDay}`;
   if (number.kind === "time") return `time:${number.clock}`;
-  return `value:${number.value}`;
+  return number.unit && number.unit !== "year" ? `qty:${number.value}:${number.unit}` : `value:${number.value}`;
 }
 
 /**
@@ -168,6 +212,13 @@ export function lookupKey(number: StatedNumber): string {
  */
 export function numberIndex(texts: readonly string[]): Set<string> {
   const keys = new Set<string>();
-  for (const text of texts) for (const number of statedNumbers(text)) for (const key of numberKeys(number)) keys.add(key);
+  for (const text of texts) {
+    for (const number of statedNumbers(text)) for (const key of numberKeys(number)) keys.add(key);
+    // A score report's age in years:months ("7:2", "5:10") supports "7 years 2 months".
+    for (const age of text.matchAll(/\b(\d{1,2}):(\d{1,2})\b/g)) {
+      keys.add(`qty:${Number(age[1])}:year`);
+      keys.add(`qty:${Number(age[2])}:month`);
+    }
+  }
   return keys;
 }

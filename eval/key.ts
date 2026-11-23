@@ -73,7 +73,8 @@ const Person = NameEntry.extend({
   givenName: z.strictObject({ pattern: Pattern, use: z.enum(["avoid", "allowed"]) }).optional(),
 });
 
-const PlantedGap = z.strictObject({
+const PlantedGap = z
+  .strictObject({
   id: z.string().min(1),
   gap: z.string().min(1),
   /** Sections that must leave a [MISSING: ...] (or [CHECK: ...]) marker about it, matching `marker`. */
@@ -84,17 +85,27 @@ const PlantedGap = z.strictObject({
    * sentence that also matches `unless` (a negation, a marker) is not counted. Checked in every section.
    */
   forbid: z.array(z.strictObject({ pattern: Pattern, unless: Pattern.optional(), what: z.string().min(1) })).default([]),
-});
+  })
+  // Review M1: a gap that must be marked says what the marker is about; otherwise any marker would do.
+  .refine((gap) => gap.mustMarkIn.length === 0 || gap.marker !== undefined, { message: "a gap that must be marked needs a marker pattern" });
 
 const Incident = z.strictObject({
   id: z.string().min(1),
   description: z.string().min(1),
-  /** A sentence that mentions it matches every pattern of one of these lists. */
+  /**
+   * A sentence that tells it matches every pattern of one of these lists. The patterns name
+   * the incident's own details (its date, what happened), so a passing mention of a place
+   * or a program is not a retelling (review S7).
+   */
   mentions: z.array(z.array(Pattern).min(1)).min(1),
-  /** The section that tells it in full (provisional where her section map is not settled). */
+  /** The section that tells it in full, by step 0's section map (rules/guide.md). */
   home: SectionIdSchema,
   /** How many other sections may refer to it. The audit's rule: one reference. */
   references: z.number().int().min(0).default(1),
+  /** Sections whose own key facts require it (Medical Necessity arguing a safety incident): they never count against it. */
+  requiredIn: z.array(SectionIdSchema).default([]),
+  /** Its home follows a section map she has not confirmed yet: shown as provisional in the summary (review M7). */
+  provisional: z.boolean().default(true),
   /** Sources it comes from: an incident whose source is not loaded is not checked. */
   from: z.array(z.string()).min(1),
 });
@@ -105,6 +116,11 @@ const Fact = z.strictObject({
   fact: z.string().min(1),
   /** Sources it comes from: a fact whose source is not loaded is skipped. */
   from: z.array(z.string()).min(1),
+  /**
+   * A fact that rests on a rule pending her answer (her standard practice, not yet given to
+   * the AI): reported, never counted in the score (review S2).
+   */
+  provisional: z.boolean().default(false),
 });
 
 const PayerParams = z.strictObject({

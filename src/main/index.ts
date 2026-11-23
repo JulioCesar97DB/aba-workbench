@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CaseLibrary } from "./cases.ts";
 import { FailedSaves, runSaves } from "./failed-saves.ts";
-import { createCloseGuard, createQuitWait, SAVE_WAIT_MS, UNSAVED_DIALOG, withTimeout, type UnsavedProblem } from "./close-guard.ts";
+import { askUnlessHidden, createCloseGuard, createQuitWait, SAVE_WAIT_MS, UNSAVED_DIALOG, withTimeout, type UnsavedProblem } from "./close-guard.ts";
 import { ChatGptSession } from "./chatgpt-session.ts";
 import { ConnectionService } from "./connections.ts";
 import { CREDENTIALS_FILE_NAME, CredentialsStore } from "./credentials.ts";
@@ -215,7 +215,7 @@ function createWindow(): void {
     createCloseGuard({
       flush: (ms) => flushInterface(window, ms),
       idle: (ms) => cases.idle(ms),
-      ask: (problem) => askAboutUnsaved(window, problem),
+      ask: askUnlessHidden(hidden, (problem) => askAboutUnsaved(window, problem), (line) => console.warn(line)),
       close: () => {
         closing = true;
         window.close();
