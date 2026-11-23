@@ -287,8 +287,13 @@ test("today's notes: a save that fails is said on the notes button on every scre
     // In the panel: what she typed, and Try again.
     await openNotes(page);
     await expect(notes).toHaveValue("Not saved yet.");
+    // The box saves when it loses focus: leave it while the folder is still read-only, so
+    // that save fails too and Try again stays (otherwise the click itself would save it).
+    await notes.blur();
+    const panel = page.getByRole("dialog", { name: "Today's notes" });
+    await expect(panel.getByRole("alert")).toBeVisible();
     chmodSync(caseFolder, 0o755);
-    await page.getByRole("dialog", { name: "Today's notes" }).getByRole("button", { name: "Try again" }).click();
+    await panel.getByRole("button", { name: "Try again" }).click();
     await expect.poll(() => caseJson(caseFile).sessionNotes?.text).toBe("Not saved yet.");
     await expect(button).not.toContainText("Not saved");
   } finally {

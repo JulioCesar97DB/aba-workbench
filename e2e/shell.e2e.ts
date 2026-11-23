@@ -334,7 +334,14 @@ test("moving into and out of a case announces the new screen and puts focus on i
 
 test("the frame: the trial line is on every screen; the header and the rail stay put while a long section scrolls", async ({ launch, home }) => {
   seedCase(defaultCasesFolder(home));
-  const page = await openApp(await launch());
+  const app = await launch();
+  const page = await openApp(app);
+  // The rail sits beside the text from a working area 50rem wide. A runner's screen can be
+  // smaller than the window asked for (1024x768 on some), so the page is zoomed out to give
+  // it a working area that wide whatever the screen.
+  await resize(app, 1280, 820);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(0.75));
+  await expect.poll(() => page.evaluate(() => (globalThis as unknown as { innerWidth: number }).innerWidth)).toBeGreaterThanOrEqual(1300);
   // One slim line above every screen, Home and Settings included.
   const trial = page.getByRole("complementary", { name: "Trial version" });
   await expect(trial).toContainText("Trial version.");
@@ -350,6 +357,9 @@ test("the frame: the trial line is on every screen; the header and the rail stay
   await expect(page.getByTestId("section-view")).toContainText("Paragraph 30");
   const header = page.getByRole("main").locator("header");
   const rail = page.getByRole("complementary", { name: "Sources and checks" });
+  // The rail is beside the text, not below it.
+  const [textBox, railBox] = [await page.getByTestId("section-view").boundingBox(), await rail.boundingBox()];
+  expect(railBox!.x).toBeGreaterThan(textBox!.x + textBox!.width);
   const before = [await header.boundingBox(), await rail.boundingBox()];
   const content = page.locator("[data-region='content']");
   await content.evaluate((element) => {
