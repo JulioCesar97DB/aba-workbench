@@ -36,6 +36,11 @@ export interface SectionGeneration {
 }
 
 const byKey = new Map<string, SectionGeneration>();
+/**
+ * Stop pressed while a request was still being prepared: the main process did not know
+ * its id yet, so the stop is sent again as soon as the request has started.
+ */
+const stopRequested = new Set<string>();
 const listeners = new Set<() => void>();
 let snapshot = 0;
 /** Told each saved section, so the screen and the sidebar show it. */
@@ -122,6 +127,8 @@ export async function startSectionGeneration(caseId: string, sectionId: ReportSe
   set({ id, caseId, sectionId, request, phase: "starting", text: "", outcome: null });
   try {
     const result = await window.aba.startSectionGeneration(caseId, sectionId, id, provider, request);
+    if (result.outcome === "started" && stopRequested.has(id)) void window.aba.cancelGeneration(id);
+    stopRequested.delete(id);
     if (result.outcome !== "started") {
       if (previous) set(previous);
       else {
@@ -144,6 +151,8 @@ export async function startSectionCheck(caseId: string, sectionId: ReportSection
   set({ id, caseId, sectionId, request: null, phase: "checking", text: "", outcome: null });
   try {
     const result = await window.aba.checkSection(caseId, sectionId, id, provider, version);
+    if (result.outcome === "started" && stopRequested.has(id)) void window.aba.cancelGeneration(id);
+    stopRequested.delete(id);
     if (result.outcome !== "started") set({ id, caseId, sectionId, request: null, phase: "done", text: "", outcome: { kind: "checked" } });
     return result.outcome;
   } catch {
@@ -153,6 +162,7 @@ export async function startSectionCheck(caseId: string, sectionId: ReportSection
 }
 
 export function stopSectionGeneration(generation: SectionGeneration): void {
+  if (generation.phase === "starting") stopRequested.add(generation.id);
   void window.aba.cancelGeneration(generation.id);
 }
 
