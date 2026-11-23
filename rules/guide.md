@@ -1,6 +1,6 @@
 ---
 id: guide
-version: 3
+version: 4
 updated: 2026-11-23
 sources: The ABA Matrix template as exported by her agency (22 sections, read 2026-11-21), the BCBA's answers of 2026-11-21, the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), the payer facts (Florida Medicaid policy 4.2.1 and 6.2.2; Molina guide sections 2 to 5 and 8), and the quality runs on an invented case (2026-11-23).
 confirmed: no, pending review by the BCBA
@@ -53,7 +53,7 @@ Each fact has one home: the section that owns it states it in full. Other sectio
 | 17 | Generalization and Maintenance | How the plan's skills generalize across this child's people, settings, materials and routines, and how they are maintained; coordination with the child's other providers for generalization | The child's goals and skills by name | Skills in 9, 11, 12; settings and people in 3 and 16 |
 | 18 | Discharge and Service Fading Plan | Discharge criteria for each behavior, skill and caregiver; how services step down; the transition | Behaviors and baselines by name and number; other providers | 8, 10, 16 |
 | 19 | Risk Assessment | The risks the assessment found: to the plan's success (inconsistent cues, prompt dependence) and from each behavior, most dangerous first, with its evidence | The safety response in 14 and the Crisis Plan by name | Behavior names and incidents with 4 and 8 |
-| 20 | Crisis Plan | The protocol: early signs, de-escalation, when emergency services are called, what caregivers must do, how crises are monitored; the family's current responses during a dangerous episode (blocking, carrying, calling for help) | The risks of 19 by name | Behavior names with 8 and 19 |
+| 20 | Crisis Plan | Early signs of escalation, as the sources record them; the protocol: de-escalation, when emergency services are called, what caregivers must do, how crises are monitored; the family's current responses during a dangerous episode (blocking, carrying, calling for help) | The risks of 19 by name | Behavior names with 8 and 19 |
 | 21 | Summary and Recommendations | Codes, hours, units, place of service and the weekly schedule, as a table | – | Hours appear nowhere else; the schedule fits the availability in 3 and 16 |
 | 22 | Consent to Treatment | Consent and signatures (a form) | – | – |
 
