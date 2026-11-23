@@ -272,7 +272,13 @@ export function responsesRequest(options: GenerateOptions): OpenAI.Responses.Res
     store: false, // nothing about the case is kept on OpenAI's side for later retrieval
     reasoning: { effort: options.effort },
   };
-  if (options.credential.kind === "chatgpt") return { ...base, instructions: `${CHATGPT_TASK_PREAMBLE}\n\n${options.prompt.task}` };
+  if (options.credential.kind === "chatgpt") {
+    // The case's opaque key (src/main/cache-key.ts) keeps every request of a case on one cache
+    // (owner's decision, 2026-11-23). The route accepts it: it is not among the fields its
+    // preview limitations refuse. The API-key route keeps its explicit breakpoints and sends none.
+    const key = options.cacheKey ? { prompt_cache_key: options.cacheKey } : {};
+    return { ...base, ...key, instructions: `${CHATGPT_TASK_PREAMBLE}\n\n${options.prompt.task}` };
+  }
   return { ...base, max_output_tokens: options.maxOutputTokens, prompt_cache_options: { mode: "explicit", ttl: "30m" } };
 }
 

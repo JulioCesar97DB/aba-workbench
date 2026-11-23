@@ -42,6 +42,12 @@ export interface GenerateOptions {
   maxOutputTokens: number;
   prompt: PromptParts;
   signal: AbortSignal;
+  /**
+   * An opaque key that groups the requests of one case for the provider's prompt cache
+   * (OpenAI's `prompt_cache_key`, sent on the ChatGPT route only). Never the client's
+   * name or anything she wrote: src/main/cache-key.ts derives it from the case's internal id.
+   */
+  cacheKey?: string | null;
 }
 
 /** Token counts normalized across providers. The four buckets do not overlap. */

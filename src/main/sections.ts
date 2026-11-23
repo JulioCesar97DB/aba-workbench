@@ -42,6 +42,7 @@ import {
 import type { CaseLibrary } from "./cases.ts";
 import type { InstructionsStore } from "./instructions.ts";
 import { outgoingSourcesOf, prepareOutgoingRequest, type PreparedRequest } from "./outgoing.ts";
+import { caseCacheKey } from "./cache-key.ts";
 import { runSectionGeneration } from "./section-generation.ts";
 
 /*
@@ -328,6 +329,7 @@ export class SectionService {
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       section: id,
       signal,
+      cacheKey: caseCacheKey(args.caseId),
       save: async ({ text, done }) => {
         // Stop pressed by now: nothing is written (review round 4, R4-1).
         if (signal.aborted) return null;
@@ -414,6 +416,7 @@ export class SectionService {
           maxOutputTokens: MAX_OUTPUT_TOKENS,
           section: id,
           signal: args.signal,
+          cacheKey: caseCacheKey(args.caseId),
           save: async ({ text: checked, done }) => {
             answer = checked;
             consistency.model = done.servedModel.slice(0, 200);

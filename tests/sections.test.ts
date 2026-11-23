@@ -16,6 +16,7 @@ import type { GenerationUpdateEvent, SectionSaveResult } from "../src/shared/api
 import { abaMatrixClipboard } from "../src/shared/section-text.ts";
 import { createAnthropicProvider } from "../src/lib/providers/anthropic.ts";
 import { CHATGPT_TASK_PREAMBLE, createOpenAIProvider } from "../src/lib/providers/openai.ts";
+import { caseCacheKey } from "../src/main/cache-key.ts";
 import { sseResponse, stubFetch } from "./helpers.ts";
 
 const folders: string[] = [];
@@ -284,6 +285,15 @@ test("F1, case B: after she fixes a fact by hand in an AI version, later version
   const versions = JSON.parse(readFileSync(caseFile, "utf8")).sections["background-information"].versions;
   assert.deepEqual(versions.map((v: { kind: string }) => v.kind), ["hers", "improve", "edited", "change"]);
   assert.equal(versions[3].consistency.ownTextCompared, 3);
+});
+
+test("the case's cache key is opaque: a fixed shape, the same for one case, different for each, and never the id itself", () => {
+  const a = "3f0c1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5b";
+  const b = "3f0c1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5c";
+  assert.match(caseCacheKey(a), /^aba-[A-Za-z0-9_-]{32}$/);
+  assert.equal(caseCacheKey(a), caseCacheKey(a));
+  assert.notEqual(caseCacheKey(a), caseCacheKey(b));
+  for (const part of a.split("-")) assert.ok(!caseCacheKey(a).includes(part), part);
 });
 
 /* Review round 2 of the ChatGPT fixes */
@@ -768,7 +778,7 @@ test("ChatGPT sign-in: every kind of section request sends the same settings and
         : "First paragraph of an invented draft.\n\nSecond paragraph.\n\nThird paragraph.";
     return openaiAnswer(text, request.model);
   });
-  const { service, caseId, caseFile } = await setup({}, { provider: createOpenAIProvider({ fetch: fetchStub }), credential: { kind: "chatgpt", accessToken: "chatgpt-access-token-not-real" } });
+  const { service, caseId, caseFile, cases } = await setup({}, { provider: createOpenAIProvider({ fetch: fetchStub }), credential: { kind: "chatgpt", accessToken: "chatgpt-access-token-not-real" } });
   saved(await service.saveText(caseId, "background-information", "Her own background text.", null));
   await generate(service, caseId, "medical-necessity", { kind: "draft" });
   await generate(service, caseId, "medical-necessity", { kind: "paragraph", fromVersion: 1, paragraphIndex: 1, request: "clearer" });
@@ -787,6 +797,18 @@ test("ChatGPT sign-in: every kind of section request sends the same settings and
   assert.match(String(firstTask), /Draft request/);
   // Review round 1, F3: the whole-assessment rules keep their force over the task.
   for (const body of requests) assert.ok(String(body.instructions).startsWith(`${CHATGPT_TASK_PREAMBLE}\n\n`));
+  // Owner's decision, 2026-11-23: one opaque cache key for every request of the case, whatever its kind.
+  const key = caseCacheKey(caseId);
+  for (const body of requests) assert.equal(body.prompt_cache_key, key);
+  for (const secret of [caseId, "Invented case", "Her own background text", "invented"]) assert.ok(!key.toLowerCase().includes(secret.toLowerCase()), secret);
+  // Another case gets another key.
+  const other = await cases.create({ label: "Another invented case" });
+  assert.ok(other.outcome === "created");
+  await cases.addTextSource(other.case.id, { type: "cde", text: "Invented notes for a second child who does not exist." });
+  await generate(service, other.case.id, "crisis-plan", { kind: "draft" });
+  const last = calls.at(-1)!.body!;
+  assert.equal(last.prompt_cache_key, caseCacheKey(other.case.id));
+  assert.notEqual(last.prompt_cache_key, key);
   assert.deepEqual(first.reasoning, { effort: "high" });
   for (const [index, body] of requests.entries()) {
     const { instructions, ...rest } = body;

@@ -319,3 +319,13 @@ test("a stream event OpenAI sent that cannot be read is said so, not called a dr
   assert.equal(error.code, "bad_response");
   assert.equal(error.message, "OpenAI sent an answer this app could not read; nothing was saved.");
 });
+
+test("ChatGPT sign-in: the case's opaque prompt_cache_key is sent when given; the API key never sends one", () => {
+  const key = "aba-0123456789abcdefghijABCDEFGHIJ-_";
+  const chatgptBody = responsesRequest({ ...options("gpt-6.2-astra"), credential: chatgpt, cacheKey: key });
+  assert.equal(chatgptBody.prompt_cache_key, key);
+  const withoutKey = responsesRequest({ ...options("gpt-6.2-astra"), credential: chatgpt });
+  assert.equal("prompt_cache_key" in withoutKey, false, "no key outside a case");
+  const apiKeyBody = responsesRequest({ ...options("gpt-6.2-astra"), cacheKey: key });
+  assert.equal("prompt_cache_key" in apiKeyBody, false, "the API-key route keeps its explicit breakpoints and sends no key");
+});

@@ -29,6 +29,8 @@ export async function* runSectionGeneration<Saved>(options: {
   maxOutputTokens: number;
   section: string;
   signal: AbortSignal;
+  /** The case's opaque prompt-cache key (src/main/cache-key.ts). */
+  cacheKey?: string | null;
   /** Writes the version; null when it wrote nothing because Stop came first. */
   save: (finished: FinishedText) => Promise<Saved | null>;
 }): AsyncGenerator<SectionGenerationEvent<Saved>> {
@@ -50,6 +52,7 @@ export async function* runSectionGeneration<Saved>(options: {
     prompt: prepared.prompt,
     rulesVersions: prepared.rulesVersions,
     signal,
+    cacheKey: options.cacheKey ?? null,
   });
   for await (const event of events) {
     if (signal.aborted) return;
