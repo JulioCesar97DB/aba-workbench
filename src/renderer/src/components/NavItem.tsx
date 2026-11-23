@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { NavLink } from "react-router";
 import { cn } from "./cn.ts";
 import type { StepState } from "../step-states.ts";
@@ -32,13 +32,16 @@ const stepBase =
  * state (filled green once done, filled amber while in progress, hollow before, dashed
  * when not built yet), its name, and a count after it. The state is also said in words to a screen
  * reader; a step not built yet says "Soon" on screen too. Under its name, a few words on
- * what it holds (`subtitle`, shown only: the name says the step). `compact` trims the row
+ * what it holds (`subtitle`): out of the link's name, which says the step, and offered as
+ * its description (aria-describedby reads it though it is aria-hidden). `compact` trims the row
  * to 36 px and leaves the subtitle out while the report's sections are listed under it,
  * so the whole sidebar fits a 1366x768 window.
  */
 export function StepNavItem({ to, number, state, stateText, laterTag, detail, subtitle, compact, children }: { to: string; number: number; state: StepState; stateText: string; laterTag: string; detail?: ReactNode; subtitle?: string; compact?: boolean; children: ReactNode }) {
+  const subtitleId = useId();
+  const showSubtitle = Boolean(subtitle) && !compact;
   return (
-    <NavLink to={to} className={cn(stepBase, compact ? "min-h-9" : "min-h-control py-1")}>
+    <NavLink to={to} aria-describedby={showSubtitle ? subtitleId : undefined} className={cn(stepBase, compact ? "min-h-9" : "min-h-control py-1")}>
       <span
         aria-hidden="true"
         className={cn(
@@ -60,8 +63,8 @@ export function StepNavItem({ to, number, state, stateText, laterTag, detail, su
       <span className="min-w-0 flex-1">
         {children}
         <span className="sr-only">, {stateText}</span>
-        {subtitle && !compact ? (
-          <span aria-hidden="true" className="block text-xs leading-snug font-normal text-fg-on-nav-muted group-aria-[current=page]:text-fg-muted">
+        {showSubtitle ? (
+          <span id={subtitleId} aria-hidden="true" className="block text-xs leading-snug font-normal text-fg-on-nav-muted group-aria-[current=page]:text-fg-muted">
             {subtitle}
           </span>
         ) : null}

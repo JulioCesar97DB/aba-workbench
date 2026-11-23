@@ -361,10 +361,10 @@ export interface DraftingStubLog {
 export async function stubDrafting(app: ElectronApplication, options: { claudeKey: string; msPerChunk?: number; consistency?: string }): Promise<void> {
   await app.evaluate((_electron, { claudeKey, msPerChunk, consistency }) => {
     const g = globalThis as unknown as {
-      draftingStub: { requests: Array<{ url: string; body: string | null }>; msPerChunk: number; failures: number; paused: Promise<void> };
+      draftingStub: { requests: Array<{ url: string; body: string | null }>; msPerChunk: number; failures: number; failureStatus: number; paused: Promise<void> };
       fetch: typeof fetch;
     };
-    g.draftingStub = { requests: [], msPerChunk: msPerChunk ?? 0, failures: 0, paused: Promise.resolve() };
+    g.draftingStub = { requests: [], msPerChunk: msPerChunk ?? 0, failures: 0, failureStatus: 400, paused: Promise.resolve() };
     const stub = g.draftingStub;
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
     const DRAFT = [
@@ -392,7 +392,8 @@ export async function stubDrafting(app: ElectronApplication, options: { claudeKe
       }
       if (url.startsWith("https://api.anthropic.com/v1/messages") && stub.failures > 0) {
         stub.failures--;
-        return json({ type: "error", error: { type: "invalid_request_error", message: "stubbed failure" } }, 400);
+        const type = stub.failureStatus === 401 ? "authentication_error" : "invalid_request_error";
+        return json({ type: "error", error: { type, message: "stubbed failure" } }, stub.failureStatus);
       }
       if (url.startsWith("https://api.anthropic.com/v1/messages")) {
         const request = JSON.parse(body ?? "{}") as { model: string; messages: Array<{ content: Array<{ type: string; text?: string }> }> };
@@ -431,11 +432,16 @@ export function draftingStubLog(app: ElectronApplication): Promise<DraftingStubL
   return app.evaluate(() => ({ requests: [...(globalThis as unknown as { draftingStub: DraftingStubLog }).draftingStub.requests] }));
 }
 
-/** The next `count` requests to the faked Claude fail with an error it answers at once (no retry). */
-export async function setDraftingFailures(app: ElectronApplication, count: number): Promise<void> {
-  await app.evaluate((_electron, n) => {
-    (globalThis as unknown as { draftingStub: { failures: number } }).draftingStub.failures = n;
-  }, count);
+/**
+ * The next `count` requests to the faked Claude fail with an error it answers at once (no
+ * retry): a 400 (a refused request) by default, or a 401 (the key no longer accepted).
+ */
+export async function setDraftingFailures(app: ElectronApplication, count: number, status: 400 | 401 = 400): Promise<void> {
+  await app.evaluate((_electron, [n, code]) => {
+    const stub = (globalThis as unknown as { draftingStub: { failures: number; failureStatus: number } }).draftingStub;
+    stub.failures = n;
+    stub.failureStatus = code;
+  }, [count, status] as const);
 }
 
 /**

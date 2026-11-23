@@ -157,8 +157,8 @@ export function SourceTypeSelect({ value, onChange }: { value: SourceType; onCha
 
 /**
  * A date field (the system's own, keyboard-friendly); "" when cleared. Only a whole, valid
- * date is passed on. It follows the computer's regional format, so its hint says the order
- * to type the date in (owner's decision T20).
+ * date is passed on. Its layout follows the app's locale, not the screen language, so its
+ * hint says the order to type the date in (owner's decision T20; see dateFieldOrder).
  */
 export function SourceDateField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const { t } = useTranslation();

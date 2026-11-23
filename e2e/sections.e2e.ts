@@ -191,11 +191,12 @@ test("a failed request says what went wrong and offers Try again, which sends th
   await setDraftingFailures(app, 1);
   await page.getByRole("button", { name: /Draft it with the AI/ }).click();
   const failure = page.getByRole("alert").filter({ hasText: "The AI could not finish" });
-  await expect(failure).toContainText("The AI could not finish and nothing was saved; your versions are unchanged. Try again in a moment.");
+  await expect(failure).toContainText("The AI could not finish and nothing was saved; your versions are unchanged. The AI refused this request. If it happens again, try the other AI; the technical details say why.");
+  await expect(failure.getByRole("link", { name: "Open Settings" })).toHaveCount(0);
   // The provider's own words wait under "Technical details", in English (owner's decision T11).
   const details = failure.getByTestId("section-error-details");
   await expect(details).toBeHidden();
-  await failure.getByText("Technical details").click();
+  await failure.getByText("Technical details", { exact: true }).click();
   await expect(details).toContainText("stubbed failure");
   await expect(details).toHaveAttribute("lang", "en");
   await screenshot(page, "section-10-failed-en");
@@ -207,6 +208,19 @@ test("a failed request says what went wrong and offers Try again, which sends th
   const drafts = log.requests.filter((r) => r.url.includes("/v1/messages")).map((r) => r.body ?? "");
   expect(drafts).toHaveLength(2);
   expect(drafts[1]).toBe(drafts[0]);
+});
+
+test("a key the provider no longer accepts says so in Spanish, with its way out in Settings", async ({ launch, home }) => {
+  const { app, page } = await openSection(launch, home, "crisis-plan", "es");
+  await setDraftingFailures(app, 1, 401);
+  await page.getByRole("button", { name: /Redactarla con la IA/ }).click();
+  const failure = page.getByRole("alert").filter({ hasText: "La IA no pudo terminar" });
+  await expect(failure).toContainText("La IA no pudo terminar y no se guardó nada; tus versiones siguen igual. La conexión con la IA ya no funciona. Vuelve a conectarla en Ajustes.");
+  // The provider's words stay under "Detalles técnicos" until she opens it.
+  await expect(failure.getByTestId("section-error-details")).toBeHidden();
+  await expect(failure.getByText("Detalles técnicos", { exact: true })).toBeVisible();
+  await failure.getByRole("link", { name: "Abrir Ajustes" }).click();
+  await expect(page.locator("#page-title")).toHaveText("Ajustes");
 });
 
 test("stopping a draft saves nothing and says so; without an AI connected, drafting points to Settings", async ({ launch, home }) => {

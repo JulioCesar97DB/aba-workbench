@@ -199,7 +199,7 @@ function ModelLine() {
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-fg-muted">{t("settings.modelLabel")}</span>{" "}
           <span>{summary}</span>{" "}
-          <Button size="sm" aria-expanded={open} aria-controls={choicesId} onClick={() => setOpen((value) => !value)}>
+          <Button size="sm" aria-expanded={open} aria-controls={open ? choicesId : undefined} onClick={() => setOpen((value) => !value)}>
             {t("settings.modelChange")}
           </Button>
         </p>

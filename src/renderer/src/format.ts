@@ -29,10 +29,13 @@ export function formatDateTime(language: Language, iso: string): string {
 export type DatePart = "day" | "month" | "year";
 
 /**
- * The order of day, month and year in the system's own date field (`type="date"`), which
- * follows the computer's regional settings (navigator.language), not the screen language:
- * a Spanish screen on a Windows set to US English shows mm/dd/yyyy. The hint under the
- * field names that order in the screen language (owner's decision T20).
+ * The order of day, month and year in the system's own date field (`type="date"`). Chromium
+ * lays the field out in the app's locale, which is what navigator.language gives, not in
+ * the screen language: a Spanish screen on a Windows set to US English shows mm/dd/yyyy.
+ * The hint under the field names that order in the screen language (owner's decision T20).
+ * Intl knows the locale's usual order only, so the two can differ when the computer's own
+ * date format was customized (Windows) or its region is not the language's usual one
+ * (macOS, such as English with region Mexico); the usual cases agree.
  */
 export function dateFieldOrder(locale: string): DatePart[] {
   const parts = new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(Date.UTC(2026, 10, 23, 12)));
