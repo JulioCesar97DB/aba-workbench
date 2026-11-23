@@ -1,4 +1,8 @@
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
+import type { TFunction } from "i18next";
+import type { SectionSummary } from "../../../shared/sections.ts";
+import { useAutosave } from "../autosave.tsx";
+import { usePatchOpenedCase } from "../open-case.tsx";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import type { Language } from "../../../shared/api.ts";
@@ -61,9 +65,24 @@ export function AppSidebar() {
   );
 }
 
-export function CaseSidebar({ caseId, caseName, caseDetail }: { caseId: string; caseName: string; caseDetail: string }) {
+/** A section's state in a word or two, for the sidebar and the report's table. */
+export function sectionStateText(t: TFunction, section: SectionSummary): { short: string | null; long: string } {
+  switch (section.state) {
+    case "hers":
+      return { short: t("section.stateHers"), long: t("section.stateHers") };
+    case "approved":
+      return { short: t("section.stateApproved"), long: t("section.stateApproved") };
+    case "drafted":
+      return { short: t("section.stateDraft", { number: section.currentVersion }), long: t("section.stateDraftLong", { number: section.currentVersion }) };
+    default:
+      return { short: null, long: t("status.notStarted") };
+  }
+}
+
+export function CaseSidebar({ caseId, caseName, caseDetail, sections, notes }: { caseId: string; caseName: string; caseDetail: string; sections: SectionSummary[]; notes: string }) {
   const { t } = useTranslation();
   const sectionsHeadingId = useId();
+  const states = new Map(sections.map((section) => [section.id, section]));
   return (
     <SidebarFrame
       top={
@@ -96,13 +115,18 @@ export function CaseSidebar({ caseId, caseName, caseDetail }: { caseId: string; 
           {t("nav.sectionsHeading")}
         </Eyebrow>
         <ul className="flex flex-col">
-          {REPORT_SECTIONS.map((section) => (
-            <li key={section.id}>
-              <SectionNavItem to={casePath(caseId, "report", section.id)} title={section.title} statusLabel={t("status.notStarted")} />
-            </li>
-          ))}
+          {REPORT_SECTIONS.map((section) => {
+            const summary = states.get(section.id) ?? { id: section.id, state: "not-started" as const, currentVersion: null, approvedVersion: null, versionCount: 0 };
+            const text = sectionStateText(t, summary);
+            return (
+              <li key={section.id}>
+                <SectionNavItem to={casePath(caseId, "report", section.id)} title={section.title} state={summary.state} detail={text.short} statusLabel={text.long} />
+              </li>
+            );
+          })}
         </ul>
       </nav>
+      <SessionNotes key={caseId} caseId={caseId} initial={notes} />
     </SidebarFrame>
   );
 }
@@ -188,5 +212,103 @@ function SidebarFooter({ extra }: { extra?: ReactNode }) {
           : null}
       </p>
     </div>
+  );
+}
+
+/**
+ * Her notes for this session, under the sections (as in the reference). The AI takes them
+ * into account in everything it drafts in this case until she starts a new session, which
+ * keeps them in the case's file and empties the box.
+ */
+function SessionNotes({ caseId, initial }: { caseId: string; initial: string }) {
+  const { t } = useTranslation();
+  const patch = usePatchOpenedCase();
+  const headingId = useId();
+  const hintId = useId();
+  // A new session starts a new box: its text, and what was saved of it, start empty.
+  const [round, setRound] = useState(0);
+  const [startFailed, setStartFailed] = useState(false);
+
+  async function newSession(flush: () => Promise<void>) {
+    await flush();
+    const result = await window.aba.startNewSession(caseId).catch(() => null);
+    setStartFailed(result?.outcome !== "saved");
+    if (result?.outcome === "saved") {
+      patch(caseId, { notes: result.notes });
+      setRound((value) => value + 1);
+    }
+  }
+
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-2 rounded-lg border border-nav-hover px-3 py-3">
+      <Eyebrow id={headingId} className="text-fg-on-nav-muted">
+        {t("section.notesHeading")}
+      </Eyebrow>
+      <p id={hintId} className="text-xs text-fg-on-nav-muted">
+        {t("section.notesHint")}
+      </p>
+      <NotesBox key={round} caseId={caseId} initial={round === 0 ? initial : ""} labelledBy={headingId} describedBy={hintId} onNewSession={newSession} />
+      {startFailed ? (
+        <p role="alert" className="text-xs font-medium text-fg-on-nav-warning">
+          {t("section.actionFailed")}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function NotesBox({
+  caseId,
+  initial,
+  labelledBy,
+  describedBy,
+  onNewSession,
+}: {
+  caseId: string;
+  initial: string;
+  labelledBy: string;
+  describedBy: string;
+  onNewSession: (flush: () => Promise<void>) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const patch = usePatchOpenedCase();
+  const notes = useAutosave({
+    key: `notes:${caseId}`,
+    initial,
+    save: async (text) => {
+      const result = await window.aba.saveSessionNotes(caseId, text);
+      if (result.outcome === "saved") patch(caseId, { notes: result.notes });
+      return result.outcome === "saved";
+    },
+  });
+  return (
+    <>
+      <textarea
+        aria-labelledby={labelledBy}
+        aria-describedby={describedBy}
+        data-testid="session-notes"
+        value={notes.value}
+        placeholder={t("section.notesPlaceholder")}
+        onChange={(event) => notes.setValue(event.target.value)}
+        onBlur={() => void notes.flush()}
+        rows={4}
+        className="min-h-24 w-full resize-y rounded-md bg-nav-hover px-2.5 py-2 text-sm text-fg-on-nav placeholder:text-fg-on-nav-muted"
+      />
+      {notes.status === "failed" ? (
+        <p role="alert" className="text-xs font-medium text-fg-on-nav-warning">
+          {t("section.actionFailed")}{" "}
+          <button type="button" onClick={() => void notes.retry()} className="underline">
+            {t("sources.tryAgain")}
+          </button>
+        </p>
+      ) : null}
+      {notes.value.trim() !== "" ? (
+        <Tooltip content={t("section.newSessionHint")}>
+          <Button variant="nav" size="sm" className="self-start" onClick={() => void onNewSession(notes.flush)}>
+            {t("section.newSession")}
+          </Button>
+        </Tooltip>
+      ) : null}
+    </>
   );
 }

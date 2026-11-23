@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useOnSectionSaved } from "../section-generation.tsx";
 import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useMatch } from "react-router";
 import { SIDEBAR_BREAKPOINT } from "../../../shared/theme.ts";
 import { formatAge } from "../format.ts";
 import { useLanguage } from "../language.tsx";
-import { OpenCaseContext, SetCaseSourcesContext, useCaseLoader } from "../open-case.tsx";
+import { OpenCaseContext, PatchOpenedCaseContext, SetCaseSourcesContext, useCaseLoader } from "../open-case.tsx";
 import { Button } from "../components/Button.tsx";
 import { Dialog, DialogClose } from "../components/Dialog.tsx";
 import { AppSidebar, CaseSidebar } from "./Sidebar.tsx";
@@ -21,12 +22,16 @@ export function AppShell() {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const inCase = useMatch("/cases/:caseId/*");
-  const { state: openCase, setSources } = useCaseLoader(inCase?.params.caseId);
+  const { state: openCase, setSources, patch } = useCaseLoader(inCase?.params.caseId);
+  // A version the AI saved changes the section's state in the sidebar, wherever she is.
+  useOnSectionSaved(useCallback((caseId, result) => patch(caseId, { sections: result.sections }), [patch]));
   const sidebar =
     openCase?.outcome === "opened" ? (
       <CaseSidebar
         caseId={openCase.case.id}
         caseName={openCase.case.label}
+        sections={openCase.case.sections}
+        notes={openCase.case.notes}
         caseDetail={formatAge(t, language, openCase.case.clientAge) ?? t("case.ageNotGiven")}
       />
     ) : (
@@ -35,6 +40,7 @@ export function AppShell() {
   return (
     <OpenCaseContext value={openCase}>
     <SetCaseSourcesContext value={setSources}>
+    <PatchOpenedCaseContext value={patch}>
     <div className="flex h-dvh overflow-hidden">
       <SkipLink />
       <div data-surface="nav" className="hidden w-sidebar shrink-0 bg-nav text-fg-on-nav sidebar:block">
@@ -48,6 +54,7 @@ export function AppShell() {
       </div>
       <RouteAnnouncer />
     </div>
+    </PatchOpenedCaseContext>
     </SetCaseSourcesContext>
     </OpenCaseContext>
   );

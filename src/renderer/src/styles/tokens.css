@@ -52,6 +52,10 @@
   --color-danger: #a1231b; /* an error message on a light surface */
   --color-fg-on-nav-warning: #ffc46b; /* an error message on the sidebar */
   --color-dot-empty: #c7d0d9; /* a section not started, on the sidebar */
+  --color-dot-done: #5cc489; /* a section that is hers or approved, on the sidebar */
+  --color-dot-draft: #ffb347; /* a section drafted by the AI, not approved yet, on the sidebar */
+  /* A paragraph she marked to change: the accent's light tint, edged in the accent. */
+  --color-mark: #fff4dc;
 
   --color-backdrop: rgb(22 32 42 / 0.55);
 

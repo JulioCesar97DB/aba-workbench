@@ -69,6 +69,24 @@ export function findMarkers(text: string): SectionMarker[] {
   return markers;
 }
 
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"]/g, (char) => (char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : "&quot;"));
+}
+
+/**
+ * What "Copy for ABA Matrix" puts on the clipboard (owner's decision, 2026-11-22): plain
+ * text, its paragraphs separated by one blank line, and the same text as minimal HTML,
+ * one <p> per paragraph with no fonts, colors or styles. A rich-text box takes the HTML
+ * and keeps clean paragraphs in its own font; a plain box takes the text.
+ */
+export function abaMatrixClipboard(text: string): { text: string; html: string } {
+  const paragraphs = splitParagraphs(text);
+  return {
+    text: joinParagraphs(paragraphs),
+    html: paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`).join(""),
+  };
+}
+
 export function countWords(text: string): number {
   return text.split(/\s+/u).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
 }

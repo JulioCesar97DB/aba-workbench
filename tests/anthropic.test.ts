@@ -43,13 +43,13 @@ test("Claude request: adaptive thinking, effort, fallbacks, two cache breakpoint
     assert.equal("betas" in body, false, "betas travel as a header, not in the body");
 
     const system = body.system as Array<Record<string, unknown>>;
-    assert.deepEqual(system[0].cache_control, { type: "ephemeral" });
+    assert.deepEqual(system[0].cache_control, { type: "ephemeral", ttl: "1h" });
     const content = (body.messages as Array<{ content: Array<Record<string, unknown>> }>)[0].content;
     const marked = content.filter((block) => block.cache_control);
     assert.equal(marked.length, 1, "exactly one breakpoint in the messages (end of sources)");
     assert.equal(content.at(-1)!.text, "SECTION RULES AND REQUEST");
     assert.equal(content.at(-1)!.cache_control, undefined, "the section request is never cached");
-    assert.deepEqual(content.at(-2)!.cache_control, { type: "ephemeral" });
+    assert.deepEqual(content.at(-2)!.cache_control, { type: "ephemeral", ttl: "1h" });
     const pdf = content.find((block) => block.type === "document") as { source: { data: string; media_type: string } };
     assert.equal(pdf.source.media_type, "application/pdf");
     assert.equal(pdf.source.data, PDF_BASE64, "the PDF bytes reach the provider unchanged");
@@ -100,7 +100,7 @@ test("Claude pre-warm: max_tokens 0, same settings, sources but no section reque
   assert.deepEqual(body.output_config, { effort: "high" });
   const content = (body.messages as Array<{ content: Array<Record<string, unknown>> }>)[0].content;
   assert.notEqual(content.at(-1)!.text, "SECTION RULES AND REQUEST");
-  assert.deepEqual(content.at(-1)!.cache_control, { type: "ephemeral" });
+  assert.deepEqual(content.at(-1)!.cache_control, { type: "ephemeral", ttl: "1h" });
   assert.equal(result.cacheWriteTokens, 3000);
 });
 

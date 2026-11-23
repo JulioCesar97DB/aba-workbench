@@ -1,6 +1,7 @@
 import { anthropicProvider, toProviderError as anthropicError } from "./anthropic.ts";
 import { openaiProvider, toProviderError as openaiError } from "./openai.ts";
 import { ProviderError, type Provider, type ProviderId } from "./types.ts";
+import { MODEL_CHOICES } from "../../shared/models.ts";
 
 export * from "./types.ts";
 
@@ -30,8 +31,8 @@ export function toSafeError(error: unknown): ProviderError {
  * rank capability in their model lists, so the ranking is ours and lives here.
  */
 const MOST_CAPABLE_FIRST: Record<ProviderId, string[]> = {
-  anthropic: ["claude-fable-5-2", "claude-opus-5-5"],
-  openai: ["gpt-6.2-astra", "gpt-6.2-sol"],
+  anthropic: MODEL_CHOICES.anthropic.map((choice) => choice.id),
+  openai: MODEL_CHOICES.openai.map((choice) => choice.id),
   mock: ["mock-echo"],
 };
 

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
  * technical detail in Plex Mono, and the screen's actions. It also sets the window title.
  * The h1 can take focus (tabIndex -1) so the skip link and a navigation can land on it.
  */
-export function PageHeader({ title, titleLang, meta, actions }: { title: string; titleLang?: string; meta?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({ title, titleLang, meta, afterTitle, actions }: { title: string; titleLang?: string; meta?: ReactNode; afterTitle?: ReactNode; actions?: ReactNode }) {
   const { t } = useTranslation();
   const windowTitle = t("app.pageTitle", { page: title });
   useEffect(() => {
@@ -18,6 +18,7 @@ export function PageHeader({ title, titleLang, meta, actions }: { title: string;
         <h1 id="page-title" tabIndex={-1} lang={titleLang} className="text-lg font-semibold break-words">
           {title}
         </h1>
+        {afterTitle}
         {meta ? <p className="font-mono text-xs text-fg-muted">{meta}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap gap-1.5">{actions}</div> : null}

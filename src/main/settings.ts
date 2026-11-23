@@ -2,6 +2,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { LANGUAGES, isLanguage, type Language } from "../shared/api.ts";
+import { isModelChoice, MODEL_CHOICES, type ModelProvider } from "../shared/models.ts";
 import { removeLeftoverAppDataTemporaryFiles, writeFileDurably } from "./durable-write.ts";
 
 /*
@@ -32,6 +33,10 @@ export interface StoredSettings {
    * only after the first sign-in with plan use. Written only when true.
    */
   chatgptWelcomeShown?: true;
+  /** The model chosen in Settings for each provider; missing: the default (src/shared/models.ts). Written only when chosen. */
+  models?: Partial<Record<ModelProvider, string>>;
+  /** The provider she last drafted with, shown next to the generate button. Written once she has drafted. */
+  lastProvider?: ModelProvider;
 }
 
 /** Long enough for any real folder, short enough that a hostile file cannot make it a burden. */
@@ -49,6 +54,14 @@ const StoredSettingsSchema = z
     language: z.enum(LANGUAGES).optional().catch(undefined),
     casesFolder: FolderPathSchema.optional().catch(undefined),
     chatgptWelcomeShown: z.literal(true).optional().catch(undefined),
+    models: z
+      .object({
+        anthropic: z.enum(MODEL_CHOICES.anthropic.map((m) => m.id)).optional().catch(undefined),
+        openai: z.enum(MODEL_CHOICES.openai.map((m) => m.id)).optional().catch(undefined),
+      })
+      .optional()
+      .catch(undefined),
+    lastProvider: z.enum(["anthropic", "openai"]).optional().catch(undefined),
   })
   .catch({});
 
@@ -77,6 +90,8 @@ export function readStoredSettings(text: string | null, defaults: StoredSettings
     language: stored.language ?? defaults.language,
     casesFolder: stored.casesFolder ?? defaults.casesFolder,
     ...(stored.chatgptWelcomeShown ? { chatgptWelcomeShown: true as const } : {}),
+    ...(modelsOf(stored.models) ? { models: modelsOf(stored.models) } : {}),
+    ...(stored.lastProvider ? { lastProvider: stored.lastProvider } : {}),
   };
   const record = typeof json === "object" && json !== null && !Array.isArray(json) ? (json as Record<string, unknown>) : null;
   const usedWhole =
@@ -85,15 +100,26 @@ export function readStoredSettings(text: string | null, defaults: StoredSettings
     stored.language !== undefined &&
     // A cases folder in the file that could not be used (not an absolute path, say).
     (record.casesFolder === undefined || stored.casesFolder !== undefined) &&
-    (record.chatgptWelcomeShown === undefined || stored.chatgptWelcomeShown !== undefined);
+    (record.chatgptWelcomeShown === undefined || stored.chatgptWelcomeShown !== undefined) &&
+    (record.lastProvider === undefined || stored.lastProvider !== undefined) &&
+    (record.models === undefined || JSON.stringify(record.models) === JSON.stringify(modelsOf(stored.models) ?? null));
   return { settings, problem: usedWhole ? null : "invalid" };
+}
+
+/** The chosen models that were understood, or undefined when none was. */
+function modelsOf(models: { anthropic?: string; openai?: string } | undefined): Partial<Record<ModelProvider, string>> | undefined {
+  if (!models) return undefined;
+  const kept = Object.fromEntries(Object.entries(models).filter(([, model]) => model !== undefined));
+  return Object.keys(kept).length > 0 ? kept : undefined;
 }
 
 /** The default cases folder is not written: only a folder the user chose is. */
 export function serializeSettings(settings: StoredSettings): string {
   const body = settings.casesFolder === null ? {} : { casesFolder: settings.casesFolder };
   const welcome = settings.chatgptWelcomeShown ? { chatgptWelcomeShown: true } : {};
-  return `${JSON.stringify({ version: SETTINGS_FILE_VERSION, language: settings.language, ...body, ...welcome }, null, 2)}\n`;
+  const models = settings.models && Object.keys(settings.models).length > 0 ? { models: settings.models } : {};
+  const last = settings.lastProvider ? { lastProvider: settings.lastProvider } : {};
+  return `${JSON.stringify({ version: SETTINGS_FILE_VERSION, language: settings.language, ...body, ...welcome, ...models, ...last }, null, 2)}\n`;
 }
 
 /**
@@ -169,6 +195,21 @@ export class SettingsStore {
       this.current = { ...(this.current ?? current), chatgptWelcomeShown: true };
       throw error;
     }
+  }
+
+  /** The model to use for a provider, as chosen in Settings. Anything not offered is refused. */
+  async setModel(provider: unknown, model: unknown): Promise<StoredSettings> {
+    if (provider !== "anthropic" && provider !== "openai") throw new Error("Refused: unknown provider.");
+    if (!isModelChoice(provider, model)) throw new Error("Refused: not a model offered for this provider.");
+    const current = await this.get();
+    return this.update({ models: { ...current.models, [provider]: model } });
+  }
+
+  /** Remembers the provider she drafted with last. */
+  async setLastProvider(provider: ModelProvider): Promise<StoredSettings> {
+    const current = await this.get();
+    if (current.lastProvider === provider) return current;
+    return this.update({ lastProvider: provider });
   }
 
   private update(change: Partial<StoredSettings>): Promise<StoredSettings> {

@@ -1,4 +1,6 @@
 import type { GenerationEvent } from "../lib/generation-events.ts";
+import type { ReportSectionId } from "./report-sections.ts";
+import type { SectionDetail, SectionRequestInput, SectionSummary } from "./sections.ts";
 import type { AddPdfsResult, CaseSources, DroppedPdf, FailedSave, NewTextSource, ReadSourceTextResult, SourceChange, SourceSaveResult } from "./sources.ts";
 
 /*
@@ -123,7 +125,46 @@ export interface CaseDetail extends CaseSummary {
   files: CaseFile[];
   /** Its sources (src/shared/sources.ts), and the PDFs in its folder again. */
   sources: CaseSources;
+  /** Its report's sections, in the report's order (src/shared/sections.ts). */
+  sections: SectionSummary[];
+  /** Her notes for this session: the AI takes them into account in everything it drafts. */
+  notes: string;
 }
+
+/* A case's report sections (src/shared/sections.ts). */
+
+/** Why a change to a section could not be saved: the case is gone or unreadable, the disk refused, or the file would be too large. */
+export type SectionSaveFailure = { outcome: "case-unavailable" } | { outcome: "not-saved" } | { outcome: "case-full" } | { outcome: "version-not-found" };
+
+/** A change to a section, saved: the section as saved, and every section's summary for the sidebar. */
+export type SectionSaveResult = { outcome: "saved"; section: SectionDetail; sections: SectionSummary[] } | SectionSaveFailure;
+
+export type GetSectionResult = { outcome: "read"; section: SectionDetail } | { outcome: "case-unavailable" };
+
+export type NotesSaveResult = { outcome: "saved"; notes: string } | { outcome: "case-unavailable" } | { outcome: "not-saved" } | { outcome: "case-full" };
+
+export type InstructionsSaveResult = { outcome: "saved" } | { outcome: "not-saved" };
+
+/** The providers a section can be drafted with: the ones connected in Settings. */
+export type DraftingProvider = "anthropic" | "openai";
+
+export type StartSectionResult =
+  | { outcome: "started" }
+  /** That provider is not connected (or needs attention). */
+  | { outcome: "not-connected" }
+  /** The version the request names is not in the section. */
+  | { outcome: "version-not-found" }
+  | { outcome: "case-unavailable" }
+  /** A generation is already running in this window. */
+  | { outcome: "busy" };
+
+/** The model used on each provider (chosen in Settings, or the default), and the provider she drafted with last. */
+export interface AiPreferences {
+  models: { anthropic: string; openai: string };
+  lastProvider: DraftingProvider | null;
+}
+
+export type CopySectionResult = { outcome: "copied"; markers: number } | { outcome: "version-not-found" } | { outcome: "case-unavailable" };
 
 /**
  * Why a folder inside the cases folder cannot be opened as a case:
@@ -168,8 +209,17 @@ export type OpenCaseResult =
   | { outcome: "unreadable"; reason: UnreadableReason }
   | { outcome: "folder-problem"; problem: CasesFolderProblem };
 
-/** What the main process reports about a generation, in order. "finished" is always last. */
-export type GenerationUpdateEvent = GenerationEvent | { type: "finished"; cancelled: boolean };
+/**
+ * What the main process reports about a generation, in order. A section's generation
+ * that finished on its own ends with "saved" (the new version, or why it could not be
+ * saved) before "finished". "finished" is always last.
+ */
+export type GenerationUpdateEvent =
+  | GenerationEvent
+  | { type: "saved"; result: SectionSaveResult }
+  /** The consistency check that runs after each new AI version, saved with it. */
+  | { type: "checked"; result: SectionSaveResult }
+  | { type: "finished"; cancelled: boolean };
 
 export interface GenerationUpdate {
   generationId: string;
@@ -388,6 +438,39 @@ export interface AbaApi {
   listFailedSaves(): Promise<FailedSave[]>;
   /** Runs a change that could not be saved again. */
   retryFailedSave(id: string): Promise<SourceSaveResult>;
+
+  /*
+   * A case's report sections (src/shared/sections.ts). Nothing is ever deleted: every
+   * change by the AI or by her is a new version, and she can go back to any of them.
+   */
+  /** A section with all its versions and her standing instructions for it. */
+  getSection(caseId: string, sectionId: ReportSectionId): Promise<GetSectionResult>;
+  /**
+   * Saves the text she writes herself (pasted from ABA Matrix, or an edit). `editing` is
+   * the version this editing pass made and keeps updating; null starts a new version.
+   */
+  saveSectionText(caseId: string, sectionId: ReportSectionId, text: string, editing: number | null): Promise<SectionSaveResult>;
+  /** Shows another version: nothing is lost, only which one is current changes. */
+  setCurrentVersion(caseId: string, sectionId: ReportSectionId, version: number): Promise<SectionSaveResult>;
+  /** Approves a version (null takes the approval back). */
+  approveSection(caseId: string, sectionId: ReportSectionId, version: number | null): Promise<SectionSaveResult>;
+  /**
+   * Asks the AI for a draft, a change, a paragraph change or an improvement. The text
+   * streams in as generation updates; the new version arrives in the "saved" update.
+   */
+  startSectionGeneration(caseId: string, sectionId: ReportSectionId, generationId: string, provider: DraftingProvider, request: SectionRequestInput): Promise<StartSectionResult>;
+  /** Saves her standing instructions for a section, for all her cases. */
+  saveSectionInstructions(sectionId: ReportSectionId, text: string): Promise<InstructionsSaveResult>;
+  /** Saves her notes for this session, in the case. */
+  saveSessionNotes(caseId: string, text: string): Promise<NotesSaveResult>;
+  /** "Start a new session": archives the notes (kept in the case, never sent again) and empties the box. */
+  startNewSession(caseId: string): Promise<NotesSaveResult>;
+  /** The model used on each provider and the provider she drafted with last. */
+  getAiPreferences(): Promise<AiPreferences>;
+  /** Chooses the model for a provider among the ones offered (src/shared/models.ts). */
+  setModel(provider: DraftingProvider, model: string): Promise<AiPreferences>;
+  /** Puts a version on the clipboard the way ABA Matrix takes it; says how many markers are left. */
+  copySection(caseId: string, sectionId: ReportSectionId, version: number): Promise<CopySectionResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -430,6 +513,17 @@ export const IPC_CHANNELS = {
   savesFlushed: "saves:flushed",
   listFailedSaves: "saves:list-failed",
   retryFailedSave: "saves:retry-failed",
+  getSection: "sections:get",
+  saveSectionText: "sections:save-text",
+  setCurrentVersion: "sections:set-current",
+  approveSection: "sections:approve",
+  startSectionGeneration: "sections:generate",
+  saveSectionInstructions: "sections:save-instructions",
+  saveSessionNotes: "sections:save-notes",
+  startNewSession: "sections:new-session",
+  copySection: "sections:copy",
+  getAiPreferences: "settings:get-ai",
+  setModel: "settings:set-model",
 } as const;
 
 /** Generation ids are UUIDs (crypto.randomUUID()); anything else is refused. */

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Provider } from "../lib/providers/types.ts";
+import type { Provider, ProviderCredential } from "../lib/providers/types.ts";
 import {
   MAX_API_KEY_INPUT_LENGTH,
   type ChatGptSignInResult,
@@ -181,6 +181,35 @@ export class ConnectionService {
     this.claudeKeyRejected = false;
     await this.changed();
     return { outcome: "started-over" };
+  }
+
+  /**
+   * The credential a section request is sent with, or null when that provider is not
+   * connected (or needs attention). Only the main process holds it: it goes to the
+   * provider's client and nowhere else. A Claude key Anthropic refuses on a request marks
+   * the connection (claudeKeyRejected, as a check would).
+   */
+  async credentialFor(provider: "anthropic" | "openai"): Promise<ProviderCredential | null> {
+    const connections = await this.get();
+    if (provider === "anthropic") {
+      if (connections.claude.state !== "connected") return null;
+      const saved = await this.store.read();
+      const key = saved.ok ? (saved.credentials?.claude?.apiKey ?? null) : null;
+      return key === null ? null : { kind: "api-key", apiKey: key };
+    }
+    if (connections.chatgpt.state !== "connected") return null;
+    try {
+      return { kind: "chatgpt", accessToken: await this.chatgpt.accessToken() };
+    } catch {
+      return null;
+    }
+  }
+
+  /** A request was refused for its key: the Claude connection needs attention, as after a check. */
+  async claudeKeyRefused(): Promise<void> {
+    if (this.claudeKeyRejected) return;
+    this.claudeKeyRejected = true;
+    await this.changed();
   }
 
   private claudeState(key: string | null): ClaudeConnection {

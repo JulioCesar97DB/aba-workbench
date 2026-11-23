@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, shell } from "electron";
 import { appMenuTemplate } from "./app-menu.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -11,6 +11,9 @@ import { ChatGptSession } from "./chatgpt-session.ts";
 import { ConnectionService } from "./connections.ts";
 import { CREDENTIALS_FILE_NAME, CredentialsStore } from "./credentials.ts";
 import { anthropicProvider } from "../lib/providers/anthropic.ts";
+import { openaiProvider } from "../lib/providers/openai.ts";
+import { INSTRUCTIONS_FILE_NAME, InstructionsStore } from "./instructions.ts";
+import { SectionService } from "./sections.ts";
 import { IPC_CHANNELS } from "../shared/api.ts";
 import { defaultCasesFolder } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
@@ -96,12 +99,28 @@ const connections = new ConnectionService({
   },
 });
 
+// The report's sections: her standing instructions per section live in the app's own
+// data folder (instructions.json), everything else in each case's data file.
+const sections = new SectionService({
+  cases,
+  instructions: new InstructionsStore(path.join(app.getPath("userData"), INSTRUCTIONS_FILE_NAME)),
+  rulesDir,
+  provider: (id) => (id === "anthropic" ? anthropicProvider : openaiProvider),
+  credential: (id) => connections.credentialFor(id),
+  chosenModel: async (id) => (await settings.get()).models?.[id] ?? null,
+  rememberProvider: (id) => settings.setLastProvider(id),
+  claudeKeyRefused: () => connections.claudeKeyRefused(),
+  // Both forms in one item, written at once: plain text and minimal HTML.
+  writeClipboard: (content) => clipboard.write([new ClipboardItem({ "text/plain": content.text, "text/html": content.html })]),
+});
+
 registerIpc({
   rulesDir,
   settings,
   cases,
   failedSaves,
   connections,
+  sections,
   isTrustedSender: (event) => mainWindow !== null && event.sender === mainWindow.webContents && isTrustedFrame(event.senderFrame, trustedOrigin),
 });
 

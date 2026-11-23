@@ -133,7 +133,25 @@ export type SectionRequest =
   | { kind: "draft" }
   | { kind: "change"; currentText: string; request: string }
   | { kind: "paragraph"; currentText: string; paragraphIndex: number; request: string }
-  | { kind: "improve"; currentText: string };
+  | { kind: "improve"; currentText: string }
+  /** Checks a version against her sections; the answer is CONSISTENCY_NONE or one "- " line per contradiction. */
+  | { kind: "consistency"; currentText: string };
+
+/** The answer of a consistency check that found nothing. */
+export const CONSISTENCY_NONE = "NO CONTRADICTIONS";
+
+/** A consistency check's answer as a list of contradictions (empty: none). Null when the answer is not in the expected shape. */
+export function parseConsistencyAnswer(answer: string): string[] | null {
+  const text = answer.trim();
+  if (text.replace(/[.\s]+$/u, "").toUpperCase() === CONSISTENCY_NONE) return [];
+  const items = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2).trim())
+    .filter((line) => line !== "");
+  return items.length > 0 ? items.slice(0, 20) : null;
+}
 
 export interface SectionPromptInput {
   section: SectionId;
@@ -211,6 +229,17 @@ export async function buildSectionPrompt(
     case "improve":
       parts.push(currentTextBlock(request.currentText, null));
       parts.push(`Improve request. The text above is ${what} as she wrote it. Return the improved section, ready to paste.`);
+      break;
+    case "consistency":
+      parts.push(currentTextBlock(request.currentText, null));
+      parts.push(
+        [
+          `Consistency check. The text above is a new version of ${what}. Compare it with her sections only: does it contradict any of them in names, numbers, scores, dates, behaviors, diagnoses, settings, people or services?`,
+          "Do not report missing information, style, length, or differences of emphasis; only statements that cannot both be true.",
+          `If there is no contradiction, answer exactly: ${CONSISTENCY_NONE}`,
+          'Otherwise answer with one line per contradiction, each starting with "- ", naming her section and saying briefly what differs. Nothing else.',
+        ].join("\n"),
+      );
       break;
   }
   return { prompt: { system, sources: input.sources, task: parts.join("\n\n") }, rulesVersions };
