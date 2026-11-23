@@ -46,11 +46,18 @@ async function openSection(launch: (options?: { language?: "en" | "es" }) => Pro
 
 /** A section as the case's data file holds it (none before the case is first saved with sections). */
 const sectionData = (caseFile: string, id: string) => (JSON.parse(readFileSync(caseFile, "utf8")).sections ?? {})[id];
-/** Opens today's notes from the foot of the sidebar (owner's decision T4), unless they are open already. */
+/**
+ * Opens today's notes from the foot of the sidebar (owner's decision T4), unless they are
+ * open already. A panel still sliding closed (Escape, a press outside) is not open: Base UI
+ * marks it data-closed at once, so the helper waits for it to be gone, then opens it again.
+ */
 async function openNotes(page: Page) {
   const box = page.getByTestId("session-notes");
-  if (await box.isVisible()) return box;
+  const panel = box.locator("xpath=ancestor::*[@role='dialog'][1]");
+  if ((await box.isVisible()) && (await panel.getAttribute("data-open")) !== null) return box;
+  await expect(box).toBeHidden();
   await page.getByTestId("notes-open").click();
+  await expect(panel).toHaveAttribute("data-open", "");
   await expect(box).toBeVisible();
   return box;
 }
