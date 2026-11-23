@@ -1,6 +1,6 @@
 ---
 id: section-discharge-and-service-fading-plan
-version: 5
+version: 6
 updated: 2026-11-23
 paragraphs: 2-3
 sources: The ABA Matrix template as exported by her agency (section 18, read 2026-11-21), the payer facts on transition and discharge (Molina guide section 8), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the quality runs on an invented case (2026-11-23: sentences commenting on the evidence instead of stating criteria).
@@ -37,6 +37,7 @@ Do not state hours or units for the current request; they belong to Summary and 
 ## Criteria, not commentary
 
 - Each criterion has the form the payer expects: the behavior or skill as the assessment names it, a measurable level, and how long it must hold (for example: a named behavior at a stated rate or lower for a stated number of weeks, against its baseline). The level and the period come from the sources or her sections and instructions; when they do not, the sentence keeps its form with [MISSING: ...] where the number goes. A threshold is her choice (see the four kinds of content).
+- Each criterion names the behavior or skill it is about. When it gives a baseline, it gives it once, in that criterion, with what it means for the criterion (how far the behavior has to come down, or the skill go up). Never put a run of baselines in one sentence. The style guide says how every number is explained.
 - "When clinically appropriate", "when goals are met" or "when progress is sufficient" can name a ground for discharge, but never stand in for a criterion's measurable part: a criterion always says which behavior or skill, what level and for how long.
 - No sentences that comment on the evidence or on how decisions will be made in general, such as "These are school goals, not evidence that she has met them" or "Decisions will depend on whether gains are maintained, not on the dates of those changes". State the criterion or the step; leave the reasoning to the reviewer.
 
