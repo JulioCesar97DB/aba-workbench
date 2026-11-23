@@ -104,8 +104,9 @@ app.whenReady().then(async () => {
   clearInterval(tick);
   check("a text bomb is stopped, the main process never blocked", bomb.status === "unreadable" && bomb.ms < 8_000 && lag < 500, { ...bomb, lagMs: lag });
 
-  const whitespace = await read(onePage(Buffer.alloc(1024 * 1024 * 1024, 0x20)));
-  check(`a 1 GB whitespace bomb is killed at the memory limit (${CHILD_MEMORY_LIMIT_MB} MB)`, whitespace.status === "unreadable" && whitespace.reason === "too-large" && whitespace.ms < 30_000, whitespace);
+  // 1.5 GB of spaces once decompressed: well past the memory limit (a 1 GB one peaks right at it, and may finish first).
+  const whitespace = await read(onePage(Buffer.alloc(1536 * 1024 * 1024, 0x20)));
+  check(`a 1.5 GB whitespace bomb is killed at the memory limit (${CHILD_MEMORY_LIMIT_MB} MB)`, whitespace.status === "unreadable" && whitespace.reason === "too-large" && whitespace.ms < 30_000, whitespace);
 
   const probes = mkdtempSync(path.join(tmpdir(), "aba-pdf-reader-check-"));
   try {
