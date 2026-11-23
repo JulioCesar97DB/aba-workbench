@@ -100,6 +100,9 @@ test("release workflow: the Mac job builds, mounts, checks, starts the app on bo
   assert.match(mac, /cache: \$\{\{ github\.ref_type != 'tag' \}\}/);
   assert.match(mac, /save-cache: false/);
   assert.match(mac, /name: mac-installer\n/);
+  // electron-builder signs nothing in a pull request's build without this: the check would
+  // then find an app with no signature at all.
+  assert.match(mac, /CSC_FOR_PULL_REQUEST: "true"\n(?:\s+[A-Z_]+: .*\n)*\s+run: \|\n\s+pnpm package:mac/);
 });
 
 test("release workflow: one pre-release gets both installers and both SHA-256 files, once both jobs passed", () => {

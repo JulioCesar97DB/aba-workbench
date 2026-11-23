@@ -104,6 +104,10 @@ jobs:
       # installer, no certificate (macOS gets an ad-hoc signature, mac identity "-" in
       # electron-builder.yml; no signing certificate is configured for Windows), no secrets.
       - name: Package the app (unpacked, no certificate)
+        env:
+          # A pull request's build gets the ad-hoc signature too (electron-builder skips all
+          # signing in a pull request otherwise); no certificate or secret is involved.
+          CSC_FOR_PULL_REQUEST: "true"
         run: pnpm package
 
       # The same window tests, against the packaged app: it starts from dist/ and finds

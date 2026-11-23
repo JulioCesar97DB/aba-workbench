@@ -255,6 +255,11 @@ jobs:
       - name: Build the universal disk image (ad-hoc signed)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # electron-builder skips all code signing in a pull request's build (it sees
+          # GITHUB_BASE_REF) unless this is set, so the app came out with no signature at
+          # all. Its warning is about certificates in a fork's reach: there is none here,
+          # only the ad-hoc signature, made on the runner.
+          CSC_FOR_PULL_REQUEST: "true"
           DMG: ${{ steps.name.outputs.dmg }}
         run: |
           pnpm package:mac
