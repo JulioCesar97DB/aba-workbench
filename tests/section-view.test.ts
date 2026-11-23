@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { relativeDay } from "../src/renderer/src/format.ts";
 import { en } from "../src/renderer/src/i18n/en.ts";
 import { es } from "../src/renderer/src/i18n/es.ts";
-import { canImproveFromEditor, changedParagraphs, copiedLead, improveFromEditorVersion, improveFromVersion, isCorrection, nextSection, paragraphBeingWritten, versionChip } from "../src/renderer/src/section-view.ts";
+import { canImproveFromEditor, changedParagraphs, copiedLead, improveFromEditorVersion, improveFromVersion, isCorrection, nextSection, nextStep, paragraphBeingWritten, versionChip } from "../src/renderer/src/section-view.ts";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
 import type { SectionState, SectionVersion } from "../src/shared/sections.ts";
 
@@ -59,6 +59,21 @@ test("the next section is the first after this one, in ABA Matrix's order, that 
   assert.equal(nextSection(states([0, 1, 2, 3, 4, 5, 6, 7]), REPORT_SECTIONS[8].id), null);
   // A section with nothing yet is not ready either.
   assert.equal(nextSection([], REPORT_SECTIONS[8].id)?.id, REPORT_SECTIONS[0].id);
+});
+
+test("Next step on the last unfinished section is Review and copy, but not \"all ready\" until this one is (review round 2, S-1)", () => {
+  const states = (ready: number[], current?: SectionState) =>
+    REPORT_SECTIONS.map((section, index) => ({ id: section.id, state: (ready.includes(index) ? "approved" : index === 8 && current ? current : "drafted") as SectionState }));
+  const others = [0, 1, 2, 3, 4, 5, 6, 7];
+  // The other eight ready, this one an AI draft not approved: not every section is ready.
+  assert.deepEqual(nextStep(states(others, "drafted"), REPORT_SECTIONS[8].id), { kind: "review", allReady: false });
+  // Not started at all: not ready either.
+  assert.deepEqual(nextStep(states(others).filter((summary) => summary.id !== REPORT_SECTIONS[8].id), REPORT_SECTIONS[8].id), { kind: "review", allReady: false });
+  // Approved, or written by her: now all nine are.
+  assert.deepEqual(nextStep(states(others, "approved"), REPORT_SECTIONS[8].id), { kind: "review", allReady: true });
+  assert.deepEqual(nextStep(states(others, "hers"), REPORT_SECTIONS[8].id), { kind: "review", allReady: true });
+  // Another section still to do: that one.
+  assert.deepEqual(nextStep(states([0, 1, 2, 3, 4, 5, 6]), REPORT_SECTIONS[8].id), { kind: "section", section: REPORT_SECTIONS[7] });
 });
 
 test("see what changed: a paragraph new or different from the version it came from; one moved is not", () => {

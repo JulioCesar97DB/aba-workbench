@@ -61,6 +61,18 @@ export function nextSection(sections: ReadonlyArray<Pick<SectionSummary, "id" | 
 }
 
 /**
+ * "Siguiente paso" for a section (owner's proposal §4, "Next"): the next section not ready;
+ * with none left, "Review and copy". That says every section is ready only when this one is
+ * ready too: on the last unfinished section, the others being ready is not all of them
+ * (UX-3 review round 2, S-1).
+ */
+export function nextStep(sections: ReadonlyArray<Pick<SectionSummary, "id" | "state">>, currentId: ReportSectionId): { kind: "section"; section: ReportSection } | { kind: "review"; allReady: boolean } {
+  const section = nextSection(sections, currentId);
+  if (section) return { kind: "section", section };
+  return { kind: "review", allReady: ready(sections.find((summary) => summary.id === currentId)) };
+}
+
+/**
  * For each paragraph of a version, whether it is new or different from the version it was
  * made from ("see what changed"). A paragraph counts as unchanged when the earlier text has
  * it word for word anywhere, so a paragraph moved is not marked.

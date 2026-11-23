@@ -485,6 +485,8 @@ export const en = {
     allReadyName: "All {{total}} sections are ready",
     allReadyBody: "Next is “Review and copy”. For now, copy each one into ABA Matrix from its own screen.",
     toReview: "Go to Review and copy",
+    thenReviewName: "Then: Review and copy",
+    thenReviewBody: "The other sections are ready. Once this one is ready too, “Review and copy” is next.",
   },
 
   settings: {

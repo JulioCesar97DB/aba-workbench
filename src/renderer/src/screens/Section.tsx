@@ -36,7 +36,7 @@ import {
   useSectionGeneration,
   type SectionGeneration,
 } from "../section-generation.tsx";
-import { canImproveFromEditor, changedParagraphs, copiedLead, improveFromEditorVersion, isAiVersion, isCorrection, nextSection, paragraphBeingWritten, versionChip } from "../section-view.ts";
+import { canImproveFromEditor, changedParagraphs, copiedLead, improveFromEditorVersion, isAiVersion, isCorrection, nextSection, nextStep, paragraphBeingWritten, versionChip } from "../section-view.ts";
 import { sourceName, sourceNameLang } from "../source-labels.tsx";
 import { Mono, StepHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
@@ -374,6 +374,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   const changesShown = current !== null && changesFor === current.number;
   const copiedNumber = copied !== null && copied !== "failed" ? copied.number : null;
   const next = nextSection(opened.sections, section.id);
+  const step = nextStep(opened.sections, section.id);
   // The section's minimum (approved, then copied) makes "Siguiente paso" the primary: one primary per screen (layout rule 9).
   const sectionDone = approvedHere && copiedNumber === current?.number;
 
@@ -577,7 +578,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
           current={display === "view" ? current : null}
           generation={generation}
           providers={providers}
-          next={next}
+          step={step}
           approved={display === "view" && approvedHere}
           done={display === "view" && sectionDone}
           onRecheck={(version) => void recheck(version)}
@@ -1351,7 +1352,7 @@ function SectionRail({
   current,
   generation,
   providers,
-  next,
+  step,
   approved,
   done,
   onRecheck,
@@ -1363,14 +1364,14 @@ function SectionRail({
   current: SectionVersion | null;
   generation: SectionGeneration | null;
   providers: Providers;
-  next: ReportSection | null;
+  step: ReturnType<typeof nextStep>;
   approved: boolean;
   done: boolean;
   onRecheck: (version: number) => void;
 }) {
   const checking = generation?.phase === "checking" && isRunning(generation);
   const parts: Array<{ key: string; node: ReactNode }> = [];
-  const nextCard = { key: "next", node: <SectionNextStep caseId={caseId} next={next} primary={done} /> };
+  const nextCard = { key: "next", node: <SectionNextStep caseId={caseId} step={step} primary={done} /> };
   if (display === "view" && approved) parts.push(nextCard);
   if (display === "writing") {
     parts.push({ key: "reads", node: <ReadsList detail={detail} section={section} /> });
@@ -1410,12 +1411,17 @@ function RailPart({ children }: { children: ReactNode }) {
   return children;
 }
 
-/** "Siguiente paso" for a section: the next one not ready, or, with every section ready, that they are. */
-function SectionNextStep({ caseId, next, primary }: { caseId: string; next: ReportSection | null; primary: boolean }) {
+/**
+ * "Siguiente paso" for a section: the next one not ready; with none left, Revisión y copia
+ * (review round 1, M1), said "all ready" only once this section is ready too (round 2, S-1).
+ */
+function SectionNextStep({ caseId, step, primary }: { caseId: string; step: ReturnType<typeof nextStep>; primary: boolean }) {
   const { t } = useTranslation();
-  // After the last section, Revisión y copia (owner's proposal §4, "Next"; review round 1, M1).
-  if (!next) return <NextStepCard name={t("section.allReadyName", { total: REPORT_SECTIONS.length })} body={t("section.allReadyBody")} to={casePath(caseId, "review")} action={t("section.toReview")} primary={primary} />;
-  return <NextStepCard name={next.title} nameLang="en" body={t("section.nextSectionBody")} to={casePath(caseId, "report", next.id)} action={t("section.nextSectionAction")} primary={primary} />;
+  if (step.kind === "review") {
+    const name = step.allReady ? t("section.allReadyName", { total: REPORT_SECTIONS.length }) : t("section.thenReviewName");
+    return <NextStepCard name={name} body={t(step.allReady ? "section.allReadyBody" : "section.thenReviewBody")} to={casePath(caseId, "review")} action={t("section.toReview")} primary={primary} />;
+  }
+  return <NextStepCard name={step.section.title} nameLang="en" body={t("section.nextSectionBody")} to={casePath(caseId, "report", step.section.id)} action={t("section.nextSectionAction")} primary={primary} />;
 }
 
 function RailHeading({ id, children }: { id: string; children: ReactNode }) {

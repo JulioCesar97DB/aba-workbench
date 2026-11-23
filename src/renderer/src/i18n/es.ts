@@ -471,6 +471,8 @@ export const es: Messages = {
     allReadyName: "Las {{total}} secciones están listas",
     allReadyBody: "Sigue «Revisión y copia». Por ahora, cópialas a ABA Matrix, cada una desde su pantalla.",
     toReview: "Ir a Revisión y copia",
+    thenReviewName: "Después: Revisión y copia",
+    thenReviewBody: "Las demás secciones están listas. Cuando esta también lo esté, sigue «Revisión y copia».",
   },
 
   settings: {
