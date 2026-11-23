@@ -32,6 +32,7 @@ export function AppShell() {
         caseName={openCase.case.label}
         sections={openCase.case.sections}
         notes={openCase.case.notes}
+        caseMap={openCase.case.caseMap}
         caseDetail={formatAge(t, language, openCase.case.clientAge) ?? t("case.ageNotGiven")}
       />
     ) : (

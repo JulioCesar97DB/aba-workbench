@@ -10,6 +10,32 @@
  * content it is (origin) and the [CHECK: ...] text on it, if any.
  */
 
+/** The 22 sections of the ABA Matrix template, by number: a fact's home section names one (rules/guide.md, the section map). */
+export const TEMPLATE_SECTIONS = [
+  "Recipient Information",
+  "Documents Reviewed",
+  "Background Information",
+  "Medical Necessity Criteria",
+  "Diagnosis Code",
+  "Strengths and Weaknesses",
+  "Environmental Changes",
+  "Maladaptive Behaviors Summary",
+  "Replacement Behaviors Summary",
+  "Maladaptive Behaviors Info",
+  "Replacement Behaviors Info",
+  "Skills Acquisition Info",
+  "Assessments Conducted",
+  "Hypothesis Based Interventions",
+  "Interventions",
+  "Family/Caregiver Involvement",
+  "Generalization and Maintenance",
+  "Discharge and Service Fading Plan",
+  "Risk Assessment",
+  "Crisis Plan",
+  "Summary and Recommendations",
+  "Consent to Treatment",
+] as const;
+
 /** The parts, in the order the screen shows them. */
 export const MAP_PARTS = ["client", "caregivers", "settings", "deficits", "strengths", "behaviors", "risks", "facts", "openItems", "report"] as const;
 export type MapPartId = (typeof MAP_PARTS)[number];

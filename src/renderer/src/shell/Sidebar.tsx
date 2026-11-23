@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import type { SectionSummary } from "../../../shared/sections.ts";
+import type { CaseMapSummary } from "../../../shared/case-map.ts";
 import { useAutosave, useKeptText } from "../autosave.tsx";
 import { onRetried } from "../case-saves.tsx";
 import type { FailedSave } from "../../../shared/sources.ts";
@@ -81,7 +82,21 @@ export function sectionStateText(t: TFunction, section: SectionSummary): { short
   }
 }
 
-export function CaseSidebar({ caseId, caseName, caseDetail, sections, notes }: { caseId: string; caseName: string; caseDetail: string; sections: SectionSummary[]; notes: string }) {
+export function CaseSidebar({
+  caseId,
+  caseName,
+  caseDetail,
+  sections,
+  notes,
+  caseMap,
+}: {
+  caseId: string;
+  caseName: string;
+  caseDetail: string;
+  sections: SectionSummary[];
+  notes: string;
+  caseMap: CaseMapSummary;
+}) {
   const { t } = useTranslation();
   const sectionsHeadingId = useId();
   const states = new Map(sections.map((section) => [section.id, section]));
@@ -105,8 +120,14 @@ export function CaseSidebar({ caseId, caseName, caseDetail, sections, notes }: {
         <ol className="flex flex-col gap-0.5">
           {CASE_STEPS.map((step, index) => (
             <li key={step}>
-              <NavItem to={casePath(caseId, step)} number={index + 1}>
+              <NavItem
+                to={casePath(caseId, step)}
+                number={index + 1}
+                // The case map: its parts approved, out of the parts with something in them.
+                detail={step === "case-map" && caseMap.withContent > 0 ? `${caseMap.approved}/${caseMap.withContent}` : undefined}
+              >
                 <StepLabel t={t} step={step} />
+                {step === "case-map" && caseMap.withContent > 0 ? <span className="sr-only">{t("caseMap.sidebarCount", { approved: caseMap.approved, total: caseMap.withContent })}</span> : null}
               </NavItem>
             </li>
           ))}

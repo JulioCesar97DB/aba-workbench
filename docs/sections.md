@@ -31,6 +31,8 @@ What the other sections build on (`finalVersion` in `src/main/case-sections.ts`)
 
 ### In the case's data file: `aba-case.json`, schema version 3
 
+Version 4 adds the case map, an optional `caseMap` key: [case-map.md](case-map.md). Everything below is unchanged by it.
+
 `src/main/case-file.ts` and `src/main/case-sections.ts`. Version 3 adds two top-level keys; a version 2 file reads as version 3 with `"sections": {}` and is written as version 3 on its next save (`MIGRATIONS[2]`). Every rule of the data file still holds (lossless reading, unknown keys kept, a newer file never written to, durable writes, the 50 MB cap).
 
 ```json
