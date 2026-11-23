@@ -120,6 +120,7 @@ export const es: Messages = {
     defaultBadge: "Predeterminada",
     chosen: "Guardado. Los casos nuevos irán a esta carpeta.",
     unusable: "No se puede usar esa carpeta, así que la carpeta de casos no cambió.",
+    insideApp: "Esa carpeta está dentro de la carpeta del programa ABA Workbench, que se borra al actualizar o desinstalar la aplicación. La carpeta de casos no cambió. Elige una carpeta tuya.",
     notSaved: "No se pudo guardar esa carpeta en tus ajustes, así que la carpeta de casos no cambió.",
     failed: "Algo salió mal. La carpeta de casos no cambió.",
     showFailed: "No se pudo mostrar la carpeta de casos. Puede que se haya movido o que no esté disponible.",

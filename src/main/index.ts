@@ -17,7 +17,7 @@ import { SectionService } from "./sections.ts";
 import { IPC_CHANNELS } from "../shared/api.ts";
 import { defaultCasesFolder } from "./cases-folder.ts";
 import { registerIpc } from "./ipc.ts";
-import { resolveHiddenMode, resolveHomeFolder, resolveRulesDir } from "./paths.ts";
+import { APP_ID, resolveHiddenMode, resolveHomeFolder, resolveRulesDir } from "./paths.ts";
 import { APP_ORIGIN, registerAppScheme, serveRenderer } from "./protocol.ts";
 import { denyAllPermissions, hardenWebContents } from "./security.ts";
 import { defaultLanguage, SETTINGS_FILE_NAME, SettingsStore } from "./settings.ts";
@@ -53,6 +53,13 @@ if (hidden && process.platform === "darwin") {
   app.setActivationPolicy("accessory");
   app.dock?.hide();
 }
+
+/*
+ * Windows: the installed app's taskbar identity is its appId, the one the installer gives
+ * its Start menu and Desktop shortcuts, so the running window and a pinned shortcut share
+ * one taskbar button. Not set when it runs from the repository.
+ */
+if (process.platform === "win32" && app.isPackaged) app.setAppUserModelId(APP_ID);
 
 hardenWebContents();
 registerAppScheme();

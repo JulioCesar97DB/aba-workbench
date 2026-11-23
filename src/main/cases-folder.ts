@@ -22,6 +22,29 @@ export function defaultCasesFolder(homeFolder: string, p: path.PlatformPath = pa
   return p.join(homeFolder, DEFAULT_CASES_FOLDER_NAME);
 }
 
+/**
+ * The folder the installed app lives in, which an update or uninstalling deletes whole:
+ * on Windows and Linux the folder holding the executable and its resources folder
+ * (%LOCALAPPDATA%\Programs\aba-workbench for the installer's per-user install); on macOS
+ * the .app bundle. Null when the app runs from the repository.
+ */
+export function installFolder(location: { isPackaged: boolean; resourcesPath: string }, platform: NodeJS.Platform = process.platform, p: path.PlatformPath = path): string | null {
+  if (!location.isPackaged) return null;
+  const resources = p.resolve(location.resourcesPath);
+  // macOS: ABA Workbench.app/Contents/Resources; elsewhere: <install folder>/resources.
+  return platform === "darwin" ? p.dirname(p.dirname(resources)) : p.dirname(resources);
+}
+
+/**
+ * Whether `folder` is `parent` or inside it. Windows and macOS compare without case, as
+ * their file systems do by default; `p` is only there so tests can check Windows paths.
+ */
+export function isSameOrInside(folder: string, parent: string, platform: NodeJS.Platform = process.platform, p: path.PlatformPath = path): boolean {
+  const fold = (value: string) => (platform === "linux" ? value : value.toLowerCase());
+  const relative = p.relative(fold(p.resolve(parent)), fold(p.resolve(folder)));
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${p.sep}`) && !p.isAbsolute(relative));
+}
+
 /** The file a write check makes and removes at once (Windows only, see canWrite). */
 const WRITE_CHECK_PREFIX = ".aba-workbench-write-check-";
 

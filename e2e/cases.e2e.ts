@@ -166,6 +166,25 @@ test("a PDF put into the case's folder shows when the case is opened again, and 
   await expect(page.getByRole("row", { name: new RegExp(SAMPLE_CASE.label.replace(/\./g, "\\.")) }).getByRole("cell").last()).toHaveText("1");
 });
 
+test("the packaged app refuses a cases folder inside its own install folder, which updating or uninstalling deletes (owner's decision)", async ({ launch, home }, testInfo) => {
+  test.skip(testInfo.project.name !== "packaged", "packaged app only: the built app has no install folder");
+  const app = await launch();
+  const page = await openApp(app);
+  const resources = await app.evaluate(() => process.resourcesPath);
+  // Windows and Linux: <install folder>/resources; macOS: ABA Workbench.app/Contents/Resources.
+  const installFolder = process.platform === "darwin" ? path.dirname(path.dirname(resources)) : path.dirname(resources);
+  await goTo(page, "/settings");
+  const section = page.getByRole("region", { name: "Cases folder" });
+  for (const chosen of [installFolder, resources]) {
+    await stubFolderDialog(app, chosen);
+    await section.getByRole("button", { name: "Choose another folder…" }).click();
+    await expect(section.getByRole("status")).toHaveText(
+      "That folder is inside ABA Workbench's own program folder, which updating or uninstalling the app deletes. The cases folder did not change. Choose a folder of your own.",
+    );
+    await expect(section.getByTestId("cases-folder-path")).toHaveText(defaultCasesFolder(home));
+  }
+});
+
 test("change the cases folder in Settings; it is remembered, and the list follows it", async ({ launch, home, profile }, testInfo) => {
   seedCase(defaultCasesFolder(home));
   const other = path.join(home, "Elsewhere", "My cases");

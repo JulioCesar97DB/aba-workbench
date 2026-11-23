@@ -112,6 +112,8 @@ function CasesFolderSection() {
         setMessage({ text: t("casesFolder.chosen"), problem: false });
       } else if (result.outcome === "unusable") {
         setMessage({ text: `${t("casesFolder.unusable")} ${casesFolderProblemText(t, result.problem, platform)}`, problem: true });
+      } else if (result.outcome === "inside-app") {
+        setMessage({ text: t("casesFolder.insideApp"), problem: true });
       } else if (result.outcome === "not-saved") {
         setMessage({ text: t("casesFolder.notSaved"), problem: true });
       }

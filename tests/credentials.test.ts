@@ -218,3 +218,14 @@ test("Windows owner-only: the saved file has one access entry, the current user'
   assert.equal(entries.length, 1, access);
   assert.doesNotMatch(access, /\(I\)/, "no inherited entry");
 });
+
+test("Windows owner-only: the access list is set under a folder whose name has spaces and accents, as a user name can", { skip: process.platform !== "win32" }, async (t) => {
+  const dir = path.join(await folder(t), "Ana María Pérez", "AppData", "Roaming", "ABA Workbench");
+  await mkdir(dir, { recursive: true });
+  const file = path.join(dir, CREDENTIALS_FILE_NAME);
+  const store = new CredentialsStore(file, { log: () => undefined });
+  await store.hostId();
+  const access = await describeAccess(file);
+  assert.equal(accessEntries(access).length, 1, access);
+  assert.doesNotMatch(access, /\(I\)/, "no inherited entry");
+});

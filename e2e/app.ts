@@ -10,9 +10,16 @@ const root = path.resolve(import.meta.dirname, "..");
 
 /**
  * The executable `pnpm package` leaves in dist/ for this system: mac-arm64/ or mac/ on
- * macOS, win-unpacked/ (win-arm64-unpacked/) on Windows, linux-unpacked/ on Linux.
+ * macOS, win-unpacked/ (win-arm64-unpacked/) on Windows, linux-unpacked/ on Linux. Or,
+ * when ABA_PACKAGED_EXECUTABLE names one (an absolute path), that one: the release
+ * workflow runs the packaged tests on the app its Windows installer installed.
  */
-function packagedExecutable(dist = path.join(root, "dist")): string {
+export function packagedExecutable(dist = path.join(root, "dist")): string {
+  const chosen = process.env.ABA_PACKAGED_EXECUTABLE;
+  if (chosen) {
+    if (!path.isAbsolute(chosen) || !existsSync(chosen)) throw new Error(`ABA_PACKAGED_EXECUTABLE is not an absolute path to an existing file: ${chosen}`);
+    return chosen;
+  }
   const candidates: string[] = [];
   for (const dir of existsSync(dist) ? readdirSync(dist) : []) {
     if (process.platform === "darwin" && /^mac/.test(dir)) candidates.push(path.join(dist, dir, "ABA Workbench.app", "Contents", "MacOS", "ABA Workbench"));
@@ -59,11 +66,18 @@ interface Fixtures {
   app: ElectronApplication;
 }
 
+/**
+ * A piece of every temporary folder's name: spaces and accents, as in a Windows user name
+ * such as "Ana María Pérez" (C:\Users\Ana María Pérez\...), so every test runs with the
+ * profile, the credentials file and the cases folder under such a path. Invented.
+ */
+const SPACES_AND_ACCENTS = "Ana María Pérez";
+
 /** The app under test, started with a temporary profile so a run leaves nothing behind. */
 export const test = base.extend<Fixtures>({
   // eslint-disable-next-line no-empty-pattern
   profile: async ({}, use) => {
-    const userDataDir = mkdtempSync(path.join(tmpdir(), "aba-workbench-e2e-"));
+    const userDataDir = mkdtempSync(path.join(tmpdir(), `aba-e2e ${SPACES_AND_ACCENTS}-`));
     try {
       await use(userDataDir);
     } finally {
@@ -73,7 +87,7 @@ export const test = base.extend<Fixtures>({
   },
   // eslint-disable-next-line no-empty-pattern
   home: async ({}, use) => {
-    const folder = mkdtempSync(path.join(tmpdir(), "aba-workbench-e2e-home-"));
+    const folder = mkdtempSync(path.join(tmpdir(), `aba-e2e-home ${SPACES_AND_ACCENTS}-`));
     try {
       await use(folder);
     } finally {

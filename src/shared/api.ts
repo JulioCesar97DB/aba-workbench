@@ -61,6 +61,11 @@ export type ChooseCasesFolderResult =
   | { outcome: "cancelled" }
   /** The folder chosen cannot be used; the setting is unchanged. */
   | { outcome: "unusable"; problem: CasesFolderProblem }
+  /**
+   * The folder is inside the app's own install folder, which an update or uninstalling
+   * deletes whole (owner's decision, 2026-11-23); the setting is unchanged.
+   */
+  | { outcome: "inside-app" }
   /** The folder is usable but the settings file could not be saved; the setting is unchanged. */
   | { outcome: "not-saved" };
 

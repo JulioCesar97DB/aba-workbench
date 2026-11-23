@@ -128,6 +128,7 @@ export const en = {
     defaultBadge: "Default",
     chosen: "Saved. New cases go in this folder.",
     unusable: "That folder cannot be used, so the cases folder did not change.",
+    insideApp: "That folder is inside ABA Workbench's own program folder, which updating or uninstalling the app deletes. The cases folder did not change. Choose a folder of your own.",
     notSaved: "That folder could not be saved in your settings, so the cases folder did not change.",
     failed: "Something went wrong. The cases folder did not change.",
     showFailed: "The cases folder could not be shown. It may have been moved, or it is not available.",

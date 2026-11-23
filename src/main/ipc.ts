@@ -28,7 +28,7 @@ import type { AddPdfsResult, FailedSave, ReadSourceTextResult, SourceSaveResult 
 import type { CaseLibrary } from "./cases.ts";
 import type { FailedSaves, SaveResult } from "./failed-saves.ts";
 import type { ConnectionService } from "./connections.ts";
-import { inspectCasesFolder } from "./cases-folder.ts";
+import { inspectCasesFolder, installFolder, isSameOrInside } from "./cases-folder.ts";
 import { runDevCheckGeneration } from "./dev-check.ts";
 import { GenerationRegistry, MAX_RUNNING_PER_WINDOW } from "./generations.ts";
 import type { SettingsStore } from "./settings.ts";
@@ -129,6 +129,9 @@ export function registerIpc(options: {
     const result = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions);
     const chosen = result.filePaths[0];
     if (result.canceled || !chosen) return { outcome: "cancelled" };
+    // Never inside the app's own folder: an update or uninstalling deletes it whole (owner's decision, 2026-11-23).
+    const appFolder = installFolder({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
+    if (appFolder !== null && isSameOrInside(chosen, appFolder)) return { outcome: "inside-app" };
     const state = await inspectCasesFolder(chosen, false).catch(() => "not-allowed" as const);
     if (state !== "ready") return { outcome: "unusable", problem: state === "not-created-yet" ? "missing" : state };
     try {

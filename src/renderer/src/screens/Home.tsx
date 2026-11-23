@@ -123,6 +123,7 @@ function FolderProblem({ folder, onChosen }: { folder: CasesFolderInfo; onChosen
       const result = await window.aba.chooseCasesFolder();
       if (result.outcome === "chosen") onChosen();
       else if (result.outcome === "unusable") setFailed(`${t("casesFolder.unusable")} ${casesFolderProblemText(t, result.problem, platform)}`);
+      else if (result.outcome === "inside-app") setFailed(t("casesFolder.insideApp"));
       else if (result.outcome === "not-saved") setFailed(t("casesFolder.notSaved"));
     } catch {
       setFailed(t("casesFolder.failed"));
