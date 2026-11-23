@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
@@ -110,14 +111,72 @@ test("release workflow: one pre-release gets both installers and both SHA-256 fi
   assert.match(publish, /Run anyway/);
 });
 
-test("mac check script: hidden from Finder and hidden at launch, Rosetta required, nothing left behind", () => {
-  const script = readFileSync(path.join("scripts", "mac-installer-check.sh"), "utf8");
-  assert.match(script, /hdiutil attach -nobrowse -readonly -noautoopen/);
-  assert.match(script, /open -g -j -n "\$APP"/);
-  assert.match(script, /arch -x86_64 \/usr\/bin\/true \|\| fail/);
-  assert.match(script, /arch -x86_64 "\$APP\/Contents\/MacOS\/\$PRODUCT"/);
-  assert.match(script, /Signature=adhoc/);
-  assert.match(script, /lipo -archs/);
-  assert.match(script, /hdiutil detach/);
-  assert.match(script, /^set -euo pipefail$/m);
+const checkScript = readFileSync(path.join("scripts", "mac-installer-check.sh"), "utf8");
+
+test("mac check script: refuses to run outside GitHub Actions, before it does anything", () => {
+  const guard = /^set -euo pipefail\n\nif \[ "\$\{GITHUB_ACTIONS:-\}" != "true" \] \|\| \[ "\$\{CI:-\}" != "true" \] \|\| \[ -z "\$\{RUNNER_TEMP:-\}" \]; then\n.*\n {2}exit 1\nfi\n/m;
+  assert.match(checkScript, guard);
+  const firstCommand = checkScript.split("\n").findIndex((line) => /^(hdiutil|open|ditto|rm|mkdir|kill)\b/.test(line.trim()));
+  assert.ok(checkScript.indexOf("GITHUB_ACTIONS") < checkScript.split("\n").slice(0, firstCommand).join("\n").length, "the guard comes before any command that acts");
+  // Run here, outside CI, it refuses and touches nothing.
+  const run = spawnSync("bash", [path.join("scripts", "mac-installer-check.sh"), "cleanup"], { env: { PATH: process.env.PATH ?? "" }, encoding: "utf8" });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /runs only on a GitHub Actions runner/);
+});
+
+test("mac check script: works only in its own folder, never /Applications, and removes only what it made", () => {
+  assert.match(checkScript, /^STATE="\$RUNNER_TEMP\/aba-mac-installer-check"$/m);
+  assert.match(checkScript, /^APP="\$STATE\/Applications\/\$PRODUCT\.app"$/m);
+  assert.doesNotMatch(checkScript, /^[^#]*"\/Applications\/\$PRODUCT/m);
+  assert.match(checkScript, /\[ ! -e "\$STATE" \] \|\| fail/);
+  // Every rm -rf removes the check's folder, a profile it made, or a folder mount found absent.
+  const removals = [...checkScript.matchAll(/rm -rf (\S+)/g)].map((match) => match[1]);
+  assert.deepEqual(removals, ['"$LAUNCH_PROFILE";', '"$path"', '"$STATE"']);
+  assert.match(checkScript, /if \[ ! -e "\$path" \]; then echo "\$path" >> "\$STATE\/absent-before"; fi/);
+});
+
+test("mac check script: hidden from Finder and at both launches, translated under Rosetta, cleaned up on failure", () => {
+  assert.match(checkScript, /hdiutil attach -nobrowse -readonly -noautoopen/);
+  assert.match(checkScript, /open -g -j -n "\$@" "\$APP" --args/);
+  assert.match(checkScript, /launch_and_quit "Native" native ;;/);
+  assert.match(checkScript, /launch_and_quit "Intel \(Rosetta\)" translated --arch x86_64\n/);
+  assert.match(checkScript, /0x20000/);
+  assert.match(checkScript, /arch -x86_64 \/usr\/bin\/true \|\| fail/);
+  assert.match(checkScript, /end_launch\(\) \{\n.*\n\s+if \[ "\$status" -ne 0 \]; then show_app_logs; fi\n\s+stop_app\n/);
+  assert.match(checkScript, /trap end_launch EXIT/);
+  assert.match(checkScript, /hdiutil detach/);
+  assert.match(job("mac-installer"), /if: \$\{\{ always\(\) \}\}\n\s+run: \.\/scripts\/mac-installer-check\.sh cleanup/);
+});
+
+test("mac check script: checks the minimum macOS, the icon, ad-hoc without the hardened runtime, and both slices", () => {
+  assert.match(checkScript, /^MINIMUM_MACOS="13\.0"$/m);
+  assert.match(checkScript, /\[ "\$minimum" = "\$MINIMUM_MACOS" \] \|\| fail/);
+  assert.match(checkScript, /cmp "\$APP\/Contents\/Resources\/\$icon" packaging\/macos\/icon\.icns/);
+  assert.match(checkScript, /Signature=adhoc/);
+  assert.match(checkScript, /\*runtime\*/);
+  assert.match(checkScript, /lipo -archs/);
+});
+
+test("mac: the README and the release notes give the Gatekeeper steps for macOS 13 and 14 and for 15 and later", () => {
+  const readme = readFileSync("README.md", "utf8");
+  for (const text of [readme, job("publish")]) {
+    assert.match(text, /\*\*Done\*\*/);
+    assert.match(text, /\*\*OK\*\*/);
+    assert.match(text, /\*\*Open Anyway\*\*/);
+    assert.match(text, /\*\*Open\*\*/);
+    assert.match(text, /macOS 13 and 14/);
+  }
+});
+
+test("mac: the README's links are this version's release and files", () => {
+  const readme = readFileSync("README.md", "utf8");
+  const version = JSON.parse(readFileSync("package.json", "utf8")).version as string;
+  const links = [...readme.matchAll(/https:\/\/github\.com\/JulioCesar97DB\/aba-workbench\/releases\/download\/(v[^/]+)\/(\S+?)\)/g)];
+  assert.equal(links.length, 4);
+  for (const [, tag, asset] of links) {
+    assert.equal(tag, `v${version}`);
+    assert.ok(asset.includes(`-${version}-`), asset);
+  }
+  assert.ok(readme.includes(`ABA-Workbench-${version}-macos-universal.dmg`));
+  assert.ok(readme.includes(`ABA-Workbench-Setup-${version}-windows-x64.exe`));
 });

@@ -1,7 +1,7 @@
 {
   "name": "aba-workbench",
   "productName": "ABA Workbench",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Drafts ABA initial assessments section by section. Desktop app for macOS and Windows.",
   "license": "Apache-2.0",

@@ -1,8 +1,8 @@
 # Builds the Windows installer on Windows and the universal Mac disk image on macOS, checks
 # each the way she will use it, and, for a version tag only, attaches both with their
-# SHA-256 to one GitHub pre-release (owner's decisions, 2026-11-23). It uses no secrets and calls no AI provider: the window tests
-# fake the providers inside the app, and the only token is GitHub's own, which can write
-# releases in the publish job only.
+# SHA-256 to one GitHub pre-release (owner's decisions, 2026-11-23). It uses no secrets and
+# calls no AI provider: the window tests fake the providers inside the app, and the only
+# token is GitHub's own, which can write releases in the publish job only.
 #
 #   A pull request, or a manual run on a branch: build and check; nothing is published.
 #   A version tag (vX.Y.Z, the same as package.json's version), pushed or chosen in a
@@ -262,24 +262,29 @@ jobs:
           test -f "dist/$DMG"
 
       # Hidden from Finder; checks the volume's name, the app and the Applications shortcut,
-      # then copies the app to /Applications, as she drags it there.
-      - name: Mount the disk image and copy the app to Applications
+      # then copies the app out, as she drags it, into a folder of the check's own in
+      # RUNNER_TEMP (never /Applications). The script refuses to run outside GitHub Actions.
+      - name: Mount the disk image and copy the app out
         env:
           DMG: ${{ steps.name.outputs.dmg }}
         run: ./scripts/mac-installer-check.sh mount "dist/$DMG"
 
-      - name: Check the copied app (ad-hoc signature, identity, version, arm64 and x86_64)
+      - name: Check the copied app (identity, version, macOS 13, icon, ad-hoc signature, arm64 and x86_64)
         run: ./scripts/mac-installer-check.sh verify
 
       # open -g -j: in the background and hidden. A temporary profile; quits it after.
       - name: Start the app hidden (Apple Silicon), check it runs, quit it
         run: ./scripts/mac-installer-check.sh launch
 
-      # The x86_64 code, as an Intel Mac runs it; fails if Rosetta is missing.
-      - name: Start the app's Intel code under Rosetta, check it runs, quit it
+      # The x86_64 code, as an Intel Mac runs it, hidden too (open --arch x86_64), and checked
+      # to run translated; fails if Rosetta is missing.
+      - name: Start the app's Intel code hidden under Rosetta, check it runs, quit it
         run: ./scripts/mac-installer-check.sh launch-x64
 
+      # Also after a failed step: quits what is left of the app, detaches the image and
+      # removes only what the check made.
       - name: Remove the app and detach the disk image
+        if: ${{ always() }}
         run: ./scripts/mac-installer-check.sh cleanup
 
       # macOS has shasum, not sha256sum; the line it writes is the same ("<sum>  <file>").
@@ -359,7 +364,7 @@ jobs:
             echo
             echo "Download **$DMG**, open it, and drag ABA Workbench onto Applications. One file for Apple Silicon and Intel Macs, macOS 13 Ventura or later."
             echo
-            echo "The app is not signed with an Apple certificate or notarized, so macOS blocks it the first time you open it. Click **Done** in that message, then open **System Settings**, **Privacy & Security**, scroll down to the message about ABA Workbench, click **Open Anyway** and confirm. This is needed once."
+            echo "The app is not signed with an Apple certificate or notarized, so macOS blocks it the first time you open it. Close that message (**Done**; on macOS 13 and 14, **OK** or **Cancel**). Then open **System Settings**, **Privacy & Security**, scroll down to the message about ABA Workbench, click **Open Anyway**, then **Open Anyway** again (on macOS 13 and 14, **Open**) when macOS asks. This is needed once."
             echo
             echo "Deleting the app from Applications removes the app only: your cases folder and the app's data folder stay."
             echo
