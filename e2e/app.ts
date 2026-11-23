@@ -92,7 +92,10 @@ export const test = base.extend<Fixtures>({
       }
       if (settingsFile !== undefined) writeFileSync(settingsPath, settingsFile);
       else if (language !== null && !existsSync(settingsPath)) writeFileSync(settingsPath, JSON.stringify({ version: 1, language, ...(chosen ? { casesFolder: chosen } : {}) }));
-      const args = [`--user-data-dir=${profile}`, `--home-folder=${home}`, ...extraArgs];
+      // --hidden (development only): the built app never shows its window, has no Dock icon
+      // and never takes the focus, so the tests can run while someone works on this
+      // computer. The packaged app ignores it and shows its window.
+      const args = [`--user-data-dir=${profile}`, `--home-folder=${home}`, "--hidden", ...extraArgs];
       // Never point the window at a dev server.
       const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) => name !== "ELECTRON_RENDERER_URL" && value !== undefined)) as Record<string, string>;
       const app =

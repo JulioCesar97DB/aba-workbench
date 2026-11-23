@@ -30,6 +30,16 @@ export function resolveHomeFolder(options: { isPackaged: boolean; override: stri
 }
 
 /**
+ * Whether the app runs hidden: no window shown, no Dock icon, never taking the focus. In
+ * development only, --hidden asks for it, so the window tests and scripts can drive the
+ * app while someone works on the same computer; a packaged app ignores the option and
+ * always shows its window.
+ */
+export function resolveHiddenMode(options: { isPackaged: boolean; requested: boolean }): boolean {
+  return !options.isPackaged && options.requested;
+}
+
+/**
  * Maps the path of an app:// URL to a file inside `root` (the built interface), or null
  * when the path is malformed or would leave `root`. "/" means index.html.
  */
