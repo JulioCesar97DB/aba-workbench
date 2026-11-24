@@ -7,8 +7,10 @@ import { Link, NavLink, useLocation } from "react-router";
 import type { Language } from "../../../shared/api.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
-import { CASE_STEPS, casePath, stepSubtitle, stepTitle } from "../case-steps.tsx";
+import { CASE_STEPS, casePath, caseSummaryPath, stepSubtitle, stepTitle } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
+import { Icon } from "../components/Icon.tsx";
+import { titleWhenCut } from "../components/truncate.ts";
 import { NavItem, SectionNavItem, StepNavItem } from "../components/NavItem.tsx";
 import { readySections, stepCount, stepState, type StepState } from "../step-states.ts";
 import { Tooltip } from "../components/Tooltip.tsx";
@@ -118,8 +120,23 @@ export function CaseSidebar({
       top={
         <div className="flex flex-col gap-0.5 px-2">
           <Brand />
-          <p className="text-lg font-semibold break-words">{caseName}</p>
-          <p className="text-xs text-fg-on-nav-muted">{caseDetail}</p>
+          {/* The case's name opens its summary, where the case opens (owner's decision T6, mockup 03). */}
+          <NavLink
+            to={caseSummaryPath(caseId)}
+            end
+            data-testid="case-summary-link"
+            className="-mx-2 flex flex-col gap-0.5 rounded-md px-2 text-fg-on-nav no-underline transition-colors hover:bg-nav-hover aria-[current=page]:bg-nav-hover"
+          >
+            {/* One line, cut with its whole name as a tooltip, so a long name never pushes the steps out of view (UX-5 follow-up). */}
+            <span className="flex min-w-0 items-center gap-1.5 text-lg font-semibold">
+              <span data-testid="case-name-line" className="min-w-0 truncate" onPointerEnter={(event) => titleWhenCut(event.currentTarget, caseName)}>
+                {caseName}
+              </span>
+              <Icon name="forward" size={14} className="shrink-0" />
+            </span>
+            <span className="text-xs text-fg-on-nav-muted">{caseDetail}</span>
+            <span className="sr-only">, {t("summary.title")}</span>
+          </NavLink>
           <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs">
             <Link to="/" className="rounded-sm text-fg-on-nav underline underline-offset-2 hover:decoration-2">
               {t("nav.allCases")}
@@ -144,7 +161,9 @@ export function CaseSidebar({
                   ? t("caseMap.sidebarCount", count.spoken.values as { approved: number; total: number })
                   : count.spoken.key === "sources"
                     ? t("nav.sourcesCount", count.spoken.values as { count: number })
-                    : t("nav.reportCount", count.spoken.values as { done: number; total: number });
+                    : count.spoken.key === "review"
+                      ? t("nav.reviewCount", count.spoken.values as { copied: number; total: number })
+                      : t("nav.reportCount", count.spoken.values as { done: number; total: number });
             return (
               <li key={step}>
                 <StepNavItem to={casePath(caseId, step)} number={index + 1} state={state} stateText={t(STATE_TEXT_KEYS[state])} laterTag={t("nav.stepLaterTag")} detail={count?.shown} subtitle={stepSubtitle(t, step)} compact={inReport}>
@@ -158,7 +177,7 @@ export function CaseSidebar({
                     </h2>
                     <ul className="flex flex-col">
                       {REPORT_SECTIONS.map((section) => {
-                        const summary = states.get(section.id) ?? { id: section.id, state: "not-started" as const, currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0 };
+                        const summary = states.get(section.id) ?? { id: section.id, state: "not-started" as const, currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0, copiedVersion: null, copied: false };
                         const text = sectionStateText(t, summary);
                         return (
                           <li key={section.id}>

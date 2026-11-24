@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ContextSection } from "../lib/rules.ts";
 import { REPORT_SECTIONS, type ReportSectionId } from "../shared/report-sections.ts";
 import { MAX_NOTES_LENGTH, MAX_REQUEST_LENGTH, MAX_SECTION_TEXT_LENGTH, normalizeLineEndings, type SectionShape } from "../shared/section-text.ts";
-import { AI_VERSION_KINDS, sectionState, type ConsistencyResult, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion, type VersionKind } from "../shared/sections.ts";
+import { AI_VERSION_KINDS, isCopied, sectionState, type ConsistencyResult, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion, type VersionKind } from "../shared/sections.ts";
 import type { CaseData, GenerationRecord, StoredSection, StoredUsage, StoredVersion } from "./case-file.ts";
 
 /*
@@ -21,6 +21,8 @@ const RequestTextSchema = z.string().trim().min(1).max(MAX_REQUEST_LENGTH);
 
 export const SectionTextSchema = z.string().max(MAX_SECTION_TEXT_LENGTH * 2);
 export const EditingSchema = VersionInputSchema.nullable();
+/** Whether a text comes from "Pegar lo que ya escribiste" (saveOwnText's `pasted`). */
+export const PastedSchema = z.boolean();
 export const VersionSchema = VersionInputSchema;
 export const ApproveSchema = VersionInputSchema.nullable();
 export const NotesSchema = z.string().max(MAX_NOTES_LENGTH * 2);
@@ -75,14 +77,16 @@ function stateOf(section: StoredSection): SectionSummary["state"] {
 
 export function sectionSummary(data: CaseData, id: ReportSectionId): SectionSummary {
   const section = storedSection(data, id);
-  return {
+  const summary = {
     id,
     state: stateOf(section),
     currentVersion: currentOf(section)?.number ?? null,
     approvedVersion: findVersion(section, section.approvedVersion)?.number ?? null,
     versionCount: section.versions.length,
     costUsd: sectionCost(section),
+    copiedVersion: findVersion(section, section.copiedVersion ?? null)?.number ?? null,
   };
+  return { ...summary, copied: isCopied(summary) };
 }
 
 /** What the AI cost for this section so far: every version and every check whose price is known (review, low 2). */
@@ -183,10 +187,14 @@ function checkedText(raw: string): string {
 /**
  * Her own text (pasted, typed or an edit). `editing` is the version this editing pass
  * made: it is updated in place while it is still the newest version and hers. Otherwise a
- * new version starts: "hers" when the section has none yet, "edited" after. A new version
- * takes the approval away (she approves again). Null when nothing changed.
+ * new version starts: "hers" when the section has none yet, "edited" after. A text from
+ * "Pegar lo que ya escribiste" (`pasted`) is always "hers", also over an AI draft (owner's
+ * decision on UX-6 review B1): it is a new text she already wrote, not an edit of what was
+ * there, so the other sections and the case map build on it; its `basedOn` still says what
+ * it replaced. A new version takes the approval away (she approves again). Null when
+ * nothing changed.
  */
-export function saveOwnText(data: CaseData, id: ReportSectionId, raw: string, editing: number | null, now: string): { data: CaseData; version: number } | null {
+export function saveOwnText(data: CaseData, id: ReportSectionId, raw: string, editing: number | null, now: string, { pasted = false }: { pasted?: boolean } = {}): { data: CaseData; version: number } | null {
   const text = checkedText(raw);
   const section = storedSection(data, id);
   const newest = section.versions.at(-1);
@@ -203,12 +211,13 @@ export function saveOwnText(data: CaseData, id: ReportSectionId, raw: string, ed
   const number = nextNumber(section);
   const version: StoredVersion = {
     number,
-    kind: section.versions.length === 0 ? "hers" : "edited",
+    kind: pasted || section.versions.length === 0 ? "hers" : "edited",
     createdAt: now,
     updatedAt: now,
     ...(current ? { basedOn: current.number } : {}),
     // Her hand fix of the version she approved stays final for the other sections while she has not approved it again.
-    ...(current && section.approvedVersion === current.number ? { fromApproved: true as const } : {}),
+    // (A pasted text is hers, final on its own: it needs no mark.)
+    ...(current && !pasted && section.approvedVersion === current.number ? { fromApproved: true as const } : {}),
     text,
   };
   return { data: withSection(data, id, withoutApproval({ ...section, versions: [...section.versions, version], currentVersion: number })), version: number };
@@ -254,6 +263,17 @@ export function approveVersion(data: CaseData, id: ReportSectionId, number: numb
   if (number === null) return withSection(data, id, withoutApproval(section));
   if (!findVersion(section, number)) return null;
   return withSection(data, id, { ...section, approvedVersion: number, approvedAt: now, currentVersion: number });
+}
+
+/**
+ * She copied a version for ABA Matrix (owner's decision T8): when, and which version. The
+ * last copy is the one kept; nothing else changes (not the version shown, not the
+ * approval). Null when the section has no such version.
+ */
+export function markCopied(data: CaseData, id: ReportSectionId, number: number, now: string): CaseData | null {
+  const section = storedSection(data, id);
+  if (!findVersion(section, number)) return null;
+  return withSection(data, id, { ...section, copiedAt: now, copiedVersion: number });
 }
 
 /** The text a request starts from. Null when the version is not there. */

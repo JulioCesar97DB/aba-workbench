@@ -28,9 +28,6 @@ export const SOURCE_TYPE_NAMES: Record<Exclude<SourceType, "other">, string> = {
   "ablls-r": "ABLLS-R",
 };
 
-/** The types offered first for a pasted text, in this order; the rest follow. */
-export const TEXT_SOURCE_TYPES: readonly SourceType[] = ["cde", "parent-interview", "direct-observation", "fba-questionnaire", "iep", "other"];
-
 export function isSourceType(value: unknown): value is SourceType {
   return typeof value === "string" && (SOURCE_TYPES as readonly string[]).includes(value);
 }
@@ -203,7 +200,7 @@ export type AddPdfsResult =
   | { outcome: "cancelled" }
   /**
    * PDFs were copied into the case's folder but the data file could not be saved: they are
-   * not sources, and stay in the folder (nothing is deleted), under "Also in this case's folder".
+   * not sources, and stay in the folder (nothing is deleted), in the Documents step's card for the PDFs in the folder not added.
    */
   | { outcome: "copied-not-added"; files: string[]; sources: CaseSources }
   | SourceSaveFailure;
@@ -237,6 +234,12 @@ export interface FailedSave {
   editing: number | null;
   /** For a map item: "<part>/<items or groups>/<item id>"; null otherwise. */
   mapItem: string | null;
+  /**
+   * For a section's text: it came from a box of "Pegar lo que ya escribiste" (saved as "hers", also over an AI draft).
+   * The paste screen puts back only these, and the section screen saves one it puts back with the same flag, so the
+   * flag never changes when a kept text moves between the two screens (UX-6 review round 2, S1). False otherwise.
+   */
+  pasted: boolean;
 }
 
 export type ReadSourceTextResult = { outcome: "read"; text: string } | { outcome: "source-not-found" } | { outcome: "case-unavailable" };

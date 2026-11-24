@@ -4,6 +4,7 @@ import type { Settings } from "../../shared/api.ts";
 import { App } from "./App.tsx";
 import { flushAllSaves, holdUnloadForSaves, refreshFailedSaves } from "./case-saves.tsx";
 import { initI18n } from "./i18n/index.ts";
+import { trackInputModality } from "./input-modality.ts";
 import { LanguageProvider } from "./language.tsx";
 import "./styles/fonts.ts";
 import "./styles/app.css";
@@ -17,6 +18,11 @@ for (const type of ["dragover", "drop"] as const) {
     if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
   });
 }
+
+// The focus ring shows after keyboard input only (audit L11): data-input on <html>, for the whole life of the window.
+trackInputModality(window, (modality) => {
+  document.documentElement.dataset.input = modality;
+});
 
 // Before the window closes or the app quits, every save still waiting is made (case-saves.tsx).
 window.aba.onFlushSaves(flushAllSaves);

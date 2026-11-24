@@ -77,6 +77,10 @@ export interface SectionSummary {
   versionCount: number;
   /** What the AI cost for this section so far, in USD (versions and checks whose price is known; ChatGPT sign-in adds nothing). */
   costUsd: number;
+  /** The version she copied for ABA Matrix last, or null when she never copied the section (owner's decision T8). */
+  copiedVersion: number | null;
+  /** Whether what she copied last is what she would copy now (isCopied): "Copiada". */
+  copied: boolean;
 }
 
 export interface SectionDetail extends SectionSummary {
@@ -106,6 +110,28 @@ export type SectionRequestInput =
   | { kind: "change"; fromVersion: number; request: string }
   | { kind: "paragraph"; fromVersion: number; paragraphIndex: number; request: string }
   | { kind: "improve"; fromVersion: number };
+
+/**
+ * The version of a section she copies to ABA Matrix (Revisión y copia, owner's decision
+ * T8): the one she approved, or else the one shown. Null when the section has none.
+ */
+export function versionToCopy(summary: Pick<SectionSummary, "approvedVersion" | "currentVersion">): number | null {
+  return summary.approvedVersion ?? summary.currentVersion;
+}
+
+/**
+ * "Copiada": the version she copied last is the one she would copy now. A newer version,
+ * or another one approved, after the copy makes the section not copied again: what is in
+ * ABA Matrix is no longer what the app holds.
+ */
+export function isCopied(summary: Pick<SectionSummary, "approvedVersion" | "currentVersion" | "copiedVersion">): boolean {
+  return summary.copiedVersion !== null && summary.copiedVersion === versionToCopy(summary);
+}
+
+/** A section she can copy as it is: hers, or approved (the sidebar's "ready"). */
+export function isReady(summary: Pick<SectionSummary, "state"> | undefined): boolean {
+  return summary?.state === "hers" || summary?.state === "approved";
+}
 
 /** A section's state, from its versions and what she approved. */
 export function sectionState(versions: ReadonlyArray<Pick<SectionVersion, "number" | "kind">>, currentVersion: number | null, approvedVersion: number | null): SectionState {

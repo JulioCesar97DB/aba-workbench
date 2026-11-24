@@ -30,7 +30,7 @@ export type SaveOp =
   | { kind: "add-text"; input: unknown }
   | { kind: "change"; sourceId: string; change: Record<string, unknown> }
   | { kind: "removed"; sourceId: string; removed: boolean }
-  | { kind: "section-text"; sectionId: unknown; text: unknown; editing: unknown }
+  | { kind: "section-text"; sectionId: unknown; text: unknown; editing: unknown; pasted?: unknown }
   | { kind: "instructions"; sectionId: unknown; text: unknown }
   | { kind: "notes"; text: unknown }
   | { kind: "map-item"; part: unknown; collection: unknown; itemId: unknown; text: unknown; editing: unknown };
@@ -51,7 +51,7 @@ export function runSaves(
     if (op.kind === "add-text") return cases.addTextSource(caseId, op.input);
     if (op.kind === "change") return cases.changeSource(caseId, op.sourceId, op.change);
     if (op.kind === "removed") return cases.setSourceRemoved(caseId, op.sourceId, op.removed);
-    if (op.kind === "section-text") return sections().saveText(caseId, op.sectionId, op.text, op.editing);
+    if (op.kind === "section-text") return sections().saveText(caseId, op.sectionId, op.text, op.editing, op.pasted ?? false);
     if (op.kind === "instructions") return sections().saveInstructions(op.sectionId, op.text);
     return sections().saveNotes(caseId, op.text);
   };
@@ -228,6 +228,8 @@ export class FailedSaves {
         text: typedText(op),
         editing: (op.kind === "section-text" || op.kind === "map-item") && typeof op.editing === "number" ? op.editing : null,
         mapItem: op.kind === "map-item" ? mapItemOf(op) : null,
+        // In memory only, like the rest of this list: nothing about it is stored.
+        pasted: op.kind === "section-text" && op.pasted === true,
       }));
   }
 

@@ -206,11 +206,21 @@ const summary = {
   errors: outcome.events.filter((event) => event.type === "error"),
   saved: outcome.events.filter((event) => event.type === "map-saved").map((event) => event.type === "map-saved" && { step: event.step, written: event.written, problems: event.problems, seconds: (event as { seconds?: number }).seconds }),
   finished: outcome.events.find((event) => event.type === "finished") ?? null,
+  // The items shown as they arrived, checked and not saved yet: how many, and when the first of each request showed.
+  previews: (["map-facts", "map-behaviors"] as const).map((step) => {
+    const shown = outcome.events.filter((event) => event.type === "map-preview" && event.step === step) as Array<{ seconds?: number }>;
+    return { step, shown: shown.length, firstSeconds: shown[0]?.seconds ?? null };
+  }),
   requests: (map?.extractions ?? []).map((record: Record<string, unknown>) => ({
     kind: record.kind,
     format: record.format,
     repaired: record.repaired,
     repairUsed: record.repairUsed,
+    // Why the repair was needed and about how much, and how long each attempt took (case map speed).
+    repairScope: record.repairScope,
+    repairCauses: record.repairCauses,
+    repairValues: record.repairValues,
+    seconds: record.seconds,
     problemsBeforeRepair: record.problemsBeforeRepair,
     problems: record.problems,
     servedModel: (record.generation as Record<string, unknown>).servedModel,

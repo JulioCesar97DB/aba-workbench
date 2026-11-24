@@ -106,7 +106,7 @@ export const UNSAVED_DIALOG: Record<Language, Record<UnsavedProblem, { message: 
     },
     timeout: {
       message: "Your last changes are still being saved",
-      detail: "Saving is taking longer than usual. Go back and wait until it says “All changes saved”, or close anyway and lose what is not saved yet.",
+      detail: "Saving is taking longer than usual. Go back and wait until it says “All saved”, or close anyway and lose what is not saved yet.",
     },
     stay: "Go back",
     close: "Close anyway",
@@ -118,7 +118,7 @@ export const UNSAVED_DIALOG: Record<Language, Record<UnsavedProblem, { message: 
     },
     timeout: {
       message: "Tus últimos cambios todavía se están guardando",
-      detail: "Guardar está tardando más de lo normal. Vuelve y espera a que diga «Todos los cambios guardados», o cierra de todos modos y pierde lo que aún no se guardó.",
+      detail: "Guardar está tardando más de lo normal. Vuelve y espera a que diga «Todo guardado», o cierra de todos modos y pierde lo que aún no se guardó.",
     },
     stay: "Volver",
     close: "Cerrar de todos modos",

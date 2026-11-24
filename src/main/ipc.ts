@@ -396,10 +396,11 @@ export function registerIpc(options: {
     return sectionCall(() => options.sections.get(caseId, sectionId), "The section could not be read.");
   });
 
-  ipcMain.handle(IPC_CHANNELS.saveSectionText, (event, caseId: unknown, sectionId: unknown, text: unknown, editing: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.saveSectionText, (event, caseId: unknown, sectionId: unknown, text: unknown, editing: unknown, pasted: unknown) => {
     assertTrusted(event);
     // Through the failed saves, which keep what was typed when it cannot be saved (review B3).
-    return sectionCall(() => options.failedSaves.save<SectionSaveResult>(caseId, { kind: "section-text", sectionId, text, editing }), "The text could not be saved.");
+    // A pasted box goes under the same key as the section screen's saves ("section-text").
+    return sectionCall(() => options.failedSaves.save<SectionSaveResult>(caseId, { kind: "section-text", sectionId, text, editing, pasted: pasted ?? false }), "The text could not be saved.");
   });
 
   ipcMain.handle(IPC_CHANNELS.setCurrentVersion, (event, caseId: unknown, sectionId: unknown, version: unknown) => {
@@ -432,6 +433,11 @@ export function registerIpc(options: {
   ipcMain.handle(IPC_CHANNELS.copySection, (event, caseId: unknown, sectionId: unknown, version: unknown) => {
     assertTrusted(event);
     return sectionCall(() => options.sections.copy(caseId, sectionId, version), "The section could not be copied.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.readReport, (event, caseId: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.sections.readReport(caseId), "The report could not be read.");
   });
 
   /*

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { CASE_FILE_NAME, newCaseData, readCaseFile, readableCaseFileText, serializeCaseFile, type CaseData } from "../src/main/case-file.ts";
+import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, newCaseData, readCaseFile, readableCaseFileText, serializeCaseFile, type CaseData } from "../src/main/case-file.ts";
 import { CaseMapService } from "../src/main/case-map-service.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
 import { writeFileDurably } from "../src/main/durable-write.ts";
@@ -62,7 +62,7 @@ function withAiBehaviors(): CaseData {
   return { ...blank(), caseMap: map };
 }
 
-test("case map: a version 3 file reads as version 4 with no map, and is written back whole as version 4", () => {
+test("case map: a version 3 file reads with no map, and is written back whole in the current version", () => {
   const v3 = { ...JSON.parse(serializeCaseFile(blank())), schemaVersion: 3, kept: { by: "a later app" } };
   const read = readCaseFile(JSON.stringify(v3));
   assert.ok(read.ok);
@@ -71,7 +71,7 @@ test("case map: a version 3 file reads as version 4 with no map, and is written 
   const text = readableCaseFileText(read.data);
   assert.ok(text);
   const written = JSON.parse(text);
-  assert.equal(written.schemaVersion, 4);
+  assert.equal(written.schemaVersion, CASE_SCHEMA_VERSION);
   assert.deepEqual(written.kept, { by: "a later app" }, "unknown keys are kept");
   assert.equal("caseMap" in written, false);
 });
@@ -234,6 +234,20 @@ test("case map: removing an item makes a version without it; the earlier version
   assert.equal(again.itemId, "beh-2", "an id is never reused");
   // Back to version 1 brings it back.
   assert.equal(mapPartView(setMapPartVersion(again.data, "behaviors", 1)!, "behaviors").items.length, 1);
+});
+
+test("case map: the sidebar's count is of parts with something in them: a part approved while empty is not counted (case map speed)", () => {
+  let data = blank();
+  data = addMapItem(data, "behaviors", "items", { name: claim("Hair pulling") }, null, T1).data;
+  data = addMapItem(data, "caregivers", "items", { role: claim("Mother") }, null, T1).data;
+  const removed = removeMapItem(data, "caregivers", "items", "cg-1", null, T2);
+  assert.ok(removed !== "item-not-found");
+  // The caregivers' version 2 holds nothing, and she approves it.
+  data = approveMapPart(removed.data, "caregivers", 2, T2)!;
+  assert.equal(mapPartView(data, "caregivers").status, "approved");
+  assert.deepEqual(caseMapSummary(data), { approved: 0, withContent: 1 }, "approved never exceeds the parts with content");
+  data = approveMapPart(data, "behaviors", 1, T3)!;
+  assert.deepEqual(caseMapSummary(data), { approved: 1, withContent: 1 });
 });
 
 test("case map: a part's status follows the version shown (D2)", () => {
@@ -453,7 +467,7 @@ test("case map service: add, type, approve, go back and remove, each saved in th
   assert.equal(approved.map.parts.behaviors.status, "approved");
   assert.deepEqual(approved.summary, { approved: 1, withContent: 1 });
   const stored = JSON.parse(readFileSync(caseFile, "utf8"));
-  assert.equal(stored.schemaVersion, 4);
+  assert.equal(stored.schemaVersion, CASE_SCHEMA_VERSION);
   assert.equal(stored.caseMap.parts.behaviors.approvedVersion, 1);
   assert.equal(stored.caseMap.parts.behaviors.versions[0].content.items[0].name.origin, "her");
 
@@ -490,7 +504,7 @@ test("case map service: hostile or malformed input is refused before anything is
 
 test("case map service: a case from a newer app is never written to, through any map call (review round 1, minor 9)", async () => {
   const { service, caseId, caseFile } = await serviceSetup();
-  writeFileSync(caseFile, JSON.stringify({ ...JSON.parse(readFileSync(caseFile, "utf8")), schemaVersion: 5 }, null, 2));
+  writeFileSync(caseFile, JSON.stringify({ ...JSON.parse(readFileSync(caseFile, "utf8")), schemaVersion: CASE_SCHEMA_VERSION + 1 }, null, 2));
   const before = readFileSync(caseFile, "utf8");
   assert.deepEqual(await service.get(caseId), { outcome: "case-unavailable" });
   for (const call of [

@@ -7,7 +7,7 @@ import { LARGEST_PDF_FOR, pdfSizeWarning } from "../src/lib/limits.ts";
 import { CASE_FILE_NAME, MAX_CASE_FILE_BYTES, newCaseData, readCaseFile, serializeCaseFile, CASE_SCHEMA_VERSION } from "../src/main/case-file.ts";
 import { pdfFileNames } from "../src/main/case-folder-name.ts";
 import { copyPdfIntoFolder, findSamePdf, writeNewFile } from "../src/main/case-pdfs.ts";
-import { addTextSource, caseSources, changeSource, setRemoved, textPreview } from "../src/main/case-sources.ts";
+import { addTextSource, caseSources, changeSource, setRemoved, textPreview, withoutMarkdownMarks } from "../src/main/case-sources.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
 import { writeFileDurably } from "../src/main/durable-write.ts";
 import { checkSourceTitle, guessPdfType, isSourceDate, looksLikePdf, MAX_SOURCE_TEXT_LENGTH, normalizeSourceText } from "../src/shared/sources.ts";
@@ -87,6 +87,28 @@ test("sources: titles, dates, text and the type a PDF's name suggests", () => {
   // A character made of two UTF-16 units is never cut in half.
   const face = String.fromCodePoint(0x1f600);
   assert.equal(textPreview(face.repeat(20), 5), `${face.repeat(2)}…`);
+});
+
+test("sources: a text's preview shows it without Markdown's marks; the text itself is not changed (T15)", () => {
+  const pasted = "## Background\n\n**Invented** client, *age 7*.\n- hits when told no\n* screams\n+ runs off\n> quoted line\n---\n1. first step\nUse `DRA` here.";
+  assert.equal(textPreview(pasted), "Background Invented client, age 7. hits when told no screams runs off quoted line 1. first step Use DRA here.");
+  // Underscores and stars inside words, arithmetic and dashes in prose are kept.
+  assert.equal(withoutMarkdownMarks("snake_case_name and 2 * 3 * 4 - a dash"), "snake_case_name and 2 * 3 * 4 - a dash");
+  assert.equal(withoutMarkdownMarks("__bold__ and _italic_ words"), "bold and italic words");
+  // Bold marks only around words, never between them: arithmetic keeps its stars (review, minor 4).
+  assert.equal(withoutMarkdownMarks("2**3 and 4**5"), "2**3 and 4**5");
+  assert.equal(withoutMarkdownMarks("a**b**c"), "a**b**c");
+  assert.equal(withoutMarkdownMarks("Score: **85** (low)"), "Score: 85 (low)");
+  // A table: its separator row goes, its cells read in one line.
+  assert.equal(withoutMarkdownMarks("| Behavior | Escape |\n| --- | :---: |\n| Hitting | 4 |"), "Behavior · Escape\n\nHitting · 4");
+  // A heading mark with no space is not a heading (#hashtag), and a lone hash line goes.
+  assert.equal(withoutMarkdownMarks("#hashtag\n#\nText"), "#hashtag\n\nText");
+  // The case's file keeps the text exactly as pasted: only the summary's preview changes.
+  const data = addTextSource(newCaseData({ id: CASE_ID, label: "Case", clientAge: null, now: NOW }), { type: "cde", text: pasted }, { id: "11111111-1111-4111-8111-111111111111", now: NOW.toISOString() });
+  const [stored] = data.sources;
+  assert.equal(stored.kind === "text" ? stored.text : null, pasted);
+  const [summary] = caseSources(data, []).sources;
+  assert.equal(summary.kind === "text" ? summary.preview : null, textPreview(pasted));
 });
 
 test("sources: a PDF over a provider's size limit is flagged by its size alone", () => {

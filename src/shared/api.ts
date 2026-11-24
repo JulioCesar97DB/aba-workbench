@@ -121,6 +121,26 @@ export interface CaseSummary {
   pdfCount: number;
 }
 
+/**
+ * How far a case is, as Home shows it (owner's decisions T7 and P8: computed from the case's
+ * data each time it is listed, nothing stored): its documents, its case map and its sections.
+ */
+export interface CaseProgress {
+  /** Its documents, not counting removed ones. */
+  sources: number;
+  /** Its case map: parts with something in them, and how many of those are approved (src/shared/case-progress.ts). */
+  caseMap: CaseMapSummary;
+  /** The first part of the map, in the map's order, with something in it and not approved; null when none. */
+  mapPartToApprove: MapPartId | null;
+  /** Each section's state and whether it is copied for ABA Matrix (T8), in the report's order. */
+  sections: Array<Pick<SectionSummary, "id" | "state" | "copied">>;
+}
+
+/** A case as Home lists it, with how far it is; null when that could not be read (the case is still listed). */
+export interface ListedCase extends CaseSummary {
+  progress: CaseProgress | null;
+}
+
 /** A PDF in the case's folder: its name only, never a path. */
 export interface CaseFile {
   name: string;
@@ -139,6 +159,8 @@ export interface CaseDetail extends CaseSummary {
   notes: string;
   /** Its case map (src/shared/case-map.ts): parts approved, out of parts with something in them. */
   caseMap: CaseMapSummary;
+  /** How far it is when it was opened, as Home lists it; null when that could not be read. */
+  progress: CaseProgress | null;
 }
 
 /* A case's map (src/shared/case-map.ts). */
@@ -197,7 +219,27 @@ export interface AiPreferences {
   lastProvider: DraftingProvider | null;
 }
 
-export type CopySectionResult = { outcome: "copied"; markers: number } | { outcome: "version-not-found" } | { outcome: "case-unavailable" };
+/**
+ * A copy for ABA Matrix. `markers` counts the [MISSING]/[CHECK] markers in what was put on
+ * the clipboard, and `allMissing` says whether every one is [MISSING] (the copied line's
+ * words, P2). Once the clipboard holds it, the copy is marked in the case (owner's
+ * decision T8): `marked` is the section and the sections as saved, or null when the mark
+ * could not be saved (the clipboard holds the text all the same).
+ */
+export type CopySectionResult =
+  | { outcome: "copied"; markers: number; allMissing: boolean; marked: { section: SectionDetail; sections: SectionSummary[] } | null }
+  | { outcome: "version-not-found" }
+  | { outcome: "case-unavailable" };
+
+/** A section as Revisión y copia shows it: its summary and the text of the version she would copy (versionToCopy), null when none. */
+export interface ReportSectionText {
+  summary: SectionSummary;
+  version: number | null;
+  text: string | null;
+}
+
+/** Every section of the report, in ABA Matrix's order (Revisión y copia and "Leer todo"). */
+export type ReadReportResult = { outcome: "read"; sections: ReportSectionText[] } | { outcome: "case-unavailable" };
 
 /**
  * Why a folder inside the cases folder cannot be opened as a case:
@@ -224,8 +266,8 @@ export interface UnreadableFolder {
 
 export interface CaseList {
   folder: CasesFolderInfo;
-  /** Newest first. Empty when the folder cannot be read. */
-  cases: CaseSummary[];
+  /** The case saved last first (updatedAt, then created, then folder name). Empty when the folder cannot be read. */
+  cases: ListedCase[];
   /** By folder name. */
   unreadable: UnreadableFolder[];
 }
@@ -257,7 +299,28 @@ export type GenerationUpdateEvent =
    * doing (writing, asked again to fix its answer, asked again as plain JSON), and how much
    * of the answer has arrived.
    */
-  | { type: "map-progress"; step: MapRequestKind; phase: "writing" | "repairing" | "plain-json"; characters: number }
+  | {
+      type: "map-progress";
+      step: MapRequestKind;
+      phase: "writing" | "repairing" | "plain-json";
+      characters: number;
+      /** While it writes: how many items of the answer have arrived, and how many of them passed their checks (case map speed). */
+      arrived?: number;
+      shown?: number;
+      /** While it repairs: how many values the checks flagged, which the repair is asked to fix. */
+      values?: number;
+      /** While it repairs: what it asks for again, those values only, the items that hold them, or the whole answer (review round 1 of case map speed, S5). */
+      scope?: "values" | "items" | "whole";
+    }
+  /**
+   * An item of the answer that arrived and passed its own checks (case map speed, 2026-11-23):
+   * shown at once, read-only and marked "checked, not saved yet", until its request saves
+   * (then the saved map replaces it) or ends without saving (then it goes). Nothing is saved
+   * by this event. `id` is the preview's own ("preview:…"), never an item id of the map.
+   * `replaces` is the id of the saved item it is a new version of (an update), or null.
+   * Nothing is sent for a part she approved or for an item she changed by hand.
+   */
+  | { type: "map-preview"; step: MapRequestKind; part: MapPartId; id: string; item: Record<string, unknown>; replaces: string | null }
   /** One request's parts saved: the whole map as saved, the parts written, and how many problems the checks still found. */
   | { type: "map-saved"; step: MapRequestKind; result: MapSaveResult; written: MapPartId[]; kept: MapPartId[]; problems: number }
   | { type: "finished"; cancelled: boolean };
@@ -491,8 +554,10 @@ export interface AbaApi {
   /**
    * Saves the text she writes herself (pasted from ABA Matrix, or an edit). `editing` is
    * the version this editing pass made and keeps updating; null starts a new version.
+   * `pasted`: a box of "Pegar lo que ya escribiste", always saved as her own text ("hers"),
+   * also over an AI draft (UX-6 review B1). Left out (false) for the section screen's saves.
    */
-  saveSectionText(caseId: string, sectionId: ReportSectionId, text: string, editing: number | null): Promise<SectionSaveResult>;
+  saveSectionText(caseId: string, sectionId: ReportSectionId, text: string, editing: number | null, pasted?: boolean): Promise<SectionSaveResult>;
   /** Shows another version: nothing is lost, only which one is current changes. */
   setCurrentVersion(caseId: string, sectionId: ReportSectionId, version: number): Promise<SectionSaveResult>;
   /** Approves a version (null takes the approval back). */
@@ -520,6 +585,8 @@ export interface AbaApi {
   setModel(provider: DraftingProvider, model: string): Promise<AiPreferences>;
   /** Puts a version on the clipboard the way ABA Matrix takes it; says how many markers are left. */
   copySection(caseId: string, sectionId: ReportSectionId, version: number): Promise<CopySectionResult>;
+  /** Every section's summary and the text of the version she would copy, in ABA Matrix's order (Revisión y copia). Read only. */
+  readReport(caseId: string): Promise<ReadReportResult>;
   /**
    * Development only, for pnpm eval (docs/evaluation.md): the evaluation's judge scores one
    * section against the rubric. The main process answers it only in a development build
@@ -604,6 +671,7 @@ export const IPC_CHANNELS = {
   saveSessionNotes: "sections:save-notes",
   startNewSession: "sections:new-session",
   copySection: "sections:copy",
+  readReport: "sections:read-report",
   judgeSection: "eval:judge-section",
   getCaseMap: "case-map:get",
   saveMapItem: "case-map:save-item",

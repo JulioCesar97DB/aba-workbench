@@ -52,11 +52,44 @@ export async function installRehearsalProvider(app: ElectronApplication): Promis
         return JSON.stringify(answer);
       }
       if (task.includes("Consistency check")) return "NO CONTRADICTIONS";
-      // The case map's two requests (scripts/map-verify.mts --rehearse): a valid, nearly empty map.
+      // The case map's two requests (scripts/map-verify.mts --rehearse): a valid, nearly empty map,
+      // with one item each that cites nothing and holds no number, so it passes the checks and
+      // shows as it arrives (case map speed).
+      const rehearsalClaim = (value: string) => ({ value, refs: [], origin: "ai-drafted", check: "" });
       if (task.includes("Map request: case facts")) {
-        return JSON.stringify({ client: null, caregivers: [], settings: [], deficits: [], strengths: [], facts: [], openItems: [{ kind: "missing", text: "Rehearsal: no real map was drafted.", homeSection: null }], report: [] });
+        return JSON.stringify({
+          client: null,
+          caregivers: [],
+          settings: [],
+          deficits: [],
+          strengths: [],
+          facts: [{ key: "new-1", text: rehearsalClaim("Rehearsal: a fact written by the fake provider, from no document."), homeSection: 0 }],
+          openItems: [{ kind: "missing", text: "Rehearsal: no real map was drafted.", homeSection: null }],
+          report: [],
+        });
       }
-      if (task.includes("Map request: behaviors")) return JSON.stringify({ behaviors: [], groups: [], risks: [], openItems: [] });
+      if (task.includes("Map request: behaviors")) {
+        const empty = rehearsalClaim("");
+        const behavior = {
+          key: "new-1",
+          name: rehearsalClaim("Rehearsal behavior"),
+          topographies: [],
+          measure: { ...empty, value: "" },
+          definition: rehearsalClaim("Rehearsal: written by the fake provider, from no document."),
+          onset: empty,
+          offset: empty,
+          examples: [],
+          nonExamples: [],
+          baseline: { observations: [], other: [] },
+          settingIds: [],
+          antecedents: [],
+          consequences: [],
+          function: { primary: [], secondary: [], evidence: [], reasoning: "", check: "" },
+          barriers: [],
+          risks: [],
+        };
+        return JSON.stringify({ behaviors: [behavior], groups: [], risks: [], openItems: [] });
+      }
       return [
         "This is a rehearsal draft written by the fake provider of pnpm eval --rehearse; no model wrote it.",
         "Her mother reported the concerns described in the parent interview [MISSING: rehearsal marker].",

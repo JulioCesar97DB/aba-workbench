@@ -62,6 +62,41 @@ async function openNotes(page: Page) {
   return box;
 }
 
+/** The version menu beside the title (owner's decision T3): "Version 2 of 3". */
+const versionMenu = (page: Page) => page.getByTestId("version-menu");
+
+/** The version shown, as the version menu names it ("Version 2 of 3", "Versión 2 de 3"). */
+async function expectVersion(page: Page, number: number, options: { timeout?: number; language?: "en" | "es" } = {}) {
+  const words = options.language === "es" ? `Versión ${number} de` : `Version ${number} of`;
+  await expect(versionMenu(page)).toContainText(words, { timeout: options.timeout });
+}
+
+/** Picks a version in the version menu. */
+async function showVersion(page: Page, number: number) {
+  await versionMenu(page).click();
+  await page.getByRole("menuitemradio", { name: new RegExp(`^v${number} ·`) }).click();
+  await expectVersion(page, number);
+}
+
+/** How many versions the section has, as the version menu says it ("of 3"). */
+async function expectVersionCount(page: Page, total: number, options: { timeout?: number } = {}) {
+  await expect(versionMenu(page)).toHaveText(new RegExp(`of ${total}$`), options);
+}
+
+/** A version's line in the version menu (the menu opened, then closed again with Escape). */
+async function expectInMenu(page: Page, line: RegExp) {
+  await versionMenu(page).click();
+  await expect(page.getByRole("menuitemradio", { name: line })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+}
+
+/** The two ways to start a section (TwoWays, owner's proposal §3.1). */
+const pasteOrType = (page: Page) => page.getByRole("button", { name: /^(Paste or type|Pegar o escribir)$/ });
+const draftWithAi = (page: Page) => page.getByRole("button", { name: /^(Draft with the AI|Redactar con la IA)$/ });
+const done = (page: Page) => page.getByTestId("section-done");
+const ASK = "Ask the AI for changes in your own words";
+
 const sidebarItem = (page: Page, title: string, language: "en" | "es" = "en") => page.getByRole("navigation", { name: language === "en" ? "Sections" : "Secciones" }).getByRole("link", { name: new RegExp(title.replace("/", "\\/")) });
 
 test("draft a section, change one paragraph, ask for changes, go back, approve and copy for ABA Matrix", async ({ launch, home }) => {
@@ -73,21 +108,27 @@ test("draft a section, change one paragraph, ask for changes, go back, approve a
   await expect(page.getByRole("dialog", { name: "Not ready for real client data yet" })).toBeVisible();
   await page.getByRole("button", { name: "Got it" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
-  await expect(page.getByRole("heading", { name: "How do you want to start this section?" })).toBeVisible();
+  // The two ways: "By hand" on the left, "With the AI" on the right (owner's proposal §3.1).
+  await expect(page.getByRole("heading", { name: "I already wrote it: paste or type it" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Have the AI draft it" })).toBeVisible();
+  await expect(page.getByTestId("state-chip")).toHaveText("Not started");
+  await expect(page.getByTestId("header-eyebrow")).toHaveText("Report · section 2 of 9");
   await screenshot(page, "section-1-start-en");
 
   await setDraftingSpeed(app, 15);
-  await page.getByRole("button", { name: /Draft it with the AI/ }).click();
+  await draftWithAi(page).click();
   await expect(page.getByTestId("streaming-text")).toContainText("Medical necessity for ABA services");
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await expect(page.getByTestId("state-chip")).toHaveText("The AI is writing");
   await screenshot(page, "section-2-writing-en");
   await setDraftingSpeed(app, 0);
 
   const view = page.getByTestId("section-view");
   await expect(view).toContainText("ABA will teach functional communication requests", { timeout: 20_000 });
-  await expect(page.getByRole("button", { name: "Version 1" })).toHaveAttribute("aria-pressed", "true");
+  await expectVersion(page, 1);
+  await expect(page.getByTestId("state-chip")).toHaveText("AI draft");
   const checks = page.getByTestId("section-checks");
-  await expect(checks).toContainText("1 marked");
+  await expect(checks).toContainText("Missing detail: percentile rank, not on the score report");
   await expect(checks).toContainText("Nothing to compare yet");
   await expect(sidebarItem(page, "Medical Necessity Criteria")).toContainText("v1");
 
@@ -95,10 +136,10 @@ test("draft a section, change one paragraph, ask for changes, go back, approve a
   const paragraphs = view.getByRole("button");
   const before = await paragraphs.allTextContents();
   await paragraphs.nth(1).click();
-  await page.getByLabel("Change this paragraph").fill("explain what the score means for the family");
+  await page.getByLabel("Change paragraph 2").fill("explain what the score means for the family");
   await screenshot(page, "section-3-paragraph-en");
   await page.getByRole("button", { name: "Change", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true", { timeout: 20_000 });
+  await expectVersion(page, 2, { timeout: 20_000 });
   const after = await view.getByRole("button").allTextContents();
   expect(after[0]).toBe(before[0]);
   expect(after[2]).toBe(before[2]);
@@ -106,23 +147,37 @@ test("draft a section, change one paragraph, ask for changes, go back, approve a
   await expect(page.getByText(/v2: paragraph 2: “explain what the score means for the family”/)).toBeVisible();
 
   // Ask for changes in her own words.
-  await page.getByLabel("Ask for changes in your own words").fill("mention that the school started the communication plan");
+  await page.getByLabel(ASK).fill("mention that the school started the communication plan");
   await page.getByRole("button", { name: "Create version 3" }).click();
-  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true", { timeout: 20_000 });
+  await expectVersion(page, 3, { timeout: 20_000 });
   await expect(view).toContainText("The school reports that his communication plan is now in place.");
   await screenshot(page, "section-4-versions-en");
 
   // Back to version 1: nothing is lost.
-  await page.getByRole("button", { name: "Version 1" }).click();
+  await showVersion(page, 1);
   await expect(view).not.toContainText("well below");
   expect(sectionData(caseFile, "medical-necessity").versions.map((v: { kind: string }) => v.kind)).toEqual(["draft", "paragraph", "change"]);
 
-  // Approve version 3 and copy it.
-  await page.getByRole("button", { name: "Version 3" }).click();
+  // Approve version 3, then copy it (P2): Copy is secondary until the approval, then the primary.
+  await showVersion(page, 3);
+  await expect(page.getByRole("button", { name: "Copy", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(sidebarItem(page, "Medical Necessity Criteria")).toContainText("Approved");
+  await expect(page.getByTestId("state-chip")).toHaveText("Approved");
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Copy for ABA Matrix" }).click();
-  await expect(page.getByText("Copied version 3. 1 marker is still to resolve before you paste.")).toBeVisible();
+  await expect(page.getByTestId("copied-line")).toHaveText(
+    "Copied with 1 detail to complete: look for [MISSING: …] when you paste. Paste it into ABA Matrix, in “Medical Necessity Criteria”. Next: Strengths and Weaknesses",
+  );
+  // A screen reader hears the same, from the screen's one live region (UX-3 review round 1, S2).
+  await expect(page.getByTestId("section-announcer")).toHaveText(
+    "Copied with 1 detail to complete: look for [MISSING: …] when you paste. Paste it into ABA Matrix, in “Medical Necessity Criteria”. Next: Strengths and Weaknesses",
+  );
+  await expect(page.getByTestId("state-chip")).toHaveText("Copied");
+  // The section is done: "Next step" is the rail's first part, and its button the screen's primary.
+  await expect(page.getByTestId("next-step")).toHaveAttribute("data-primary", "true");
+  // The copy button she pressed is gone: the focus is on that primary, not lost (UX-3 review round 1, S3).
+  await expect(page.getByTestId("next-step").getByRole("link", { name: "Open the section" })).toBeFocused();
   const copied = await app.evaluate(async ({ clipboard }) => clipboard.readText());
   expect(copied).toContain("The school reports that his communication plan is now in place.");
   expect(copied.split("\n\n")).toHaveLength(3);
@@ -130,8 +185,11 @@ test("draft a section, change one paragraph, ask for changes, go back, approve a
 
   const stored = sectionData(caseFile, "medical-necessity");
   expect(stored.approvedVersion).toBe(3);
+  // The copy is marked in the case (owner's decision T8): the version copied, and when.
+  expect(stored.copiedVersion).toBe(3);
+  expect(Date.parse(stored.copiedAt)).toBeGreaterThan(0);
   expect(stored.versions[0].generation.deidentified).toBe(false);
-  expect(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion).toBe(4);
+  expect(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion).toBe(5);
   // Every request went to the faked Claude: the draft and two changes (no check: no other section of hers yet).
   const log = await draftingStubLog(app);
   expect(log.requests.filter((r) => r.url.includes("/v1/messages"))).toHaveLength(3);
@@ -145,11 +203,11 @@ test("pick up a section she already wrote, improve it, and draft another that bu
   await expect(page.getByRole("dialog", { name: "Todavía no está lista para datos reales de clientes" })).toBeVisible();
   await page.getByRole("button", { name: "Entendido" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
-  await page.getByRole("button", { name: /Ya la escribí/ }).click();
+  await pasteOrType(page).click();
   const herText = "The child is a 4-year-old boy who lives at home with his parents.\n\nSpanish and English are spoken at home.";
   await page.getByTestId("section-text").fill(herText);
   await screenshot(page, "section-6-paste-es");
-  await page.getByRole("button", { name: "Listo, dejarla así" }).click();
+  await done(page).click();
   await expect(page.getByTestId("section-view")).toContainText("Spanish and English are spoken at home.");
   await expect(sidebarItem(page, "Background Information", "es")).toContainText("Tuya");
   expect(sectionData(caseFile, "background-information").versions[0]).toMatchObject({ number: 1, kind: "hers", text: herText });
@@ -159,10 +217,10 @@ test("pick up a section she already wrote, improve it, and draft another that bu
   await page.getByTestId("section-instructions").fill("Cada área con su puntaje, un ejemplo de casa y uno de la escuela.");
   await (await openNotes(page)).fill("La mamá confirmó hoy que la escuela ya aplica el plan de comunicación.");
   await page.getByTestId("session-notes").blur();
-  await page.getByRole("button", { name: /Redactarla con la IA/ }).click();
+  await draftWithAi(page).click();
   const view = page.getByTestId("section-view");
   await expect(view).toContainText("ABA will teach", { timeout: 20_000 });
-  await expect(page.getByTestId("section-checks")).toContainText("Sin contradicciones", { timeout: 20_000 });
+  await expect(page.getByTestId("section-checks")).toContainText("No contradice tus secciones", { timeout: 20_000 });
   await screenshot(page, "section-7-draft-es");
   const log = await draftingStubLog(app);
   const bodies = log.requests.filter((r) => r.url.includes("/v1/messages")).map((r) => r.body ?? "");
@@ -175,9 +233,9 @@ test("pick up a section she already wrote, improve it, and draft another that bu
   // Improve hers: a new version beside it; hers stays.
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/background-information`);
   await expect(page.getByTestId("section-view")).toContainText("Spanish and English are spoken at home.");
-  await page.getByLabel("Pide cambios con tus palabras").fill("más formal");
+  await page.getByLabel("Pide cambios a la IA con tus palabras").fill("más formal");
   await page.getByRole("button", { name: "Crear versión 2" }).click();
-  await expect(page.getByRole("button", { name: "Versión 2" })).toHaveAttribute("aria-pressed", "true", { timeout: 20_000 });
+  await expectVersion(page, 2, { timeout: 20_000, language: "es" });
   await screenshot(page, "section-8-versions-es");
   const versions = sectionData(caseFile, "background-information").versions;
   expect(versions[0].text).toBe(herText);
@@ -189,10 +247,11 @@ test("pick up a section she already wrote, improve it, and draft another that bu
 test("a failed request says what went wrong and offers Try again, which sends the same request again", async ({ launch, home }) => {
   const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
   await setDraftingFailures(app, 1);
-  await page.getByRole("button", { name: /Draft it with the AI/ }).click();
+  await draftWithAi(page).click();
   const failure = page.getByRole("alert").filter({ hasText: "The AI could not finish" });
   await expect(failure).toContainText("The AI could not finish and nothing was saved; your versions are unchanged. The AI refused this request. If it happens again, try the other AI; the technical details say why.");
   await expect(failure.getByRole("link", { name: "Open Settings" })).toHaveCount(0);
+  // A refused request can be sent again (another try may not be refused): Try again is offered.
   // The provider's own words wait under "Technical details", in English (owner's decision T11).
   const details = failure.getByTestId("section-error-details");
   await expect(details).toBeHidden();
@@ -213,42 +272,78 @@ test("a failed request says what went wrong and offers Try again, which sends th
 test("a key the provider no longer accepts says so in Spanish, with its way out in Settings", async ({ launch, home }) => {
   const { app, page } = await openSection(launch, home, "crisis-plan", "es");
   await setDraftingFailures(app, 1, 401);
-  await page.getByRole("button", { name: /Redactarla con la IA/ }).click();
+  await draftWithAi(page).click();
   const failure = page.getByRole("alert").filter({ hasText: "La IA no pudo terminar" });
   await expect(failure).toContainText("La IA no pudo terminar y no se guardó nada; tus versiones siguen igual. La conexión con la IA ya no funciona. Vuelve a conectarla en Ajustes.");
   // The provider's words stay under "Detalles técnicos" until she opens it.
   await expect(failure.getByTestId("section-error-details")).toBeHidden();
   await expect(failure.getByText("Detalles técnicos", { exact: true })).toBeVisible();
-  await failure.getByRole("link", { name: "Abrir Ajustes" }).click();
+  // A key no longer accepted: sending it again cannot work, so there is no "Volver a intentar" (UX-2 follow-up).
+  await expect(failure.getByRole("button", { name: "Volver a intentar" })).toHaveCount(0);
+  // One way out, not two (UX-3 review round 1, B2): the key is no longer connected, so the AI card's
+  // "Conectar la IA" leads to Ajustes, and the error box has no "Abrir Ajustes" of its own.
+  const aiCard = page.getByTestId("two-ways").locator("[data-way='ai']");
+  await expect(aiCard.getByRole("link", { name: "Conectar la IA" })).toBeVisible();
+  await expect(failure.getByRole("link", { name: "Abrir Ajustes" })).toHaveCount(0);
+  await aiCard.getByRole("link", { name: "Conectar la IA" }).click();
   await expect(page.locator("#page-title")).toHaveText("Ajustes");
 });
 
 test("stopping a draft saves nothing and says so; without an AI connected, drafting points to Settings", async ({ launch, home }) => {
   const { app, page, caseFile } = await openSection(launch, home, "crisis-plan", "en", { msPerChunk: 200 });
-  await page.getByRole("button", { name: /Draft it with the AI/ }).click();
+  await draftWithAi(page).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByText("Stopped. Nothing was saved; your versions are unchanged.")).toBeVisible();
   // She can start again, either way.
-  await expect(page.getByRole("button", { name: /Draft it with the AI/ })).toBeEnabled();
-  await expect(page.getByRole("button", { name: /I already wrote it/ })).toBeVisible();
+  await expect(draftWithAi(page)).toBeEnabled();
+  await expect(pasteOrType(page)).toBeVisible();
   expect(sectionData(caseFile, "crisis-plan")).toBeUndefined();
 
   await page.evaluate(() => (globalThis as unknown as { aba: AbaApi }).aba.removeClaudeKey());
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/risk-assessment`);
-  await expect(page.getByText("To draft with the AI, connect ChatGPT or Claude in Settings.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Draft it with the AI/ })).toBeDisabled();
+  // The AI card keeps its color; its button reads "Connect the AI" and leads to Settings (P7).
+  const aiCard = page.getByTestId("two-ways").locator("[data-way='ai']");
+  await expect(aiCard).toContainText("Connect ChatGPT in Settings to use this way.");
+  await expect(draftWithAi(page)).toHaveCount(0);
+  await aiCard.getByRole("link", { name: "Connect the AI" }).click();
+  await expect(page.locator("#page-title")).toHaveText("Settings");
   void app;
+});
+
+test("Improve it with the AI from an edit sends what she has on screen at that moment, as her text (UX-3 review round 1, S1)", async ({ launch, home }) => {
+  const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
+  await draftWithAi(page).click();
+  await expect(page.getByTestId("section-view")).toContainText("ABA will teach", { timeout: 20_000 });
+  await expect(page.getByTestId("section-checks")).not.toContainText("Checking", { timeout: 20_000 });
+  await page.getByRole("button", { name: "Edit by hand" }).click();
+  const box = page.getByTestId("section-text");
+  const improve = page.getByTestId("improve-from-editor");
+  // The AI's draft, untouched, is not her text: there is nothing of hers to improve yet.
+  await expect(improve).toBeDisabled();
+  const hers = `${await box.inputValue()}\n\nHer correction, typed by hand just now.`;
+  await box.fill(hers);
+  // At once, inside the typing pause: nothing of this editing pass is saved yet.
+  await improve.click();
+  await expectVersion(page, 3, { timeout: 20_000 });
+  const versions = sectionData(caseFile, "crisis-plan").versions as { number: number; kind: string; text: string; basedOn: number | null }[];
+  expect(versions.map((v) => v.kind)).toEqual(["draft", "edited", "improve"]);
+  // Her edit is kept as she typed it, and the improvement is built on it, not on the AI's draft.
+  expect(versions[1].text).toBe(hers);
+  expect(versions[2].basedOn).toBe(2);
+  const log = await draftingStubLog(app);
+  const bodies = log.requests.filter((r) => r.url.includes("/v1/messages")).map((r) => r.body ?? "");
+  expect(bodies.some((body) => body.includes("Her correction, typed by hand just now."))).toBe(true);
 });
 
 test("her edits, instructions and notes survive a restart; the file keeps every version", async ({ launch, home }) => {
   const { app, page, caseFile } = await openSection(launch, home, "generalization-and-maintenance");
-  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await pasteOrType(page).click();
   await page.getByTestId("section-text").fill("Generalization paragraph.\n\nMaintenance paragraph.");
-  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
-  await page.getByRole("button", { name: "Edit the text" }).click();
+  await done(page).click();
+  await page.getByRole("button", { name: "Edit by hand" }).click();
   await page.getByTestId("section-text").fill("Generalization paragraph, edited.\n\nMaintenance paragraph.");
-  await page.getByRole("button", { name: "Done" }).click();
+  await done(page).click();
   await expect(page.getByTestId("section-view")).toContainText("edited.");
   await page.getByTestId("section-instructions").fill("Two paragraphs, examples from this child's goals.");
   await (await openNotes(page)).fill("Invented note.");
@@ -260,7 +355,8 @@ test("her edits, instructions and notes survive a restart; the file keeps every 
   const page2 = await firstScreen(again);
   await goTo(page2, `/cases/${SAMPLE_CASE.id}/report/generalization-and-maintenance`);
   await expect(page2.getByTestId("section-view")).toContainText("Generalization paragraph, edited.");
-  await expect(page2.getByRole("button", { name: "Version 1" })).toBeVisible();
+  await expectVersion(page2, 2);
+  await expectVersionCount(page2, 2);
   await expect(page2.getByTestId("section-instructions")).toHaveValue("Two paragraphs, examples from this child's goals.");
   await expect(await openNotes(page2)).toHaveValue("Invented note.");
   expect(sectionData(caseFile, "generalization-and-maintenance").versions.map((v: { kind: string }) => v.kind)).toEqual(["hers", "edited"]);
@@ -339,7 +435,7 @@ test("B3: what she typed in a section that could not be saved is still there aft
   test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
   const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
   const caseFolder = path.dirname(caseFile);
-  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await pasteOrType(page).click();
   chmodSync(caseFolder, 0o555);
   try {
     await page.getByTestId("section-text").fill("Typed while the folder refused.");
@@ -355,7 +451,7 @@ test("B3: what she typed in a section that could not be saved is still there aft
     await page.getByRole("button", { name: "Try again" }).click();
     await expect(notice).toBeHidden();
     expect(sectionData(caseFile, "crisis-plan").versions[0].text).toBe("Typed while the folder refused.");
-    await page.getByRole("button", { name: "Done, keep it as it is" }).click();
+    await done(page).click();
     await expect(page.getByTestId("section-view")).toContainText("Typed while the folder refused.");
     expect(sectionData(caseFile, "crisis-plan").versions).toHaveLength(1);
   } finally {
@@ -365,22 +461,23 @@ test("B3: what she typed in a section that could not be saved is still there aft
 
 test("M3 and M6: lines pasted with single line breaks can become paragraphs; the copy says which version it copied", async ({ launch, home }) => {
   const { app, page, caseFile } = await openSection(launch, home, "environmental-changes");
-  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await pasteOrType(page).click();
   await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
   await expect(page.getByTestId("lines-notice")).toBeVisible();
   await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
-  await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+  await expectVersion(page, 2);
   await expect(page.getByTestId("section-view").getByRole("button")).toHaveCount(3);
   const versions = sectionData(caseFile, "environmental-changes").versions;
   expect(versions.map((v: { text: string }) => v.text)).toEqual(["Para one.\nPara two.\nPara three.", "Para one.\n\nPara two.\n\nPara three."]);
 
-  // Approve version 2, look back at version 1, copy: the message says so plainly.
+  // Approve version 2, look back at version 1, copy: the line says so plainly.
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await page.getByRole("button", { name: "Version 1, yours" }).click();
-  await page.getByRole("button", { name: "Copy for ABA Matrix" }).click();
-  await expect(page.getByText("Copied version 1. Paste it into ABA Matrix. Version 2 is the approved one.")).toBeVisible();
+  await expect(page.getByTestId("state-chip")).toHaveText("Approved");
+  await showVersion(page, 1);
+  await page.getByRole("button", { name: "Copy", exact: true }).click();
+  await expect(page.getByTestId("copied-line")).toContainText("Copied. Paste it into ABA Matrix, in “Environmental Changes”. You copied version 1, not the approved one (version 2).");
   expect(await app.evaluate(async ({ clipboard }) => clipboard.readText())).toBe("Para one.\nPara two.\nPara three.");
-  await expect(page.getByRole("button", { name: "Version 2, approved" })).toBeVisible();
+  await expectInMenu(page, /^v2 ·.*approved/);
 });
 
 /*
@@ -403,24 +500,24 @@ for (const [late, channels] of Object.entries(SLOW_ANSWERS)) {
         g.copied.push(await (await items[0].getType("text/plain")).text());
       };
     });
-    await page.getByRole("button", { name: /I already wrote it/ }).click();
+    await pasteOrType(page).click();
     await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
     await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
-    await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+    await expectVersion(page, 2);
 
     const releases: Array<() => Promise<void>> = [];
     for (const channel of channels) releases.push(await holdAnswers(app, channel));
     await page.getByRole("button", { name: "Approve", exact: true }).click();
-    await page.getByRole("button", { name: "Version 1, yours" }).click();
-    await page.getByRole("button", { name: "Copy for ABA Matrix" }).click();
+    await showVersion(page, 1);
+    await page.getByRole("button", { name: "Copy", exact: true }).click();
     await expect.poll(() => app.evaluate(() => (globalThis as unknown as { copied: string[] }).copied)).toEqual(["Para one.\nPara two.\nPara three."]);
 
     for (const release of releases) await release();
     // One more call to the main process: its answer comes after the held ones, so the screen has had them.
     await page.evaluate(([caseId, sectionId]) => (globalThis as unknown as { aba: AbaApi }).aba.getSection(caseId, sectionId as "environmental-changes"), [SAMPLE_CASE.id, "environmental-changes"]);
-    await expect(page.getByRole("button", { name: "Version 2, approved" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByText("Copied version 1. Paste it into ABA Matrix. Version 2 is the approved one.")).toBeVisible();
+    await expectVersion(page, 1);
+    await expect(page.getByTestId("copied-line")).toContainText("You copied version 1, not the approved one (version 2).");
+    await expectInMenu(page, /^v2 ·.*approved/);
     expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ approvedVersion: 2, currentVersion: 1 });
   });
 }
@@ -436,10 +533,10 @@ for (const [late, channels] of Object.entries(SLOW_ANSWERS)) {
 async function twoVersions(launch: Parameters<typeof openSection>[0], home: string) {
   const opened = await openSection(launch, home, "environmental-changes");
   const { page } = opened;
-  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await pasteOrType(page).click();
   await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
   await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
-  await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
+  await expectVersion(page, 2);
   return opened;
 }
 
@@ -451,29 +548,29 @@ async function settle(page: Page) {
 test("out of order: version 1, then Approve at once, the version's answer last; the approval stays shown", async ({ launch, home }) => {
   const { app, page, caseFile } = await twoVersions(launch, home);
   const release = await holdAnswers(app, "sections:set-current");
-  await page.getByRole("button", { name: "Version 1, yours" }).click();
+  await showVersion(page, 1);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Undo approval" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy for ABA Matrix" })).toBeVisible();
   expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ approvedVersion: 1, currentVersion: 1 });
 
   await release();
   await settle(page);
-  await expect(page.getByRole("button", { name: "Undo approval" })).toBeVisible();
-  // The badge beside the text, and the section's line in the sidebar.
-  await expect(page.locator("#content").getByText("Approved", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Version 1, approved" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Copy for ABA Matrix" })).toBeVisible();
+  // The chip in the header, the version menu, and the section's line in the sidebar.
+  await expect(page.getByTestId("state-chip")).toHaveText("Approved");
+  await expectVersion(page, 1);
+  await expectInMenu(page, /^v1 ·.*approved/);
   await expect(sidebarItem(page, "Environmental Changes")).toContainText("Approved");
 });
 
 test("out of order: Approve version 1, then each line a paragraph at once, the approval's answer last; version 3 stays, unapproved", async ({ launch, home }) => {
   const { app, page, caseFile } = await twoVersions(launch, home);
-  await page.getByRole("button", { name: "Version 1, yours" }).click();
-  await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
+  await showVersion(page, 1);
   await settle(page);
   const release = await holdAnswers(app, "sections:approve");
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
-  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true");
+  await expectVersion(page, 3);
   // The new version took the approval away (she approves again).
   const stored = sectionData(caseFile, "environmental-changes");
   expect(stored.versions).toHaveLength(3);
@@ -481,26 +578,26 @@ test("out of order: Approve version 1, then each line a paragraph at once, the a
 
   await release();
   await settle(page);
-  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(3);
+  await expectVersion(page, 3);
+  await expectVersionCount(page, 3);
   await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
-  await expect(page.locator("#content").getByText("Approved", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("state-chip")).not.toHaveText("Approved");
   await expect(sidebarItem(page, "Environmental Changes")).not.toContainText("Approved");
 });
 
 test("out of order: version 1, then ask for changes; the version's answer after the new version is saved never hides it", async ({ launch, home }) => {
   const { app, page, caseFile } = await twoVersions(launch, home);
   const release = await holdAnswers(app, "sections:set-current");
-  await page.getByRole("button", { name: "Version 1, yours" }).click();
-  await page.getByLabel("Ask for changes in your own words").fill("mention that the school started the communication plan");
+  await showVersion(page, 1);
+  await page.getByLabel(ASK).fill("mention that the school started the communication plan");
   await page.getByRole("button", { name: "Create version 3" }).click();
-  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true", { timeout: 20_000 });
+  await expectVersion(page, 3, { timeout: 20_000 });
   expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ currentVersion: 3 });
 
   await release();
   await settle(page);
-  await expect(page.getByRole("button", { name: "Version 3" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(3);
+  await expectVersion(page, 3);
+  await expectVersionCount(page, 3);
   await expect(page.getByTestId("section-view")).toContainText("The school reports that his communication plan is now in place.");
 });
 
@@ -519,35 +616,45 @@ test("out of order: version 1, then ask for changes; the version's answer after 
 async function checkingAgain(launch: Parameters<typeof openSection>[0], home: string) {
   const opened = await openSection(launch, home, "background-information", "en", { consistency: "Maybe." });
   const { app, page } = opened;
-  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await pasteOrType(page).click();
   await page.getByTestId("section-text").fill("Her own background text.");
-  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
+  await done(page).click();
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/environmental-changes`);
-  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await pasteOrType(page).click();
   await page.getByTestId("section-text").fill("Para one.\nPara two.\nPara three.");
   await page.getByRole("button", { name: "Treat each line as a paragraph" }).click();
-  await expect(page.getByRole("button", { name: "Version 2" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByLabel("Ask for changes in your own words").fill("mention that the school started the communication plan");
+  await expectVersion(page, 2);
+  await page.getByLabel(ASK).fill("mention that the school started the communication plan");
   await page.getByRole("button", { name: "Create version 3" }).click();
   await expect(page.getByTestId("section-checks")).toContainText("Could not be checked", { timeout: 20_000 });
 
   const finishCheck = await pauseDrafting(app);
   await page.getByRole("button", { name: "Check again" }).click();
   await expect(page.getByTestId("section-checks")).toContainText("Checking");
-  await page.getByRole("button", { name: "Version 1, yours" }).click();
-  await expect(page.getByRole("button", { name: "Version 1, yours" })).toHaveAttribute("aria-pressed", "true");
+  await showVersion(page, 1);
   return { ...opened, finishCheck };
 }
 
 /**
  * Her new version 4 is on disk, then the check ends and saves after it. Her answer is held,
- * so only the check's news can bring version 4 into the version bar.
+ * so only the check's news can bring version 4 to the screen: the version menu says "of 4".
+ * While she edits by hand the header has no version menu (UX-3, §3.2), so there the rail's
+ * live checks show it: they read the version her editing pass wrote, and version 1 (one
+ * paragraph) has a paragraph-count issue her three-paragraph version 4 has not.
  */
-async function checkSavedAfterHer(page: Page, caseFile: string, finishCheck: () => Promise<void>) {
+async function checkSavedAfterHer(page: Page, caseFile: string, finishCheck: () => Promise<void>, editing = false) {
   await expect.poll(() => sectionData(caseFile, "environmental-changes").versions.length).toBe(4);
   expect(sectionData(caseFile, "environmental-changes")).toMatchObject({ currentVersion: 4 });
+  const onePara = "1 paragraphs; the rules ask for 2 to 3.";
+  if (editing) await expect(page.getByTestId("section-checks")).toContainText(onePara);
   await finishCheck();
-  await expect(page.getByRole("button", { name: /^Version \d/ })).toHaveCount(4, { timeout: 20_000 });
+  if (!editing) {
+    await expectVersionCount(page, 4, { timeout: 20_000 });
+    return;
+  }
+  await expect(page.getByTestId("section-checks")).not.toContainText(onePara, { timeout: 20_000 });
+  // The check's news leaves her where she is: still editing, her text as she typed it.
+  await expect(page.getByTestId("section-text")).toHaveValue("Para one.\n\nPara two, edited by her.\n\nPara three.");
 }
 
 test("check overtakes: during a check, version 1 then each line a paragraph; the new version is shown", async ({ launch, home }) => {
@@ -560,22 +667,22 @@ test("check overtakes: during a check, version 1 then each line a paragraph; the
   await release();
   await settle(page);
   // She asked for each line as a paragraph: the file shows version 4; so must the screen.
-  await expect(page.getByRole("button", { name: "Version 4" })).toHaveAttribute("aria-pressed", "true");
+  await expectVersion(page, 4);
   await expect(page.getByTestId("lines-notice")).toHaveCount(0);
 });
 
 test("check overtakes: during a check, she edits version 1's text; after Done her edit is what the screen shows", async ({ launch, home }) => {
   const { app, page, caseFile, finishCheck } = await checkingAgain(launch, home);
-  await page.getByRole("button", { name: "Edit the text" }).click();
+  await page.getByRole("button", { name: "Edit by hand" }).click();
   const release = await holdAnswers(app, "sections:save-text");
   await page.getByTestId("section-text").fill("Para one.\n\nPara two, edited by her.\n\nPara three.");
-  await checkSavedAfterHer(page, caseFile, finishCheck);
+  await checkSavedAfterHer(page, caseFile, finishCheck, true);
   expect(sectionData(caseFile, "environmental-changes").versions[3].text).toBe("Para one.\n\nPara two, edited by her.\n\nPara three.");
 
   await release();
   await settle(page);
-  await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByRole("button", { name: /^Version 4/ })).toHaveAttribute("aria-pressed", "true");
+  await done(page).click();
+  await expectVersion(page, 4);
   await expect(page.getByTestId("section-view")).toContainText("Para two, edited by her.");
 });
 
@@ -628,11 +735,11 @@ test("B3 round 2, section text: after a reload the editor reopens with her corre
   test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
   const { app, page, caseFile } = await openSection(launch, home, "crisis-plan");
   const caseFolder = path.dirname(caseFile);
-  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await pasteOrType(page).click();
   await page.getByTestId("section-text").fill("Hers v1.");
-  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
+  await done(page).click();
   await expect(page.getByTestId("section-view")).toContainText("Hers v1.");
-  await page.getByRole("button", { name: "Edit the text" }).click();
+  await page.getByRole("button", { name: "Edit by hand" }).click();
   chmodSync(caseFolder, 0o555);
   try {
     await page.getByTestId("section-text").fill("Hers v1. A long correction of the dates, typed before the reload.");
@@ -765,27 +872,27 @@ test("R3-1: deleting text while saves fail, then a reload: the box shows her new
 test("R4-1: Stop pressed at once, 25 rounds on one screen: the screen and the file always agree", async ({ launch, home }) => {
   const { page, caseFile } = await openSection(launch, home, "background-information");
   // Her own Background Information, so every draft of Medical Necessity is followed by a check.
-  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await pasteOrType(page).click();
   await page.getByTestId("section-text").fill("Her own background text.");
-  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
+  await done(page).click();
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/medical-necessity`);
   await expect(heading(page)).toHaveText("Medical Necessity Criteria");
   const versionsOnDisk = () => (sectionData(caseFile, "medical-necessity")?.versions ?? []).length;
   const stopOrSkip = page.getByRole("button", { name: /^(Stop|Skip the check)$/ });
   const stoppedMessage = page.getByText("Stopped. Nothing was saved; your versions are unchanged.");
   const tally = { saved: 0, stopped: 0 };
-  // The section has loaded: it asks how to start it.
-  await expect(page.getByRole("heading", { name: "How do you want to start this section?" })).toBeVisible();
+  // The section has loaded: it shows the two ways to start it.
+  await expect(draftWithAi(page)).toBeVisible();
   for (let round = 1; round <= 25; round++) {
     const before = versionsOnDisk();
-    if (before > 0) await page.getByLabel("Ask for changes in your own words").fill(`round ${round}`);
+    if (before > 0) await page.getByLabel(ASK).fill(`round ${round}`);
     // The request, then Stop at once, from inside the page: 0 to 4 ms apart, changing each
     // round, so the Stop lands while preparing, while writing, during the save or after it.
     await page.evaluate(async (delay) => {
       type Button = { textContent: string | null; click(): void };
       const buttons = () => [...(globalThis as unknown as { document: { querySelectorAll(selector: string): Iterable<Button> } }).document.querySelectorAll("button")];
       buttons()
-        .find((button) => /Draft it with the AI|^Create version/.test(button.textContent ?? ""))
+        .find((button) => /^(Draft with the AI|Create version \d+)$/.test((button.textContent ?? "").trim()))
         ?.click();
       await new Promise((resolve) => setTimeout(resolve, delay));
       for (let tries = 0; tries < 200; tries++) {
@@ -801,7 +908,8 @@ test("R4-1: Stop pressed at once, 25 rounds on one screen: the screen and the fi
     const after = versionsOnDisk();
     expect(after === before || after === before + 1, `round ${round}: at most one version`).toBe(true);
     // What the screen shows is what the file holds.
-    await expect(page.getByRole("group", { name: "Versions" }).getByRole("button")).toHaveCount(after);
+    if (after === 0) await expect(versionMenu(page)).toHaveCount(0);
+    else await expectVersionCount(page, after);
     if (after > before) await expect(stoppedMessage, `round ${round}: a saved version is never called not saved`).toHaveCount(0);
     else if (await stoppedMessage.isVisible()) expect(after, `round ${round}`).toBe(before);
     tally[after > before ? "saved" : "stopped"]++;
@@ -812,11 +920,11 @@ test("R4-1: Stop pressed at once, 25 rounds on one screen: the screen and the fi
 
 test("L-1: Skip pressed while Check again is still being prepared stops the check", async ({ launch, home, }) => {
   const { app, page, caseFile } = await openSection(launch, home, "background-information", "en", { consistency: "Maybe." });
-  await page.getByRole("button", { name: /I already wrote it/ }).click();
+  await pasteOrType(page).click();
   await page.getByTestId("section-text").fill("Her own background text.");
-  await page.getByRole("button", { name: "Done, keep it as it is" }).click();
+  await done(page).click();
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/medical-necessity`);
-  await page.getByRole("button", { name: /Draft it with the AI/ }).click();
+  await draftWithAi(page).click();
   await expect(page.getByTestId("section-checks")).toContainText("Could not be checked", { timeout: 20_000 });
   const before = sectionData(caseFile, "medical-necessity").versions[0].consistency.checkedAt;
   // A slow answer: a Skip that reaches the main process stops it before it ends.

@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import path from "node:path";
 import type { AbaApi } from "../src/shared/api.ts";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
-import { defaultCasesFolder, expect, firstScreen, goTo, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
+import { defaultCasesFolder, expect, firstScreen, goTo, newCaseButton, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
 
 /*
  * The interface as a user meets it: the screens, the navigation, the language and the
@@ -42,10 +42,10 @@ test("the app opens on Home, the empty list of cases, with what to do next", asy
   await expect(page).toHaveTitle("Cases · ABA Workbench");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "No cases yet" })).toBeVisible();
-  await expect(page.getByText(/Choose New case to make your first one/)).toBeVisible();
+  await expect(page.getByText("A case brings together one client's documents and their assessment.")).toBeVisible();
 
   // "New case" opens its form; Escape closes it and focus returns.
-  const newCase = page.getByRole("button", { name: "New case" });
+  const newCase = newCaseButton(page);
   await newCase.click();
   const dialog = page.getByRole("dialog", { name: "New case" });
   await expect(dialog).toBeVisible();
@@ -94,7 +94,7 @@ test("the interface loads under the content security policy as written, with its
   expect(fonts).toEqual({ faces: [true, true, true], sans: true, mono: true });
 
   // Popups (dialog, tooltip, select) render without inline styles the policy would block.
-  await page.getByRole("button", { name: "New case" }).click();
+  await newCaseButton(page).click();
   await page.keyboard.press("Escape");
   await goTo(page, "/settings");
   // The tooltip before the Select, never right after closing it: while a Select is mounted
@@ -127,11 +127,15 @@ test("the navigation reaches every screen", async ({ launch, home }) => {
   seedCase(defaultCasesFolder(home));
   const page = await openApp(await launch());
 
+  // A case opens on its summary (owner's decision T6); the case's name in the sidebar leads back to it.
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
+  await expect(heading(page)).toHaveText("Case summary");
+  await expect(page.getByTestId("case-summary-link")).toHaveAttribute("aria-current", "page");
+  await page.getByRole("navigation", { name: "Steps of the case" }).getByRole("link", { name: "Documents" }).click();
   await expect(heading(page)).toHaveText("Documents");
-  await expect(page.getByText(`${SAMPLE_CASE.label} · Step 1 of 5`)).toBeVisible();
-  const rail = page.getByRole("complementary", { name: "Documents and checks" });
-  await expect(rail).toContainText("No documents yet.");
+  await expect(page.getByTestId("header-eyebrow")).toHaveText("Step 1 of 5");
+  const rail = page.getByRole("complementary", { name: "This step" });
+  await expect(rail.getByTestId("next-step")).toContainText("Turns on when you add the first document.");
 
   const steps = page.getByRole("navigation", { name: "Steps of the case" });
   const expected: Array<[string, string]> = [
@@ -146,6 +150,8 @@ test("the navigation reaches every screen", async ({ launch, home }) => {
     await expect(heading(page)).toHaveText(title);
     await expect(steps.getByRole("link", { name: link })).toHaveAttribute("aria-current", "page");
   }
+  await page.getByTestId("case-summary-link").click();
+  await expect(heading(page)).toHaveText("Case summary");
 
   // The report's sections are listed under its step while she is in the report.
   const sections = page.getByRole("navigation", { name: "Sections" });
@@ -205,7 +211,7 @@ test("switching the language changes the screen and survives a restart", async (
   await goTo(page, `/cases/${SAMPLE_CASE.id}/interventions`);
   await expect(heading(page)).toHaveText("Plan");
   await expect(heading(page)).not.toHaveAttribute("lang", "en");
-  await expect(page.getByText(`${SAMPLE_CASE.label} · Paso 3 de 5`)).toBeVisible();
+  await expect(page.getByTestId("header-eyebrow")).toHaveText("Paso 3 de 5");
   // The age in Spanish words, under the case's label in the sidebar.
   await expect(page.getByText("4 años 2 meses")).toBeVisible();
   const steps = page.getByRole("navigation", { name: "Pasos del caso" });
@@ -214,7 +220,7 @@ test("switching the language changes the screen and survives a restart", async (
   for (const subtitle of ["Lo que ya tienes del cliente", "Conductas y funciones", "Intervenciones", "Las 9 secciones", "Todo junto, a ABA Matrix"]) await expect(steps).toContainText(subtitle);
   await expect(steps.locator('[lang="en"]')).toHaveCount(0);
   // Clinical terms stay in English, marked as English: the sentence that names the Interventions.
-  await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText(["Interventions"]);
+  await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText(["Interventions", "Hypothesis Based Interventions"]);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report`);
   const sections = page.getByRole("navigation", { name: "Secciones" });
   await expect(sections.locator('[lang="en"]')).toHaveText(REPORT_SECTIONS.map((section) => section.title));
@@ -309,8 +315,8 @@ test("moving into and out of a case announces the new screen and puts focus on i
 
   // Home -> case: the link that was followed is gone, so focus goes to the new title.
   await page.getByRole("link", { name: SAMPLE_CASE.label }).click();
-  await expect(heading(page)).toHaveText("Documents");
-  await expect(announcement(page)).toHaveText("Documents · ABA Workbench");
+  await expect(heading(page)).toHaveText("Case summary");
+  await expect(announcement(page)).toHaveText("Case summary · ABA Workbench");
   await expect(heading(page)).toBeFocused();
 
   // Inside the case the sidebar stays, and so does the focus, on the link followed.
@@ -338,9 +344,9 @@ test("the frame: the trial line is on every screen; the header and the rail stay
   seedCase(defaultCasesFolder(home));
   const app = await launch();
   const page = await openApp(app);
-  // The rail sits beside the text from a working area 50rem wide. A runner's screen can be
+  // The rail sits beside the text from a window 1024 px wide (T2). A runner's screen can be
   // smaller than the window asked for (1024x768 on some), so the page is zoomed out to give
-  // it a working area that wide whatever the screen.
+  // it a window that wide whatever the screen.
   await resize(app, 1280, 820);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(0.75));
   await expect.poll(() => page.evaluate(() => (globalThis as unknown as { innerWidth: number }).innerWidth)).toBeGreaterThanOrEqual(1300);
@@ -358,7 +364,7 @@ test("the frame: the trial line is on every screen; the header and the rail stay
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/background-information`);
   await expect(page.getByTestId("section-view")).toContainText("Paragraph 30");
   const header = page.getByRole("main").locator("header");
-  const rail = page.getByRole("complementary", { name: "Documents and checks" });
+  const rail = page.getByRole("complementary", { name: "Checks" });
   // The rail is beside the text, not below it.
   const [textBox, railBox] = [await page.getByTestId("section-view").boundingBox(), await rail.boundingBox()];
   expect(railBox!.x).toBeGreaterThan(textBox!.x + textBox!.width);
@@ -396,18 +402,18 @@ test("everything works from the keyboard, with the focus always visible", async 
 
   // Every stop on the way shows the focus ring, up to the last control of the screen. How
   // many stops come first depends on the build (a development build also links the
-  // development check), so it tabs until "Open Settings", with a cap.
+  // development check), so it tabs until the empty Home's "Change it in Settings", with a cap.
   const stops: string[] = [];
-  for (let i = 0; i < 14 && stops.at(-1) !== "Open Settings"; i++) {
+  for (let i = 0; i < 14 && stops.at(-1) !== "Change it in Settings"; i++) {
     await page.keyboard.press("Tab");
     const stop = await focused();
     expect(stop.outline, `focus ring on "${stop.name}"`).toBe(true);
     stops.push(stop.name);
   }
-  expect(stops).toEqual(expect.arrayContaining(["Cases", "Settings", "English", "Español", "What this means", "New case", "Open Settings"]));
+  expect(stops).toEqual(expect.arrayContaining(["Cases", "Settings", "English", "Español", "What this means", "New case", "Change it in Settings"]));
 
   // A link opens with Enter; the Select opens and chooses with the arrow keys.
-  await page.getByRole("link", { name: "Open Settings" }).focus();
+  await page.getByRole("link", { name: "Change it in Settings" }).focus();
   await page.keyboard.press("Enter");
   await expect(heading(page)).toHaveText("Settings");
   await page.getByRole("combobox", { name: "Language" }).focus();

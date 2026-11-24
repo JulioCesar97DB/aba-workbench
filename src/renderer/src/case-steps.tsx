@@ -3,8 +3,18 @@ import { CASE_STEPS, type CaseStep } from "./steps.ts";
 
 export { CASE_STEPS, type CaseStep };
 
+/** The case's summary, where a case opens (owner's decision T6): its index address. */
+export function caseSummaryPath(caseId: string): string {
+  return `/cases/${caseId}`;
+}
+
 export function casePath(caseId: string, step: CaseStep = "sources", sectionId?: string): string {
   return sectionId ? `/cases/${caseId}/${step}/${sectionId}` : `/cases/${caseId}/${step}`;
+}
+
+/** "Pegar lo que ya escribiste": the nine sections on one screen, under the report (owner's decision T10). */
+export function bulkPastePath(caseId: string): string {
+  return `/cases/${caseId}/report/paste`;
 }
 
 /** A pasted text of the case, to read and edit. */

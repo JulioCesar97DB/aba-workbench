@@ -1,29 +1,29 @@
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, Outlet } from "react-router";
+import { Outlet } from "react-router";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
-import { CASE_STEPS, casePath, stepTitle, type CaseStep } from "../case-steps.tsx";
+import { bulkPastePath, CASE_STEPS, casePath, stepTitle, type CaseStep } from "../case-steps.tsx";
 import { casesFolderProblemText } from "../cases-folder.tsx";
-import { TextLink } from "../components/Link.tsx";
+import { Icon } from "../components/Icon.tsx";
+import { ButtonLink, TextLink } from "../components/Link.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, TableRowHeader } from "../components/Table.tsx";
-import { TransWithTerms } from "../components/Trans.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 import { useOpenCaseState, useOpenedCase } from "../open-case.tsx";
 import { sourceName, sourceNameLang } from "../source-labels.tsx";
-import { Placeholder } from "./Placeholder.tsx";
 import { sectionStateText } from "../shell/Sidebar.tsx";
 import { formatUsd } from "./Section.tsx";
 import { useLanguage } from "../language.tsx";
+import { useWaitsForHerSections } from "../half-done.ts";
 import type { SectionSummary } from "../../../shared/sections.ts";
 
 /*
  * The case workspace: the five steps and the report's sections. AppShell opens the case
- * (src/renderer/src/open-case.tsx). Documents has its own screens (Sources.tsx, SourceText.tsx),
- * and so does the case map (CaseMap.tsx); Plan and Review and copy are placeholders until
- * later phases fill them.
+ * (src/renderer/src/open-case.tsx). The case opens on its summary (CaseSummary.tsx, owner's
+ * decision T6). Documents has its own screens (Sources.tsx, SourceText.tsx), and so does the
+ * case map (CaseMap.tsx); Plan and Review and copy say they come later (ComingLater.tsx).
  */
 
 /** The case's screens, once it is open; otherwise why it cannot be. */
@@ -58,32 +58,10 @@ export function CaseRoute() {
   );
 }
 
-export function CaseIndex() {
-  return <Navigate to="sources" replace />;
-}
-
 export function useStepMeta(step: CaseStep): string {
   const { t } = useTranslation();
   const opened = useOpenedCase();
   return `${opened.label} · ${t("steps.position", { number: CASE_STEPS.indexOf(step) + 1, total: CASE_STEPS.length })}`;
-}
-
-const STEP_BODIES = {
-  interventions: "workspace.interventionsBody",
-  review: "workspace.reviewBody",
-} as const;
-
-/** Plan, Review and copy: placeholders for now. */
-export function StepScreen({ step }: { step: keyof typeof STEP_BODIES }) {
-  const { t } = useTranslation();
-  const meta = useStepMeta(step);
-  return (
-    <WorkArea header={<PageHeader title={stepTitle(t, step)} meta={meta} />} rail={<CaseRail />}>
-      <Placeholder>
-        <TransWithTerms i18nKey={STEP_BODIES[step]} />
-      </Placeholder>
-    </WorkArea>
-  );
 }
 
 /** The report: its sections, each with its status. */
@@ -96,11 +74,14 @@ export function ReportScreen() {
   const { language } = useLanguage();
   // What the AI cost for this case: every version and check whose price is known (review, low 2).
   const spent = opened.sections.reduce((sum, section) => sum + section.costUsd, 0);
+  // "Ya escribí partes" at creation puts the paste card first (T9); otherwise it waits under the sections, at any time (§4).
+  const pasteFirst = useWaitsForHerSections(caseId, opened.sections);
   return (
-    <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />}>
+    <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />} railLabel={t("rail.sources")}>
       <div className="flex max-w-measure flex-col gap-5">
         <p className="text-md">{t("workspace.reportBody")}</p>
         {spent > 0 ? <p className="text-sm text-fg-muted">{t("section.caseCost", { cost: formatUsd(language, spent) })}</p> : null}
+        {pasteFirst ? <PasteCard caseId={caseId} primary /> : null}
         <Table>
           <TableHead>
             <TableRow>
@@ -128,8 +109,29 @@ export function ReportScreen() {
             ))}
           </TableBody>
         </Table>
+        {pasteFirst ? null : <PasteCard caseId={caseId} />}
       </div>
     </WorkArea>
+  );
+}
+
+/** "Pegar lo que ya escribiste": the nine sections on one screen (owner's decision T10). */
+function PasteCard({ caseId, primary = false }: { caseId: string; primary?: boolean }) {
+  const { t } = useTranslation();
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} data-testid="paste-card" data-first={primary || undefined} className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-lg border border-border-control bg-surface px-4 py-3.5">
+      <div className="flex min-w-0 flex-1 basis-72 flex-col gap-1">
+        <h2 id={headingId} className="flex items-center gap-2 text-base font-semibold">
+          <Icon name="pencil" className="text-fg-muted" />
+          {t("workspace.pasteCardTitle")}
+        </h2>
+        <p className="text-sm text-fg-muted">{t("workspace.pasteCardBody")}</p>
+      </div>
+      <ButtonLink to={bulkPastePath(caseId)} variant={primary ? "primary" : "secondary"} className="shrink-0" aria-describedby={headingId}>
+        {t("workspace.pasteCardAction")}
+      </ButtonLink>
+    </section>
   );
 }
 

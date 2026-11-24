@@ -1,32 +1,46 @@
+import type { TFunction } from "i18next";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
-import { checkCaseLabel, type CaseList, type CasesFolderInfo, type CaseSummary, type ClientAge, type UnreadableFolder } from "../../../shared/api.ts";
+import { Link, useNavigate } from "react-router";
+import { checkCaseLabel, type CaseList, type CaseProgress, type CasesFolderInfo, type CaseSummary, type ClientAge, type Language, type ListedCase, type UnreadableFolder } from "../../../shared/api.ts";
+import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
-import { casePath } from "../case-steps.tsx";
+import { CASE_STEPS, casePath, caseSummaryPath, stepTitle, type CaseStep } from "../case-steps.tsx";
 import { casesFolderProblemText, useShowInFolderLabel } from "../cases-folder.tsx";
 import { Button } from "../components/Button.tsx";
+import { ChoiceCards } from "../components/ChoiceCards.tsx";
 import { Dialog, DialogClose, DialogDescription } from "../components/Dialog.tsx";
-import { TextLink } from "../components/Link.tsx";
+import { Icon } from "../components/Icon.tsx";
+import { ButtonLink, TextLink } from "../components/Link.tsx";
+import { StepProgressBar } from "../components/StepMarks.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, TableRowHeader } from "../components/Table.tsx";
 import { TextField } from "../components/TextField.tsx";
-import { formatAge, formatDate, formatDateTime } from "../format.ts";
+import { useProviders } from "../drafting-provider.tsx";
+import { formatAge, formatDate, formatShortDate, formatTime, relativeDay } from "../format.ts";
 import { useLanguage } from "../language.tsx";
 import { useFailedSaves } from "../case-saves.tsx";
+import { markStartedFromParts } from "../half-done.ts";
+import { currentStep, nextThing, nextThingPath, stepStates, type NextInputs, type NextThing } from "../next-thing.ts";
+import { useNextWords } from "../next-thing-words.tsx";
+import { copiedSections, readySections } from "../step-states.ts";
 import { PageHeader } from "../shell/PageHeader.tsx";
-import { WorkArea } from "../shell/WorkArea.tsx";
+import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 
 type ListState = { status: "loading" } | { status: "error" } | { status: "loaded"; list: CaseList };
 
 /**
- * The list of cases in the cases folder, newest first, and below it the folders there
- * that cannot be opened as cases. The main process reads the folder; this screen only
- * shows what it reports.
+ * Home (owner's proposal §4, mockup 01): "Sigue donde lo dejaste" with the last case and its
+ * next thing, then one row per case with its step and progress in words and the five-segment
+ * bar; below them the folders in the cases folder that cannot be opened as cases. With no
+ * case, what a case is and "Nuevo caso"; with no AI connected, "Conecta la IA" (P7). The main
+ * process reads the folder and each case's progress (T7: computed, nothing stored); this
+ * screen only shows what it reports.
  */
 export function Home() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [state, setState] = useState<ListState>({ status: "loading" });
+  const [newCaseOpen, setNewCaseOpen] = useState(false);
   const load = useCallback(() => {
     window.aba.listCases().then(
       (list) => setState({ status: "loaded", list }),
@@ -34,9 +48,32 @@ export function Home() {
     );
   }, []);
   useEffect(load, [load]);
+  // "Nuevo caso" is the primary action only while there is no case to continue (§4), and the
+  // cases folder works: with it missing, "Elegir otra carpeta" is the screen's one primary (audit L9).
+  const hasCases = state.status === "loaded" && state.list.cases.length > 0;
+  const folderProblem = state.status === "loaded" && hasFolderProblem(state.list.folder);
 
   return (
-    <WorkArea header={<PageHeader title={t("home.title")} actions={<NewCaseDialog onCreated={(created) => navigate(casePath(created.id))} />} />}>
+    <WorkArea
+      header={
+        <PageHeader
+          title={t("home.title")}
+          actions={
+            <NewCaseDialog
+              open={newCaseOpen}
+              onOpenChange={setNewCaseOpen}
+              primary={!hasCases && !folderProblem}
+              onCreated={(created, start) => {
+                // Both land on Documentos; "Ya escribí partes" adds its line there and the paste card on top of the report (T9: not stored).
+                if (start === "parts") markStartedFromParts(created.id);
+                navigate(casePath(created.id));
+              }}
+            />
+          }
+        />
+      }
+      contentClassName="max-w-list"
+    >
       <div className="flex flex-col gap-6">
         <UnsavedChanges />
         {state.status === "loading" ? (
@@ -59,7 +96,7 @@ export function Home() {
             </Button>
           </div>
         ) : null}
-        {state.status === "loaded" ? <CasesView list={state.list} onFolderChosen={load} /> : null}
+        {state.status === "loaded" ? <CasesView list={state.list} onFolderChosen={load} onNewCase={() => setNewCaseOpen(true)} /> : null}
       </div>
     </WorkArea>
   );
@@ -71,41 +108,237 @@ function UnsavedChanges() {
   const failed = useFailedSaves();
   if (failed.length === 0) return null;
   return (
-    <div role="alert" className="flex max-w-4xl flex-col gap-2 rounded-md border border-danger px-3.5 py-2.5 text-md">
+    <div role="alert" className="flex flex-col gap-2 rounded-md border border-danger px-3.5 py-2.5 text-md">
       {failed.map((item) => (
         <p key={item.caseId} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="font-medium text-danger">{t("home.unsavedChange", { label: item.label })}</span>
-          <TextLink to={casePath(item.caseId)}>{t("home.openToTryAgain")}</TextLink>
+          <TextLink to={caseSummaryPath(item.caseId)}>{t("home.openToTryAgain")}</TextLink>
         </p>
       ))}
     </div>
   );
 }
 
-function CasesView({ list, onFolderChosen }: { list: CaseList; onFolderChosen: () => void }) {
+/** The cases folder is missing, not allowed or cannot be written to: Home says so, and its "choose another folder" is the primary. */
+function hasFolderProblem(folder: CasesFolderInfo): boolean {
+  return folder.state !== "ready" && folder.state !== "not-created-yet";
+}
+
+function CasesView({ list, onFolderChosen, onNewCase }: { list: CaseList; onFolderChosen: () => void; onNewCase: () => void }) {
   const { folder, cases, unreadable } = list;
   const usable = folder.state === "ready" || folder.state === "not-created-yet" || folder.state === "not-writable";
+  const folderProblem = hasFolderProblem(folder);
+  const providers = useProviders();
+  const noAi = !providers.loading && providers.available.length === 0;
+  const unsaved = new Set(useFailedSaves().map((item) => item.caseId));
+  // The list comes with the case saved last first (owner's decision on review round 1, S1): that one is to continue.
+  const last = cases.at(0);
   return (
     <>
-      {usable && folder.state !== "not-writable" ? null : <FolderProblem folder={folder} onChosen={onFolderChosen} />}
-      {usable && cases.length === 0 && unreadable.length === 0 ? <EmptyState /> : null}
-      {cases.length > 0 ? <CasesTable cases={cases} /> : null}
+      {folderProblem ? <FolderProblem folder={folder} onChosen={onFolderChosen} /> : null}
+      {usable && cases.length === 0 && unreadable.length === 0 ? (
+        <>
+          <EmptyState onNewCase={onNewCase} />
+          {noAi ? <ConnectAi layout="card" /> : null}
+        </>
+      ) : null}
+      {last ? <ContinueCard item={last} unsaved={unsaved.has(last.id)} primary={!folderProblem} /> : null}
+      {cases.length > 0 && noAi ? <ConnectAi layout="bar" /> : null}
+      {cases.length > 0 ? <CasesList cases={cases} unsaved={unsaved} /> : null}
       {unreadable.length > 0 ? <UnreadableFolders folders={unreadable} /> : null}
     </>
   );
 }
 
-function EmptyState() {
+/**
+ * A case's next thing and its step, from its progress; null when its progress could not be
+ * read (the case is listed all the same, and opens on its summary).
+ */
+function caseWork(item: ListedCase, unsaved: boolean): { progress: CaseProgress; thing: NextThing; step: CaseStep | null } | null {
+  if (!item.progress) return null;
+  const inputs: NextInputs = { unsaved, ...item.progress };
+  return { progress: item.progress, thing: nextThing(inputs), step: currentStep(inputs) };
+}
+
+/** "guardado hoy, 11:23", "ayer, 9:05", "20 nov": when the case was last saved. */
+function savedWhen(t: TFunction, language: Language, iso: string): string {
+  const day = relativeDay(iso);
+  if (day === "today") return t("home.today", { time: formatTime(language, iso) });
+  if (day === "yesterday") return t("home.yesterday", { time: formatTime(language, iso) });
+  return new Date(iso).getFullYear() === new Date().getFullYear() ? formatShortDate(language, iso) : formatDate(language, iso);
+}
+
+/** The progress of the step the case is at, in a few words: "3 de 9 secciones listas". */
+function progressWords(t: TFunction, progress: CaseProgress, step: CaseStep | null): string {
+  const { sources, caseMap, sections } = progress;
+  const total = REPORT_SECTIONS.length;
+  if (step === "sources") return t("home.progress.noDocuments");
+  if (step === "case-map") return caseMap.withContent === 0 ? t("home.progress.mapNotStarted", { count: sources }) : t("home.progress.mapParts", { approved: caseMap.approved, total: caseMap.withContent });
+  if (step === "report") return t("home.progress.reportReady", { ready: readySections(sections), total });
+  if (step === "review") return t("home.progress.reviewCopied", { copied: copiedSections(sections), total });
+  return t("home.progress.allCopied", { total });
+}
+
+/** The step the case is at and its progress: "Informe · 3 de 9 secciones listas"; "Lista · …" once done. */
+function stepWords(t: TFunction, work: NonNullable<ReturnType<typeof caseWork>>): string {
+  return `${work.step ? stepTitle(t, work.step) : t("home.allDoneLine")} · ${progressWords(t, work.progress, work.step)}`;
+}
+
+/** "Sigue donde lo dejaste": the case saved last, its step, what comes next, and "Continuar". */
+function ContinueCard({ item, unsaved, primary }: { item: ListedCase; unsaved: boolean; primary: boolean }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+  const headingId = useId();
+  const labelId = useId();
+  const nextId = useId();
+  const work = caseWork(item, unsaved);
+  const where = work
+    ? `${work.step ? t("home.stepLine", { number: CASE_STEPS.indexOf(work.step) + 1, total: CASE_STEPS.length, step: stepTitle(t, work.step) }) : t("home.allDoneLine")} · ${progressWords(t, work.progress, work.step)} · `
+    : "";
+  return (
+    <section aria-labelledby={headingId} data-testid="continue-card" className="flex flex-col gap-3 rounded-lg border border-border-control bg-surface px-5 py-4 @split:flex-row @split:items-center @split:gap-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <Eyebrow id={headingId} className="text-fg-muted">
+          {t("home.continueHeading")}
+        </Eyebrow>
+        <p id={labelId} className="text-md font-semibold break-words">
+          {item.label}
+        </p>
+        <p className="text-sm text-fg-muted">
+          {where}
+          {t("home.savedLine", { when: savedWhen(t, language, item.updatedAt) })}
+        </p>
+        {work ? <NextLine id={nextId} thing={work.thing} /> : null}
+      </div>
+      {/* Its name says the case and its next thing, not only the card's heading (review round 1, M3). */}
+      <ButtonLink
+        to={work ? nextThingPath(item.id, work.thing) : caseSummaryPath(item.id)}
+        variant={primary ? "primary" : "secondary"}
+        className="shrink-0 self-start @split:self-auto"
+        aria-describedby={work ? `${labelId} ${nextId}` : labelId}
+      >
+        {t("home.continue")}
+        <Icon name="arrow" />
+      </ButtonLink>
+    </section>
+  );
+}
+
+function NextLine({ id, thing }: { id: string; thing: NextThing }) {
+  const { t } = useTranslation();
+  const words = useNextWords(thing);
+  return (
+    <p id={id} className="text-sm">
+      {t("home.nextLine")} {words.title}
+    </p>
+  );
+}
+
+/** "Tus casos": one row per case, its step and progress in words, the five-segment bar, when it was saved, and Continuar or Abrir. */
+function CasesList({ cases, unsaved }: { cases: ListedCase[]; unsaved: Set<string> }) {
   const { t } = useTranslation();
   const headingId = useId();
   return (
-    <section aria-labelledby={headingId} className="flex max-w-xl flex-col items-start gap-3 rounded-lg border border-border bg-surface-muted p-6">
+    <section aria-labelledby={headingId} className="flex flex-col gap-2">
+      <h2 id={headingId} className="flex items-baseline gap-2 text-base font-semibold">
+        {t("home.listHeading")}
+        <span className="font-mono text-sm font-normal text-fg-muted">{cases.length}</span>
+      </h2>
+      <ul data-testid="cases-list" className="flex flex-col rounded-lg border border-border">
+        {cases.map((item) => (
+          <CaseRow key={item.id} item={item} unsaved={unsaved.has(item.id)} />
+        ))}
+      </ul>
+      <p className="text-sm text-fg-muted">
+        {t("home.folderNote")} <TextLink to="/settings">{t("home.folderNoteLink")}</TextLink>
+      </p>
+    </section>
+  );
+}
+
+function CaseRow({ item, unsaved }: { item: ListedCase; unsaved: boolean }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+  const nameId = useId();
+  const work = caseWork(item, unsaved);
+  // Done, or its progress could not be read: "Abrir", to its summary.
+  const open = !work || work.thing.kind === "all-ready";
+  const age = formatAge(t, language, item.clientAge) ?? t("case.ageNotGiven");
+  return (
+    // The name gives way first, so the bar, the time and the button stay on its line down to a 700 px window (UX-5 follow-up).
+    <li data-testid="case-row" className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-2.5 last:border-b-0">
+      <div className="flex min-w-0 flex-1 basis-40 flex-col">
+        <Link id={nameId} data-testid="case-name" to={caseSummaryPath(item.id)} className="self-start rounded-sm text-base font-semibold break-words text-fg underline-offset-2 hover:underline">
+          {item.label}
+        </Link>
+        <span className="text-sm text-fg-muted">{work ? `${age} · ${stepWords(t, work)}` : age}</span>
+      </div>
+      {work ? <StepProgressBar steps={stepStates(work.progress)} /> : <span aria-hidden="true" className="w-32 shrink-0" />}
+      <span className="w-28 shrink-0 text-right text-sm text-fg-muted">
+        <span className="sr-only">{t("home.lastSaved", { when: savedWhen(t, language, item.updatedAt) })}</span>
+        <time aria-hidden="true" dateTime={item.updatedAt}>
+          {savedWhen(t, language, item.updatedAt)}
+        </time>
+      </span>
+      <ButtonLink to={open || !work ? caseSummaryPath(item.id) : nextThingPath(item.id, work.thing)} size="sm" className="w-28 shrink-0" aria-describedby={nameId}>
+        {open ? t("home.open") : t("home.continue")}
+      </ButtonLink>
+    </li>
+  );
+}
+
+function EmptyState({ onNewCase }: { onNewCase: () => void }) {
+  const { t } = useTranslation();
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} data-testid="empty-home" className="flex flex-col items-start gap-3 rounded-lg border border-border bg-surface-muted p-6">
       <h2 id={headingId} className="text-lg font-semibold">
         {t("home.emptyTitle")}
       </h2>
       <p className="text-md">{t("home.emptyBody")}</p>
-      <p className="text-md text-fg-muted">{t("home.emptyNext")}</p>
-      <TextLink to="/settings">{t("home.openSettings")}</TextLink>
+      <Button onClick={onNewCase}>{t("home.newCase")}</Button>
+      <p className="text-sm text-fg-muted">
+        {t("home.folderNote")} <TextLink to="/settings">{t("home.folderNoteLink")}</TextLink>
+      </p>
+    </section>
+  );
+}
+
+/** No AI connected: what the AI is for and where to connect it (owner's decision P7). A card on an empty Home, a slim bar above the list. */
+function ConnectAi({ layout }: { layout: "card" | "bar" }) {
+  const { t } = useTranslation();
+  const headingId = useId();
+  const button = (
+    <ButtonLink to="/settings" variant="ai" size={layout === "bar" ? "sm" : "md"} data-testid="connect-ai" className="shrink-0">
+      <Icon name="sparkle" />
+      {t("home.connectAction")}
+    </ButtonLink>
+  );
+  if (layout === "bar") {
+    return (
+      <section aria-labelledby={headingId} data-testid="connect-ai-home" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-accent bg-ai-subtle px-4 py-2.5 text-sm text-fg-on-accent-subtle">
+        <p className="min-w-0 flex-1">
+          <Icon name="sparkle" className="mr-1.5 inline align-[-2px]" />
+          <span id={headingId} className="font-semibold">
+            {t("home.connectTitle")}.
+          </span>{" "}
+          {t("home.connectBody")}
+        </p>
+        {button}
+      </section>
+    );
+  }
+  return (
+    <section aria-labelledby={headingId} data-testid="connect-ai-home" className="flex flex-col items-start gap-2 rounded-lg border border-accent bg-ai-subtle p-6 text-fg-on-accent-subtle">
+      <p aria-hidden="true" className="flex items-center gap-2 text-2xs font-semibold tracking-eyebrow uppercase">
+        <Icon name="sparkle" size={14} />
+        {t("twoWays.ai")}
+      </p>
+      <h2 id={headingId} className="text-lg font-semibold">
+        {t("home.connectTitle")}
+      </h2>
+      <p className="text-md">{t("home.connectBody")}</p>
+      {button}
     </section>
   );
 }
@@ -146,51 +379,6 @@ function FolderProblem({ folder, onChosen }: { folder: CasesFolderInfo; onChosen
       <p role="status" className="text-sm font-medium text-danger">
         {failed}
       </p>
-    </section>
-  );
-}
-
-function CasesTable({ cases }: { cases: CaseSummary[] }) {
-  const { t } = useTranslation();
-  const { language } = useLanguage();
-  const headingId = useId();
-  return (
-    <section aria-labelledby={headingId} className="flex max-w-4xl flex-col gap-2">
-      <h2 id={headingId} className="text-base font-semibold">
-        {t("home.listHeading")}
-      </h2>
-      <div className="overflow-x-auto">
-        <Table className="text-base">
-          <TableHead>
-            <TableRow>
-              <TableHeaderCell>{t("home.columnCase")}</TableHeaderCell>
-              <TableHeaderCell>{t("home.columnAge")}</TableHeaderCell>
-              <TableHeaderCell>{t("home.columnCreated")}</TableHeaderCell>
-              <TableHeaderCell>{t("home.columnUpdated")}</TableHeaderCell>
-              <TableHeaderCell className="text-right">{t("home.columnPdfs")}</TableHeaderCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {cases.map((item) => (
-              <TableRow key={item.id}>
-                <TableRowHeader className="py-2">
-                  <TextLink to={casePath(item.id)} className="break-words">
-                    {item.label}
-                  </TextLink>
-                </TableRowHeader>
-                <TableCell className="py-2">{formatAge(t, language, item.clientAge) ?? <span className="text-fg-muted">{t("home.ageNotGiven")}</span>}</TableCell>
-                <TableCell className="py-2">
-                  <time dateTime={item.createdAt}>{formatDate(language, item.createdAt)}</time>
-                </TableCell>
-                <TableCell className="py-2">
-                  <time dateTime={item.updatedAt}>{formatDateTime(language, item.updatedAt)}</time>
-                </TableCell>
-                <TableCell className="py-2 text-right font-mono text-sm tabular-nums">{item.pdfCount}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
     </section>
   );
 }
@@ -267,31 +455,41 @@ interface FormErrors {
   months?: string;
 }
 
-/** New case: a label, and the client's age if the user wants to give it. */
-function NewCaseDialog({ onCreated }: { onCreated: (created: CaseSummary) => void }) {
+/** "¿Cómo empiezas?": from scratch, or from sections she already wrote in ABA Matrix (owner's decision T9: not stored). */
+type StartFrom = "scratch" | "parts";
+
+/**
+ * New case (mockup 02): a label, the client's age if the user wants to give it, and how she
+ * starts. Opened from the header or from the empty Home's card (`open` is Home's). The form
+ * lives only while the dialog is open, so each opening starts empty, "Desde cero" chosen.
+ */
+function NewCaseDialog({ open, onOpenChange, primary, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; primary: boolean; onCreated: (created: CaseSummary, start: StartFrom) => void }) {
+  const { t } = useTranslation();
+  return (
+    <Dialog title={t("newCase.title")} open={open} onOpenChange={onOpenChange} trigger={<Button variant={primary ? "primary" : "secondary"}>{t("home.newCase")}</Button>}>
+      <NewCaseForm
+        onCreated={(created, start) => {
+          onOpenChange(false);
+          onCreated(created, start);
+        }}
+      />
+    </Dialog>
+  );
+}
+
+function NewCaseForm({ onCreated }: { onCreated: (created: CaseSummary, start: StartFrom) => void }) {
   const { t } = useTranslation();
   const platform = useAppInfo()?.platform;
-  const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [years, setYears] = useState("");
   const [months, setMonths] = useState("");
+  const [start, setStart] = useState<StartFrom>("scratch");
   const [errors, setErrors] = useState<FormErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const labelId = useId();
   const yearsId = useId();
   const monthsId = useId();
-
-  function onOpenChange(next: boolean) {
-    if (next) {
-      setLabel("");
-      setYears("");
-      setMonths("");
-      setErrors({});
-      setFormError(null);
-    }
-    setOpen(next);
-  }
 
   async function submit(event: { preventDefault(): void }) {
     event.preventDefault();
@@ -318,8 +516,7 @@ function NewCaseDialog({ onCreated }: { onCreated: (created: CaseSummary) => voi
     try {
       const result = await window.aba.createCase({ label: checked.label, clientAge });
       if (result.outcome === "created") {
-        setOpen(false);
-        onCreated(result.case);
+        onCreated(result.case, start);
       } else if (result.outcome === "folder-problem") {
         setFormError(casesFolderProblemText(t, result.problem, platform));
       } else {
@@ -333,7 +530,7 @@ function NewCaseDialog({ onCreated }: { onCreated: (created: CaseSummary) => voi
   }
 
   return (
-    <Dialog title={t("newCase.title")} open={open} onOpenChange={onOpenChange} trigger={<Button variant="primary">{t("home.newCase")}</Button>}>
+    <>
       <DialogDescription className="mt-2 text-md">{t("newCase.body")}</DialogDescription>
       <form noValidate onSubmit={(event) => void submit(event)} className="mt-4 flex flex-col gap-4">
         <TextField
@@ -375,6 +572,16 @@ function NewCaseDialog({ onCreated }: { onCreated: (created: CaseSummary) => voi
             />
           </div>
         </fieldset>
+        <ChoiceCards
+          legend={t("newCase.startLegend")}
+          testId="start-from"
+          value={start}
+          onChange={setStart}
+          options={[
+            { value: "scratch", title: t("newCase.startScratch"), body: t("newCase.startScratchBody") },
+            { value: "parts", title: t("newCase.startParts"), body: t("newCase.startPartsBody") },
+          ]}
+        />
         <p role="alert" className="text-sm font-medium text-danger empty:hidden">
           {formError}
         </p>
@@ -385,6 +592,6 @@ function NewCaseDialog({ onCreated }: { onCreated: (created: CaseSummary) => voi
           </Button>
         </div>
       </form>
-    </Dialog>
+    </>
   );
 }

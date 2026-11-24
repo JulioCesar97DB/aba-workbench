@@ -1,4 +1,4 @@
-import { test as base, _electron as electron, expect, type ElectronApplication, type Page } from "@playwright/test";
+import { test as base, _electron as electron, expect, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -66,6 +66,9 @@ interface Fixtures {
   app: ElectronApplication;
 }
 
+/** The window width the tests are written for: the app's own default window (src/main/index.ts). */
+const TESTED_WIDTH = 1280;
+
 /**
  * A piece of every temporary folder's name: spaces and accents, as in a Windows user name
  * such as "Ana María Pérez" (C:\Users\Ana María Pérez\...), so every test runs with the
@@ -126,6 +129,22 @@ export const test = base.extend<Fixtures>({
         BrowserWindow.getAllWindows().forEach(ignore);
         electronApp.on("browser-window-created", (_event, window) => ignore(window));
       });
+      // A runner's screen can be smaller than the window asked for (1024x768 on the Windows
+      // runners): its window then has less than 1024 px, where the rail is a panel (owner's
+      // decision T2), unlike the window of 1280 px the tests are written for. There the page is
+      // zoomed out to that width, on every load, so every runner shows the same layout.
+      await app.evaluate(({ app: electronApp, BrowserWindow }, wide) => {
+        const fit = (window: Electron.BrowserWindow) => {
+          const apply = () => {
+            const [width] = window.getContentSize();
+            if (width < wide) window.webContents.setZoomFactor(width / wide);
+          };
+          window.webContents.on("did-finish-load", apply);
+          apply();
+        };
+        BrowserWindow.getAllWindows().forEach(fit);
+        electronApp.on("browser-window-created", (_event, window) => fit(window));
+      }, TESTED_WIDTH);
       return app;
     });
     for (const app of started) await app.close().catch(() => undefined);
@@ -261,6 +280,14 @@ export async function holdAnswers(app: ElectronApplication, channel: string): Pr
     app.evaluate((_electron, name) => {
       (globalThis as unknown as { heldAnswers: Record<string, () => void> }).heldAnswers[name]();
     }, channel);
+}
+
+/**
+ * The header's "New case" button. An empty Home also has one in its card (UX-5), so a test
+ * that means the header's says so.
+ */
+export function newCaseButton(page: Page, name = "New case"): Locator {
+  return page.locator("[data-region='header']").getByRole("button", { name });
 }
 
 /** Shows a screen by its address (the part after #), as a link inside the app would. */
