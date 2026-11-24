@@ -1,7 +1,7 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { defaultCasesFolder, expect, firstScreen, goTo, packagedExecutable, SAMPLE_CASE, seedCase, startSecondCopy, stubFileManager, stubFolderDialog, test } from "./app.ts";
+import { defaultCasesFolder, expect, firstScreen, goTo, newCaseButton, packagedExecutable, SAMPLE_CASE, seedCase, startSecondCopy, stubFileManager, stubFolderDialog, test } from "./app.ts";
 
 /*
  * Cases as a user meets them: creating one, finding it in the list, opening it after a
@@ -18,7 +18,7 @@ async function openApp(app: ElectronApplication): Promise<Page> {
 }
 
 async function createCase(page: Page, label: string, age?: { years?: string; months?: string }, words = { newCase: "New case", label: "Label", years: "Years", months: "Months", create: "Create case" }) {
-  await page.getByRole("button", { name: words.newCase }).click();
+  await newCaseButton(page, words.newCase).click();
   const dialog = page.getByRole("dialog", { name: words.newCase });
   await dialog.getByRole("textbox", { name: words.label }).fill(label);
   if (age?.years !== undefined) await dialog.getByRole("textbox", { name: words.years }).fill(age.years);
@@ -87,7 +87,7 @@ test("the form checks the label and the age, in Spanish too, and two cases with 
   const casesFolder = defaultCasesFolder(home);
   const page = await openApp(await launch({ language: "es" }));
   const words = { newCase: "Nuevo caso", label: "Nombre", years: "Años", months: "Meses", create: "Crear caso" };
-  await page.getByRole("button", { name: words.newCase }).click();
+  await newCaseButton(page, words.newCase).click();
   const dialog = page.getByRole("dialog", { name: words.newCase });
   await dialog.getByRole("textbox", { name: words.months }).fill("12");
   await dialog.getByRole("button", { name: words.create }).click();
@@ -268,7 +268,7 @@ test("a cases folder that is missing is reported, never made again, and another 
   expect(readdirSync(home)).toEqual([]);
 
   // Creating a case says why it cannot, and makes nothing.
-  await page.getByRole("button", { name: "New case" }).click();
+  await newCaseButton(page).click();
   const dialog = page.getByRole("dialog", { name: "New case" });
   await dialog.getByRole("textbox", { name: "Label" }).fill("Ana");
   await dialog.getByRole("button", { name: "Create case" }).click();
@@ -346,7 +346,7 @@ test("Settings says so when the cases folder cannot be shown or checked", async 
   const section = page.getByRole("region", { name: "Cases folder" });
   // The default folder exists once a case is made; make one so "Show" is available.
   await goTo(page, "/");
-  await page.getByRole("button", { name: "New case" }).click();
+  await newCaseButton(page).click();
   await page.getByRole("dialog", { name: "New case" }).getByRole("textbox", { name: "Label" }).fill("Ana");
   await page.getByRole("dialog", { name: "New case" }).getByRole("button", { name: "Create case" }).click();
   await expect(heading(page)).toHaveText("Documents");

@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import path from "node:path";
 import type { AbaApi } from "../src/shared/api.ts";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
-import { defaultCasesFolder, expect, firstScreen, goTo, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
+import { defaultCasesFolder, expect, firstScreen, goTo, newCaseButton, resize, SAMPLE_CASE, seedCase, test } from "./app.ts";
 
 /*
  * The interface as a user meets it: the screens, the navigation, the language and the
@@ -42,10 +42,10 @@ test("the app opens on Home, the empty list of cases, with what to do next", asy
   await expect(page).toHaveTitle("Cases · ABA Workbench");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "No cases yet" })).toBeVisible();
-  await expect(page.getByText(/Choose New case to make your first one/)).toBeVisible();
+  await expect(page.getByText("A case brings together one client's documents and their assessment.")).toBeVisible();
 
   // "New case" opens its form; Escape closes it and focus returns.
-  const newCase = page.getByRole("button", { name: "New case" });
+  const newCase = newCaseButton(page);
   await newCase.click();
   const dialog = page.getByRole("dialog", { name: "New case" });
   await expect(dialog).toBeVisible();
@@ -94,7 +94,7 @@ test("the interface loads under the content security policy as written, with its
   expect(fonts).toEqual({ faces: [true, true, true], sans: true, mono: true });
 
   // Popups (dialog, tooltip, select) render without inline styles the policy would block.
-  await page.getByRole("button", { name: "New case" }).click();
+  await newCaseButton(page).click();
   await page.keyboard.press("Escape");
   await goTo(page, "/settings");
   // The tooltip before the Select, never right after closing it: while a Select is mounted
@@ -402,18 +402,18 @@ test("everything works from the keyboard, with the focus always visible", async 
 
   // Every stop on the way shows the focus ring, up to the last control of the screen. How
   // many stops come first depends on the build (a development build also links the
-  // development check), so it tabs until "Open Settings", with a cap.
+  // development check), so it tabs until the empty Home's "Change it in Settings", with a cap.
   const stops: string[] = [];
-  for (let i = 0; i < 14 && stops.at(-1) !== "Open Settings"; i++) {
+  for (let i = 0; i < 14 && stops.at(-1) !== "Change it in Settings"; i++) {
     await page.keyboard.press("Tab");
     const stop = await focused();
     expect(stop.outline, `focus ring on "${stop.name}"`).toBe(true);
     stops.push(stop.name);
   }
-  expect(stops).toEqual(expect.arrayContaining(["Cases", "Settings", "English", "Español", "What this means", "New case", "Open Settings"]));
+  expect(stops).toEqual(expect.arrayContaining(["Cases", "Settings", "English", "Español", "What this means", "New case", "Change it in Settings"]));
 
   // A link opens with Enter; the Select opens and chooses with the arrow keys.
-  await page.getByRole("link", { name: "Open Settings" }).focus();
+  await page.getByRole("link", { name: "Change it in Settings" }).focus();
   await page.keyboard.press("Enter");
   await expect(heading(page)).toHaveText("Settings");
   await page.getByRole("combobox", { name: "Language" }).focus();

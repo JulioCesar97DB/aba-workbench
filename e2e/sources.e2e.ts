@@ -714,11 +714,13 @@ test("a change that could not be saved is still reported after a reload, and Try
     await reloadWindow(app, page);
     // The page starts again with nothing in memory: the main process still knows.
     await expect(notice).toBeVisible();
+    // The case opens on its summary, whose "Lo siguiente" is the change not saved (UX-5, §6 rule 1).
     await page.getByRole("link", { name: "Open the case to try again" }).click();
-    await expect(page.getByText("Your last change could not be saved. Check that the cases folder is available, then try again.")).toBeVisible();
+    const next = page.getByTestId("next-thing");
+    await expect(next).toHaveAttribute("data-kind", "unsaved");
     chmodSync(caseFolder, 0o755);
-    await page.getByRole("button", { name: "Try again" }).click();
-    await expect(page.getByText("All changes saved").first()).toBeVisible();
+    await next.getByRole("button", { name: "Try again" }).click();
+    await expect(next).toHaveAttribute("data-kind", "build-map");
     expect(caseData(casesFolder).sources[0].text).toBe("Saved part. Kept after reload.");
     await page.getByRole("link", { name: "All cases" }).click();
     await expect(notice).toBeHidden();
