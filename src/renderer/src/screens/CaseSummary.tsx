@@ -154,17 +154,26 @@ function Steps({ caseId, inputs, types }: { caseId: string; inputs: NextInputs; 
       </h2>
       <ol data-testid="summary-steps" className="flex flex-col rounded-lg border border-border">
         {CASE_STEPS.map((step, index) => (
-          <StepRow key={step} caseId={caseId} step={step} number={index + 1} state={stepState(step, inputs)} sentence={<StepSentence step={step} inputs={inputs} types={types} />} />
+          <StepRow
+            key={step}
+            caseId={caseId}
+            step={step}
+            number={index + 1}
+            state={stepState(step, inputs)}
+            // Revisión y copia with nothing ready and nothing copied: no button to an empty list (UX-7 review round 1, minor 5).
+            noAction={step === "review" && readySections(inputs.sections) === 0 && copiedSections(inputs.sections) === 0}
+            sentence={<StepSentence step={step} inputs={inputs} types={types} />}
+          />
         ))}
       </ol>
     </section>
   );
 }
 
-function StepRow({ caseId, step, number, state, sentence }: { caseId: string; step: CaseStep; number: number; state: StepState; sentence: ReactNode }) {
+function StepRow({ caseId, step, number, state, sentence, noAction = false }: { caseId: string; step: CaseStep; number: number; state: StepState; sentence: ReactNode; noAction?: boolean }) {
   const { t } = useTranslation();
   const titleId = useId();
-  const action = state === "later" ? null : state === "done" ? t("summary.view") : state === "in-progress" ? t("summary.continue") : t("summary.start");
+  const action = state === "later" || noAction ? null : state === "done" ? t("summary.view") : state === "in-progress" ? t("summary.continue") : t("summary.start");
   return (
     <li data-step={step} data-state={state} className="flex items-center gap-3.5 border-b border-border px-4 py-3 last:border-b-0">
       <StepCircle number={number} state={state} />

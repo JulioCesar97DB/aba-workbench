@@ -88,10 +88,11 @@ test("the paragraph being written is the last one begun, and 1 before any text",
   assert.equal(paragraphBeingWritten("One.\n\nTwo.\n\nThr"), 3);
 });
 
-test("the copied line says how many details are still marked, and of which kind (P2)", () => {
-  assert.deepEqual(copiedLead("All there."), { key: "copiedLead" });
-  assert.deepEqual(copiedLead("Score [MISSING: percentile]. Age [MISSING: date of birth]."), { key: "copiedMissing", count: 2 });
-  assert.deepEqual(copiedLead("Score [MISSING: percentile].\n\nSchool [CHECK: name]."), { key: "copiedMarked", count: 2 });
+test("the copied line says how many details are still marked, and of which kind (P2), from the copy's own answer (UX-7 review round 1, S1)", () => {
+  assert.deepEqual(copiedLead({ markers: 0, allMissing: true }), { key: "copiedLead" });
+  assert.deepEqual(copiedLead({ markers: 2, allMissing: true }), { key: "copiedMissing", count: 2 });
+  assert.deepEqual(copiedLead({ markers: 2, allMissing: false }), { key: "copiedMarked", count: 2 });
+  assert.deepEqual(copiedLead({ markers: 1, allMissing: false }), { key: "copiedMarked", count: 1 });
   for (const strings of [en, es]) {
     assert.match(strings.section.copiedMissing_one, /\[MISSING: …\]/);
     assert.match(strings.section.copiedMarked_other, /\[CHECK: …\]/);

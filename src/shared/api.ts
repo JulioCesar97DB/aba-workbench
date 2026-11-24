@@ -220,12 +220,14 @@ export interface AiPreferences {
 }
 
 /**
- * A copy for ABA Matrix. Once the clipboard holds it, the copy is marked in the case
- * (owner's decision T8): `marked` is the section and the sections as saved, or null when
- * the mark could not be saved (the clipboard holds the text all the same).
+ * A copy for ABA Matrix. `markers` counts the [MISSING]/[CHECK] markers in what was put on
+ * the clipboard, and `allMissing` says whether every one is [MISSING] (the copied line's
+ * words, P2). Once the clipboard holds it, the copy is marked in the case (owner's
+ * decision T8): `marked` is the section and the sections as saved, or null when the mark
+ * could not be saved (the clipboard holds the text all the same).
  */
 export type CopySectionResult =
-  | { outcome: "copied"; markers: number; marked: { section: SectionDetail; sections: SectionSummary[] } | null }
+  | { outcome: "copied"; markers: number; allMissing: boolean; marked: { section: SectionDetail; sections: SectionSummary[] } | null }
   | { outcome: "version-not-found" }
   | { outcome: "case-unavailable" };
 

@@ -198,7 +198,13 @@ export class SectionService {
     await this.options.writeClipboard(abaMatrixClipboard(result.value));
     // Marked only once the clipboard holds it (T8): a mark never says more than happened.
     const marked = await this.change(caseId, id, (data, now) => markCopied(data, id, number, now) ?? "version-not-found");
-    return { outcome: "copied", markers: findMarkers(result.value).length, marked: marked.outcome === "saved" ? { section: marked.section, sections: marked.sections } : null };
+    const markers = findMarkers(result.value);
+    return {
+      outcome: "copied",
+      markers: markers.length,
+      allMissing: markers.every((marker) => marker.kind === "missing"),
+      marked: marked.outcome === "saved" ? { section: marked.section, sections: marked.sections } : null,
+    };
   }
 
   /** Every section with the text of the version she would copy, for Revisión y copia and "Leer todo". Nothing is saved. */

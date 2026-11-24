@@ -285,7 +285,6 @@ export const en = {
     marked_other: "{{count}} details marked",
     copiedBefore: "You copied version {{number}} before",
     reviewDraft: "Review",
-    markNotSaved: "The app could not save that you copied it, so it will not show as copied.",
     allCopied: "The {{total}} sections are copied. You can close the case or go back to any section.",
     readFailed: "The sections' texts could not be read. Go back to the case summary and open this step again.",
     readAllTitle: "Read the whole assessment",
@@ -309,7 +308,6 @@ export const en = {
     backToReview: "Back to Review and copy",
     contents: "In this assessment",
   },
-
   sources: {
     addPdf: "Add PDF",
     pasteText: "Paste a text",
@@ -656,6 +654,7 @@ export const en = {
     copiedMarked_other: "Copied with {{count}} marked details: look for [MISSING: …] or [CHECK: …] when you paste.",
     pasteWhere: "Paste it into ABA Matrix, in “{{section}}”.",
     copiedNotApprovedYet: "You have not approved it yet: read it through before you paste it.",
+    markNotSaved: "The app could not save that you copied it, so it will not show as copied. The text is on your clipboard: copy it again later to mark it.",
     copiedOtherVersion: "You copied version {{number}}, not the approved one (version {{approved}}).",
     nextSectionLink: "Next: {{section}}",
     nextSectionBody: "The next unfinished section, in ABA Matrix's order.",

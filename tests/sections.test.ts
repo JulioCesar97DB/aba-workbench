@@ -5,8 +5,9 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { mockProvider } from "../src/lib/providers/mock.ts";
 import type { GenerateEvent, GenerateOptions, Provider, ProviderCredential } from "../src/lib/providers/types.ts";
-import { CASE_FILE_NAME, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
+import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
 import { contextSections, saveOwnText, startNewSession, setNotes } from "../src/main/case-sections.ts";
+import { addMapItem } from "../src/main/case-map.ts";
 import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
 import { hasLinesInParagraphs, isParagraphAnswer, linesAsParagraphs, paragraphSpans, replaceParagraph, splitParagraphs } from "../src/shared/section-text.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
@@ -415,6 +416,8 @@ test("copy for ABA Matrix puts plain text and minimal HTML on the clipboard and 
   const copied = await service.copy(caseId, "crisis-plan", 1);
   assert.ok(copied.outcome === "copied");
   assert.equal(copied.markers, 2);
+  // One [MISSING] and one [CHECK]: not all missing. The copied line is chosen from this answer, not from the screen's text (S1).
+  assert.equal(copied.allMissing, false);
   assert.deepEqual(clipboard, [{ text: "One <b> & [MISSING: x].\n\nTwo\nlines [CHECK: y].", html: "<p>One &lt;b&gt; &amp; [MISSING: x].</p><p>Two<br>lines [CHECK: y].</p>" }]);
   assert.deepEqual(await service.copy(caseId, "crisis-plan", 9), { outcome: "version-not-found" });
   // Nothing more on the clipboard for a version that is not there.
@@ -460,7 +463,7 @@ test("T8: a copy whose mark cannot be saved is still on the clipboard, and says 
   saved(await service.saveText(caseId, "risk-assessment", "Her risk assessment.", null));
   failing = true;
   const copied = await service.copy(caseId, "risk-assessment", 1);
-  assert.deepEqual(copied, { outcome: "copied", markers: 0, marked: null });
+  assert.deepEqual(copied, { outcome: "copied", markers: 0, allMissing: true, marked: null });
   assert.equal(clipboard.length, 1);
   assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).sections["risk-assessment"].copiedAt, undefined);
 });
@@ -482,6 +485,56 @@ test("T8: the clipboard is written before the mark; a clipboard that fails marks
   saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
   await assert.rejects(service.copy(caseId, "crisis-plan", 1));
   assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).sections["crisis-plan"].copiedAt, undefined);
+});
+
+test("S1: a copy answers what it put on the clipboard: how many markers, and whether all are [MISSING]", async () => {
+  const { service, caseId } = await setup();
+  saved(await service.saveText(caseId, "risk-assessment", "Risk [MISSING: last episode].\n\nAnd [MISSING: phone].", null));
+  const copied = await service.copy(caseId, "risk-assessment", 1);
+  assert.ok(copied.outcome === "copied");
+  assert.deepEqual({ markers: copied.markers, allMissing: copied.allMissing }, { markers: 2, allMissing: true });
+});
+
+test("S3: copying and reading the report never touch a case a newer app wrote", async () => {
+  const { service, caseId, caseFile, clipboard } = await setup();
+  saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
+  const newer = JSON.stringify({ ...JSON.parse(readFileSync(caseFile, "utf8")), schemaVersion: CASE_SCHEMA_VERSION + 1 }, null, 2);
+  writeFileSync(caseFile, newer);
+  assert.deepEqual(await service.copy(caseId, "crisis-plan", 1), { outcome: "case-unavailable" });
+  assert.deepEqual(await service.readReport(caseId), { outcome: "case-unavailable" });
+  assert.equal(readFileSync(caseFile, "utf8"), newer, "the file is left byte for byte");
+  assert.deepEqual(clipboard, [], "nothing reaches the clipboard");
+});
+
+test("S3: the copied mark's save keeps unknown keys, at the top and in the section, and leaves the case map as it was", async () => {
+  const { service, caseId, caseFile } = await setup();
+  saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
+  const before = readCaseFile(readFileSync(caseFile, "utf8"));
+  assert.ok(before.ok);
+  // A map typed by hand, through the case map's own change, so it is the shape the app writes.
+  const withMap = addMapItem(before.data, "behaviors", "items", { name: { value: "Invented behavior", check: null } }, null, before.data.updatedAt).data;
+  const current = JSON.parse(serializeCaseFile(withMap));
+  const caseMap = current.caseMap;
+  assert.ok(caseMap);
+  const v4 = {
+    ...current,
+    schemaVersion: 4,
+    fromALaterApp: { kept: true },
+    sections: { ...current.sections, "crisis-plan": { ...current.sections["crisis-plan"], laterKey: [1, 2] } },
+    caseMap,
+  };
+  const read = readCaseFile(JSON.stringify(v4));
+  assert.ok(read.ok, "the invented v4 case with a map reads");
+  writeFileSync(caseFile, JSON.stringify(v4, null, 2));
+  const copied = await service.copy(caseId, "crisis-plan", 1);
+  assert.ok(copied.outcome === "copied" && copied.marked);
+  const written = JSON.parse(readFileSync(caseFile, "utf8"));
+  assert.equal(written.schemaVersion, CASE_SCHEMA_VERSION);
+  assert.deepEqual(written.fromALaterApp, { kept: true });
+  assert.deepEqual(written.sections["crisis-plan"].laterKey, [1, 2]);
+  assert.equal(written.sections["crisis-plan"].copiedVersion, 1);
+  assert.deepEqual(written.caseMap, JSON.parse(serializeCaseFile(read.data)).caseMap);
+  assert.deepEqual(written.caseMap, caseMap);
 });
 
 test("Revisión y copia reads every section with the text she would copy: the approved version, or else the one shown", async () => {

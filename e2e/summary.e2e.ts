@@ -160,6 +160,10 @@ test("Plan says it comes later and sends her on; the last section's Next step go
   const app = await launch();
   const page = await firstScreen(app);
   const id = await create(page, "Later steps case");
+  // Nothing to copy yet: the summary's Review and copy row has no button (UX-7 review round 1, minor 5).
+  await goTo(page, `/cases/${id}`);
+  await expect(page.getByTestId("summary-steps").getByRole("listitem").nth(4)).toContainText("Nothing to copy yet");
+  await expect(page.getByTestId("summary-steps").getByRole("listitem").nth(4).getByRole("link")).toHaveCount(0);
   await goTo(page, `/cases/${id}/interventions`);
   await expect(heading(page)).toHaveText("Plan");
   await expect(page.getByTestId("header-eyebrow")).toHaveText("Step 3 of 5");
@@ -262,6 +266,49 @@ test("Review and copy: the nine sections in order, one primary Copy on the first
   await expect(page.getByTestId("review-all-copied")).toHaveText("The 9 sections are copied. You can close the case or go back to any section.");
   await expect(rail.getByTestId("review-progress")).toContainText("9 of 9 copied");
   await expect(list.getByTestId("copied-mark")).toHaveCount(REPORT_SECTIONS.length);
+});
+
+/**
+ * The copy's answer as when the case could not keep the mark (T8): what was copied is on the
+ * clipboard, `marked` is null. Only the screens are under test here: the main process's side
+ * (the clipboard first, then the mark, null when its save fails) is tests/sections.test.ts's.
+ */
+async function marksCannotBeSaved(app: ElectronApplication) {
+  await app.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler("sections:copy");
+    ipcMain.handle("sections:copy", async () => ({ outcome: "copied", markers: 1, allMissing: true, marked: null }));
+  });
+}
+
+test("a copy whose mark cannot be saved says so on both screens, and the section never claims Copied (UX-7 review round 1, S2)", async ({ launch }) => {
+  const app = await launch();
+  const page = await firstScreen(app);
+  const id = await create(page, "Mark case");
+  await addDocument(page, id);
+  const [first] = REPORT_SECTIONS;
+  await writeSection(page, id, first.id, "Background [MISSING: school name].");
+  expect((await call<{ outcome: string }>(page, "approveSection", id, first.id, 1)).outcome).toBe("saved");
+  await marksCannotBeSaved(app);
+
+  await goTo(page, `/cases/${id}/report/${first.id}`);
+  await page.getByRole("button", { name: "Copy for ABA Matrix" }).click();
+  await expect(page.getByTestId("copied-line")).toContainText("Copied with 1 detail to complete");
+  await expect(page.getByTestId("mark-not-saved")).toHaveText(
+    "The app could not save that you copied it, so it will not show as copied. The text is on your clipboard: copy it again later to mark it.",
+  );
+  await expect(page.getByTestId("mark-not-saved")).toHaveAttribute("role", "alert");
+  // Not "Copied": the case does not hold it. The copy itself is done for her: Copy again, and Next step is the primary.
+  await expect(page.getByTestId("state-chip")).toHaveText("Approved");
+  await expect(page.getByTestId("copy-again")).toBeVisible();
+  await expect(page.getByTestId("next-step")).toHaveAttribute("data-primary", "true");
+
+  await goTo(page, `/cases/${id}/review`);
+  const row = page.getByTestId("review-list").getByRole("listitem").first();
+  await expect(row.getByTestId("copied-mark")).toHaveCount(0);
+  await row.getByTestId("review-copy").click();
+  await expect(row.getByTestId("copied-line")).toHaveText("Copied with 1 detail to complete: look for [MISSING: …] when you paste. Paste it into ABA Matrix, in “Background Information”.");
+  await expect(row.getByTestId("mark-not-saved")).toBeVisible();
+  await expect(row.getByTestId("copied-mark")).toHaveCount(0);
 });
 
 test("Lo siguiente, rule 7: the first section ready and not copied, in Spanish, to Revisión y copia", async ({ launch }) => {

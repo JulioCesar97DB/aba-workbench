@@ -19,7 +19,7 @@ import { sectionStateText } from "../shell/Sidebar.tsx";
 import { StepHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 import { copiedSections } from "../step-states.ts";
-import { Highlighted } from "./Section.tsx";
+import { Highlighted, MarkNotSaved } from "./Section.tsx";
 
 /*
  * Step 5, Revisión y copia (#/cases/<id>/review), owner's proposal §4 "5 · Revisión y copia"
@@ -80,8 +80,8 @@ function reviewEyebrow(t: TFunction): string {
   return t("steps.position", { number: CASE_STEPS.indexOf("review") + 1, total: CASE_STEPS.length });
 }
 
-/** What the last copy did, shown under its row and said by the screen's live region. */
-type LastCopy = { sectionId: ReportSectionId; outcome: "copied"; text: string; approved: boolean; marked: boolean } | { sectionId: ReportSectionId; outcome: "failed" };
+/** What the last copy did, shown under its row and said by the screen's live region; the markers are the main process's count of what it copied (review round 1, S1). */
+type LastCopy = { sectionId: ReportSectionId; outcome: "copied"; markers: number; allMissing: boolean; approved: boolean; marked: boolean } | { sectionId: ReportSectionId; outcome: "failed" };
 
 export function ReviewScreen() {
   const { t } = useTranslation();
@@ -95,15 +95,19 @@ export function ReviewScreen() {
   const copied = copiedSections(rows.map((row) => row.summary));
   const total = REPORT_SECTIONS.length;
 
+  /** The sections being copied now: a second press while one runs does nothing (review round 1, minor 7). */
+  const copying = useRef(new Set<ReportSectionId>());
+
   async function copy(summary: SectionSummary) {
     const version = versionToCopy(summary);
-    if (version === null) return;
+    if (version === null || copying.current.has(summary.id)) return;
+    copying.current.add(summary.id);
     setAnnounced(false);
     const result = await window.aba.copySection(opened.id, summary.id, version).catch(() => null);
+    copying.current.delete(summary.id);
     if (result?.outcome === "copied") {
       if (result.marked) patch(opened.id, { sections: result.marked.sections });
-      const text = rows.find((row) => row.summary.id === summary.id)?.text ?? "";
-      setLast({ sectionId: summary.id, outcome: "copied", text, approved: summary.approvedVersion === version, marked: result.marked !== null });
+      setLast({ sectionId: summary.id, outcome: "copied", markers: result.markers, allMissing: result.allMissing, approved: summary.approvedVersion === version, marked: result.marked !== null });
     } else {
       setLast({ sectionId: summary.id, outcome: "failed" });
     }
@@ -269,14 +273,16 @@ function CopiedLine({ last, section }: { last: LastCopy; section: ReportSection 
       </p>
     );
   }
-  const lead = copiedLead(last.text);
-  const warn = lead.key !== "copiedLead" || !last.approved || !last.marked;
+  const lead = copiedLead(last);
+  const warn = lead.key !== "copiedLead" || !last.approved;
   return (
-    <p data-testid="copied-line" className={cn("max-w-reading pl-8.5 text-sm font-medium", warn ? "text-warning" : "text-success")}>
-      {lead.key === "copiedLead" ? t("section.copiedLead") : t(`section.${lead.key}`, { count: lead.count })} {pasteWhere(t, section)}
-      {last.approved ? null : ` ${t("section.copiedNotApprovedYet")}`}
-      {last.marked ? null : ` ${t("review.markNotSaved")}`}
-    </p>
+    <>
+      <p data-testid="copied-line" className={cn("max-w-reading pl-8.5 text-sm font-medium", warn ? "text-warning" : "text-success")}>
+        {lead.key === "copiedLead" ? t("section.copiedLead") : t(`section.${lead.key}`, { count: lead.count })} {pasteWhere(t, section)}
+        {last.approved ? null : ` ${t("section.copiedNotApprovedYet")}`}
+      </p>
+      {last.marked ? null : <MarkNotSaved className="pl-8.5" />}
+    </>
   );
 }
 
@@ -295,10 +301,9 @@ function pasteWhere(t: TFunction, section: ReportSection): ReactNode {
 function copySentence(t: TFunction, last: LastCopy): string {
   if (last.outcome === "failed") return t("section.copyFailed");
   const section = REPORT_SECTIONS.find((item) => item.id === last.sectionId);
-  const lead = copiedLead(last.text);
+  const lead = copiedLead(last);
   const parts = [lead.key === "copiedLead" ? t("section.copiedLead") : t(`section.${lead.key}`, { count: lead.count }), t("section.pasteWhere", { section: section?.title ?? "" })];
   if (!last.approved) parts.push(t("section.copiedNotApprovedYet"));
-  if (!last.marked) parts.push(t("review.markNotSaved"));
   return parts.join(" ");
 }
 

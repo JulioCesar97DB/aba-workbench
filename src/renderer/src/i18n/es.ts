@@ -275,7 +275,6 @@ export const es: Messages = {
     marked_other: "{{count}} datos marcados",
     copiedBefore: "Antes copiaste la versión {{number}}",
     reviewDraft: "Revisar",
-    markNotSaved: "La app no pudo guardar que la copiaste, así que no aparecerá como copiada.",
     allCopied: "Las {{total}} secciones están copiadas. Puedes cerrar el caso o volver a cualquier sección.",
     readFailed: "No se pudieron leer los textos de las secciones. Vuelve al Resumen del caso y abre este paso otra vez.",
     readAllTitle: "Lee la evaluación completa",
@@ -299,7 +298,6 @@ export const es: Messages = {
     backToReview: "Volver a Revisión y copia",
     contents: "En esta evaluación",
   },
-
   sources: {
     addPdf: "Agregar PDF",
     pasteText: "Pegar un texto",
@@ -641,6 +639,7 @@ export const es: Messages = {
     copiedMarked_other: "Copiada con {{count}} datos marcados: búscalos como [MISSING: …] o [CHECK: …] al pegar.",
     pasteWhere: "Pégala en ABA Matrix, en «{{section}}».",
     copiedNotApprovedYet: "Todavía no la apruebas: léela antes de pegarla.",
+    markNotSaved: "La app no pudo guardar que la copiaste, así que no aparecerá como copiada. El texto sí está en tu portapapeles: cópiala otra vez más tarde para marcarla.",
     copiedOtherVersion: "Copiaste la versión {{number}}, que no es la aprobada (la {{approved}}).",
     nextSectionLink: "Siguiente: {{section}}",
     nextSectionBody: "La siguiente sección sin terminar, en el orden de ABA Matrix.",
