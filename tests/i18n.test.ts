@@ -94,3 +94,8 @@ test("strings: Settings says what the AI does and when anything is sent (audit U
   assert.equal(en.connections.intro, "The AI drafts the case map and the sections. Nothing is sent unless you ask. Connect one; ChatGPT is the usual one.");
   for (const [key, value] of [...english, ...spanish]) assert.doesNotMatch(value, /later version|versión posterior/, key);
 });
+
+test("strings: the case map draft's estimate is the measured 10 to 20 minutes, in both languages (owner's decision, 2026-11-23)", () => {
+  assert.equal(en.caseMap.ai.time, "It can take 10 to 20 minutes. You review everything before it is used.");
+  assert.equal(es.caseMap.ai.time, "Puede tardar de 10 a 20 minutos. Tú revisas todo antes de que se use.");
+});

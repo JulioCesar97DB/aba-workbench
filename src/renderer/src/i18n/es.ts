@@ -770,7 +770,7 @@ export const es: Messages = {
       arrived_other: "Llegaron {{count}} elementos; {{shown}} pasaron las comprobaciones y se ven en el mapa, aún sin guardar.",
       elapsed: "Tiempo hasta ahora: {{total}} en total, {{step}} en este paso.",
       plainJson: "Esta IA no acepta el formato estructurado: se lo vuelve a pedir en JSON simple…",
-      time: "Puede tardar de 15 a 30 minutos. Tú revisas todo antes de que se use.",
+      time: "Puede tardar de 10 a 20 minutos. Tú revisas todo antes de que se use.",
       stop: "Detener",
       saved: "La IA armó el mapa. Revisa cada parte: nada se usa hasta que la apruebes.",
       partial: "Los datos del caso quedaron guardados; las conductas no.",

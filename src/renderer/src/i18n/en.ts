@@ -786,7 +786,7 @@ export const en = {
       arrived_other: "{{count}} items have arrived; {{shown}} passed their checks and show in the map, not saved yet.",
       elapsed: "Time so far: {{total}} in all, {{step}} on this step.",
       plainJson: "This AI does not take the structured format: asking it again in plain JSON…",
-      time: "It can take 15 to 30 minutes. You review everything before it is used.",
+      time: "It can take 10 to 20 minutes. You review everything before it is used.",
       stop: "Stop",
       saved: "The AI drafted the map. Review each part: nothing is used until you approve it.",
       partial: "The case facts are saved; the behaviors are not.",
