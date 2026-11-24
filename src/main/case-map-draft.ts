@@ -261,7 +261,7 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
     let characters = 0;
     let reported = 0;
     // A first answer is read item by item as it arrives; a repair is small and is not.
-    const preview = repair === null ? new ArrivingItems(kind, context, convert) : null;
+    const preview = repair === null ? new ArrivingItems(kind, context, convert, savedOf(data)) : null;
     for await (const event of runSectionGeneration<FinishedText>({
       prepared,
       provider: options.provider,
@@ -376,31 +376,66 @@ const PREVIEW_PARTS: Partial<Record<string, MapPartId>> = {
   risks: "risks",
 };
 
+/** What the map holds before a request, for its previews: the parts she approved, and each part's items, hers (changed by hand) apart. */
+interface SavedItems {
+  approved: ReadonlySet<MapPartId>;
+  items: ReadonlyMap<MapPartId, ReadonlySet<string>>;
+  hers: ReadonlyMap<MapPartId, ReadonlySet<string>>;
+}
+
+function savedOf(data: CaseData): SavedItems {
+  const view = caseMapView(data);
+  const approved = new Set<MapPartId>();
+  const items = new Map<MapPartId, Set<string>>();
+  const hers = new Map<MapPartId, Set<string>>();
+  for (const [part, partView] of Object.entries(view.parts) as Array<[MapPartId, (typeof view.parts)[MapPartId]]>) {
+    if (partView.status === "approved") approved.add(part);
+    items.set(part, new Set(partView.items.map((item) => item.id)));
+    hers.set(part, new Set(partView.items.filter((item) => item.editedAt !== null).map((item) => item.id)));
+  }
+  return { approved, items, hers };
+}
+
+/** An item shown as it arrives: its part, its own id ("preview:…"), and the saved item it would replace, if any. */
+interface ShownItem {
+  part: MapPartId;
+  id: string;
+  item: Record<string, unknown>;
+  replaces: string | null;
+}
+
 /**
  * The items of an answer as they arrive (case map speed, 2026-11-23): each one read as
  * soon as its JSON closes, checked on its own (its quotes, numbers and links, as the whole
  * answer's checks do), and, when it passes, put in the map's stored shape to be shown
  * read-only. Checks across items (keys used twice, a group's members) wait for the whole
  * answer, as does every save.
+ *
+ * Only what the save would write is shown (review round 1 of case map speed, S4): nothing
+ * of a part she approved, nothing under the id of an item she changed by hand (hers is
+ * kept), and no client when one is saved (the screen shows the saved one). An item under
+ * the id of a saved item is that item's new version, and says which it replaces.
  */
 class ArrivingItems {
   readonly #scanner = new JsonItemScanner();
   readonly #kind: MapRequestKind;
   readonly #context: CheckContext & { behaviorIds: ReadonlySet<string> };
   readonly #convert: ConvertContext;
+  readonly #saved: SavedItems;
   /** The behaviors' keys arrived so far: a risk that arrives after them may name them. */
   readonly #behaviorKeys = new Set<string>();
   arrived = 0;
   shown = 0;
 
-  constructor(kind: MapRequestKind, context: CheckContext & { behaviorIds: ReadonlySet<string> }, convert: ConvertContext) {
+  constructor(kind: MapRequestKind, context: CheckContext & { behaviorIds: ReadonlySet<string> }, convert: ConvertContext, saved: SavedItems) {
     this.#kind = kind;
     this.#context = context;
     this.#convert = convert;
+    this.#saved = saved;
   }
 
-  feed(piece: string): Array<{ part: MapPartId; id: string; item: Record<string, unknown> }> {
-    const out: Array<{ part: MapPartId; id: string; item: Record<string, unknown> }> = [];
+  feed(piece: string): ShownItem[] {
+    const out: ShownItem[] = [];
     for (const closed of this.#scanner.feed(piece)) {
       this.arrived++;
       const shown = this.#check(closed);
@@ -411,7 +446,7 @@ class ArrivingItems {
     return out;
   }
 
-  #check(closed: ClosedItem): { part: MapPartId; id: string; item: Record<string, unknown> } | null {
+  #check(closed: ClosedItem): ShownItem | null {
     let value: unknown;
     try {
       value = JSON.parse(closed.text);
@@ -420,7 +455,8 @@ class ArrivingItems {
     }
     if (closed.list === "behaviors" && typeof (value as { key?: unknown }).key === "string") this.#behaviorKeys.add((value as { key: string }).key);
     const part = PREVIEW_PARTS[closed.list];
-    if (!part) return null;
+    if (!part || this.#saved.approved.has(part)) return null;
+    if (part === "client" && (this.#saved.items.get("client")?.size ?? 0) > 0) return null;
     const alone: Record<string, unknown> = this.#kind === "map-facts" ? { client: null, caregivers: [], settings: [], deficits: [], strengths: [], facts: [], openItems: [], report: [] } : { behaviors: [], groups: [], risks: [], openItems: [] };
     if (!(closed.list in alone)) return null;
     alone[closed.list] = closed.index === null ? value : [value];
@@ -432,7 +468,11 @@ class ArrivingItems {
     const parts = toAnswerParts(this.#kind, parsed.answer, checks, { ...this.#convert, behaviorIds });
     const item = parts[part]?.items[0];
     if (!item) return null;
-    return { part, id: `preview:${this.#kind}:${closed.list}:${closed.index ?? 0}`, item };
+    // Open items are joined to the saved ones, never in place of one.
+    const key = part === "openItems" ? null : String(item.key);
+    if (key !== null && this.#saved.hers.get(part)?.has(key)) return null;
+    const replaces = key !== null && this.#saved.items.get(part)?.has(key) ? key : null;
+    return { part, id: `preview:${this.#kind}:${closed.list}:${closed.index ?? 0}`, item, replaces };
   }
 }
 

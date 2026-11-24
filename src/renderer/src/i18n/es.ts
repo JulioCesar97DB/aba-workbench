@@ -852,6 +852,8 @@ export const es: Messages = {
     editedByYou: "Cambiado por ti",
     preview: "Revisado, aún sin guardar",
     previewNote: "La IA sigue escribiendo. Este elemento pasó las comprobaciones de la app; se guarda, y puedes corregirlo, cuando termine este paso del borrador.",
+    previewReplaces: "Nueva versión, aún sin guardar",
+    previewReplacesNote: "La IA sigue escribiendo. Esta es su nueva versión del elemento guardado que está arriba en la lista, y pasó las comprobaciones de la app; lo reemplaza, y puedes corregirla, cuando termine este paso del borrador.",
     checks_one: "{{count}} por revisar",
     checks_other: "{{count}} por revisar",
     groupsHeading: "Grupos",

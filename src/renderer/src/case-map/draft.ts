@@ -18,6 +18,8 @@ export interface MapPreview {
   /** The preview's own id ("preview:…"), never an item id of the map. */
   id: string;
   item: Record<string, unknown>;
+  /** The saved item it is a new version of (an update), shown with it; null for a new item. */
+  replaces: string | null;
 }
 
 export type MapDraftOutcome =
@@ -104,7 +106,7 @@ function apply(update: GenerationUpdate) {
       return;
     }
     case "map-preview":
-      set({ ...current, previews: [...current.previews.filter((preview) => preview.id !== event.id), { step: event.step, part: event.part, id: event.id, item: event.item }] });
+      set({ ...current, previews: [...current.previews.filter((preview) => preview.id !== event.id), { step: event.step, part: event.part, id: event.id, item: event.item, replaces: event.replaces ?? null }] });
       return;
     case "map-saved":
       if (event.result.outcome === "saved") {

@@ -1214,3 +1214,49 @@ test("review S3, M1, M2: a cut quote keeps the passage with the value's number, 
   const reportParts = toAnswerParts("map-facts", report, checkMapAnswer("map-facts", report, checkContext()), convert);
   assert.ok(reportParts.openItems!.items.some((item) => /^The report item "Section 3 lacks dates\..*was longer than the map allows/.test(String(item.text))));
 });
+
+test("review S4: an update shows nothing of a part she approved or of an item she changed, and marks the AI's new version of a saved item", async () => {
+  let caregiverIds: string[] = [];
+  const { service, caseId, caseFile, cases } = await setup((found) => {
+    const base = factsAnswer(found);
+    return {
+      facts: [
+        { answer: factsAnswer(found) },
+        {
+          answer: {
+            ...base,
+            get caregivers() {
+              return (factsAnswer(found).caregivers as Array<Record<string, unknown>>).map((item, index) => ({ ...item, key: caregiverIds[index] }));
+            },
+          },
+        },
+      ],
+      behaviors: [{ answer: behaviorsAnswer(found, []) }, { answer: behaviorsAnswer(found, []) }],
+    };
+  });
+  await draft(service, caseId);
+  const first = stored(caseFile);
+  caregiverIds = first.parts.caregivers.versions[0].content.items.map((item: { id: string }) => item.id);
+  assert.equal(caregiverIds.length, 2);
+  // She changes the first caregiver by hand and approves the behaviors.
+  await cases.changeCase(caseId, (data, _folder, now) => {
+    const typed = saveMapItem(data, "caregivers", "items", caregiverIds[0], { role: { value: "Mother (her words)", check: null } }, null, now);
+    assert.ok(typed && typed !== "item-not-found");
+    return { save: approveMapPart(typed.data, "behaviors", 1, now), value: null };
+  });
+  const events = await draft(service, caseId);
+  const previews = events.filter((event) => event.type === "map-preview");
+  assert.ok(!previews.some((event) => event.part === "behaviors"), "nothing of the approved behaviors");
+  const caregivers = previews.filter((event) => event.part === "caregivers");
+  assert.deepEqual(
+    caregivers.map((event) => event.replaces),
+    [caregiverIds[1]],
+    "her changed caregiver is not shown; the other is the AI's new version of the saved one",
+  );
+  assert.ok(previews.filter((event) => event.part === "settings").every((event) => event.replaces === null), "a new key is a new item");
+  // The progress counts only what is shown.
+  const writing = events.filter((event) => event.type === "map-progress" && event.step === "map-behaviors" && event.phase === "writing").at(-1);
+  assert.ok(writing?.type === "map-progress");
+  assert.equal(writing.shown, previews.filter((event) => event.step === "map-behaviors").length);
+  assert.equal(stored(caseFile).parts.behaviors.versions.length, 1, "the approved part is left as it is");
+});

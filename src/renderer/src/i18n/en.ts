@@ -868,6 +868,8 @@ export const en = {
     editedByYou: "Changed by you",
     preview: "Checked, not saved yet",
     previewNote: "The AI is still writing. This item passed the app's checks; it is saved, and you can correct it, when this step of the draft finishes.",
+    previewReplaces: "New version, not saved yet",
+    previewReplacesNote: "The AI is still writing. This is its new version of the saved item listed above it, and it passed the app's checks; it replaces that item, and you can correct it, when this step of the draft finishes.",
     checks_one: "{{count}} to check",
     checks_other: "{{count}} to check",
     groupsHeading: "Groups",

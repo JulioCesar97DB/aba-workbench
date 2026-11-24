@@ -295,8 +295,10 @@ export type GenerationUpdateEvent =
    * shown at once, read-only and marked "checked, not saved yet", until its request saves
    * (then the saved map replaces it) or ends without saving (then it goes). Nothing is saved
    * by this event. `id` is the preview's own ("preview:…"), never an item id of the map.
+   * `replaces` is the id of the saved item it is a new version of (an update), or null.
+   * Nothing is sent for a part she approved or for an item she changed by hand.
    */
-  | { type: "map-preview"; step: MapRequestKind; part: MapPartId; id: string; item: Record<string, unknown> }
+  | { type: "map-preview"; step: MapRequestKind; part: MapPartId; id: string; item: Record<string, unknown>; replaces: string | null }
   /** One request's parts saved: the whole map as saved, the parts written, and how many problems the checks still found. */
   | { type: "map-saved"; step: MapRequestKind; result: MapSaveResult; written: MapPartId[]; kept: MapPartId[]; problems: number }
   | { type: "finished"; cancelled: boolean };
