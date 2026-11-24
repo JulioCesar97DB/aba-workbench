@@ -299,7 +299,7 @@ export function CaseMapScreen() {
           </p>
         ) : null}
         {view.outOfDate ? <p className="text-sm text-warning">{t("caseMap.outOfDate", { reasons: view.outOfDate.reasons.join("; ") })}</p> : null}
-        {part === "report" && view.items.length === 0 ? (
+        {part === "report" && view.items.length === 0 && previews.length === 0 ? (
           <p className="max-w-measure text-md text-fg-muted">{t("caseMap.reportEmpty")}</p>
         ) : part === "client" ? (
           (editor ?? (previews[0] ? <PreviewItem part={part} preview={previews[0]} context={context} /> : null)) ?? (
