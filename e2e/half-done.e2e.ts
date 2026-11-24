@@ -327,7 +327,8 @@ test("Paste what you already wrote: boxes left unsaved are saved on a reload and
   await expect(heading(page)).toHaveText("Paste what you already wrote");
   await openRow(page, "medical-necessity");
   await expect(row(page, "medical-necessity")).toContainText("This section is approved: what you paste becomes a new version, and you will need to approve it again.");
-  await expect(page.getByRole("complementary")).toContainText("What you leave in the boxes is also saved if you close the app.");
+  // The rail, not the trial bar (also a complementary landmark): review round 2, B1.
+  await expect(page.locator("[data-region='rail']")).toContainText("What you leave in the boxes is also saved if you close the app.");
 
   // Two boxes filled, "Save" never pressed, then a reload.
   await (await openRow(page, "background-information")).fill("Background left in its box.");
