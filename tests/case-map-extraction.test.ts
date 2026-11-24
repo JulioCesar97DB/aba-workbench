@@ -1174,3 +1174,43 @@ test("review S2: a repaired score row is merged into the failed row field by fie
   assert.equal(byName.deficits[0].scores.length, 2);
   assert.deepEqual(checkMapAnswer("map-facts", byName, context).problems, []);
 });
+
+test("review S3, M1, M2: a cut quote keeps the passage with the value's number, or the value is flagged; cut texts that are not claims are flagged; a cut note joins an earlier check", () => {
+  const convert = { notesSession: null, sectionVersions: new Map(), settingIds: new Set<string>(), behaviorIds: new Set<string>() };
+  // S3: a found quote of 385 characters whose "30" is near its end.
+  const story = `${"The mother said the child talks a lot at home but it is hard to follow, and then: ".repeat(4)}the child goes to Speech therapy 30 minutes twice a week at school.`;
+  assert.ok(story.length > 300 && story.indexOf("30") > 300);
+  const context = checkContext({ sources: [{ id: "n", title: "Notes", text: story }] });
+  const answer = parsedFacts(factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [], facts: [{ key: "new-1", text: claim("Speech therapy 30 minutes twice a week", [ref("n", story)]), homeSection: 3 }] }));
+  const checks = checkMapAnswer("map-facts", answer, context);
+  assert.equal(checks.quotes.get(answer.facts[0].text!.refs[0]), "found");
+  const fact = (toAnswerParts("map-facts", answer, checks, convert).facts!.items[0] as unknown as { text: { refs: Array<{ quote: string; checked: string }>; check: string | null } }).text;
+  const quote = fact.refs[0].quote;
+  assert.ok(quote.length <= 300 && story.includes(quote), "still word for word");
+  assert.match(quote, /\b30 minutes/, "the passage that holds the value's number");
+  assert.equal(fact.refs[0].checked, "found");
+  // A value whose numbers no passage of the limit holds together: flagged.
+  const far = `There were 12 sessions. ${"x ".repeat(160)}and 30 minutes each.`;
+  const farContext = checkContext({ sources: [{ id: "n", title: "Notes", text: far }] });
+  const farAnswer = parsedFacts(factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [], facts: [{ key: "new-1", text: claim("12 sessions of 30 minutes", [ref("n", far)]), homeSection: 3 }] }));
+  const farFact = (toAnswerParts("map-facts", farAnswer, checkMapAnswer("map-facts", farAnswer, farContext), convert).facts!.items[0] as unknown as { text: { check: string | null } }).text;
+  assert.match(farFact.check ?? "", /This quote was cut to fit: check the value against the source\./);
+  // M2: a value too long that already has a check is told both.
+  const long = parsedFacts(factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [], facts: [{ key: "new-1", text: claim(`Spitting at home. ${"y".repeat(1600)}`, [ref("o", "the child spat toward his mother's forearm")], "extracted", "The AI was unsure of this."), homeSection: 3 }] }));
+  const longFact = (toAnswerParts("map-facts", long, checkMapAnswer("map-facts", long, checkContext()), convert).facts!.items[0] as unknown as { text: { check: string } }).text;
+  assert.match(longFact.check, /^The AI was unsure of this\. This value was longer than the map allows/);
+  // M1: a reasoning cut to fit says so in the function's check; a group's reason in an open item; a report item's text too.
+  const first = behaviorsAnswer({ obs: "o", interview: "i" }, []);
+  const behavior = (first.behaviors as Array<Record<string, unknown>>)[0];
+  behavior.function = { ...(behavior.function as Record<string, unknown>), reasoning: "r ".repeat(900) };
+  (first.groups as Array<Record<string, unknown>>)[0].reason = "g ".repeat(900);
+  const a = parsedBehaviors(first);
+  const parts = toAnswerParts("map-behaviors", a, checkMapAnswer("map-behaviors", a, checkContext()), convert);
+  const fn = (parts.behaviors!.items[0] as unknown as { function: { reasoning: string; check: string } }).function;
+  assert.ok(fn.reasoning.endsWith("…"));
+  assert.match(fn.check, /The reasoning was longer than the map allows/);
+  assert.ok(parts.openItems!.items.some((item) => /The group "Spitting": its reason was longer than the map allows/.test(String(item.text))));
+  const report = parsedFacts(factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { report: [{ kind: "thread-gap", text: `Section 3 lacks dates. ${"z ".repeat(900)}`, sections: [], refs: [] }] }));
+  const reportParts = toAnswerParts("map-facts", report, checkMapAnswer("map-facts", report, checkContext()), convert);
+  assert.ok(reportParts.openItems!.items.some((item) => /^The report item "Section 3 lacks dates\..*was longer than the map allows/.test(String(item.text))));
+});

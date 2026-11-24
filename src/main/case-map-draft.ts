@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { checkMapAnswer, cutText, isScoreRow, limitOf, SCORE_LIMITS, TEXT_LIMITS, MAP_SCHEMA_NAMES, mapAnswerSchema, mergeRepair, numbersIn, parseMapAnswer, PARTS_OF_REQUEST, repairInput, SCORE_FIELDS, type AnswerClaim, type AnswerRef, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer, type MapAnswer, type MapAnswerFormat, type RepairScope, type ScoreRow } from "../lib/case-map-extraction.ts";
+import { checkMapAnswer, cutText, limitOf, SCORE_LIMITS, TEXT_LIMITS, MAP_SCHEMA_NAMES, mapAnswerSchema, mergeRepair, numbersIn, parseMapAnswer, PARTS_OF_REQUEST, repairInput, sameNumber, SCORE_FIELDS, type AnswerClaim, type AnswerRef, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer, type MapAnswer, type MapAnswerFormat, type RepairScope, type ScoreRow } from "../lib/case-map-extraction.ts";
 import { JsonItemScanner, type ClosedItem } from "../lib/json-items.ts";
 import { generationCostUsd } from "../lib/pricing.ts";
 import type { Effort, Provider, ProviderCredential, TokenUsage } from "../lib/providers/types.ts";
@@ -457,12 +457,52 @@ const NUMBER_CHECK = "This number is not written in the quote it cites: check it
 const NO_REF_CHECK = "No quote supports this value: check it against the sources.";
 const PDF_NUMBER_CHECK = "A number of this value is only in a PDF's quote, which the app cannot check yet: check it against the PDF.";
 const CUT_CHECK = "This value was longer than the map allows, even after the AI was asked to shorten it, so it was cut: check it against the source.";
-/** A quote cut to the limit at a word, with no mark added: its first words, still as the source writes them. */
-function cutQuote(quote: string): string {
-  if (quote.length <= TEXT_LIMITS.quote) return quote;
-  const room = quote.slice(0, TEXT_LIMITS.quote);
+const QUOTE_CUT_CHECK = "This quote was cut to fit: check the value against the source.";
+/** A text that is not a claim, cut to fit: the note goes on what holds it (review round 1 of case map speed, M1). */
+const textCutCheck = (what: string) => `The ${what} was longer than the map allows, even after the AI was asked to shorten it, so it was cut: check it.`;
+
+/**
+ * A check with a note after it, both kept within the check's limit (review round 1 of case
+ * map speed, M2): a value flagged for another reason and cut is told both.
+ */
+export function joinChecks(check: string | null, note: string): string {
+  if (!check) return note;
+  if (check.includes(note)) return check;
+  const room = TEXT_LIMITS.check - note.length - 1;
+  return `${check.length <= room ? check : cutText(check, room)} ${note}`;
+}
+
+/** A quote's passage of at most the limit, from the word at `start`, ending at a word. */
+function windowAt(quote: string, start: number): string {
+  const room = quote.slice(start, start + TEXT_LIMITS.quote);
+  if (start + TEXT_LIMITS.quote >= quote.length) return room.trimEnd();
   const space = room.lastIndexOf(" ");
   return (space > TEXT_LIMITS.quote / 2 ? room.slice(0, space) : room).trimEnd();
+}
+
+/**
+ * A quote cut to the limit at words, with no mark added, so it is still as the source writes
+ * it and still found. It keeps the passage that holds the value's numbers the quote gives
+ * (review round 1 of case map speed, S3): its first words when they do, else a passage
+ * that does, the numbers in its middle. `lost` when no passage holds them all.
+ */
+export function cutQuote(quote: string, numbers: readonly string[] = []): { quote: string; lost: boolean } {
+  if (quote.length <= TEXT_LIMITS.quote) return { quote, lost: false };
+  const inQuote = numbersIn(quote);
+  const wanted = numbers.filter((number) => inQuote.some((quoted) => sameNumber(number, quoted)));
+  const holdsAll = (text: string) => {
+    const held = numbersIn(text);
+    return wanted.every((number) => held.some((quoted) => sameNumber(number, quoted)));
+  };
+  const first = windowAt(quote, 0);
+  if (holdsAll(first)) return { quote: first, lost: false };
+  // Of the passages that hold them all, the middle one: the numbers with words on both sides.
+  const holding: number[] = [];
+  for (let start = 1; start < quote.length; start++) {
+    if (quote[start - 1] === " " && quote[start] !== " " && holdsAll(windowAt(quote, start))) holding.push(start);
+  }
+  if (holding.length === 0) return { quote: first, lost: true };
+  return { quote: windowAt(quote, holding[Math.floor(holding.length / 2)]), lost: false };
 }
 const NOT_HERS_CHECK = "Marked as hers, but no quote of her section or her notes was found: check it.";
 
@@ -470,10 +510,14 @@ const NOT_HERS_CHECK = "Marked as hers, but no quote of her section or her notes
 export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: CheckResult, context: ConvertContext): Partial<Record<MapPartId, AnswerPart>> {
   // A ref the checks never reached is not vouched for: "not-found", never the PDF's "not-checked" (review round 1, M6).
   const checkOf = (item: AnswerRef) => checks.quotes.get(item) ?? "not-found";
-  const ref = (item: AnswerRef): Record<string, unknown> => {
+  /** A quote cut to fit lost a number of the value it vouched for (S3): set by `ref`, read by its caller. */
+  let quoteLost = false;
+  const ref = (item: AnswerRef, numbers: readonly string[] = []): Record<string, unknown> => {
     const checked = checkOf(item);
-    // A quote still too long after the repair is kept to its first words that fit: still word for word, so still found.
-    const quote = cutQuote(item.quote);
+    // A quote still too long after the repair is cut to fit, keeping the passage with the value's numbers: still word for word, so still found.
+    const cut = cutQuote(item.quote, numbers);
+    if (cut.lost && checked === "found") quoteLost = true;
+    const quote = cut.quote;
     if (item.kind === "source") return { kind: "source", sourceId: item.id, quote, checked };
     if (item.kind === "section") {
       const version = context.sectionVersions.get(item.id);
@@ -481,8 +525,15 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
     }
     return { kind: "note", ...(context.notesSession ? { session: context.notesSession } : {}), quote, checked };
   };
-  const claim = (value: AnswerClaim | null, options: { proposedUnlessSourced?: boolean } = {}): Record<string, unknown> | null => {
-    if (!value) return null;
+  /** A claim's refs as stored, and whether a cut quote lost one of its numbers. */
+  const refsOf = (refs: readonly AnswerRef[], text: string) => {
+    quoteLost = false;
+    const numbers = numbersIn(text);
+    const stored = refs.map((item) => ref(item, numbers));
+    return { refs: stored, lost: quoteLost };
+  };
+  /** A claim's check before any cut: its own, or what the checks found. */
+  const baseOf = (value: AnswerClaim, options: { proposedUnlessSourced?: boolean } = {}) => {
     let check = value.check;
     let origin: string = value.origin;
     // "her" only when a quote of her section or her notes was found (review round 1, S2).
@@ -496,11 +547,21 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
     if (!check && checks.numbers.has(value)) check = NUMBER_CHECK;
     if (!check && checks.pdfNumbers.has(value)) check = PDF_NUMBER_CHECK;
     if (!check && (origin === "extracted" || origin === "her") && value.refs.length === 0) check = NO_REF_CHECK;
-    // A value still longer than its field allows after the repair is cut to fit, with a [CHECK] (owner's decision, 2026-11-23).
+    return { check, origin };
+  };
+  const claim = (value: AnswerClaim | null, options: { proposedUnlessSourced?: boolean } = {}): Record<string, unknown> | null => {
+    if (!value) return null;
+    const base = baseOf(value, options);
+    const origin = base.origin;
+    let check = base.check;
+    const { refs, lost } = refsOf(value.refs, value.value);
+    // A value still longer than its field allows after the repair is cut to fit, with a [CHECK] (owner's decision, 2026-11-23),
+    // told after any earlier check (M2).
     const max = limitOf(value);
-    const tooLong = !isScoreRow(value) && value.value.length > max;
-    if (tooLong) check ??= CUT_CHECK;
-    return { value: tooLong ? cutText(value.value, max) : value.value, refs: value.refs.map(ref), origin, check: check === null ? null : cutText(check, TEXT_LIMITS.check) };
+    const tooLong = value.value.length > max;
+    if (tooLong) check = joinChecks(check, CUT_CHECK);
+    if (lost) check = joinChecks(check, QUOTE_CUT_CHECK);
+    return { value: tooLong ? cutText(value.value, max) : value.value, refs, origin, check: check === null ? null : cutText(check, TEXT_LIMITS.check) };
   };
   const claims = (values: readonly AnswerClaim[]) => values.map((value) => claim(value)!);
   /**
@@ -510,19 +571,23 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
    * holds it.
    */
   const scoreClaims = (row: ScoreRow): Record<string, Record<string, unknown> | null> => {
-    const stored = claim(row)!;
+    const base = baseOf(row);
+    const { refs, lost } = refsOf(row.refs, row.value);
     const holder = row.score !== null ? "score" : SCORE_FIELDS.find((field) => row[field] !== null);
     const unquoted = checks.unquotedNumbers.get(row) ?? [];
+    const unquotedFields = checks.unquotedFields.get(row);
     // "A number is not in its quote" belongs to the field that holds the number, not to the row.
-    const rowCheck = stored.check === NUMBER_CHECK && unquoted.length > 0 ? null : (stored.check as string | null);
+    const rowCheck = base.check === NUMBER_CHECK && unquoted.length > 0 ? null : base.check;
     return Object.fromEntries(
       SCORE_FIELDS.map((field) => {
         const value = row[field];
         if (value === null) return [field, null];
-        const ownNumber = numbersIn(value).some((number) => unquoted.includes(number));
+        const ownNumber = unquotedFields ? unquotedFields.has(field) : numbersIn(value).some((number) => unquoted.includes(number));
         const tooLong = value.length > SCORE_LIMITS[field];
-        const check = field === holder && rowCheck ? rowCheck : ownNumber ? NUMBER_CHECK : tooLong ? CUT_CHECK : null;
-        return [field, { value: tooLong ? cutText(value, SCORE_LIMITS[field]) : value, refs: stored.refs, origin: stored.origin, check }];
+        let check: string | null = field === holder && rowCheck ? rowCheck : ownNumber ? NUMBER_CHECK : null;
+        if (tooLong) check = joinChecks(check, CUT_CHECK);
+        if (lost && field === holder) check = joinChecks(check, QUOTE_CUT_CHECK);
+        return [field, { value: tooLong ? cutText(value, SCORE_LIMITS[field]) : value, refs, origin: base.origin, check: check === null ? null : cutText(check, TEXT_LIMITS.check) }];
       }),
     );
   };
@@ -577,8 +642,18 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
       },
       strengths: { items: facts.strengths.map((item) => ({ key: item.key, text: claim(item.text), kind: claim(item.kind), setting: claim(item.setting) })) },
       facts: { items: facts.facts.map((item) => ({ key: item.key, text: claim(item.text), homeSection: item.homeSection })) },
-      openItems: { items: openItems(facts.openItems) },
-      report: { items: facts.report.map((item, index) => ({ key: `new-report-${index + 1}`, kind: item.kind, text: cutText(item.text, TEXT_LIMITS.report), sections: item.sections, refs: item.refs.map(ref), status: "open" })) },
+      // Report items before the open items: a report item cut to fit adds one (M1).
+      ...(() => {
+        const cutNotes: Array<{ kind: string; text: string; homeSection: number | null }> = [];
+        const report = facts.report.map((item, index) => {
+          const { refs, lost } = refsOf(item.refs, item.text);
+          const what = `The report item "${cutText(item.text, 80)}"`;
+          if (item.text.length > TEXT_LIMITS.report) cutNotes.push({ kind: "check", text: `${what} was longer than the map allows, even after the AI was asked to shorten it, so it was cut: check it.`, homeSection: null });
+          if (lost) cutNotes.push({ kind: "check", text: `${what}: a quote was cut to fit, so check the item against the source.`, homeSection: null });
+          return { key: `new-report-${index + 1}`, kind: item.kind, text: cutText(item.text, TEXT_LIMITS.report), sections: item.sections, refs, status: "open" };
+        });
+        return { openItems: { items: openItems([...facts.openItems, ...cutNotes]) }, report: { items: report } };
+      })(),
     };
   }
   const found = answer as BehaviorsAnswer;
@@ -591,6 +666,25 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
     const dropped = keys.filter((key) => !behaviorKeys.has(key));
     if (dropped.length > 0) unlinked.push({ kind: "check", text: `${owner} named behaviors that are not in the map (${dropped.join(", ")}): link the right ones by hand.`, homeSection: null });
     return known;
+  };
+  /**
+   * A behavior's function as stored. A reasoning, a respondent or a check still too long
+   * after the repair is cut to fit, and the function's check says so (review round 1 of
+   * case map speed, M1), after any check it had.
+   */
+  const functionOf = (fn: BehaviorsAnswer["behaviors"][number]["function"]) => {
+    const cut: string[] = [];
+    const fit = (text: string | null, max: number, what: string) => {
+      if (text === null || text.length <= max) return text;
+      cut.push(what);
+      return cutText(text, max);
+    };
+    const evidence = fn.evidence.map((entry) => ({ tool: entry.tool, respondent: fit(entry.respondent, TEXT_LIMITS.respondent, "respondent of an evidence"), result: claim(entry.result), supports: entry.supports }));
+    const reasoning = fit(fn.reasoning, TEXT_LIMITS.reasoning, "reasoning");
+    let check = fn.check;
+    if (check !== null && check.length > TEXT_LIMITS.check) cut.push("function's check");
+    for (const what of [...new Set(cut)]) check = joinChecks(check, textCutCheck(what));
+    return { primary: fn.primary, secondary: fn.secondary, origin: "hypothesis", evidence, reasoning, check: check === null ? null : cutText(check, TEXT_LIMITS.check) };
   };
   const behaviors = found.behaviors.map((item) => {
     const settingIds = item.settingIds.filter((id) => context.settingIds.has(id));
@@ -625,20 +719,20 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
       settingIds,
       antecedents: claims(item.antecedents),
       consequences: claims(item.consequences),
-      function: {
-        primary: item.function.primary,
-        secondary: item.function.secondary,
-        origin: "hypothesis",
-        evidence: item.function.evidence.map((entry) => ({ tool: entry.tool, respondent: entry.respondent === null ? null : cutText(entry.respondent, TEXT_LIMITS.respondent), result: claim(entry.result), supports: entry.supports })),
-        reasoning: item.function.reasoning === null ? null : cutText(item.function.reasoning, TEXT_LIMITS.reasoning),
-        check: item.function.check === null ? null : cutText(item.function.check, TEXT_LIMITS.check),
-      },
+      function: functionOf(item.function),
       // Barrier tags from her list, as proposals (D18).
       barriers: item.barriers.length > 0 ? { value: item.barriers, refs: [], origin: "proposed", check: null } : null,
       risks: claims(item.risks),
     };
   });
-  const groups = found.groups.map((group) => ({ key: group.key, behaviorKeys: knownBehaviors(group.behaviorKeys, `The group "${group.nature}"`), nature: cutText(group.nature, TEXT_LIMITS.nature), function: group.function, measure: group.measure, reason: cutText(group.reason, TEXT_LIMITS.reason), origin: "hypothesis" }));
+  const groups = found.groups.map((group) => {
+    // A group's nature or reason cut to fit is named in an open item (M1): a group has no check of its own.
+    const nature = cutText(group.nature, TEXT_LIMITS.nature);
+    for (const [what, text, max] of [["nature", group.nature, TEXT_LIMITS.nature], ["reason", group.reason, TEXT_LIMITS.reason]] as const) {
+      if (text.length > max) unlinked.push({ kind: "check", text: `The group "${nature}": its ${what} was longer than the map allows, even after the AI was asked to shorten it, so it was cut: check it.`, homeSection: null });
+    }
+    return { key: group.key, behaviorKeys: knownBehaviors(group.behaviorKeys, `The group "${group.nature}"`), nature, function: group.function, measure: group.measure, reason: cutText(group.reason, TEXT_LIMITS.reason), origin: "hypothesis" };
+  });
   const risks = found.risks.map((risk) => ({ key: risk.key, behaviorKeys: knownBehaviors(risk.behaviorKeys, `The risk "${risk.what?.value.slice(0, 80) ?? risk.key}"`), what: claim(risk.what), evidence: claims(risk.evidence), level: claim(risk.level) }));
   return {
     behaviors: { items: behaviors, groups },
