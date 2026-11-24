@@ -319,6 +319,8 @@ test("Lo siguiente, rule 7: the first section ready and not copied, in Spanish, 
   await addDocument(page, id);
   for (const section of REPORT_SECTIONS) await writeSection(page, id, section.id);
   await copySection(page, id, REPORT_SECTIONS[0].id);
+  // Home is already shown: leave it and come back, so it lists the cases again.
+  await goTo(page, "/settings");
   await goTo(page, "/");
   await page.getByRole("link", { name: "Caso para copiar" }).click();
   const next = page.getByRole("region", { name: "Lo siguiente" });
