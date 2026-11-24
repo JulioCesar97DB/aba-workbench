@@ -300,7 +300,11 @@ export interface MapPromptInput {
   /** For the behaviors request: the facts already saved (the settings and their ids), as JSON. */
   mapFacts: string | null;
   format: MapAnswerFormat;
-  /** The repair: what of the previous answer it quotes (the items that failed, or the whole answer) and the problems. */
+  /**
+   * The repair: what of the previous answer it quotes and the problems. Unless `whole`, it
+   * quotes only what failed: the values that failed under their item's key, or an item whole
+   * when the problem is the item's own (case map speed, 2026-11-23).
+   */
   repair: { previousAnswer: string; problems: string[]; whole?: boolean } | null;
 }
 
@@ -348,11 +352,13 @@ export async function buildCaseMapPrompt(input: MapPromptInput, rulesDir: string
         "<previous-answer>",
         quoteForPrompt(input.repair.previousAnswer),
         "</previous-answer>",
-        input.repair.whole ? "Your previous answer could not be used as it is:" : "These items of your previous answer could not be used as they are:",
+        input.repair.whole
+          ? "Your previous answer could not be used as it is:"
+          : "These values of your previous answer could not be used as they are. <previous-answer> shows only them, each under its item's key (an item with a problem of its own is shown whole):",
         ...input.repair.problems.map((problem) => `- ${problem}`),
         input.repair.whole
           ? "Answer again, complete, with these fixed."
-          : "Answer with the same JSON shape holding only these items, corrected, each under the same key; leave every other list empty and every other value of the client empty. The items you leave out stay as they were.",
+          : "Answer with the same JSON shape holding only these items, each under the same key, with what failed corrected. Leave empty every value and every list that <previous-answer> does not show, and every value of the client it does not show: what you leave empty stays as it was.",
         "Copy every quote word for word from the place it cites, at least three words. When a value cannot be supported by a quote, leave it empty (value \"\" and no refs) and add an open item that says what is missing.",
       ].join("\n"),
     );

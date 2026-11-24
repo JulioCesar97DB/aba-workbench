@@ -1,6 +1,6 @@
 ---
 id: case-map
-version: 2
+version: 3
 updated: 2026-11-23
 sources: The owner's decisions D1 to D35 on the case map (2026-11-23), the assessment guide's section map, and the four kinds of content of the whole-assessment rules. Written for these rules; no text from any real assessment.
 confirmed: no, pending review by the BCBA
@@ -57,7 +57,7 @@ The rule outranks everything else in this request.
 - **Client**: age as the sources give it; the diagnosis worded exactly as the evaluation words it; the severity level only if the evaluation states one, otherwise empty with an open item; the evaluator and the date; medications; school, grade, schedule and the IEP; each other service with its provider and whether it is a paid service (a school service under an education plan is not a separate paid service); languages.
 - **Caregivers**: each caregiver's role (never a given name unless her sections use it), language, availability, participation, limits, and a mitigation for the limits: `extracted` when a source states it, otherwise `proposed`.
 - **Settings**: each setting where behavior was observed by the BCBA or reported, which of the two, by whom, and the dates.
-- **Deficits**: each area in the payer's terms (communication, daily living skills, socialization, safety, and so on), the scores exactly as the score report prints them, the evidence (incidents, reports), and the impact on the child's daily life.
+- **Deficits**: each area in the payer's terms (communication, daily living skills, socialization, safety, and so on), the scores exactly as the score report prints them, the evidence (incidents, reports), and the impact on the child's daily life. Each score row is one claim: its instrument, scale, score, percentile and level, as the report prints them, under the quote of that row's line (empty fields "" when the report leaves them blank). Every number of the row, the instrument's name included ("Vineland-3"), is written in one of the row's quotes: when the row's line does not name the instrument, add a second ref that quotes the report's title.
 - **Strengths**: strengths, interests, preferences and reinforcers, each sourced, with the setting when known.
 - **Facts**: facts that matter to a section and fit no other part, a coming move, a change of school, a schedule change. Each with its **home section**: the number of the section of the 22-section template that tells it in full, by the assessment guide's section map (0 when no section is its home). A fact from her session notes is a fact like any other here, with her notes as its ref.
 - **Open items**: every [MISSING] the map needs (what is missing and which section needs it, 0 when none) and any [CHECK] that belongs to no single value.

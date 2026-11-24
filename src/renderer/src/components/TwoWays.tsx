@@ -13,8 +13,8 @@ import { ButtonLink } from "./Link.tsx";
  * IA", which goes to Settings, with one sentence saying so (owner's decision P7). It is
  * never greyed out.
  *
- * Used by a report section (screens/Section.tsx); the case map and Documentos adopt it in
- * their own pull requests. Props in docs/interface.md, "Shared pieces".
+ * Used by a report section (screens/Section.tsx), Documentos, and the empty case map
+ * (case-map/MapDraft.tsx). Props in docs/interface.md, "Shared pieces".
  */
 
 export interface Way {

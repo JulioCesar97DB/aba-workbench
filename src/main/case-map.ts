@@ -408,8 +408,11 @@ export function caseMapSummary(data: WithCaseMap): CaseMapSummary {
   let withContent = 0;
   for (const part of MAP_PARTS) {
     const view = mapPartView(data, part);
+    // Only parts with something in them count, approved or not, as the case summary and Home
+    // count them (UX-5): a part approved while empty never makes "approved" exceed the parts.
+    if (view.items.length === 0 && view.groups.length === 0) continue;
+    withContent++;
     if (view.status === "approved") approved++;
-    if (view.items.length > 0 || view.groups.length > 0) withContent++;
   }
   return { approved, withContent };
 }
@@ -817,6 +820,16 @@ export interface MapExtractionRecord {
   problemsBeforeRepair?: string[];
   /** What the code checks still found after the repair (at most 50). */
   problems: string[];
+  /**
+   * Why the repair was asked for, and about how much (case map speed, 2026-11-23): how many
+   * problems of each kind the first answer had, whether the repair quoted the values that
+   * failed, whole items or the whole answer, and how many values it was asked to fix.
+   */
+  repairScope?: "values" | "items" | "whole";
+  repairCauses?: Record<string, number>;
+  repairValues?: number;
+  /** How long the answer, and the repair when there was one, took, in seconds. */
+  seconds?: { answer: number; repair?: number };
 }
 
 /** An item as the AI's answer gives it, already in the stored shape, with its key instead of an id. */

@@ -94,3 +94,25 @@ test("strings: Settings says what the AI does and when anything is sent (audit U
   assert.equal(en.connections.intro, "The AI drafts the case map and the sections. Nothing is sent unless you ask. Connect one; ChatGPT is the usual one.");
   for (const [key, value] of [...english, ...spanish]) assert.doesNotMatch(value, /later version|versión posterior/, key);
 });
+
+test("strings: the case map draft's estimate is the measured 10 to 20 minutes, in both languages (owner's decision, 2026-11-23)", () => {
+  assert.equal(en.caseMap.ai.time, "It can take 10 to 20 minutes. You review everything before it is used.");
+  assert.equal(es.caseMap.ai.time, "Puede tardar de 10 a 20 minutos. Tú revisas todo antes de que se use.");
+});
+
+test("strings: the repair line says 'values only' only for a repair of values; the progress counts are two sentences (review round 1 of case map speed, S5, M3)", () => {
+  for (const strings of [en, es]) {
+    const ai = strings.caseMap.ai as Record<string, string>;
+    for (const key of ["repairingItems_one", "repairingItems_other", "repairingWhole_one", "repairingWhole_other", "repairingAnswer"]) assert.doesNotMatch(ai[key], /values only|value only|solo es/u, key);
+    for (const key of ["arrived_one", "arrived_other"]) assert.doesNotMatch(ai[key], /shown|\{\{shown\}\}|pas[óa]/u, key);
+  }
+  assert.match(en.caseMap.ai.repairingWhole_other, /write the answer again/);
+  assert.match(es.caseMap.ai.repairingWhole_other, /vuelva a escribir la respuesta/);
+  assert.equal(en.caseMap.ai.shown_one, "{{count}} passed its checks and shows in the map, not saved yet.");
+  assert.equal(es.caseMap.ai.shown_other, "{{count}} pasaron las comprobaciones y se ven en el mapa, aún sin guardar.");
+});
+
+test("strings: a draft that did not save says the items shown while the AI wrote were not saved, in both languages (review round 1 of case map speed, M5)", () => {
+  assert.equal(en.caseMap.ai.previewsNotSaved, "The items shown while the AI wrote were not saved.");
+  assert.equal(es.caseMap.ai.previewsNotSaved, "Los elementos que se vieron mientras la IA escribía no se guardaron.");
+});

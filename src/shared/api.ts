@@ -299,7 +299,28 @@ export type GenerationUpdateEvent =
    * doing (writing, asked again to fix its answer, asked again as plain JSON), and how much
    * of the answer has arrived.
    */
-  | { type: "map-progress"; step: MapRequestKind; phase: "writing" | "repairing" | "plain-json"; characters: number }
+  | {
+      type: "map-progress";
+      step: MapRequestKind;
+      phase: "writing" | "repairing" | "plain-json";
+      characters: number;
+      /** While it writes: how many items of the answer have arrived, and how many of them passed their checks (case map speed). */
+      arrived?: number;
+      shown?: number;
+      /** While it repairs: how many values the checks flagged, which the repair is asked to fix. */
+      values?: number;
+      /** While it repairs: what it asks for again, those values only, the items that hold them, or the whole answer (review round 1 of case map speed, S5). */
+      scope?: "values" | "items" | "whole";
+    }
+  /**
+   * An item of the answer that arrived and passed its own checks (case map speed, 2026-11-23):
+   * shown at once, read-only and marked "checked, not saved yet", until its request saves
+   * (then the saved map replaces it) or ends without saving (then it goes). Nothing is saved
+   * by this event. `id` is the preview's own ("preview:…"), never an item id of the map.
+   * `replaces` is the id of the saved item it is a new version of (an update), or null.
+   * Nothing is sent for a part she approved or for an item she changed by hand.
+   */
+  | { type: "map-preview"; step: MapRequestKind; part: MapPartId; id: string; item: Record<string, unknown>; replaces: string | null }
   /** One request's parts saved: the whole map as saved, the parts written, and how many problems the checks still found. */
   | { type: "map-saved"; step: MapRequestKind; result: MapSaveResult; written: MapPartId[]; kept: MapPartId[]; problems: number }
   | { type: "finished"; cancelled: boolean };
