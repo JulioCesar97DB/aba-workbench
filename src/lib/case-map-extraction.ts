@@ -466,8 +466,19 @@ export function numbersIn(text: string): string[] {
   return out;
 }
 
+/**
+ * A quote without the instrument names it holds: the row's instrument as written, and any
+ * name joined to its edition by a hyphen ("Vineland-3", "ABAS-3", "PLS-5"), so their digits
+ * are not taken for a score, a percentile or a level (review round 1 of case map speed, S1).
+ */
+function withoutInstrumentNames(instrument: string | null): (quote: string) => string {
+  const name = instrument?.trim() ?? "";
+  const named = name === "" ? null : new RegExp(name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu");
+  return (quote) => (named ? quote.replace(named, " ") : quote).replace(/\p{L}{2,}[-\u{2010}-\u{2015}\u{2212}]\d+\b/gu, " ");
+}
+
 /** Whether a number of a value is the same as one of a quote: equal, or the same date where one of the two leaves the year out. */
-function sameNumber(wanted: string, quoted: string): boolean {
+export function sameNumber(wanted: string, quoted: string): boolean {
   if (wanted === quoted) return true;
   if (!wanted.startsWith("d:") || !quoted.startsWith("d:")) return false;
   const [a, b] = [wanted.slice(2).split("/"), quoted.slice(2).split("/")];
@@ -485,6 +496,8 @@ export interface CheckResult {
   numbers: Set<AnswerClaim>;
   /** Those numbers, by claim (a score row's [CHECK] goes on the field that holds one). */
   unquotedNumbers: Map<AnswerClaim, string[]>;
+  /** Of a score row, the fields whose numbers no quote gives (a percentile of 3 is flagged, not the "3" of "Vineland-3" that the title gives). */
+  unquotedFields: Map<AnswerClaim, Set<string>>;
   /** Claims with a number found only in a PDF's quote, which cannot be checked yet: not a problem, but marked [CHECK] (review round 2, S1). */
   pdfNumbers: Set<AnswerClaim>;
   /** Claims with a problem of their own: a repair may replace them; the others are kept (review scoped check, R3-M1). */
@@ -542,6 +555,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   const quotes = new Map<AnswerRef, QuoteCheck>();
   const numbers = new Set<AnswerClaim>();
   const unquotedNumbers = new Map<AnswerClaim, string[]>();
+  const unquotedFields = new Map<AnswerClaim, Set<string>>();
   const pdfNumbers = new Set<AnswerClaim>();
   const failedClaims = new Set<AnswerClaim>();
   const failing = new Map<string, Set<number>>();
@@ -650,13 +664,36 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     if ((claim.origin === "extracted" || claim.origin === "her") && claim.refs.length === 0) problem(where, "a value a source or her text states needs a ref with its quote.", "no-ref");
     // Only PDFs cited: their text cannot be read yet, so nothing can be checked (D32).
     if (claim.refs.length > 0 && claim.refs.every((ref) => quotes.get(ref) === "not-checked")) return;
-    const quotedIn = (state: QuoteCheck) => claim.refs.filter((ref) => quotes.get(ref) === state).flatMap((ref) => numbersIn(ref.quote));
-    const found = quotedIn("found");
-    const inPdf = quotedIn("not-checked");
-    const allowed = (number: string) => found.some((quoted) => sameNumber(number, quoted)) || (claim.origin === "ai-drafted" && [...thresholdNumbers].some((quoted) => sameNumber(number, quoted)));
-    const unchecked = numbersIn(claim.value).filter((number) => !allowed(number));
-    // A number only in a PDF's quote next to a text quote passes, marked [CHECK] on the value (review round 2, S1).
-    const missing = unchecked.filter((number) => !inPdf.some((quoted) => sameNumber(number, quoted)));
+    const quotedIn = (state: QuoteCheck, strip: (quote: string) => string = (quote) => quote) => claim.refs.filter((ref) => quotes.get(ref) === state).flatMap((ref) => numbersIn(strip(ref.quote)));
+    /** The numbers of a text that no found quote gives, and of those the ones no PDF's quote gives either. */
+    const judge = (text: string, found: readonly string[], inPdf: readonly string[]) => {
+      const allowed = (number: string) => found.some((quoted) => sameNumber(number, quoted)) || (claim.origin === "ai-drafted" && [...thresholdNumbers].some((quoted) => sameNumber(number, quoted)));
+      const unchecked = numbersIn(text).filter((number) => !allowed(number));
+      // A number only in a PDF's quote next to a text quote passes, marked [CHECK] on the value (review round 2, S1).
+      return { unchecked, missing: unchecked.filter((number) => !inPdf.some((quoted) => sameNumber(number, quoted))) };
+    };
+    let unchecked: string[] = [];
+    let missing: string[] = [];
+    if (isScoreRow(claim)) {
+      // The instrument's number may come from any quote, the report's title included. The
+      // other fields' numbers may not come from a quote's instrument name ("Vineland-3",
+      // "ABAS-3"), or a title would vouch for a percentile of 3 (review round 1 of case map speed, S1).
+      const strip = withoutInstrumentNames(claim.instrument);
+      const all = { found: quotedIn("found"), inPdf: quotedIn("not-checked") };
+      const rest = { found: quotedIn("found", strip), inPdf: quotedIn("not-checked", strip) };
+      const fields = new Set<string>();
+      for (const field of SCORE_FIELDS) {
+        const text = claim[field];
+        if (text === null) continue;
+        const pool = field === "instrument" ? all : rest;
+        const result = judge(text, pool.found, pool.inPdf);
+        unchecked.push(...result.unchecked);
+        missing.push(...result.missing);
+        if (result.missing.length > 0) fields.add(field);
+      }
+      missing = [...new Set(missing)];
+      if (fields.size > 0) unquotedFields.set(claim, fields);
+    } else ({ unchecked, missing } = judge(claim.value, quotedIn("found"), quotedIn("not-checked")));
     if (unchecked.length > 0 && missing.length === 0) pdfNumbers.add(claim);
     if (missing.length === 0) return;
     numbers.add(claim);
@@ -782,7 +819,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     uniqueKeys(found.groups, "groups (keys)");
     uniqueKeys(found.risks, "risks (keys)");
   }
-  return { problems, quotes, numbers, unquotedNumbers, pdfNumbers, failedClaims, failing, whole, itemLevel, causes, failedValues: failedClaims.size + fieldProblems + itemProblems, failedFields };
+  return { problems, quotes, numbers, unquotedNumbers, unquotedFields, pdfNumbers, failedClaims, failing, whole, itemLevel, causes, failedValues: failedClaims.size + fieldProblems + itemProblems, failedFields };
 }
 
 /*
@@ -951,6 +988,12 @@ const entryFailed = (entry: Record<string, unknown>, failed: ReadonlySet<unknown
  * A first entry that passed stays when the repair leaves it out, so a repair that returns
  * only the fixed observation keeps the counts that passed. A failed first entry the repair
  * leaves out is dropped, as the repair was asked to fix it, as in a claim list.
+ *
+ * A repair entry that matches no name (the failed value was the name itself, an
+ * observation's date rewritten, or the entry has no name) is the next failed first entry
+ * still unmatched, in order, and is merged into it field by field, so the values of that
+ * entry that passed stay (review round 1 of case map speed, B1). The repair quotes only the
+ * failed entries, in their order, so the order pairs them.
  */
 function mergeObjectList(first: Array<Record<string, unknown>>, repaired: Array<Record<string, unknown>>, failed: ReadonlySet<unknown>): Array<Record<string, unknown>> {
   const matchOf = new Map<number, Record<string, unknown>>();
@@ -965,6 +1008,9 @@ function mergeObjectList(first: Array<Record<string, unknown>>, repaired: Array<
     if (match) matchOf.set(match.index, entry);
     else extra.push(entry);
   }
+  // Entries with no name that matched: the failed first entries still unmatched, in order.
+  const unmatchedFailed = first.map((item, index) => ({ item, index })).filter(({ item, index }) => !matchOf.has(index) && entryFailed(item, failed));
+  while (extra.length > 0 && unmatchedFailed.length > 0) matchOf.set(unmatchedFailed.shift()!.index, extra.shift()!);
   const out: Array<Record<string, unknown>> = [];
   first.forEach((item, index) => {
     const entry = matchOf.get(index);
@@ -983,9 +1029,53 @@ const isClaimList = (value: unknown): value is AnswerClaim[] => Array.isArray(va
  * when the repair leaves it out, as the repair was asked to fix it.
  */
 function mergeClaimList(first: AnswerClaim[], repaired: AnswerClaim[], failed: ReadonlySet<unknown>): AnswerClaim[] {
+  if (first.every(isScoreRow) && repaired.every(isScoreRow)) return mergeScoreRows(first, repaired, failed) as AnswerClaim[];
   const given = new Set(repaired.map((claim) => normalizeForQuote(claim.value)));
   const kept = first.filter((claim) => !failed.has(claim) && !given.has(normalizeForQuote(claim.value)));
   return [...kept, ...repaired];
+}
+
+/**
+ * Score rows after a repair (review round 1 of case map speed, S2). A row is one claim on
+ * the wire but five values when stored, and a repair of a few values writes back only the
+ * fields it fixed. So each repair row is merged into the failed row it replaces, field by
+ * field (an empty field keeps the first answer's text), in that row's place: the failed row
+ * of the same instrument and scale, or else the next failed row still unmatched, in order.
+ * A row that passed stays in its place; the repair's same row is not added twice. A failed
+ * row the repair leaves out is dropped, as in any claim list; the repair's other rows follow.
+ */
+function mergeScoreRows(first: ScoreRow[], repaired: ScoreRow[], failed: ReadonlySet<unknown>): ScoreRow[] {
+  const nameOf = (row: ScoreRow) => (row.instrument === null && row.scale === null ? null : `${normalizeForQuote(row.instrument ?? "")}|${normalizeForQuote(row.scale ?? "")}`);
+  const into = new Map<number, ScoreRow>();
+  const unpaired: ScoreRow[] = [];
+  const isFailed = (index: number) => failed.has(first[index]);
+  for (const row of repaired) {
+    // The same row as one that passed: nothing to merge.
+    if (first.some((item, index) => !isFailed(index) && sameText(item.value, row.value))) continue;
+    const name = nameOf(row);
+    const index = name === null ? -1 : first.findIndex((item, at) => isFailed(at) && !into.has(at) && nameOf(item) === name);
+    if (index >= 0) into.set(index, row);
+    else unpaired.push(row);
+  }
+  const extra: ScoreRow[] = [];
+  for (const row of unpaired) {
+    const index = first.findIndex((_item, at) => isFailed(at) && !into.has(at));
+    if (index >= 0) into.set(index, row);
+    else extra.push(row);
+  }
+  const out: ScoreRow[] = [];
+  first.forEach((item, index) => {
+    const row = into.get(index);
+    if (row) out.push(mergeScoreRow(item, row));
+    else if (!isFailed(index)) out.push(item);
+  });
+  return [...out, ...extra];
+}
+
+/** A repair's score row over the first answer's: each empty field keeps the first answer's text; its refs too when it gives none. */
+function mergeScoreRow(first: ScoreRow, repaired: ScoreRow): ScoreRow {
+  const fields = Object.fromEntries(SCORE_FIELDS.map((field) => [field, repaired[field] ?? first[field]])) as Record<(typeof SCORE_FIELDS)[number], string | null>;
+  return { ...repaired, ...fields, value: rowValue(fields), refs: repaired.refs.length > 0 ? repaired.refs : first.refs };
 }
 
 /**

@@ -508,7 +508,7 @@ test("M5: only a refusal that names the schema or the format switches the route 
 test("M6: a ref the checks never reached is stored as not found, never as a PDF's 'not checked'", () => {
   const parsed = parseMapAnswer("map-facts", JSON.stringify(factsAnswer({ obs: "o", interview: "i", pdf: "p" })));
   assert.ok(parsed.ok);
-  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failedClaims: new Set(), failing: new Map(), whole: false, unquotedNumbers: new Map(), itemLevel: new Map(), causes: {}, failedValues: 0, failedFields: new Map() };
+  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failedClaims: new Set(), failing: new Map(), whole: false, unquotedNumbers: new Map(), unquotedFields: new Map(), itemLevel: new Map(), causes: {}, failedValues: 0, failedFields: new Map() };
   const parts = toAnswerParts("map-facts", parsed.answer, empty, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
   const role = (parts.caregivers!.items[0] as Record<string, { refs: Array<{ checked: string }> }>).role;
   assert.equal(role.refs[0].checked, "not-found");
@@ -1074,4 +1074,103 @@ test("limits: a reasoning, a group's reason or a respondent too long is quoted a
   assert.equal(merged.groups[0].reason, "Same response class, function and measure.");
   assert.deepEqual(merged.groups[0].behaviorKeys, ["new-1", "new-2"]);
   assert.deepEqual(checkMapAnswer("map-behaviors", merged, checkContext()).problems, []);
+});
+
+/* Review round 1 of case map speed (2026-11-23): the reviewer's probes. */
+
+const parsedFacts = (answer: Answer) => {
+  const parsed = parseMapAnswer("map-facts", JSON.stringify(answer));
+  assert.ok(parsed.ok, parsed.ok ? "" : parsed.problems.join("; "));
+  return parsed.answer as FactsAnswer;
+};
+/** The first answer's failed values and the objects holding a failed text, as the draft passes them to the merge. */
+const failedOf = (checks: CheckResult) => new Set<unknown>([...checks.failedClaims, ...checks.failedFields.keys()]);
+
+test("review B1: a repair that rewrites the value naming an entry (an observation's date, a service's name), or an entry with no name, keeps the entry's passed values", () => {
+  const found = { obs: "o", interview: "i" };
+  const withObservation = (observation: unknown) => {
+    const answer = behaviorsAnswer(found, []);
+    (answer.behaviors as Array<{ baseline: { observations: unknown[] } }>)[0].baseline.observations = [observation];
+    return answer;
+  };
+  const passed = { setting: claim("Home", [ref("o", "11/04/2026, home, 2 hours")]), length: claim("2 hours", [ref("o", "11/04/2026, home, 2 hours")]), value: claim("3", [ref("o", "Spitting counts: 3 on 11/04")]) };
+  const row = (answer: BehaviorsAnswer) => {
+    const entry = answer.behaviors[0].baseline.observations;
+    return entry.map((item) => ({ date: item.date?.value ?? null, setting: item.setting?.value ?? null, length: item.length?.value ?? null, value: item.value?.value ?? null }));
+  };
+  // Probe 1: the date's quote is not found; the repair writes the date another way, with a found quote.
+  const a = parsedBehaviors(withObservation({ date: claim("11/04/2026", [ref("o", "on 11/04/2026 at home")]), ...passed }));
+  const checks = checkMapAnswer("map-behaviors", a, checkContext());
+  assert.ok(checks.problems.length > 0 && checks.problems.every((problem) => /observations\[0\]\.date/.test(problem)), checks.problems.join("\n"));
+  const quoted = repairInput("map-behaviors", {}, a, checks).previousAnswer as { behaviors: Array<{ baseline: { observations: Array<Record<string, unknown>> } }> };
+  assert.deepEqual(Object.keys(quoted.behaviors[0].baseline.observations[0]), ["date"], "only the failed date is quoted");
+  const fix = parsedBehaviors({ behaviors: [emptyBehavior("new-1", { baseline: { observations: [{ date: claim("November 4, 2026", [ref("o", "11/04/2026, home, 2 hours")]), setting: none(), length: none(), value: none() }], other: [] } })], groups: [], risks: [], openItems: [] });
+  const merged = mergeRepair("map-behaviors", a, fix, checks.failing, false, failedOf(checks)) as BehaviorsAnswer;
+  assert.deepEqual(row(merged), [{ date: "November 4, 2026", setting: "Home", length: "2 hours", value: "3" }], "the count that passed stays");
+  assert.deepEqual(checkMapAnswer("map-behaviors", merged, checkContext()).problems, []);
+  // Probe 2: an observation with no date, whose value of 9 failed; the repair gives 3.
+  const noDate = parsedBehaviors(withObservation({ date: none(), setting: passed.setting, length: passed.length, value: claim("9", [ref("o", "Spitting counts: 3 on 11/04")]) }));
+  const noDateChecks = checkMapAnswer("map-behaviors", noDate, checkContext());
+  const three = parsedBehaviors({ behaviors: [emptyBehavior("new-1", { baseline: { observations: [{ date: none(), setting: none(), length: none(), value: passed.value }], other: [] } })], groups: [], risks: [], openItems: [] });
+  assert.deepEqual(row(mergeRepair("map-behaviors", noDate, three, noDateChecks.failing, false, failedOf(noDateChecks)) as BehaviorsAnswer), [{ date: null, setting: "Home", length: "2 hours", value: "3" }]);
+  // Probe 3: a service's name failed; the repair names it another way.
+  const services = "Other services, invented: speech-language therapy at school with Ms. Rivera, paid by the family.";
+  const context = checkContext({ sources: [...checkContext().sources, { id: "s", title: "Services", text: services }] });
+  const withService = (service: Answer) => factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { client: { ...absentClient(), otherServices: [service] }, deficits: [] });
+  const first = parsedFacts(withService({ name: claim("Speech therapy", [ref("s", "speech therapy at school")]), provider: claim("Ms. Rivera", [ref("s", "at school with Ms. Rivera")]), paid: claim("not-paid", [ref("s", "paid by the family")]) }));
+  const firstChecks = checkMapAnswer("map-facts", first, context);
+  assert.equal(firstChecks.problems.length, 1, firstChecks.problems.join("\n"));
+  const renamed = parsedFacts(withService({ name: claim("Speech-language therapy", [ref("s", "speech-language therapy at school")]), provider: none(), paid: none() }));
+  const service = (mergeRepair("map-facts", first, renamed, firstChecks.failing, false, failedOf(firstChecks)) as FactsAnswer).client!.otherServices;
+  assert.deepEqual(service.map((item) => [item.name?.value, item.provider?.value, item.paid?.value]), [["Speech-language therapy", "Ms. Rivera", "not-paid"]], "the provider and 'paid' that passed stay");
+});
+
+test("review S1: the report's title vouches for the instrument's number only, never for a wrong percentile", () => {
+  const report = "Score report, invented.\nVineland-3 Adaptive Behavior Scales\n| Communication | 68 | 2 | Low |";
+  const context = checkContext({ sources: [{ id: "v", title: "Vineland", text: report }] });
+  const rows = (percentile: string) =>
+    parsedFacts(
+      factsAnswer({ obs: "o", interview: "i", pdf: "p" }, {
+        caregivers: [],
+        settings: [],
+        deficits: [{ key: "new-1", area: claim("Communication", [ref("v", "Communication | 68 | 2")]), scores: [{ instrument: "Vineland-3", scale: "Communication", score: "68", percentile, level: "Low", refs: [ref("v", "| Communication | 68 | 2 | Low |"), ref("v", "Vineland-3 Adaptive Behavior Scales")], origin: "extracted", check: "" }], evidence: [], impact: none() }],
+      }),
+    );
+  assert.deepEqual(checkMapAnswer("map-facts", rows("2"), context).problems, [], "the right row passes, the instrument's 3 from the title");
+  const wrong = rows("3");
+  const checks = checkMapAnswer("map-facts", wrong, context);
+  assert.equal(checks.problems.length, 1);
+  assert.match(checks.problems[0], /deficits\[0\]\.scores\[0\]: the number 3 in .* is not written in any of its quotes/);
+  // Stored, the [CHECK] is on the percentile, not on the instrument whose 3 the title gives.
+  const parts = toAnswerParts("map-facts", wrong, checks, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
+  const row = (parts.deficits!.items[0] as unknown as { scores: Array<Record<string, { check: string | null }>> }).scores[0];
+  assert.match(row.percentile.check ?? "", /not written in the quote/);
+  assert.equal(row.instrument.check, null);
+});
+
+test("review S2: a repaired score row is merged into the failed row field by field, in its place", () => {
+  const report = "Score report, invented.\nVineland-3 Adaptive Behavior Scales\n| Communication | 68 | 2 | Low |\n| Socialization | 74 | 4 | Moderately low |";
+  const context = checkContext({ sources: [{ id: "v", title: "Vineland", text: report }] });
+  const title = ref("v", "Vineland-3 Adaptive Behavior Scales");
+  const row = (fields: Answer, line: string) => ({ instrument: "Vineland-3", scale: "Communication", score: "68", percentile: "2", level: "Low", refs: [ref("v", line), title], origin: "extracted", check: "", ...fields });
+  const deficit = (scores: unknown[]) => factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [{ key: "new-1", area: claim("Communication", [ref("v", "Communication | 68 | 2")]), scores, evidence: [], impact: none() }] });
+  // Only the Communication score fails (86 for 68); Socialization passes.
+  const first = parsedFacts(deficit([row({ score: "86" }, "| Communication | 68 | 2 | Low |"), row({ scale: "Socialization", score: "74", percentile: "4", level: "Moderately low" }, "| Socialization | 74 | 4 | Moderately low |")]));
+  const checks = checkMapAnswer("map-facts", first, context);
+  assert.equal(checks.problems.length, 1, checks.problems.join("\n"));
+  // The repair writes back only the corrected score.
+  const repaired = parsedFacts(deficit([{ instrument: "", scale: "", score: "68", percentile: "", level: "", refs: [ref("v", "| Communication | 68 | 2 | Low |")], origin: "extracted", check: "" }]));
+  const merged = mergeRepair("map-facts", first, repaired, checks.failing, false, failedOf(checks)) as FactsAnswer;
+  assert.deepEqual(
+    merged.deficits[0].scores.map((item) => item.value),
+    ["Vineland-3 · Communication · 68 · 2 · Low", "Vineland-3 · Socialization · 74 · 4 · Moderately low"],
+    "the repaired row keeps its instrument, scale, percentile and level, in the report's order",
+  );
+  assert.deepEqual(merged.deficits[0].scores[0].refs.map((item) => item.quote), ["| Communication | 68 | 2 | Low |"]);
+  // A repair that names the row is matched by its instrument and scale.
+  const named = parsedFacts(deficit([{ instrument: "Vineland-3", scale: "Communication", score: "68", percentile: "", level: "", refs: [ref("v", "| Communication | 68 | 2 | Low |"), title], origin: "extracted", check: "" }]));
+  const byName = mergeRepair("map-facts", first, named, checks.failing, false, failedOf(checks)) as FactsAnswer;
+  assert.equal(byName.deficits[0].scores[0].value, "Vineland-3 · Communication · 68 · 2 · Low");
+  assert.equal(byName.deficits[0].scores.length, 2);
+  assert.deepEqual(checkMapAnswer("map-facts", byName, context).problems, []);
 });
