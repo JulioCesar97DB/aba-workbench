@@ -63,13 +63,17 @@ export function MapAiButton({ caseId, hasMap, align = "end" }: { caseId: string;
 
 const PARTS_OF_STEP = { "map-facts": "caseMap.ai.stepFacts", "map-behaviors": "caseMap.ai.stepBehaviors" } as const;
 
-/** Where a draft is, while it runs, and how it ended. Nothing shows when no draft was started here. */
-export function MapDraftPanel({ caseId }: { caseId: string }) {
+/**
+ * Where a draft is, while it runs, and how it ended. With no draft started here, a line
+ * says to connect the AI when none is, unless `quiet`: the empty map's AI card says it
+ * already (review round 1 of case map speed, M4).
+ */
+export function MapDraftPanel({ caseId, quiet = false }: { caseId: string; quiet?: boolean }) {
   const { t } = useTranslation();
   const draft = useMapDraft(caseId);
   const providers = useProviders();
   if (!draft) {
-    return providers.provider === null ? (
+    return providers.provider === null && !quiet ? (
       <p className="max-w-measure text-sm text-fg-muted">
         {t("caseMap.ai.notConnected")} <TextLink to="/settings">{t("caseMap.ai.settingsLink")}</TextLink>
       </p>

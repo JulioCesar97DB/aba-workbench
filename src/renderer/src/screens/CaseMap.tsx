@@ -178,8 +178,9 @@ export function CaseMapScreen() {
                 </Button>
               )
             ) : null}
-            {/* The AI's way: moves into the "Con la IA" side of the two-ways bar when the UX redesign's UX-3 lands. */}
-            <MapAiButton caseId={caseId} hasMap={opened.caseMap.withContent > 0} />
+            {/* The AI's way, for a map with content: moves into the "Con la IA" side of the two-ways bar when the UX redesign's UX-3 lands.
+                An empty map's AI card holds the action, so the header has none (review round 1 of case map speed, M4; P7, U4). */}
+            {opened.caseMap.withContent > 0 ? <MapAiButton caseId={caseId} hasMap /> : null}
           </>
         ) : null
       }
@@ -270,7 +271,7 @@ export function CaseMapScreen() {
     >
       <div className="flex flex-col gap-4">
         <PartBar map={map} part={part} />
-        <MapDraftPanel caseId={caseId} />
+        <MapDraftPanel caseId={caseId} quiet={showWays} />
         {showWays ? (
           <MapWays
             caseId={caseId}
