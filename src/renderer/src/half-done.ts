@@ -92,7 +92,7 @@ export function keepPastedDraft(caseId: string, sectionId: ReportSectionId, text
 export function savePastedSection(caseId: string, sectionId: ReportSectionId, text: string, onSaved?: (result: Extract<SectionSaveResult, { outcome: "saved" }>) => void): Promise<boolean> {
   return trackSave(
     caseId,
-    window.aba.saveSectionText(caseId, sectionId, text, null).then((result) => {
+    window.aba.saveSectionText(caseId, sectionId, text, null, true).then((result) => {
       if (result.outcome !== "saved") return false;
       onSaved?.(result);
       return true;

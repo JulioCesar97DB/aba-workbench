@@ -21,6 +21,8 @@ const RequestTextSchema = z.string().trim().min(1).max(MAX_REQUEST_LENGTH);
 
 export const SectionTextSchema = z.string().max(MAX_SECTION_TEXT_LENGTH * 2);
 export const EditingSchema = VersionInputSchema.nullable();
+/** Whether a text comes from "Pegar lo que ya escribiste" (saveOwnText's `pasted`). */
+export const PastedSchema = z.boolean();
 export const VersionSchema = VersionInputSchema;
 export const ApproveSchema = VersionInputSchema.nullable();
 export const NotesSchema = z.string().max(MAX_NOTES_LENGTH * 2);
@@ -183,10 +185,14 @@ function checkedText(raw: string): string {
 /**
  * Her own text (pasted, typed or an edit). `editing` is the version this editing pass
  * made: it is updated in place while it is still the newest version and hers. Otherwise a
- * new version starts: "hers" when the section has none yet, "edited" after. A new version
- * takes the approval away (she approves again). Null when nothing changed.
+ * new version starts: "hers" when the section has none yet, "edited" after. A text from
+ * "Pegar lo que ya escribiste" (`pasted`) is always "hers", also over an AI draft (owner's
+ * decision on UX-6 review B1): it is a new text she already wrote, not an edit of what was
+ * there, so the other sections and the case map build on it; its `basedOn` still says what
+ * it replaced. A new version takes the approval away (she approves again). Null when
+ * nothing changed.
  */
-export function saveOwnText(data: CaseData, id: ReportSectionId, raw: string, editing: number | null, now: string): { data: CaseData; version: number } | null {
+export function saveOwnText(data: CaseData, id: ReportSectionId, raw: string, editing: number | null, now: string, { pasted = false }: { pasted?: boolean } = {}): { data: CaseData; version: number } | null {
   const text = checkedText(raw);
   const section = storedSection(data, id);
   const newest = section.versions.at(-1);
@@ -203,12 +209,13 @@ export function saveOwnText(data: CaseData, id: ReportSectionId, raw: string, ed
   const number = nextNumber(section);
   const version: StoredVersion = {
     number,
-    kind: section.versions.length === 0 ? "hers" : "edited",
+    kind: pasted || section.versions.length === 0 ? "hers" : "edited",
     createdAt: now,
     updatedAt: now,
     ...(current ? { basedOn: current.number } : {}),
     // Her hand fix of the version she approved stays final for the other sections while she has not approved it again.
-    ...(current && section.approvedVersion === current.number ? { fromApproved: true as const } : {}),
+    // (A pasted text is hers, final on its own: it needs no mark.)
+    ...(current && !pasted && section.approvedVersion === current.number ? { fromApproved: true as const } : {}),
     text,
   };
   return { data: withSection(data, id, withoutApproval({ ...section, versions: [...section.versions, version], currentVersion: number })), version: number };

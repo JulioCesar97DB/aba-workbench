@@ -513,8 +513,10 @@ export interface AbaApi {
   /**
    * Saves the text she writes herself (pasted from ABA Matrix, or an edit). `editing` is
    * the version this editing pass made and keeps updating; null starts a new version.
+   * `pasted`: a box of "Pegar lo que ya escribiste", always saved as her own text ("hers"),
+   * also over an AI draft (UX-6 review B1). Left out (false) for the section screen's saves.
    */
-  saveSectionText(caseId: string, sectionId: ReportSectionId, text: string, editing: number | null): Promise<SectionSaveResult>;
+  saveSectionText(caseId: string, sectionId: ReportSectionId, text: string, editing: number | null, pasted?: boolean): Promise<SectionSaveResult>;
   /** Shows another version: nothing is lost, only which one is current changes. */
   setCurrentVersion(caseId: string, sectionId: ReportSectionId, version: number): Promise<SectionSaveResult>;
   /** Approves a version (null takes the approval back). */

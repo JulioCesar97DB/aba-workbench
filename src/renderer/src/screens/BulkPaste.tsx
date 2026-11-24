@@ -26,9 +26,9 @@ import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
  * "Pegar lo que ya escribiste" (#/cases/<id>/report/paste; owner's proposal §4 "4 · Informe"
  * and "Picking up a half-done assessment", decision T10): the nine sections in ABA Matrix's
  * order as collapsed rows, each with a box. "Guardar" saves each filled box through the
- * section's own save (window.aba.saveSectionText, no editing pass), one call per box, one
- * after another: each becomes her version of that section exactly as "Ya la escribí" makes
- * it on the section's screen. A box that could not be saved keeps its text and says so,
+ * section's own save (window.aba.saveSectionText, no editing pass, `pasted`), one call per
+ * box, one after another: each becomes her version of that section ("hers"), as "Ya la
+ * escribí" makes it on the section's screen, also over an AI draft (review B1). A box that could not be saved keeps its text and says so,
  * with "Volver a intentar"; the main process keeps it too (src/main/failed-saves.ts), so a
  * reload puts it back here. What the boxes hold is kept while the app runs (half-done.ts).
  */

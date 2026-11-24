@@ -77,8 +77,8 @@ function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
   };
 }
 
-/** Her sections that are hers or approved, in the report's order, with their versions. */
-function herSectionsOf(data: CaseData) {
+/** Her sections that are hers or approved, in the report's order, with their versions. Exported for the tests. */
+export function herSectionsOf(data: CaseData) {
   return REPORT_SECTIONS.flatMap((section) => {
     const version = finalVersion(data, section.id);
     return version && version.text.trim() !== "" ? [{ id: section.id, title: section.title, text: version.text, version: version.number }] : [];

@@ -1,7 +1,7 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import { chmodSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { defaultCasesFolder, expect, firstScreen, goTo, newCaseButton, test } from "./app.ts";
+import { defaultCasesFolder, expect, firstScreen, goTo, newCaseButton, seedCase, test } from "./app.ts";
 
 /*
  * A half-done assessment (UX-6; owner's proposal §4 "Nuevo caso", "4 · Informe" and "Picking
@@ -156,9 +156,12 @@ test("Paste what you already wrote: each filled box becomes her version of its s
   expect(data.sections["risk-assessment"].versions.map((v: { text: string }) => v.text)).toEqual(["Invented risk assessment."]);
   expect(data.sections["crisis-plan"].versions.map((v: { text: string }) => v.text)).toEqual(["Her earlier crisis plan.", "Her crisis plan from ABA Matrix."]);
   expect(data.sections["environmental-changes"]).toBeUndefined();
-  // Hers, through the section's own save: "hers" for a first text, "edited" over an earlier one.
+  // Hers, through the section's own save with the "pasted" flag: always "hers", also over an earlier one (review B1).
   expect(data.sections["background-information"].versions[0].kind).toBe("hers");
-  expect(data.sections["crisis-plan"].versions.map((v: { kind: string }) => v.kind)).toEqual(["hers", "edited"]);
+  expect(data.sections["crisis-plan"].versions.map((v: { kind: string; basedOn?: number }) => [v.kind, v.basedOn])).toEqual([
+    ["hers", undefined],
+    ["hers", 1],
+  ]);
 
   // The sidebar's sections say so, the section's own screen shows it as hers, and the case no longer waits for her sections.
   await row(page, "background-information").getByRole("link", { name: "Open the section" }).click();
@@ -169,6 +172,68 @@ test("Paste what you already wrote: each filled box becomes her version of its s
   await expect(page.getByTestId("half-done-banner")).toHaveCount(0);
   await goTo(page, `/cases/${id}/report`);
   await expect(page.getByTestId("paste-card")).not.toHaveAttribute("data-first", "true");
+});
+
+test("Paste what you already wrote: a text pasted over an AI draft is hers, so the AI and the case map use it (review B1, the owner's decision)", async ({ launch, home }) => {
+  // A case whose Background Information has an AI draft, written into its data file before the app starts. Invented.
+  const casesFolder = defaultCasesFolder(home);
+  const id = "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const at = "2026-11-20T10:00:00.000Z";
+  const generation = {
+    provider: "anthropic",
+    requestedModel: "invented-model",
+    servedModel: "invented-model",
+    effort: "medium",
+    rulesVersions: {},
+    sourcesUsed: [],
+    sectionsUsed: [],
+    deidentified: false,
+    usage: { uncachedInputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500, reasoningTokens: null },
+    costUsd: null,
+  };
+  const folder = seedCase(casesFolder, "Drafted case", {
+    schemaVersion: 4,
+    id,
+    label: "Drafted case",
+    createdAt: at,
+    updatedAt: at,
+    sources: [],
+    sections: {
+      "background-information": {
+        currentVersion: 1,
+        approvedVersion: null,
+        versions: [{ number: 1, kind: "draft", createdAt: at, text: "An invented AI draft of the background.", generation }],
+      },
+    },
+  });
+  const read = () => JSON.parse(readFileSync(path.join(folder, "aba-case.json"), "utf8"));
+  const page = await firstScreen(await launch());
+  await goTo(page, `/cases/${id}/report/paste`);
+  await expect(heading(page)).toHaveText("Paste what you already wrote");
+  await expect(row(page, "background-information").getByTestId("state-chip")).toHaveAttribute("data-state", "drafted");
+  const box = await openRow(page, "background-information");
+  await expect(row(page, "background-information")).toContainText("This section already has text in the app: what you paste becomes a new version, and the earlier ones stay.");
+  await box.fill("Her background from ABA Matrix.");
+  await page.getByTestId("bulk-paste-save").click();
+  await expect(page.getByTestId("bulk-paste-result")).toHaveText("1 section saved as yours.");
+  await expect(row(page, "background-information")).toHaveAttribute("data-outcome", "saved");
+  await expect(row(page, "background-information").getByTestId("state-chip")).toHaveAttribute("data-state", "hers");
+
+  // On disk: a new version of hers, not a correction of the draft; it still says what it replaced, and the draft stays.
+  const versions = read().sections["background-information"].versions;
+  expect(versions.map((v: { number: number; kind: string; basedOn?: number; text: string }) => [v.number, v.kind, v.basedOn, v.text])).toEqual([
+    [1, "draft", undefined, "An invented AI draft of the background."],
+    [2, "hers", 1, "Her background from ABA Matrix."],
+  ]);
+  expect(versions[1].generation).toBeUndefined();
+  expect(versions[1].fromApproved).toBeUndefined();
+
+  // The section's own screen shows it as written by her, not corrected.
+  await row(page, "background-information").getByRole("link", { name: "Open the section" }).click();
+  await expect(heading(page)).toHaveText("Background Information");
+  await expect(page.getByTestId("state-chip").first()).toHaveAttribute("data-state", "hers");
+  await expect(page.getByTestId("section-view")).toContainText("Her background from ABA Matrix.");
+  await expect(page.getByTestId("version-line")).toContainText("v2: yours");
 });
 
 async function failNextSaveOf(app: ElectronApplication, caseFolder: string, sectionId: string) {
