@@ -434,6 +434,11 @@ export function registerIpc(options: {
     return sectionCall(() => options.sections.copy(caseId, sectionId, version), "The section could not be copied.");
   });
 
+  ipcMain.handle(IPC_CHANNELS.readReport, (event, caseId: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.sections.readReport(caseId), "The report could not be read.");
+  });
+
   /*
    * The case map (src/main/case-map-service.ts checks every argument). What she types in an
    * item goes through the failed saves, like a section's text, so it is kept when it cannot

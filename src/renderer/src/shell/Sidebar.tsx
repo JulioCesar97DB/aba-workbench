@@ -157,7 +157,9 @@ export function CaseSidebar({
                   ? t("caseMap.sidebarCount", count.spoken.values as { approved: number; total: number })
                   : count.spoken.key === "sources"
                     ? t("nav.sourcesCount", count.spoken.values as { count: number })
-                    : t("nav.reportCount", count.spoken.values as { done: number; total: number });
+                    : count.spoken.key === "review"
+                      ? t("nav.reviewCount", count.spoken.values as { copied: number; total: number })
+                      : t("nav.reportCount", count.spoken.values as { done: number; total: number });
             return (
               <li key={step}>
                 <StepNavItem to={casePath(caseId, step)} number={index + 1} state={state} stateText={t(STATE_TEXT_KEYS[state])} laterTag={t("nav.stepLaterTag")} detail={count?.shown} subtitle={stepSubtitle(t, step)} compact={inReport}>
@@ -171,7 +173,7 @@ export function CaseSidebar({
                     </h2>
                     <ul className="flex flex-col">
                       {REPORT_SECTIONS.map((section) => {
-                        const summary = states.get(section.id) ?? { id: section.id, state: "not-started" as const, currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0 };
+                        const summary = states.get(section.id) ?? { id: section.id, state: "not-started" as const, currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0, copiedVersion: null, copied: false };
                         const text = sectionStateText(t, summary);
                         return (
                           <li key={section.id}>

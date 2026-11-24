@@ -8,6 +8,7 @@ import type {
   GenerationUpdateEvent,
   GetSectionResult,
   InstructionsSaveResult,
+  ReadReportResult,
   NotesSaveResult,
   SectionSaveResult,
   StartSectionResult,
@@ -15,7 +16,7 @@ import type {
 import { defaultModel } from "../shared/models.ts";
 import type { ReportSectionId } from "../shared/report-sections.ts";
 import { abaMatrixClipboard, findMarkers, isParagraphAnswer, MAX_SECTION_TEXT_LENGTH, replaceParagraph, tidySectionText } from "../shared/section-text.ts";
-import type { SectionRequestInput, VersionKind } from "../shared/sections.ts";
+import { versionToCopy, type SectionRequestInput, type VersionKind } from "../shared/sections.ts";
 import type { CaseData, GenerationRecord } from "./case-file.ts";
 import {
   addAiVersion,
@@ -23,6 +24,7 @@ import {
   approveVersion,
   contextSections,
   EditingSchema,
+  markCopied,
   NotesSchema,
   ownTextBefore,
   saveOwnText,
@@ -194,7 +196,29 @@ export class SectionService {
     if (result.kind !== "unchanged" && result.kind !== "saved") return { outcome: "case-unavailable" };
     if (result.value === null) return { outcome: "version-not-found" };
     await this.options.writeClipboard(abaMatrixClipboard(result.value));
-    return { outcome: "copied", markers: findMarkers(result.value).length };
+    // Marked only once the clipboard holds it (T8): a mark never says more than happened.
+    const marked = await this.change(caseId, id, (data, now) => markCopied(data, id, number, now) ?? "version-not-found");
+    const markers = findMarkers(result.value);
+    return {
+      outcome: "copied",
+      markers: markers.length,
+      allMissing: markers.every((marker) => marker.kind === "missing"),
+      marked: marked.outcome === "saved" ? { section: marked.section, sections: marked.sections } : null,
+    };
+  }
+
+  /** Every section with the text of the version she would copy, for Revisión y copia and "Leer todo". Nothing is saved. */
+  async readReport(caseId: unknown): Promise<ReadReportResult> {
+    const result = await this.options.cases.changeCase(caseId, () => ({ save: null, value: null }));
+    if (result.kind !== "unchanged" && result.kind !== "saved") return { outcome: "case-unavailable" };
+    const data = result.data;
+    return {
+      outcome: "read",
+      sections: sectionSummaries(data).map((summary) => {
+        const version = versionToCopy(summary);
+        return { summary, version, text: version === null ? null : versionText(data, summary.id, version) };
+      }),
+    };
   }
 
   /**

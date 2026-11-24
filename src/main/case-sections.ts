@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ContextSection } from "../lib/rules.ts";
 import { REPORT_SECTIONS, type ReportSectionId } from "../shared/report-sections.ts";
 import { MAX_NOTES_LENGTH, MAX_REQUEST_LENGTH, MAX_SECTION_TEXT_LENGTH, normalizeLineEndings, type SectionShape } from "../shared/section-text.ts";
-import { AI_VERSION_KINDS, sectionState, type ConsistencyResult, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion, type VersionKind } from "../shared/sections.ts";
+import { AI_VERSION_KINDS, isCopied, sectionState, type ConsistencyResult, type SectionDetail, type SectionRequestInput, type SectionSummary, type SectionVersion, type VersionKind } from "../shared/sections.ts";
 import type { CaseData, GenerationRecord, StoredSection, StoredUsage, StoredVersion } from "./case-file.ts";
 
 /*
@@ -75,14 +75,16 @@ function stateOf(section: StoredSection): SectionSummary["state"] {
 
 export function sectionSummary(data: CaseData, id: ReportSectionId): SectionSummary {
   const section = storedSection(data, id);
-  return {
+  const summary = {
     id,
     state: stateOf(section),
     currentVersion: currentOf(section)?.number ?? null,
     approvedVersion: findVersion(section, section.approvedVersion)?.number ?? null,
     versionCount: section.versions.length,
     costUsd: sectionCost(section),
+    copiedVersion: findVersion(section, section.copiedVersion ?? null)?.number ?? null,
   };
+  return { ...summary, copied: isCopied(summary) };
 }
 
 /** What the AI cost for this section so far: every version and every check whose price is known (review, low 2). */
@@ -254,6 +256,17 @@ export function approveVersion(data: CaseData, id: ReportSectionId, number: numb
   if (number === null) return withSection(data, id, withoutApproval(section));
   if (!findVersion(section, number)) return null;
   return withSection(data, id, { ...section, approvedVersion: number, approvedAt: now, currentVersion: number });
+}
+
+/**
+ * She copied a version for ABA Matrix (owner's decision T8): when, and which version. The
+ * last copy is the one kept; nothing else changes (not the version shown, not the
+ * approval). Null when the section has no such version.
+ */
+export function markCopied(data: CaseData, id: ReportSectionId, number: number, now: string): CaseData | null {
+  const section = storedSection(data, id);
+  if (!findVersion(section, number)) return null;
+  return withSection(data, id, { ...section, copiedAt: now, copiedVersion: number });
 }
 
 /** The text a request starts from. Null when the version is not there. */

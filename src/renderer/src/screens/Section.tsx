@@ -12,7 +12,7 @@ import type { FailedSave } from "../../../shared/sources.ts";
 import { aiErrorCanRetry, aiErrorKind, aiErrorNeedsSettings } from "../ai-errors.ts";
 import { useAutosave, useKeptText, type AutosaveStatus } from "../autosave.tsx";
 import { onRetried, retry, useFailedSavesLoaded, useSectionFailures } from "../case-saves.tsx";
-import { casePath, caseSummaryPath } from "../case-steps.tsx";
+import { casePath } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { cn } from "../components/cn.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -137,9 +137,12 @@ interface EditorState {
   text: string;
 }
 
+/** What a copy on this screen did: the version, what was still marked in it (the main process's count), and whether its mark was saved (T8). */
 interface Copied {
   number: number;
-  text: string;
+  markers: number;
+  allMissing: boolean;
+  marked: boolean;
 }
 
 function SectionWorkspace({ caseId, section, initial }: { caseId: string; section: ReportSection; initial: SectionDetail }) {
@@ -307,10 +310,12 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     // S2). The visible line and the header stay as they are meanwhile.
     setCopyAnnounced(false);
     const result = await window.aba.copySection(caseId, section.id, version.number).catch(() => null);
+    // The copy is marked in the case (T8): the section as saved, and the sidebar's and the summary's states.
+    if (result?.outcome === "copied" && result.marked) take(result.marked.section, result.marked.sections);
     // The line names where to paste it, what is still marked, and whether this is the approved version (P2).
     const done = result?.outcome === "copied";
     focusAfterCopy.current = done && finishes;
-    setCopied(done ? { number: version.number, text: version.text } : "failed");
+    setCopied(result?.outcome === "copied" ? { number: version.number, markers: result.markers, allMissing: result.allMissing, marked: result.marked !== null } : "failed");
     setCopyAnnounced(true);
   }
 
@@ -372,11 +377,15 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   const display: Mode | "writing" = writing ? "writing" : detail.versions.length === 0 && mode !== "paste" ? "choose" : mode === "edit" && !current ? "choose" : mode;
   const approvedHere = current !== null && detail.approvedVersion === current.number;
   const changesShown = current !== null && changesFor === current.number;
-  const copiedNumber = copied !== null && copied !== "failed" ? copied.number : null;
+  const copiedHere = copied !== null && copied !== "failed" ? copied : null;
+  // "Copiada" only from a mark the case holds (T8): a copy whose mark could not be saved never claims it (review round 1, S2).
+  const copiedNumber = copiedHere?.marked ? copiedHere.number : detail.copiedVersion;
+  // What she copied is on her clipboard all the same: for what comes next on this screen, the copy is done.
+  const doneNumber = copiedHere ? copiedHere.number : detail.copiedVersion;
   const next = nextSection(opened.sections, section.id);
   const step = nextStep(opened.sections, section.id);
   // The section's minimum (approved, then copied) makes "Siguiente paso" the primary: one primary per screen (layout rule 9).
-  const sectionDone = approvedHere && copiedNumber === current?.number;
+  const sectionDone = approvedHere && doneNumber === current?.number;
 
   const chip: ReactNode =
     display === "writing" ? (
@@ -418,10 +427,11 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         </Button>
       );
     } else {
+      // Her text not approved, copied as it is: "Copiar otra vez", as on Revisión y copia (review round 1, minor 1). Approve stays the primary.
       secondary = (
-        <Button onClick={() => void copy()}>
+        <Button data-testid={doneNumber === current.number ? "copy-again" : undefined} onClick={() => void copy()}>
           <Icon name="copy" />
-          {t("section.copyShort")}
+          {doneNumber === current.number ? t("section.copyAgain") : t("section.copyShort")}
         </Button>
       );
       primary = (
@@ -604,7 +614,10 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         ))}
         {display === "view" && current ? (
           copied !== null ? (
-            <CopiedLine copied={copied} section={section} approvedVersion={detail.approvedVersion} next={next} caseId={caseId} />
+            <>
+              <CopiedLine copied={copied} section={section} approvedVersion={detail.approvedVersion} next={next} caseId={caseId} />
+              {copied !== "failed" && !copied.marked ? <MarkNotSaved /> : null}
+            </>
           ) : (
             <VersionLine detail={detail} version={current} changesShown={changesShown} onToggleChanges={() => setChangesFor(changesShown ? null : current.number)} />
           )
@@ -828,7 +841,7 @@ function CopiedLine({ copied, section, approvedVersion, next, caseId }: { copied
       </p>
     );
   }
-  const lead = copiedLead(copied.text);
+  const lead = copiedLead(copied);
   const warn = lead.key !== "copiedLead" || approvedVersion !== copied.number;
   return (
     <p data-testid="copied-line" className={cn("max-w-reading text-sm font-medium", warn ? "text-warning" : "text-success")}>
@@ -848,10 +861,24 @@ function CopiedLine({ copied, section, approvedVersion, next, caseId }: { copied
   );
 }
 
+/**
+ * The copy is on her clipboard, but the case could not keep that she copied it (T8; UX-7
+ * review round 1, S2): said as a failed save is, so "Copiada" missing later is no surprise.
+ * Not kept to try again: copying again is the retry (docs/sections.md). Also Review.tsx.
+ */
+export function MarkNotSaved({ className }: { className?: string }) {
+  const { t } = useTranslation();
+  return (
+    <p role="alert" data-testid="mark-not-saved" className={cn("max-w-reading text-sm font-medium text-danger", className)}>
+      {t("section.markNotSaved")}
+    </p>
+  );
+}
+
 /** What the copied line says, as one sentence for the screen's live region (review round 1, S2). */
 function copiedSentence(t: TFunction, copied: Copied | "failed", section: ReportSection, approvedVersion: number | null, next: ReportSection | null): string {
   if (copied === "failed") return t("section.copyFailed");
-  const lead = copiedLead(copied.text);
+  const lead = copiedLead(copied);
   const parts = [lead.key === "copiedLead" ? t("section.copiedLead") : t(`section.${lead.key}`, { count: lead.count }), t("section.pasteWhere", { section: section.title })];
   if (approvedVersion === null) parts.push(t("section.copiedNotApprovedYet"));
   else if (approvedVersion !== copied.number) parts.push(t("section.copiedOtherVersion", { number: copied.number, approved: approvedVersion }));
@@ -1260,8 +1287,8 @@ function Composer({ version, nextNumber, providers, onRequest, onEdit }: { versi
   );
 }
 
-/** The markers the model leaves stand out in the text. */
-function Highlighted({ text }: { text: string }) {
+/** The markers the model leaves stand out in the text. Also "Leer todo" (Review.tsx). */
+export function Highlighted({ text }: { text: string }) {
   const parts = text.split(/(\[(?:MISSING|CHECK)\s*:[^\]]*\])/u);
   return (
     <>
@@ -1412,15 +1439,14 @@ function RailPart({ children }: { children: ReactNode }) {
 }
 
 /**
- * "Siguiente paso" for a section: the next one not ready; with none left, the case's summary
- * (review round 1, M1), said "all ready" only once this section is ready too (round 2, S-1).
- * Revisión y copia is not built yet, so "Siguiente paso" skips it (owner's decision P3, UX-5).
+ * "Siguiente paso" for a section: the next one not ready; with none left, Revisión y copia
+ * (UX-7), said "all ready" only once this section is ready too (UX-3 review round 2, S-1).
  */
 function SectionNextStep({ caseId, step, primary }: { caseId: string; step: ReturnType<typeof nextStep>; primary: boolean }) {
   const { t } = useTranslation();
   if (step.kind === "review") {
-    const name = step.allReady ? t("section.allReadyName", { total: REPORT_SECTIONS.length }) : t("section.thenSummaryName");
-    return <NextStepCard name={name} body={t(step.allReady ? "section.allReadyBody" : "section.thenSummaryBody")} to={caseSummaryPath(caseId)} action={t("section.toSummary")} primary={primary} />;
+    const name = step.allReady ? t("section.allReadyName", { total: REPORT_SECTIONS.length }) : t("section.thenReviewName");
+    return <NextStepCard name={name} body={t(step.allReady ? "section.allReadyBody" : "section.thenReviewBody")} to={casePath(caseId, "review")} action={t("section.toReview")} primary={primary} />;
   }
   return <NextStepCard name={step.section.title} nameLang="en" body={t("section.nextSectionBody")} to={casePath(caseId, "report", step.section.id)} action={t("section.nextSectionAction")} primary={primary} />;
 }

@@ -17,10 +17,11 @@ import { CASE_STEPS, type CaseStep } from "./steps.ts";
  *   4. a part of the case map with content, not approved (once the map has content);
  *   5. no case map and no section yet;
  *   6. the first section in ABA Matrix's order not started;
- *   7. (UX-7) approved sections not copied yet: copied marks do not exist yet (T8 arrives with
- *      Revisión y copia), so this rule is left out. UX-7 adds `copied` to the sections' inputs
- *      and one entry to RULES, between "start-section" and the end;
- *   8. everything done.
+ *   7. the first section, in ABA Matrix's order, ready (hers or approved) and not copied as
+ *      it is now (the copied marks of decision T8): "Copia <section> a ABA Matrix", done in
+ *      Revisión y copia. By then every section is started and none waits as an AI draft, so
+ *      every section is ready: hers counts like approved, as the section screen's "ready";
+ *   8. everything done: the nine sections copied.
  */
 
 export interface NextInputs {
@@ -35,8 +36,8 @@ export interface NextInputs {
    * then still says to approve the map, without naming the part.
    */
   mapPartToApprove: MapPartId | null;
-  /** The sections' states; a section missing here is not started. */
-  sections: ReadonlyArray<{ id: ReportSectionId; state: SectionState }>;
+  /** The sections' states, and whether each is copied as it is now (T8); a section missing here is not started. */
+  sections: ReadonlyArray<{ id: ReportSectionId; state: SectionState; copied: boolean }>;
 }
 
 export type NextThing =
@@ -46,6 +47,7 @@ export type NextThing =
   | { kind: "approve-map"; part: MapPartId | null }
   | { kind: "build-map" }
   | { kind: "start-section"; sectionId: ReportSectionId }
+  | { kind: "copy-section"; sectionId: ReportSectionId }
   | { kind: "all-ready" };
 
 function stateOf(inputs: NextInputs, id: ReportSectionId): SectionState {
@@ -69,7 +71,13 @@ const RULES: ReadonlyArray<(inputs: NextInputs) => NextThing | null> = [
     const first = REPORT_SECTIONS.find((section) => stateOf(inputs, section.id) === "not-started");
     return first ? { kind: "start-section", sectionId: first.id } : null;
   },
-  // UX-7: rule 7, "Copia <section> a ABA Matrix", goes here.
+  (inputs) => {
+    const first = REPORT_SECTIONS.find((section) => {
+      const summary = inputs.sections.find((item) => item.id === section.id);
+      return (summary?.state === "hers" || summary?.state === "approved") && !summary.copied;
+    });
+    return first ? { kind: "copy-section", sectionId: first.id } : null;
+  },
 ];
 
 /** The next thing to do in the case (§6). */
@@ -99,6 +107,8 @@ export function currentStep(inputs: NextInputs): CaseStep | null {
     case "review-draft":
     case "start-section":
       return "report";
+    case "copy-section":
+      return "review";
     default:
       return null;
   }
@@ -119,8 +129,9 @@ export function nextThingPath(caseId: string, thing: NextThing): string {
       return thing.part ? `${base}/case-map?part=${thing.part}` : `${base}/case-map`;
     case "build-map":
       return `${base}/case-map`;
+    case "copy-section":
     case "all-ready":
-      return `${base}/report`;
+      return `${base}/review`;
   }
 }
 
