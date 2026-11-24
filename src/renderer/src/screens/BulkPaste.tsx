@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { REPORT_SECTIONS, type ReportSection, type ReportSectionId } from "../../../shared/report-sections.ts";
 import { countWords, hasLinesInParagraphs, linesAsParagraphs, MAX_SECTION_TEXT_LENGTH, splitParagraphs } from "../../../shared/section-text.ts";
-import type { SectionDetail, SectionState, SectionSummary } from "../../../shared/sections.ts";
+import type { SectionState } from "../../../shared/sections.ts";
 import { filledBoxes, isFilled, isTooLong, saveBoxes, sectionChip, type PastedTexts } from "../bulk-paste.ts";
 import { onRetried, useFailedSavesLoaded, useSectionFailures, type SectionFailure } from "../case-saves.tsx";
 import { casePath, stepTitle } from "../case-steps.tsx";
@@ -43,12 +43,6 @@ function keptTexts(failures: SectionFailure[]): Map<ReportSectionId, { id: strin
     if (item.about === "section" && section && item.editing === null && item.text !== null) kept.set(section.id, { id: item.id, text: item.text });
   }
   return kept;
-}
-
-/** The case's sections with one of them as it is now. */
-function withSummary(sections: SectionSummary[], detail: SectionDetail): SectionSummary[] {
-  const { id, state, currentVersion, approvedVersion, versionCount, costUsd } = detail;
-  return sections.map((section) => (section.id === id ? { id, state, currentVersion, approvedVersion, versionCount, costUsd } : section));
 }
 
 export function BulkPasteScreen() {
@@ -98,22 +92,17 @@ export function BulkPasteScreen() {
     for (const id of restored ?? []) void window.aba.failedSaveShown(id).catch(() => undefined);
   }, [restored]);
 
-  const sectionsRef = useRef(opened.sections);
-  useEffect(() => {
-    sectionsRef.current = opened.sections;
-  }, [opened.sections]);
   // "Volver a intentar" from elsewhere (Home, the summary, the header's save state) saved a box shown here as not saved:
-  // it shows saved, and the case's sections are read again for its chip and the sidebar.
+  // it shows saved, and the case's sections from that save update its chip and the sidebar.
   useEffect(
     () =>
-      onRetried((item) => {
+      onRetried((item, sections) => {
         if (item.caseId !== caseId || item.about !== "section" || !item.sectionId) return;
         const sectionId = item.sectionId as ReportSectionId;
         setOutcomes((current) => (current[sectionId] === "failed" ? { ...current, [sectionId]: "saved" } : current));
         setTexts((current) => (current[sectionId] === item.text ? { ...current, [sectionId]: "" } : current));
-        void window.aba.getSection(caseId, sectionId).then((result) => {
-          if (result.outcome === "read") patch(caseId, { sections: withSummary(sectionsRef.current, result.section) });
-        });
+        // The save's own summaries, as the main process built them (review round 2, S2).
+        if (sections) patch(caseId, { sections });
       }),
     [caseId, patch],
   );
