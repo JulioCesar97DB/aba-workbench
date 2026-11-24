@@ -18,7 +18,7 @@ export interface NextWords {
   action: string | null;
 }
 
-function SectionTitle({ i18nKey, sectionId }: { i18nKey: "next.reviewDraftTitle" | "next.startSectionTitle"; sectionId: string }) {
+function SectionTitle({ i18nKey, sectionId }: { i18nKey: "next.reviewDraftTitle" | "next.startSectionTitle" | "next.copySectionTitle"; sectionId: string }) {
   return <TransWithTerms i18nKey={i18nKey} values={{ section: findReportSection(sectionId)?.title ?? sectionId }} />;
 }
 
@@ -40,6 +40,8 @@ export function nextWords(t: TFunction, thing: NextThing): NextWords {
       return { title: t("next.buildMapTitle"), body: t("next.buildMapBody"), action: t("next.buildMapAction") };
     case "start-section":
       return { title: <SectionTitle i18nKey="next.startSectionTitle" sectionId={thing.sectionId} />, body: t("next.startSectionBody"), action: t("next.openSection") };
+    case "copy-section":
+      return { title: <SectionTitle i18nKey="next.copySectionTitle" sectionId={thing.sectionId} />, body: t("next.copySectionBody"), action: t("next.copySectionAction") };
     case "all-ready":
       return { title: t("next.allReadyTitle", { total: REPORT_SECTIONS.length }), body: t("next.allReadyBody"), action: t("next.allReadyAction") };
   }

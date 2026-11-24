@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { CASE_STEPS, casePath, caseSummaryPath, stepTitle } from "../case-steps.tsx";
+import { CASE_STEPS, casePath, stepTitle } from "../case-steps.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { ButtonLink } from "../components/Link.tsx";
 import { TransWithTerms } from "../components/Trans.tsx";
@@ -13,12 +13,12 @@ import { WorkArea } from "../shell/WorkArea.tsx";
  * The honest "coming later" (owner's proposal §3.5, decision P3; mockup 12): a step that is
  * not built yet says so in a dashed card, says what it will do and what to do meanwhile,
  * and sends her on to the next useful step with the screen's one primary button. Then the
- * two ways: what she does today by hand, what the AI will do later. Plan (step 3) and, until
- * UX-7 builds it, Revisión y copia (step 5). Their sidebar steps stay dashed with "Pronto".
+ * two ways: what she does today by hand, what the AI will do later. Plan (step 3); its
+ * sidebar step stays dashed with "Pronto". (Revisión y copia, step 5, is built: Review.tsx.)
  */
 
 /** The step header of a step not built yet: "Paso 3 de 5", its name and a dashed "Llega más adelante". */
-function ComingLaterHeader({ step }: { step: "interventions" | "review" }) {
+function ComingLaterHeader({ step }: { step: "interventions" }) {
   const { t } = useTranslation();
   return (
     <StepHeader
@@ -71,30 +71,6 @@ export function PlanScreen() {
           secondary={<ButtonLink to={casePath(id, "case-map")}>{t("plan.backToMap")}</ButtonLink>}
         />
         <TwoWays layout="cards" hand={{ title: t("plan.handTitle"), body: <TransWithTerms i18nKey="plan.handBody" /> }} ai={{ title: t("plan.aiTitle"), body: t("plan.aiBody") }} />
-      </div>
-    </WorkArea>
-  );
-}
-
-/** Step 5, Revisión y copia: not built yet (UX-7 builds it). Each section is copied from its own screen meanwhile. */
-export function ReviewScreen() {
-  const { t } = useTranslation();
-  const { id } = useOpenedCase();
-  return (
-    <WorkArea header={<ComingLaterHeader step="review" />} contentClassName="max-w-list">
-      <div className="flex flex-col gap-5">
-        <ComingLaterCard
-          what={t("review.what")}
-          meanwhile={t("review.meanwhile")}
-          primary={
-            <ButtonLink to={casePath(id, "report")} variant="primary">
-              {t("review.toReport")}
-              <Icon name="arrow" />
-            </ButtonLink>
-          }
-          secondary={<ButtonLink to={caseSummaryPath(id)}>{t("review.toSummary")}</ButtonLink>}
-        />
-        <TwoWays layout="cards" hand={{ title: t("review.handTitle"), body: t("review.handBody") }} ai={{ title: t("review.aiTitle"), body: t("review.aiBody") }} />
       </div>
     </WorkArea>
   );

@@ -13,9 +13,9 @@ import { currentStep, everythingDone, nextThing, nextThingPath, stepStates, type
 const ID = "4b8c1f2e-3d4a-4b5c-8d6e-7f8091a2b3c4";
 const [S1, S2, S3] = REPORT_SECTIONS.map((section) => section.id);
 
-/** The nine sections, all in one state, with some changed. */
-function sections(all: SectionState, changes: Partial<Record<ReportSectionId, SectionState>> = {}): NextInputs["sections"] {
-  return REPORT_SECTIONS.map((section) => ({ id: section.id, state: changes[section.id] ?? all }));
+/** The nine sections, all in one state, with some changed; none copied unless `copied` names them (or is true for all). */
+function sections(all: SectionState, changes: Partial<Record<ReportSectionId, SectionState>> = {}, copied: boolean | ReportSectionId[] = false): NextInputs["sections"] {
+  return REPORT_SECTIONS.map((section) => ({ id: section.id, state: changes[section.id] ?? all, copied: copied === true || (Array.isArray(copied) && copied.includes(section.id)) }));
 }
 
 const fresh: NextInputs = { unsaved: false, sources: 0, caseMap: { approved: 0, withContent: 0 }, mapPartToApprove: null, sections: sections("not-started") };
@@ -71,22 +71,37 @@ test("rule 6: the first section not started, in ABA Matrix's order", () => {
   assert.deepEqual(nextThing({ ...withDocs, caseMap: approvedMap }), { kind: "start-section", sectionId: S1 });
   assert.deepEqual(nextThing({ ...withDocs, caseMap: approvedMap, sections: sections("not-started", { [S1]: "approved", [S3]: "hers" }) }), { kind: "start-section", sectionId: S2 });
   // A section missing from the inputs is not started.
-  assert.deepEqual(nextThing({ ...withDocs, caseMap: approvedMap, sections: [{ id: S1, state: "approved" }] }), { kind: "start-section", sectionId: S2 });
+  assert.deepEqual(nextThing({ ...withDocs, caseMap: approvedMap, sections: [{ id: S1, state: "approved", copied: false }] }), { kind: "start-section", sectionId: S2 });
   assert.equal(currentStep({ ...withDocs, caseMap: approvedMap }), "report");
 });
 
-test("rule 8: every section hers or approved, the map approved or never made: everything is done", () => {
-  const done = { ...withDocs, caseMap: { approved: 5, withContent: 5 }, sections: sections("approved", { [S2]: "hers" }) };
+test("rule 7: every section ready, the first not copied as it is now, in ABA Matrix's order, is to copy (T8)", () => {
+  const ready = { ...withDocs, caseMap: { approved: 5, withContent: 5 }, sections: sections("approved", { [S2]: "hers" }) };
+  assert.deepEqual(nextThing(ready), { kind: "copy-section", sectionId: S1 });
+  assert.equal(currentStep(ready), "review");
+  assert.equal(nextThingPath(ID, { kind: "copy-section", sectionId: S1 }), `/cases/${ID}/review`);
+  // Hers counts like approved: ready to copy.
+  assert.deepEqual(nextThing({ ...ready, sections: sections("approved", { [S2]: "hers" }, [S1]) }), { kind: "copy-section", sectionId: S2 });
+  assert.deepEqual(nextThing({ ...ready, sections: sections("approved", {}, [S1, S2]) }), { kind: "copy-section", sectionId: S3 });
+  // A section not started or a draft comes first: rule 7 waits for them.
+  assert.deepEqual(nextThing({ ...ready, sections: sections("approved", { [S3]: "not-started" }) }), { kind: "start-section", sectionId: S3 });
+  assert.deepEqual(nextThing({ ...ready, sections: sections("approved", { [S3]: "drafted" }) }), { kind: "review-draft", sectionId: S3 });
+});
+
+test("rule 8: every section copied as it is now, the map approved or never made: everything is done", () => {
+  const done = { ...withDocs, caseMap: { approved: 5, withContent: 5 }, sections: sections("approved", { [S2]: "hers" }, true) };
   assert.deepEqual(nextThing(done), { kind: "all-ready" });
   assert.equal(currentStep(done), null);
   assert.equal(everythingDone(done), true);
-  assert.equal(nextThingPath(ID, { kind: "all-ready" }), `/cases/${ID}/report`);
-  // The map is optional: nine sections of hers with no map are done too.
-  assert.deepEqual(nextThing({ ...withDocs, sections: sections("hers") }), { kind: "all-ready" });
+  assert.equal(nextThingPath(ID, { kind: "all-ready" }), `/cases/${ID}/review`);
+  // The map is optional: nine sections of hers, copied, with no map are done too.
+  assert.deepEqual(nextThing({ ...withDocs, sections: sections("hers", {}, true) }), { kind: "all-ready" });
   assert.equal(everythingDone(withDocs), false);
+  // Ready but not all copied is not done.
+  assert.equal(everythingDone({ ...done, sections: sections("approved", {}, [S1, S2]) }), false);
 });
 
-test("the order: unsaved, documents, drafts, map, new map, first section, done", () => {
+test("the order: unsaved, documents, drafts, map, new map, first section, copy, done", () => {
   const everything: NextInputs = { unsaved: true, sources: 0, caseMap: { approved: 0, withContent: 2 }, mapPartToApprove: "client", sections: sections("not-started", { [S2]: "drafted" }) };
   const seen: string[] = [];
   let inputs = everything;
@@ -99,14 +114,19 @@ test("the order: unsaved, documents, drafts, map, new map, first section, done",
     else if (thing.kind === "approve-map") inputs = { ...inputs, caseMap: { approved: 0, withContent: 0 }, mapPartToApprove: null };
     else if (thing.kind === "build-map") inputs = { ...inputs, caseMap: { approved: 3, withContent: 3 } };
     else if (thing.kind === "start-section") inputs = { ...inputs, sections: sections("approved") };
+    else if (thing.kind === "copy-section") inputs = { ...inputs, sections: sections("approved", {}, true) };
     else break;
   }
-  assert.deepEqual(seen, ["unsaved", "add-documents", "review-draft", "approve-map", "build-map", "start-section", "all-ready"]);
+  assert.deepEqual(seen, ["unsaved", "add-documents", "review-draft", "approve-map", "build-map", "start-section", "copy-section", "all-ready"]);
 });
 
-test("Home's five segments are the sidebar's step states, the two steps not built yet included", () => {
+test("Home's five segments are the sidebar's step states, Plan (not built yet) included", () => {
   assert.deepEqual(
     stepStates({ sources: 2, caseMap: { approved: 1, withContent: 3 }, sections: sections("not-started", { [S1]: "hers" }) }).map((entry) => `${entry.step}:${entry.state}`),
-    ["sources:done", "case-map:in-progress", "interventions:later", "report:in-progress", "review:later"],
+    ["sources:done", "case-map:in-progress", "interventions:later", "report:in-progress", "review:not-started"],
+  );
+  assert.deepEqual(
+    stepStates({ sources: 2, caseMap: { approved: 3, withContent: 3 }, sections: sections("approved", {}, [S1]) }).map((entry) => `${entry.step}:${entry.state}`),
+    ["sources:done", "case-map:done", "interventions:later", "report:done", "review:in-progress"],
   );
 });

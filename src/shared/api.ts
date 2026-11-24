@@ -132,8 +132,8 @@ export interface CaseProgress {
   caseMap: CaseMapSummary;
   /** The first part of the map, in the map's order, with something in it and not approved; null when none. */
   mapPartToApprove: MapPartId | null;
-  /** Each section's state, in the report's order. */
-  sections: Array<Pick<SectionSummary, "id" | "state">>;
+  /** Each section's state and whether it is copied for ABA Matrix (T8), in the report's order. */
+  sections: Array<Pick<SectionSummary, "id" | "state" | "copied">>;
 }
 
 /** A case as Home lists it, with how far it is; null when that could not be read (the case is still listed). */
@@ -219,7 +219,25 @@ export interface AiPreferences {
   lastProvider: DraftingProvider | null;
 }
 
-export type CopySectionResult = { outcome: "copied"; markers: number } | { outcome: "version-not-found" } | { outcome: "case-unavailable" };
+/**
+ * A copy for ABA Matrix. Once the clipboard holds it, the copy is marked in the case
+ * (owner's decision T8): `marked` is the section and the sections as saved, or null when
+ * the mark could not be saved (the clipboard holds the text all the same).
+ */
+export type CopySectionResult =
+  | { outcome: "copied"; markers: number; marked: { section: SectionDetail; sections: SectionSummary[] } | null }
+  | { outcome: "version-not-found" }
+  | { outcome: "case-unavailable" };
+
+/** A section as Revisión y copia shows it: its summary and the text of the version she would copy (versionToCopy), null when none. */
+export interface ReportSectionText {
+  summary: SectionSummary;
+  version: number | null;
+  text: string | null;
+}
+
+/** Every section of the report, in ABA Matrix's order (Revisión y copia and "Leer todo"). */
+export type ReadReportResult = { outcome: "read"; sections: ReportSectionText[] } | { outcome: "case-unavailable" };
 
 /**
  * Why a folder inside the cases folder cannot be opened as a case:
@@ -542,6 +560,8 @@ export interface AbaApi {
   setModel(provider: DraftingProvider, model: string): Promise<AiPreferences>;
   /** Puts a version on the clipboard the way ABA Matrix takes it; says how many markers are left. */
   copySection(caseId: string, sectionId: ReportSectionId, version: number): Promise<CopySectionResult>;
+  /** Every section's summary and the text of the version she would copy, in ABA Matrix's order (Revisión y copia). Read only. */
+  readReport(caseId: string): Promise<ReadReportResult>;
   /**
    * Development only, for pnpm eval (docs/evaluation.md): the evaluation's judge scores one
    * section against the rubric. The main process answers it only in a development build
@@ -626,6 +646,7 @@ export const IPC_CHANNELS = {
   saveSessionNotes: "sections:save-notes",
   startNewSession: "sections:new-session",
   copySection: "sections:copy",
+  readReport: "sections:read-report",
   judgeSection: "eval:judge-section",
   getCaseMap: "case-map:get",
   saveMapItem: "case-map:save-item",

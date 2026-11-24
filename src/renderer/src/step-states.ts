@@ -15,12 +15,17 @@ export type StepState = "done" | "in-progress" | "not-started" | "later";
 export interface StepInputs {
   sources: number;
   caseMap: CaseMapSummary;
-  sections: ReadonlyArray<Pick<SectionSummary, "state">>;
+  sections: ReadonlyArray<Pick<SectionSummary, "state" | "copied">>;
 }
 
 /** The sections that are hers or approved: ready to copy. */
-export function readySections(sections: StepInputs["sections"]): number {
+export function readySections(sections: ReadonlyArray<Pick<SectionSummary, "state">>): number {
   return sections.filter((section) => section.state === "hers" || section.state === "approved").length;
+}
+
+/** The sections copied for ABA Matrix as they are now (owner's decision T8). */
+export function copiedSections(sections: ReadonlyArray<Pick<SectionSummary, "copied">>): number {
+  return sections.filter((section) => section.copied).length;
 }
 
 export function stepState(step: CaseStep, inputs: StepInputs): StepState {
@@ -33,14 +38,20 @@ export function stepState(step: CaseStep, inputs: StepInputs): StepState {
     case "report":
       if (readySections(inputs.sections) === REPORT_SECTIONS.length) return "done";
       return inputs.sections.some((section) => section.state !== "not-started") ? "in-progress" : "not-started";
+    case "review": {
+      // Done once every section is copied as it is now; under way from the first copy.
+      const copied = copiedSections(inputs.sections);
+      if (copied === REPORT_SECTIONS.length) return "done";
+      return copied > 0 ? "in-progress" : "not-started";
+    }
     default:
-      // Interventions, and Review and copy: not built yet, said so (owner's decision P3).
+      // Plan (Interventions): not built yet, said so (owner's decision P3).
       return "later";
   }
 }
 
 /** The count shown after a step, or none. */
-export function stepCount(step: CaseStep, inputs: StepInputs): { shown: string; spoken: { key: "sources" | "caseMap" | "report"; values: Record<string, number> } } | null {
+export function stepCount(step: CaseStep, inputs: StepInputs): { shown: string; spoken: { key: "sources" | "caseMap" | "report" | "review"; values: Record<string, number> } } | null {
   if (step === "sources" && inputs.sources > 0) return { shown: String(inputs.sources), spoken: { key: "sources", values: { count: inputs.sources } } };
   // The case map: its parts approved, out of the parts with something in them.
   if (step === "case-map" && inputs.caseMap.withContent > 0) {
@@ -49,6 +60,11 @@ export function stepCount(step: CaseStep, inputs: StepInputs): { shown: string; 
   if (step === "report") {
     const done = readySections(inputs.sections);
     return { shown: `${done}/${REPORT_SECTIONS.length}`, spoken: { key: "report", values: { done, total: REPORT_SECTIONS.length } } };
+  }
+  // Review and copy: the sections copied, once there is one to copy (mockup 10: "6/9").
+  if (step === "review" && (readySections(inputs.sections) > 0 || copiedSections(inputs.sections) > 0)) {
+    const copied = copiedSections(inputs.sections);
+    return { shown: `${copied}/${REPORT_SECTIONS.length}`, spoken: { key: "review", values: { copied, total: REPORT_SECTIONS.length } } };
   }
   return null;
 }

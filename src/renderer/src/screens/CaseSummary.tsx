@@ -18,7 +18,7 @@ import { nextThing, nextThingPath, type NextInputs } from "../next-thing.ts";
 import { useNextWords } from "../next-thing-words.tsx";
 import { useOpenedCase, usePatchOpenedCase } from "../open-case.tsx";
 import { SourceTypeLabel } from "../source-labels.tsx";
-import { readySections, stepState, type StepState } from "../step-states.ts";
+import { copiedSections, readySections, stepState, type StepState } from "../step-states.ts";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 
@@ -227,8 +227,12 @@ function StepSentence({ step, inputs, types }: { step: CaseStep; inputs: NextInp
         </>
       );
     }
-    case "review":
-      return <>{t("summary.reviewLater")}</>;
+    case "review": {
+      const copied = copiedSections(inputs.sections);
+      if (copied === total) return <>{t("summary.reviewAllCopied", { total })}</>;
+      if (copied > 0) return <>{t("summary.reviewCopied", { copied, total })}</>;
+      return <>{readySections(inputs.sections) > 0 ? t("summary.reviewNoneCopied") : t("summary.reviewNothingYet")}</>;
+    }
   }
 }
 

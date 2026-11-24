@@ -115,7 +115,7 @@ export function caseProgress(data: CaseData): CaseProgress {
   return {
     sources: data.sources.filter((source) => !source.removedAt).length,
     ...mapProgress(caseMapView(data).parts),
-    sections: sectionSummaries(data).map(({ id, state }) => ({ id, state })),
+    sections: sectionSummaries(data).map(({ id, state, copied }) => ({ id, state, copied })),
   };
 }
 

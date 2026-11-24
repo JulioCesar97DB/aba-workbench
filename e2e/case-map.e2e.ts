@@ -39,7 +39,7 @@ test("the case map by hand: add a behavior, type it, approve the part, correct i
   const first = caseMapOf(caseFile).parts.behaviors;
   expect(first.versions).toHaveLength(1);
   expect(first.versions[0].content.items[0].name).toEqual({ value: "Hair pulling", refs: [{ kind: "her" }], origin: "her", check: null });
-  expect(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion).toBe(4);
+  expect(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion).toBe(5);
 
   // Approve the part: the sidebar counts it.
   await page.getByRole("button", { name: "Approve this part" }).click();

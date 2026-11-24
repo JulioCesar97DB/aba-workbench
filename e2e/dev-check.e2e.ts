@@ -73,6 +73,7 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
       "openCase",
       "openChatGptUsage",
       "openSourcePdf",
+      "readReport",
       "readSourceText",
       "removeClaudeKey",
       "removeMapItem",
