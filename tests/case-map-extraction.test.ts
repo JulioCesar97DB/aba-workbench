@@ -897,6 +897,8 @@ test("speed: a repair quotes only the values that failed, under their item's key
   assert.equal(map.extractions[0].seconds.repair, undefined, "no repair, no repair time");
   // The screen hears how many values the repair fixes.
   assert.ok(events.some((event) => event.type === "map-progress" && event.step === "map-behaviors" && event.phase === "repairing" && event.values === 1));
+  // And what the repair asks for again, so the line says "those values only" only then (review round 1 of case map speed, S5).
+  assert.ok(events.filter((event) => event.type === "map-progress" && event.phase === "repairing").every((event) => event.type === "map-progress" && event.scope === "values"));
 });
 
 test("speed: an item with a problem of its own (a link, a function twice) is quoted whole; the scope says so", async () => {
@@ -907,7 +909,8 @@ test("speed: an item with a problem of its own (a link, a function twice) is quo
     behaviors[1].function = { primary: ["escape"], secondary: ["escape"], evidence: [], reasoning: "", check: "" };
     return { facts: [{ answer: factsAnswer(found) }], behaviors: [{ answer: first }, { answer: { behaviors: [], groups: [], risks: [], openItems: [] } }] };
   });
-  await draft(service, caseId);
+  const events = await draft(service, caseId);
+  assert.ok(events.some((event) => event.type === "map-progress" && event.phase === "repairing" && event.scope === "items" && event.values === 2), "the screen hears that items are rewritten");
   const task = model.sent[2].prompt.task;
   const previous = JSON.parse(task.slice(task.indexOf("<previous-answer>") + "<previous-answer>".length, task.indexOf("</previous-answer>")).trim()) as { behaviors: Array<Record<string, unknown>> };
   assert.deepEqual(Object.keys(previous.behaviors[0]), ["key", "examples"], "new-1: only its failed value");

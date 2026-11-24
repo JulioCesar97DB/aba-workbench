@@ -50,8 +50,9 @@ export interface MapDraft {
   /** Of the answer being written: the items that arrived, and those that passed their checks. */
   arrived: number;
   shown: number;
-  /** While a repair runs: how many values it is asked to fix. */
+  /** While a repair runs: how many values it is asked to fix, and what it asks for again (S5). */
   values: number;
+  scope: "values" | "items" | "whole";
   /** The items that passed their checks and are not saved yet. */
   previews: MapPreview[];
   /** The requests whose parts are saved. */
@@ -101,6 +102,7 @@ function apply(update: GenerationUpdate) {
         arrived: event.arrived ?? (newAnswer ? 0 : current.arrived),
         shown: event.shown ?? (newAnswer ? 0 : current.shown),
         values: event.values ?? current.values,
+        scope: event.scope ?? current.scope,
         previews: newAnswer ? current.previews.filter((preview) => preview.step !== event.step) : current.previews,
       });
       return;
@@ -157,7 +159,7 @@ function subscribe(listener: () => void) {
 
 function fresh(id: string, caseId: string, provider: DraftingProvider): MapDraft {
   const now = Date.now();
-  return { id, caseId, provider, step: null, phase: "starting", characters: 0, startedAt: now, stepStartedAt: now, arrived: 0, shown: 0, values: 0, previews: [], saved: [], written: [], kept: [], problems: 0, outcome: null };
+  return { id, caseId, provider, step: null, phase: "starting", characters: 0, startedAt: now, stepStartedAt: now, arrived: 0, shown: 0, values: 0, scope: "values", previews: [], saved: [], written: [], kept: [], problems: 0, outcome: null };
 }
 
 /** Starts a draft (or an update) of the case's map; the outcome says why it did not start. */

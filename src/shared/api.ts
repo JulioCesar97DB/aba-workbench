@@ -289,6 +289,8 @@ export type GenerationUpdateEvent =
       shown?: number;
       /** While it repairs: how many values the checks flagged, which the repair is asked to fix. */
       values?: number;
+      /** While it repairs: what it asks for again, those values only, the items that hold them, or the whole answer (review round 1 of case map speed, S5). */
+      scope?: "values" | "items" | "whole";
     }
   /**
    * An item of the answer that arrived and passed its own checks (case map speed, 2026-11-23):

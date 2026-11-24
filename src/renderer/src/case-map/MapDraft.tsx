@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { THRESHOLDS_DRAFT } from "../../../shared/case-map-thresholds.ts";
@@ -98,15 +99,23 @@ function formatElapsed(ms: number): string {
   return minutes > 0 ? `${minutes} min ${seconds % 60} s` : `${seconds} s`;
 }
 
+/**
+ * What a repair asks for, by its scope (review round 1 of case map speed, S5): those values
+ * only, the items that hold them, or the whole answer again.
+ */
+function repairLine(t: TFunction, draft: MapDraft): string {
+  if (draft.scope === "values" && draft.values > 0) return t("caseMap.ai.repairingValues", { count: draft.values });
+  if (draft.scope === "items") return draft.values > 0 ? t("caseMap.ai.repairingItems", { count: draft.values }) : t("caseMap.ai.repairing");
+  return draft.values > 0 ? t("caseMap.ai.repairingWhole", { count: draft.values }) : t("caseMap.ai.repairingAnswer");
+}
+
 function Running({ draft }: { draft: MapDraft }) {
   const { t } = useTranslation();
   const now = useNow();
   const step = draft.step ?? "map-facts";
   const phase =
     draft.phase === "repairing"
-      ? draft.values > 0
-        ? t("caseMap.ai.repairingValues", { count: draft.values })
-        : t("caseMap.ai.repairing")
+      ? repairLine(t, draft)
       : draft.phase === "plain-json"
         ? t("caseMap.ai.plainJson")
         : draft.characters > 0
@@ -131,7 +140,12 @@ function Running({ draft }: { draft: MapDraft }) {
         ))}
       </ol>
       <p className="text-sm">{phase}</p>
-      {draft.arrived > 0 && draft.phase !== "repairing" ? <p className="text-sm">{t("caseMap.ai.arrived", { count: draft.arrived, shown: draft.shown })}</p> : null}
+      {/* Two sentences, each with its own count, so each plural follows its own number (M3). */}
+      {draft.arrived > 0 && draft.phase !== "repairing" ? (
+        <p className="text-sm">
+          {t("caseMap.ai.arrived", { count: draft.arrived })} {t("caseMap.ai.shown", { count: draft.shown })}
+        </p>
+      ) : null}
       {/* The time it has taken, measured; no estimate of the time left (owner's decision, 2026-11-23). */}
       <p className="text-xs tabular-nums" data-testid="map-elapsed">
         {t("caseMap.ai.elapsed", { total: formatElapsed(now - draft.startedAt), step: formatElapsed(now - draft.stepStartedAt) })}

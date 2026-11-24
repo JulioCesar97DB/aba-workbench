@@ -233,7 +233,7 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
   for (let attempt = 0; attempt < 4; attempt++) {
     const phase = repair ? "repairing" : switched ? "plain-json" : "writing";
     const started = Date.now();
-    yield { type: "map-progress", step: kind, phase, characters: 0, ...(repair ? { values: repairValues } : { arrived: 0, shown: 0 }) };
+    yield { type: "map-progress", step: kind, phase, characters: 0, ...(repair ? { values: repairValues, scope: repairScope ?? "whole" } : { arrived: 0, shown: 0 }) };
     let prepared;
     try {
       prepared = await prepareMapRequest({
@@ -281,7 +281,7 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
         if (preview) for (const shown of preview.feed(event.delta)) yield { type: "map-preview", step: kind, ...shown };
         if (characters - reported >= PROGRESS_STEP || (preview?.arrived ?? 0) > arrivedBefore) {
           reported = characters;
-          yield { type: "map-progress", step: kind, phase, characters, ...(preview ? { arrived: preview.arrived, shown: preview.shown } : { values: repairValues }) };
+          yield { type: "map-progress", step: kind, phase, characters, ...(preview ? { arrived: preview.arrived, shown: preview.shown } : { values: repairValues, scope: repairScope ?? "whole" }) };
         }
       } else if (event.type === "error") failure = event;
       else if (event.type === "refusal") yield event;
