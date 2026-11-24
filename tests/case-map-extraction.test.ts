@@ -66,7 +66,8 @@ function factsAnswer(ids: { obs: string; interview: string; pdf: string }, overr
       {
         key: "new-5",
         area: claim("Communication", [ref(ids.pdf, "Communication")]),
-        scores: [{ instrument: claim("Vineland-3", [ref(ids.pdf, "Vineland-3")]), scale: claim("Communication", [ref(ids.pdf, "Communication")]), score: claim("68", [ref(ids.pdf, "Communication 68")]), percentile: none(), level: none() }],
+        // One claim per score row (case map speed): the row's fields under the quote of its line.
+        scores: [{ instrument: "Vineland-3", scale: "Communication", score: "68", percentile: "", level: "", refs: [ref(ids.pdf, "Communication 68")], origin: "extracted", check: "" }],
         evidence: [],
         impact: none(),
       },
@@ -507,7 +508,7 @@ test("M5: only a refusal that names the schema or the format switches the route 
 test("M6: a ref the checks never reached is stored as not found, never as a PDF's 'not checked'", () => {
   const parsed = parseMapAnswer("map-facts", JSON.stringify(factsAnswer({ obs: "o", interview: "i", pdf: "p" })));
   assert.ok(parsed.ok);
-  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failedClaims: new Set(), failing: new Map(), whole: false };
+  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failedClaims: new Set(), failing: new Map(), whole: false, unquotedNumbers: new Map(), itemLevel: new Map(), causes: {}, failedValues: 0 };
   const parts = toAnswerParts("map-facts", parsed.answer, empty, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
   const role = (parts.caregivers!.items[0] as Record<string, { refs: Array<{ checked: string }> }>).role;
   assert.equal(role.refs[0].checked, "not-found");
@@ -791,4 +792,166 @@ test("R4-M1: a repair that returns only the fixed observation keeps the observat
   teacher.behaviors[0].function.evidence = [{ ...teacher.behaviors[0].function.evidence[0], respondent: "Teacher" }];
   const evidence = (mergeRepair("map-behaviors", a, teacher, checks.failing, false, checks.failedClaims) as BehaviorsAnswer).behaviors[0].function.evidence;
   assert.deepEqual(evidence.map((entry) => entry.respondent), ["Mother", "Teacher"]);
+});
+
+/* Case map speed (2026-11-23): one claim per score row, repairs of only what failed, and the items shown as they arrive. */
+
+/** A behavior in the wire's form with every value empty but its key: what a repair about a few values answers around them. */
+function emptyBehavior(key: string, overrides: Answer = {}): Answer {
+  return {
+    key,
+    name: none(),
+    topographies: [],
+    measure: none(),
+    definition: none(),
+    onset: none(),
+    offset: none(),
+    examples: [],
+    nonExamples: [],
+    baseline: { observations: [], other: [] },
+    settingIds: [],
+    antecedents: [],
+    consequences: [],
+    function: { primary: [], secondary: [], evidence: [], reasoning: "", check: "" },
+    barriers: [],
+    risks: [],
+    ...overrides,
+  };
+}
+
+test("speed: a score row is one claim on the wire, every number of the row is checked against its quotes, and it is stored as five claims", () => {
+  const scores = (mapAnswerSchema("map-facts") as { properties: { deficits: { items: { properties: { scores: { items: { required: string[] } } } } } } }).properties.deficits.items.properties.scores.items;
+  assert.deepEqual(scores.required, ["instrument", "scale", "score", "percentile", "level", "refs", "origin", "check"], "one claim per row");
+  const report = "Score report, invented.\nVineland-3 Adaptive Behavior Scales\n| Communication | 68 | 2 | Low |\n| Socialization | 74 | 4 | Moderately low |";
+  const context = checkContext({ sources: [{ id: "v", title: "Vineland", text: report }] });
+  const row = (fields: Answer, refs: unknown[]) => ({ instrument: "Vineland-3", scale: "Communication", score: "68", percentile: "2", level: "Low", refs, origin: "extracted", check: "", ...fields });
+  const withRows = (rows: unknown[]) => {
+    const answer = factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [{ key: "new-1", area: claim("Communication", [ref("v", "Communication | 68 | 2")]), scores: rows, evidence: [], impact: none() }] });
+    const parsed = parseMapAnswer("map-facts", JSON.stringify(answer));
+    assert.ok(parsed.ok, parsed.ok ? "" : parsed.problems.join("; "));
+    return parsed.answer as FactsAnswer;
+  };
+  // The row's line and the report's title: every number found, the instrument's "3" too.
+  const good = withRows([row({}, [ref("v", "Communication | 68 | 2 | Low"), ref("v", "Vineland-3 Adaptive Behavior Scales")])]);
+  assert.deepEqual(checkMapAnswer("map-facts", good, context).problems, []);
+  // Without the title, the instrument's number is in no quote: still checked, as when it was its own claim.
+  const noTitle = checkMapAnswer("map-facts", withRows([row({}, [ref("v", "Communication | 68 | 2 | Low")])]), context);
+  assert.match(noTitle.problems.join("\n"), /deficits\[0\]\.scores\[0\]: the number 3 in "Vineland-3 · Communication · 68 · 2 · Low" is not written/);
+  // A score the line does not give: a problem of the row, flagged on the score when stored.
+  const wrong = withRows([row({ score: "86" }, [ref("v", "Communication | 68 | 2 | Low"), ref("v", "Vineland-3 Adaptive Behavior Scales")])]);
+  const checks = checkMapAnswer("map-facts", wrong, context);
+  assert.equal(checks.problems.length, 1);
+  assert.equal(checks.causes["number-not-quoted"], 1);
+  const parts = toAnswerParts("map-facts", wrong, checks, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
+  const stored = (parts.deficits!.items[0] as unknown as { scores: Array<Record<string, { value: string; refs: Array<{ quote: string; checked: string }>; check: string | null } | null>> }).scores[0];
+  assert.deepEqual(Object.keys(stored), ["instrument", "scale", "score", "percentile", "level"], "the stored shape is today's five claims");
+  assert.equal(stored.score!.value, "86");
+  assert.match(stored.score!.check ?? "", /not written in the quote/);
+  assert.equal(stored.percentile!.check, null, "the other fields carry no check");
+  assert.equal(stored.instrument!.check, null);
+  for (const field of ["instrument", "scale", "score", "percentile", "level"]) assert.deepEqual(stored[field]!.refs.map((item) => item.quote), ["Communication | 68 | 2 | Low", "Vineland-3 Adaptive Behavior Scales"], `${field} keeps the row's refs`);
+  // A blank field of the report is an empty field of the row, stored as no claim; a row with no field at all is no row.
+  const blank = withRows([row({ percentile: "", level: "" }, [ref("v", "Communication | 68 | 2 | Low"), ref("v", "Vineland-3 Adaptive Behavior Scales")]), row({ instrument: "", scale: "", score: "", percentile: "", level: "" }, [])]);
+  assert.equal(blank.deficits[0].scores.length, 1);
+  const blankStored = toAnswerParts("map-facts", blank, checkMapAnswer("map-facts", blank, context), { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
+  assert.equal((blankStored.deficits!.items[0] as unknown as { scores: Array<Record<string, unknown>> }).scores[0].percentile, null);
+});
+
+test("speed: a repair quotes only the values that failed, under their item's key; the answer around them is merged back and why is recorded", async () => {
+  const { service, caseId, caseFile, model } = await setup((found) => {
+    const first = behaviorsAnswer(found, []);
+    const behaviors = first.behaviors as Array<Record<string, unknown>>;
+    behaviors[0].examples = [claim("He spat at his mother's arm during homework", [ref(found.obs, "spat toward his mother's forearm twice")]), claim("He spat at his brother at dinner", [ref(found.obs, "spat at his brother during dinner")])];
+    // The repair answers the one example that failed, every other value empty.
+    const repair = { behaviors: [emptyBehavior("new-1", { examples: [claim("He spat once on the floor next to his grandmother", [ref(found.obs, "he spat once on the floor next to his grandmother")])] })], groups: [], risks: [], openItems: [] };
+    return { facts: [{ answer: factsAnswer(found) }], behaviors: [{ answer: first }, { answer: repair }] };
+  });
+  const events = await draft(service, caseId);
+  assert.equal(model.sent.length, 3);
+  const task = model.sent[2].prompt.task;
+  const previous = JSON.parse(task.slice(task.indexOf("<previous-answer>") + "<previous-answer>".length, task.indexOf("</previous-answer>")).trim()) as { behaviors: Array<Record<string, unknown>> };
+  assert.deepEqual(Object.keys(previous), ["behaviors"], "lists with nothing to fix are left out");
+  assert.deepEqual(previous.behaviors.length, 1, "only the item that failed");
+  assert.deepEqual(Object.keys(previous.behaviors[0]), ["key", "examples"], "and of it, only its key and the value that failed");
+  assert.deepEqual((previous.behaviors[0].examples as Array<{ value: string }>).map((example) => example.value), ["He spat at his brother at dinner"]);
+  assert.match(task, /behaviors\[0\]\.examples\[1\]\.refs\[0\]: the quote "spat at his brother during dinner" is not found word for word in the source "[^"]+"\. \(item "new-1"\)/);
+  assert.match(task, /Leave empty every value and every list that <previous-answer> does not show/);
+  const map = stored(caseFile);
+  const spitting = map.parts.behaviors.versions[0].content.items[0];
+  assert.deepEqual(
+    spitting.examples.map((example: { value: string }) => example.value),
+    ["He spat at his mother's arm during homework", "He spat once on the floor next to his grandmother"],
+    "the example that passed stays; the failed one is replaced",
+  );
+  assert.match(spitting.definition.value, /^Any instance/, "what the repair left empty stays as it was");
+  assert.equal(spitting.name.value, "Spitting");
+  assert.equal(spitting.baseline.observations.length, 1);
+  assert.equal(map.parts.behaviors.versions[0].content.items.length, 2);
+  const record = map.extractions[1];
+  assert.equal(record.repairScope, "values");
+  assert.deepEqual(record.repairCauses, { "quote-not-found": 1 }, "why the repair happened");
+  assert.equal(record.repairValues, 1);
+  assert.deepEqual(record.problems, []);
+  assert.equal(typeof record.seconds.answer, "number");
+  assert.equal(typeof record.seconds.repair, "number");
+  assert.equal(map.extractions[0].seconds.repair, undefined, "no repair, no repair time");
+  // The screen hears how many values the repair fixes.
+  assert.ok(events.some((event) => event.type === "map-progress" && event.step === "map-behaviors" && event.phase === "repairing" && event.values === 1));
+});
+
+test("speed: an item with a problem of its own (a link, a function twice) is quoted whole; the scope says so", async () => {
+  const { service, caseId, caseFile, model } = await setup((found) => {
+    const first = behaviorsAnswer(found, []);
+    const behaviors = first.behaviors as Array<Record<string, unknown>>;
+    behaviors[0].examples = [claim("He spat at his brother at dinner", [ref(found.obs, "spat at his brother during dinner")])];
+    behaviors[1].function = { primary: ["escape"], secondary: ["escape"], evidence: [], reasoning: "", check: "" };
+    return { facts: [{ answer: factsAnswer(found) }], behaviors: [{ answer: first }, { answer: { behaviors: [], groups: [], risks: [], openItems: [] } }] };
+  });
+  await draft(service, caseId);
+  const task = model.sent[2].prompt.task;
+  const previous = JSON.parse(task.slice(task.indexOf("<previous-answer>") + "<previous-answer>".length, task.indexOf("</previous-answer>")).trim()) as { behaviors: Array<Record<string, unknown>> };
+  assert.deepEqual(Object.keys(previous.behaviors[0]), ["key", "examples"], "new-1: only its failed value");
+  assert.equal(previous.behaviors[1].key, "new-2");
+  assert.ok("definition" in previous.behaviors[1] && "baseline" in previous.behaviors[1], "new-2: whole, as the AI wrote it");
+  const record = stored(caseFile).extractions[1];
+  assert.equal(record.repairScope, "items");
+  assert.deepEqual(record.repairCauses, { "quote-not-found": 1, "function-both": 1 });
+  assert.equal(record.repairValues, 2);
+  assert.equal(record.repairUsed, true);
+  // The repair answered nothing: the first answer is kept whole, its problems flagged.
+  assert.equal(record.problems.length, 2);
+});
+
+test("speed: each item that passes its own checks is shown as it arrives, before its request saves; one that fails is not", async () => {
+  const { service, caseId, caseFile } = await setup((found) => {
+    const facts = factsAnswer(found);
+    (facts.caregivers as Array<Record<string, unknown>>)[0].role = claim("Mother", [ref(found.interview, "the mother said she works nights")]);
+    const fixed = factsAnswer(found, { caregivers: [(factsAnswer(found).caregivers as unknown[])[0]], settings: [], deficits: [], openItems: [] });
+    return { facts: [{ answer: facts }, { answer: fixed }], behaviors: [{ answer: behaviorsAnswer(found, []) }] };
+  });
+  const events = await draft(service, caseId);
+  const previews = events.filter((event) => event.type === "map-preview");
+  const factsSaved = events.findIndex((event) => event.type === "map-saved" && event.step === "map-facts");
+  const factsPreviews = previews.filter((event) => event.type === "map-preview" && event.step === "map-facts");
+  assert.deepEqual(
+    factsPreviews.map((event) => event.type === "map-preview" && event.id),
+    ["preview:map-facts:caregivers:1", "preview:map-facts:settings:0", "preview:map-facts:settings:1", "preview:map-facts:deficits:0", "preview:map-facts:openItems:0"],
+    "the caregiver whose quote fails is not shown; the empty client is nothing to show",
+  );
+  assert.ok(factsPreviews.every((event) => events.indexOf(event) < factsSaved), "shown before the request saves");
+  const setting = factsPreviews[1];
+  assert.ok(setting.type === "map-preview" && setting.part === "settings");
+  const item = setting.item as { key: string; name: { value: string; refs: Array<{ checked: string }> } };
+  assert.equal(item.name.value, "Home");
+  assert.equal(item.name.refs[0].checked, "found", "in the map's stored shape, with its checks");
+  // The progress counts what arrived and what was shown, for the writing answer only.
+  const writing = events.filter((event) => event.type === "map-progress" && event.step === "map-facts" && event.phase === "writing");
+  const last = writing.at(-1);
+  assert.ok(last?.type === "map-progress");
+  assert.deepEqual([last.arrived, last.shown], [7, 5]);
+  // The behaviors: a risk that names a behavior that arrived before it is shown too; groups wait for the save.
+  const behaviorsPreviews = previews.filter((event) => event.type === "map-preview" && event.step === "map-behaviors").map((event) => event.type === "map-preview" && event.part);
+  assert.deepEqual(behaviorsPreviews, ["behaviors", "behaviors", "risks"]);
+  // Nothing is saved by a preview: the saved map is the request's, after its checks and repair.
+  assert.equal(stored(caseFile).parts.caregivers.versions[0].content.items[0].role.refs[0].checked, "found");
 });

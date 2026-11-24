@@ -6,8 +6,19 @@ import type { MapPartId, MapRequestKind } from "../../../shared/case-map.ts";
  * "Draft the map" / "Update the map" (step 1, pull request 2), one store for the whole
  * app, like the sections' requests: leaving the case map (or the case) while the AI works
  * loses nothing, and coming back shows where it is. Each of the two requests reports its
- * progress, then its saved parts ("map-saved"), which the screen shows at once.
+ * progress, then its saved parts ("map-saved"), which the screen shows at once. While an
+ * answer arrives, each item that passed its own checks comes as a preview ("map-preview"),
+ * shown read-only until its request saves; the previews go when it saves or the draft ends.
  */
+
+/** An item of the answer that passed its checks, not saved yet (case map speed, 2026-11-23). */
+export interface MapPreview {
+  step: MapRequestKind;
+  part: MapPartId;
+  /** The preview's own id ("preview:…"), never an item id of the map. */
+  id: string;
+  item: Record<string, unknown>;
+}
 
 export type MapDraftOutcome =
   /** Both requests saved their parts. */
@@ -31,6 +42,16 @@ export interface MapDraft {
   phase: "starting" | "writing" | "repairing" | "plain-json" | "done";
   /** How much of the answer has arrived. */
   characters: number;
+  /** When the draft started and when the request at work started (Date.now()), for the time shown. */
+  startedAt: number;
+  stepStartedAt: number;
+  /** Of the answer being written: the items that arrived, and those that passed their checks. */
+  arrived: number;
+  shown: number;
+  /** While a repair runs: how many values it is asked to fix. */
+  values: number;
+  /** The items that passed their checks and are not saved yet. */
+  previews: MapPreview[];
   /** The requests whose parts are saved. */
   saved: MapRequestKind[];
   /** The parts written, over both requests, and the approved ones left as they were. */
@@ -65,14 +86,39 @@ function apply(update: GenerationUpdate) {
   if (!current) return;
   const event = update.event;
   switch (event.type) {
-    case "map-progress":
-      set({ ...current, step: event.step, phase: event.phase, characters: event.characters });
+    case "map-progress": {
+      const newStep = event.step !== current.step;
+      // A new answer (the plain-JSON resend) replaces what the last one showed; a repair keeps it.
+      const newAnswer = newStep || (event.phase !== "repairing" && event.characters === 0);
+      set({
+        ...current,
+        step: event.step,
+        phase: event.phase,
+        characters: event.characters,
+        stepStartedAt: newStep ? Date.now() : current.stepStartedAt,
+        arrived: event.arrived ?? (newAnswer ? 0 : current.arrived),
+        shown: event.shown ?? (newAnswer ? 0 : current.shown),
+        values: event.values ?? current.values,
+        previews: newAnswer ? current.previews.filter((preview) => preview.step !== event.step) : current.previews,
+      });
+      return;
+    }
+    case "map-preview":
+      set({ ...current, previews: [...current.previews.filter((preview) => preview.id !== event.id), { step: event.step, part: event.part, id: event.id, item: event.item }] });
       return;
     case "map-saved":
       if (event.result.outcome === "saved") {
         const result = event.result;
         for (const listener of savedListeners) listener(current.caseId, result);
-        set({ ...current, saved: [...current.saved, event.step], written: [...current.written, ...event.written], kept: [...current.kept, ...event.kept], problems: current.problems + event.problems });
+        set({
+          ...current,
+          saved: [...current.saved, event.step],
+          written: [...current.written, ...event.written],
+          kept: [...current.kept, ...event.kept],
+          problems: current.problems + event.problems,
+          // The saved map now holds them: the previews of this request go.
+          previews: current.previews.filter((preview) => preview.step !== event.step),
+        });
       } else {
         set({ ...current, outcome: { kind: "failed", message: "", code: null } });
       }
@@ -86,7 +132,8 @@ function apply(update: GenerationUpdate) {
     case "finished": {
       const outcome: MapDraftOutcome =
         current.outcome ?? (current.saved.length === 2 ? { kind: "saved" } : current.saved.length > 0 ? { kind: "partial", message: null, code: null } : event.cancelled ? { kind: "stopped" } : { kind: "failed", message: "", code: null });
-      set({ ...current, phase: "done", outcome });
+      // Nothing more is saved: whatever was only previewed goes.
+      set({ ...current, phase: "done", outcome, previews: [] });
       return;
     }
     default:
@@ -106,12 +153,17 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
+function fresh(id: string, caseId: string, provider: DraftingProvider): MapDraft {
+  const now = Date.now();
+  return { id, caseId, provider, step: null, phase: "starting", characters: 0, startedAt: now, stepStartedAt: now, arrived: 0, shown: 0, values: 0, previews: [], saved: [], written: [], kept: [], problems: 0, outcome: null };
+}
+
 /** Starts a draft (or an update) of the case's map; the outcome says why it did not start. */
 export async function startMapDraft(caseId: string, provider: DraftingProvider): Promise<StartSectionResult["outcome"] | "error"> {
   ensureSubscribed();
   const id = crypto.randomUUID();
   const previous = byCase.get(caseId);
-  set({ id, caseId, provider, step: null, phase: "starting", characters: 0, saved: [], written: [], kept: [], problems: 0, outcome: null });
+  set(fresh(id, caseId, provider));
   notStarted.add(id);
   try {
     const result = await window.aba.startMapDraft(caseId, id, provider);
@@ -129,7 +181,7 @@ export async function startMapDraft(caseId: string, provider: DraftingProvider):
     return result.outcome;
   } catch {
     notStarted.delete(id);
-    set({ id, caseId, provider, step: null, phase: "done", characters: 0, saved: [], written: [], kept: [], problems: 0, outcome: { kind: "failed", message: "", code: null } });
+    set({ ...fresh(id, caseId, provider), phase: "done", outcome: { kind: "failed", message: "", code: null } });
     return "error";
   }
 }

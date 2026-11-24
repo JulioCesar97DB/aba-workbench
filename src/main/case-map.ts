@@ -820,6 +820,16 @@ export interface MapExtractionRecord {
   problemsBeforeRepair?: string[];
   /** What the code checks still found after the repair (at most 50). */
   problems: string[];
+  /**
+   * Why the repair was asked for, and about how much (case map speed, 2026-11-23): how many
+   * problems of each kind the first answer had, whether the repair quoted the values that
+   * failed, whole items or the whole answer, and how many values it was asked to fix.
+   */
+  repairScope?: "values" | "items" | "whole";
+  repairCauses?: Record<string, number>;
+  repairValues?: number;
+  /** How long the answer, and the repair when there was one, took, in seconds. */
+  seconds?: { answer: number; repair?: number };
 }
 
 /** An item as the AI's answer gives it, already in the stored shape, with its key instead of an id. */

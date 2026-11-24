@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { checkMapAnswer, failingItems, MAP_SCHEMA_NAMES, mapAnswerSchema, mergeRepair, parseMapAnswer, PARTS_OF_REQUEST, type AnswerClaim, type AnswerRef, type BehaviorsAnswer, type CheckResult, type FactsAnswer, type MapAnswer, type MapAnswerFormat } from "../lib/case-map-extraction.ts";
+import { checkMapAnswer, MAP_SCHEMA_NAMES, mapAnswerSchema, mergeRepair, numbersIn, parseMapAnswer, PARTS_OF_REQUEST, repairInput, SCORE_FIELDS, type AnswerClaim, type AnswerRef, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer, type MapAnswer, type MapAnswerFormat, type RepairScope, type ScoreRow } from "../lib/case-map-extraction.ts";
+import { JsonItemScanner, type ClosedItem } from "../lib/json-items.ts";
 import { generationCostUsd } from "../lib/pricing.ts";
 import type { Effort, Provider, ProviderCredential, TokenUsage } from "../lib/providers/types.ts";
 import type { DraftingProvider, GenerationUpdateEvent } from "../shared/api.ts";
@@ -20,10 +21,15 @@ import { runSectionGeneration, type FinishedText } from "./section-generation.ts
  * (plain JSON when a route refuses it), read with Zod, then checked by code: every quote
  * found word for word in what it cites (a PDF's quotes are "not checked" until PDF text
  * can be read), every number in one of its quotes, every link known. An answer with
- * problems gets one repair request about the items that failed; the repair's items replace
- * those of the first answer by key, and when the repair cannot be used the first answer is
- * saved as it is. What still fails is saved and flagged with a [CHECK]. Each request's
- * parts are saved as soon as they pass, as new versions.
+ * problems gets one repair request about what failed: the values that failed, or an item
+ * whole when the problem is the item's own; the repair's answer is merged into the first
+ * answer by key, field by field and entry by entry, and when the repair cannot be used the
+ * first answer is saved as it is. What still fails is saved and flagged with a [CHECK].
+ * Each request's parts are saved as soon as they pass, as new versions.
+ *
+ * While an answer arrives, each item is read as soon as its JSON closes and checked on its
+ * own; one that passes is shown at once ("map-preview"), read-only and marked as not saved
+ * yet. Nothing is saved before the whole answer's checks (case map speed, 2026-11-23).
  */
 
 type RunEvent = Exclude<GenerationUpdateEvent, { type: "finished" }>;
@@ -63,6 +69,12 @@ interface RequestOutcome {
   repaired: boolean;
   repairUsed: boolean;
   problemsBeforeRepair: string[];
+  /** Why the repair was asked for, and about how much (case map speed). */
+  repairScope: RepairScope | null;
+  repairCauses: Record<string, number>;
+  repairValues: number;
+  /** How long the answer and the repair took, in seconds. */
+  seconds: { answer: number; repair?: number };
   generation: Record<string, unknown>;
 }
 
@@ -128,8 +140,11 @@ export async function* runMapDraft(options: MapDraftOptions): AsyncGenerator<Run
       generation: outcome.generation,
       format: outcome.format,
       repaired: outcome.repaired,
-      ...(outcome.repaired ? { repairUsed: outcome.repairUsed, problemsBeforeRepair: outcome.problemsBeforeRepair } : {}),
+      ...(outcome.repaired
+        ? { repairUsed: outcome.repairUsed, problemsBeforeRepair: outcome.problemsBeforeRepair, repairScope: outcome.repairScope ?? "whole", repairCauses: outcome.repairCauses, repairValues: outcome.repairValues }
+        : {}),
       problems: outcome.checks.problems,
+      seconds: outcome.seconds,
     };
     if (options.signal.aborted) return;
     let written: MapPartId[] = [];
@@ -160,7 +175,7 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
   const facts = kind === "map-behaviors" ? mapFactsForPrompt(data) : null;
   const herMap = herMapForPrompt(data, PARTS_OF_REQUEST[kind]);
   const notes = sessionNotes(data);
-  const context = {
+  const context: CheckContext & { behaviorIds: ReadonlySet<string> } = {
     sources: sources.map((source) => ({ id: source.id, title: source.title, text: source.kind === "text" ? source.text : null })),
     sections: herSections,
     notes,
@@ -168,11 +183,21 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
     behaviorIds: behaviorIdsOf(data),
     instructions: kind === "map-behaviors" ? options.instructions : "",
   };
+  const convert: ConvertContext = {
+    notesSession: data.sessionNotes?.startedAt ?? null,
+    sectionVersions: new Map(herSections.map((section) => [section.id, section.version])),
+    settingIds: context.settingIds,
+    behaviorIds: context.behaviorIds,
+  };
   let format: MapAnswerFormat = formats.get(options.providerId) ?? "json-schema";
   /** The first answer that could be read, kept whatever the repair brings (review round 1, B1). */
   let first: { answer: MapAnswer; checks: CheckResult } | null = null;
   let repair: { previousAnswer: string; problems: string[]; whole: boolean } | null = null;
   let problemsBeforeRepair: string[] = [];
+  let repairScope: RepairScope | null = null;
+  let repairCauses: Record<string, number> = {};
+  let repairValues = 0;
+  const seconds: { answer: number; repair?: number } = { answer: 0 };
   let switched = false;
   let usage = zeroUsage;
   let cost: number | null = 0;
@@ -186,6 +211,10 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
     repaired: repair !== null,
     repairUsed,
     problemsBeforeRepair,
+    repairScope,
+    repairCauses,
+    repairValues,
+    seconds,
     generation: {
       provider: options.providerId,
       requestedModel: options.model,
@@ -203,7 +232,8 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
   });
   for (let attempt = 0; attempt < 4; attempt++) {
     const phase = repair ? "repairing" : switched ? "plain-json" : "writing";
-    yield { type: "map-progress", step: kind, phase, characters: 0 };
+    const started = Date.now();
+    yield { type: "map-progress", step: kind, phase, characters: 0, ...(repair ? { values: repairValues } : { arrived: 0, shown: 0 }) };
     let prepared;
     try {
       prepared = await prepareMapRequest({
@@ -229,7 +259,9 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
     let finished: FinishedText | null = null;
     let failure: { code: string; message: string; status: number | null } | null = null;
     let characters = 0;
-    let shown = 0;
+    let reported = 0;
+    // A first answer is read item by item as it arrives; a repair is small and is not.
+    const preview = repair === null ? new ArrivingItems(kind, context, convert) : null;
     for await (const event of runSectionGeneration<FinishedText>({
       prepared,
       provider: options.provider,
@@ -245,9 +277,11 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
     })) {
       if (event.type === "text") {
         characters += event.delta.length;
-        if (characters - shown >= PROGRESS_STEP) {
-          shown = characters;
-          yield { type: "map-progress", step: kind, phase, characters };
+        const arrivedBefore = preview?.arrived ?? 0;
+        if (preview) for (const shown of preview.feed(event.delta)) yield { type: "map-preview", step: kind, ...shown };
+        if (characters - reported >= PROGRESS_STEP || (preview?.arrived ?? 0) > arrivedBefore) {
+          reported = characters;
+          yield { type: "map-progress", step: kind, phase, characters, ...(preview ? { arrived: preview.arrived, shown: preview.shown } : { values: repairValues }) };
         }
       } else if (event.type === "error") failure = event;
       else if (event.type === "refusal") yield event;
@@ -258,6 +292,9 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
         cost = cost === null || spent === null ? null : cost + spent;
       } else if (event.type === "saved") finished = event.result;
     }
+    const took = Math.round((Date.now() - started) / 1000);
+    if (repair) seconds.repair = (seconds.repair ?? 0) + took;
+    else seconds.answer += took;
     if (options.signal.aborted) return null;
     if (failure && format === "json-schema" && !switched && repair === null && refusedFormat(failure)) {
       // The route does not take the schema: the same request as plain JSON, checked the same way.
@@ -288,9 +325,17 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
       if (checks.problems.length === 0) return outcome(parsed.answer, checks, false);
       first = { answer: parsed.answer, checks };
       problemsBeforeRepair = checks.problems;
-      repair = { previousAnswer: JSON.stringify(failingItems(kind, parsed.raw, checks)), problems: checks.problems.slice(0, 40), whole: checks.whole };
+      // Only what failed is quoted and asked for again (case map speed, 2026-11-23), and why is recorded.
+      const input = repairInput(kind, parsed.raw, parsed.answer, checks);
+      repairScope = input.scope;
+      repairCauses = checks.causes;
+      repairValues = checks.failedValues;
+      repair = { previousAnswer: JSON.stringify(input.previousAnswer), problems: withItemKeys(checks.problems, parsed.answer).slice(0, 40), whole: input.scope === "whole" };
     } else {
       problemsBeforeRepair = parsed.problems;
+      repairScope = "whole";
+      repairCauses = { unreadable: parsed.problems.length };
+      repairValues = 0;
       // The whole text, uncut: an answer that could not be read is asked again in full.
       repair = { previousAnswer: finished.text, problems: parsed.problems, whole: true };
     }
@@ -298,6 +343,95 @@ async function* request(options: MapDraftOptions, kind: MapRequestKind, data: Ca
   if (first) return outcome(first.answer, first.checks, false);
   yield { type: "error", code: "unreadable_answer", message: "The AI's answer could not be read, so nothing was saved.", status: null };
   return null;
+}
+
+/**
+ * A problem's place with its item's key ("caregivers[0].role…: … (item "new-1")"), since a
+ * repair's quote holds only the items that failed, so their places in the first answer no
+ * longer match.
+ */
+function withItemKeys(problems: readonly string[], answer: MapAnswer): string[] {
+  const lists = answer as unknown as Record<string, unknown>;
+  return problems.map((problem) => {
+    const listed = /^([a-zA-Z]+)\[(\d+)\]/u.exec(problem);
+    const items = listed ? lists[listed[1]] : null;
+    const key = Array.isArray(items) ? (items[Number(listed![2])] as { key?: unknown } | undefined)?.key : undefined;
+    return typeof key === "string" ? `${problem} (item "${key}")` : problem;
+  });
+}
+
+/** The part each list of an answer fills, for the items shown as they arrive. A group is shown once its request saves. */
+const PREVIEW_PARTS: Partial<Record<string, MapPartId>> = {
+  client: "client",
+  caregivers: "caregivers",
+  settings: "settings",
+  deficits: "deficits",
+  strengths: "strengths",
+  facts: "facts",
+  openItems: "openItems",
+  report: "report",
+  behaviors: "behaviors",
+  risks: "risks",
+};
+
+/**
+ * The items of an answer as they arrive (case map speed, 2026-11-23): each one read as
+ * soon as its JSON closes, checked on its own (its quotes, numbers and links, as the whole
+ * answer's checks do), and, when it passes, put in the map's stored shape to be shown
+ * read-only. Checks across items (keys used twice, a group's members) wait for the whole
+ * answer, as does every save.
+ */
+class ArrivingItems {
+  readonly #scanner = new JsonItemScanner();
+  readonly #kind: MapRequestKind;
+  readonly #context: CheckContext & { behaviorIds: ReadonlySet<string> };
+  readonly #convert: ConvertContext;
+  /** The behaviors' keys arrived so far: a risk that arrives after them may name them. */
+  readonly #behaviorKeys = new Set<string>();
+  arrived = 0;
+  shown = 0;
+
+  constructor(kind: MapRequestKind, context: CheckContext & { behaviorIds: ReadonlySet<string> }, convert: ConvertContext) {
+    this.#kind = kind;
+    this.#context = context;
+    this.#convert = convert;
+  }
+
+  feed(piece: string): Array<{ part: MapPartId; id: string; item: Record<string, unknown> }> {
+    const out: Array<{ part: MapPartId; id: string; item: Record<string, unknown> }> = [];
+    for (const closed of this.#scanner.feed(piece)) {
+      this.arrived++;
+      const shown = this.#check(closed);
+      if (!shown) continue;
+      this.shown++;
+      out.push(shown);
+    }
+    return out;
+  }
+
+  #check(closed: ClosedItem): { part: MapPartId; id: string; item: Record<string, unknown> } | null {
+    let value: unknown;
+    try {
+      value = JSON.parse(closed.text);
+    } catch {
+      return null;
+    }
+    if (closed.list === "behaviors" && typeof (value as { key?: unknown }).key === "string") this.#behaviorKeys.add((value as { key: string }).key);
+    const part = PREVIEW_PARTS[closed.list];
+    if (!part) return null;
+    const alone: Record<string, unknown> = this.#kind === "map-facts" ? { client: null, caregivers: [], settings: [], deficits: [], strengths: [], facts: [], openItems: [], report: [] } : { behaviors: [], groups: [], risks: [], openItems: [] };
+    if (!(closed.list in alone)) return null;
+    alone[closed.list] = closed.index === null ? value : [value];
+    const parsed = parseMapAnswer(this.#kind, JSON.stringify(alone));
+    if (!parsed.ok) return null;
+    const behaviorIds = new Set([...this.#context.behaviorIds, ...this.#behaviorKeys]);
+    const checks = checkMapAnswer(this.#kind, parsed.answer, { ...this.#context, behaviorIds });
+    if (checks.problems.length > 0) return null;
+    const parts = toAnswerParts(this.#kind, parsed.answer, checks, { ...this.#convert, behaviorIds });
+    const item = parts[part]?.items[0];
+    if (!item) return null;
+    return { part, id: `preview:${this.#kind}:${closed.list}:${closed.index ?? 0}`, item };
+  }
 }
 
 /** The ids of the behaviors the map holds now: a group or a risk of an update may name them. */
@@ -353,6 +487,28 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
     return { value: value.value, refs: value.refs.map(ref), origin, check };
   };
   const claims = (values: readonly AnswerClaim[]) => values.map((value) => claim(value)!);
+  /**
+   * A score row, one claim on the wire, stored as today's five claims (owner's decision,
+   * 2026-11-23): each field with the row's refs and origin. The row's own [CHECK] goes on its
+   * score (or its first field); a number the quotes do not give is flagged on the field that
+   * holds it.
+   */
+  const scoreClaims = (row: ScoreRow): Record<string, Record<string, unknown> | null> => {
+    const stored = claim(row)!;
+    const holder = row.score !== null ? "score" : SCORE_FIELDS.find((field) => row[field] !== null);
+    const unquoted = checks.unquotedNumbers.get(row) ?? [];
+    // "A number is not in its quote" belongs to the field that holds the number, not to the row.
+    const rowCheck = stored.check === NUMBER_CHECK && unquoted.length > 0 ? null : (stored.check as string | null);
+    return Object.fromEntries(
+      SCORE_FIELDS.map((field) => {
+        const value = row[field];
+        if (value === null) return [field, null];
+        const ownNumber = numbersIn(value).some((number) => unquoted.includes(number));
+        const check = field === holder && rowCheck ? rowCheck : ownNumber ? NUMBER_CHECK : null;
+        return [field, { value, refs: stored.refs, origin: stored.origin, check }];
+      }),
+    );
+  };
   const openItems = (items: ReadonlyArray<{ kind: string; text: string; homeSection: number | null }>): AnswerItem[] =>
     items.map((item, index) => ({ key: `new-open-${kind}-${index + 1}`, kind: item.kind, text: item.text, itemRef: null, homeSection: item.homeSection, status: "open" }));
 
@@ -397,7 +553,7 @@ export function toAnswerParts(kind: MapRequestKind, answer: MapAnswer, checks: C
         items: facts.deficits.map((item) => ({
           key: item.key,
           area: claim(item.area),
-          scores: item.scores.map((score) => ({ instrument: claim(score.instrument), scale: claim(score.scale), score: claim(score.score), percentile: claim(score.percentile), level: claim(score.level) })),
+          scores: item.scores.map((row) => scoreClaims(row)),
           evidence: claims(item.evidence),
           impact: claim(item.impact),
         })),

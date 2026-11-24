@@ -97,7 +97,7 @@ Base UI's own inline `<style>` tags are turned off (`CSPProvider disableStyleEle
 
 ## Shared pieces (UX-3)
 
-Built for every step (the report's sections first, then Documentos in UX-4; the case map and the summary adopt them in their own pull requests). Their props are kept small on purpose.
+Built for every step (the report's sections first, then Documentos in UX-4, and the empty case map's two ways in the case map speed pull request; the rest of the case map and the summary adopt them in their own pull requests). Their props are kept small on purpose.
 
 **`Icon`** (`components/Icon.tsx`, owner's decision T5): the app's own inline SVGs, no icon library. `<Icon name="pencil" />`; `name` is one of `pencil`, `sparkle`, `check`, `arrow`, `chevron`, `forward` (the "›" after the case's name in the sidebar, UX-5), `copy`, `upload`, `stop`, `panel`, `more` (the "⋯" of a row's menu, UX-4); `size` in px (default: 1em, the size of the text around it); `className`. Drawn on a 16x16 grid in `currentColor`, hidden from screen readers: the words beside an icon carry the meaning. A new icon is one more path in `PATHS`.
 

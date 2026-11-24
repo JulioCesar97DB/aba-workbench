@@ -56,6 +56,12 @@ const claimSchema = object({ value: str, refs: list(refSchema), origin: choice(O
 /** A claim whose value is one of a fixed list ("" when absent): the list is in the schema, so a strict route cannot answer anything else. */
 const choiceClaim = (values: readonly string[]): Schema => object({ value: choice(["", ...values]), refs: list(refSchema), origin: choice(ORIGIN_VALUES), check: str });
 const claims = list(claimSchema);
+/**
+ * A score row (owner's decision, 2026-11-23, case map speed): one claim on the wire, with
+ * the instrument, scale, score, percentile and level as the score report prints them,
+ * under the quotes of that row. Stored as today's five claims, each with the row's refs.
+ */
+const scoreRowSchema = object({ instrument: str, scale: str, score: str, percentile: str, level: str, refs: list(refSchema), origin: choice(ORIGIN_VALUES), check: str });
 const openItemSchema = object({ kind: choice(OPEN_ITEM_KINDS), text: str, homeSection: int });
 
 const factsSchema = object({
@@ -79,7 +85,7 @@ const factsSchema = object({
     object({
       key: str,
       area: claimSchema,
-      scores: list(object({ instrument: claimSchema, scale: claimSchema, score: claimSchema, percentile: claimSchema, level: claimSchema })),
+      scores: list(scoreRowSchema),
       evidence: claims,
       impact: claimSchema,
     }),
@@ -159,6 +165,39 @@ const orNone = <const T extends readonly [string, ...string[]]>(values: T) =>
     .nullable()
     .transform((value) => (value === null || value === NONE ? null : (value as T[number])));
 const KeyZ = z.string().min(1).max(40);
+/** The fields of a score row, in the order the report prints them. */
+export const SCORE_FIELDS = ["instrument", "scale", "score", "percentile", "level"] as const;
+/**
+ * A score row: its five fields, and a `value` that joins them, so the row is one claim to
+ * the checks (every number of every field is checked against the row's quotes) and to the
+ * repair's merge. A row with no field at all is absent.
+ */
+const ScoreRowZ = z
+  .strictObject({
+    instrument: TextOrNullZ(T.name),
+    scale: TextOrNullZ(T.name),
+    score: TextOrNullZ(T.short),
+    percentile: TextOrNullZ(T.short),
+    level: TextOrNullZ(T.name),
+    refs: z.array(RefZ).max(MAX_MAP_REFS),
+    origin: z.enum(ORIGIN_VALUES),
+    check: z.string().max(T.text).nullable(),
+  })
+  .transform((row) => ({
+    value: rowValue(row),
+    refs: row.refs,
+    origin: row.origin,
+    check: row.check !== null && row.check.trim() !== "" ? row.check : null,
+    instrument: row.instrument,
+    scale: row.scale,
+    score: row.score,
+    percentile: row.percentile,
+    level: row.level,
+  }));
+const rowValue = (row: Record<(typeof SCORE_FIELDS)[number], string | null>) =>
+  SCORE_FIELDS.map((field) => row[field])
+    .filter((text): text is string => text !== null)
+    .join(" · ");
 const OpenItemZ = z.strictObject({ kind: z.enum(OPEN_ITEM_KINDS), text: z.string().max(T.text), homeSection: HomeSectionZ });
 
 const ClientZ = z.strictObject({
@@ -191,7 +230,10 @@ export const FactsAnswerSchema = z.strictObject({
       z.strictObject({
         key: KeyZ,
         area: maybe(T.name),
-        scores: z.array(z.strictObject({ instrument: maybe(T.name), scale: maybe(T.name), score: maybe(T.short), percentile: maybe(T.short), level: maybe(T.name) })).max(MAX_MAP_LIST),
+        scores: z
+          .array(ScoreRowZ)
+          .max(MAX_MAP_LIST)
+          .transform((rows) => rows.filter((row) => row.value !== "")),
         evidence: ClaimsZ(),
         impact: maybe(),
       }),
@@ -249,6 +291,7 @@ export type BehaviorsAnswer = z.output<typeof BehaviorsAnswerSchema>;
 export type MapAnswer = FactsAnswer | BehaviorsAnswer;
 export type AnswerRef = z.infer<typeof RefZ>;
 export type AnswerClaim = ReturnType<typeof finish>;
+export type ScoreRow = z.output<typeof ScoreRowZ>;
 
 /** The JSON object in an answer: the whole text, a fenced block, or the text from the first { to the last }. */
 function jsonText(answer: string): string {
@@ -410,6 +453,8 @@ export interface CheckResult {
   quotes: Map<AnswerRef, QuoteCheck>;
   /** Claims with a number in none of their quotes. */
   numbers: Set<AnswerClaim>;
+  /** Those numbers, by claim (a score row's [CHECK] goes on the field that holds one). */
+  unquotedNumbers: Map<AnswerClaim, string[]>;
   /** Claims with a number found only in a PDF's quote, which cannot be checked yet: not a problem, but marked [CHECK] (review round 2, S1). */
   pdfNumbers: Set<AnswerClaim>;
   /** Claims with a problem of their own: a repair may replace them; the others are kept (review scoped check, R3-M1). */
@@ -418,7 +463,33 @@ export interface CheckResult {
   failing: Map<string, Set<number>>;
   /** A problem that belongs to no single item (a key used twice): the repair asks about the whole answer. */
   whole: boolean;
+  /**
+   * The items with a problem of their own that is not one of their values' (a link, a
+   * function both primary and secondary, a report item): the repair quotes them whole. For
+   * every other failing item it quotes only the values that failed (case map speed, 2026-11-23).
+   */
+  itemLevel: Map<string, Set<number>>;
+  /** Why: how many problems of each kind (a quote not found, a number in no quote, …), recorded with the request. */
+  causes: Record<string, number>;
+  /** How many values the repair is asked to fix: the values that failed, and each item-level problem. */
+  failedValues: number;
 }
+
+/** The kinds of problem, as recorded (MapExtractionRecord.repairCauses). */
+export type ProblemCause =
+  | "quote-empty"
+  | "quote-too-short"
+  | "quote-not-found"
+  | "unknown-ref"
+  | "no-ref"
+  | "number-not-quoted"
+  | "threshold"
+  | "not-in-list"
+  | "unknown-link"
+  | "duplicate-key"
+  | "group-rule"
+  | "function-both"
+  | "unreadable";
 
 const LISTS = ["caregivers", "settings", "deficits", "strengths", "facts", "report", "behaviors", "groups", "risks"] as const;
 
@@ -433,10 +504,16 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   const problems: string[] = [];
   const quotes = new Map<AnswerRef, QuoteCheck>();
   const numbers = new Set<AnswerClaim>();
+  const unquotedNumbers = new Map<AnswerClaim, string[]>();
   const pdfNumbers = new Set<AnswerClaim>();
   const failedClaims = new Set<AnswerClaim>();
   const failing = new Map<string, Set<number>>();
+  const itemLevel = new Map<string, Set<number>>();
+  const causes: Record<string, number> = {};
+  let itemProblems = 0;
   let whole = false;
+  /** Inside the check of one value: its problems are the value's, not the item's. */
+  let inClaim = false;
   const sources = new Map(context.sources.map((source) => [source.id, source]));
   const sourceTexts = new Map(context.sources.filter((source) => source.text !== null).map((source) => [source.id, normalizeForQuote(source.text ?? "")]));
   const sectionTexts = new Map(context.sections.map((section) => [section.id, normalizeForQuote(section.text)]));
@@ -445,35 +522,45 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   const knownBehaviors = context.behaviorIds ?? new Set<string>();
 
   /** A problem, located: "settings[2].kind" marks settings item 2 as failing; "client.age" the client. */
-  const problem = (where: string, message: string) => {
-    problems.push(`${where}: ${message}`);
+  const problem = (where: string, message: string, cause: ProblemCause) => {
+    const text = `${where}: ${message}`;
+    if (problems.includes(text)) return;
+    problems.push(text);
+    causes[cause] = (causes[cause] ?? 0) + 1;
     const listed = /^([a-zA-Z]+)\[(\d+)\]/u.exec(where);
+    const mark = (into: Map<string, Set<number>>, list: string, index: number) => {
+      const set = into.get(list) ?? new Set<number>();
+      set.add(index);
+      into.set(list, set);
+    };
     if (listed && (LISTS as readonly string[]).includes(listed[1])) {
-      const set = failing.get(listed[1]) ?? new Set<number>();
-      set.add(Number(listed[2]));
-      failing.set(listed[1], set);
+      mark(failing, listed[1], Number(listed[2]));
+      if (!inClaim) {
+        mark(itemLevel, listed[1], Number(listed[2]));
+        itemProblems++;
+      }
     } else if (where.startsWith("client")) failing.set("client", new Set([0]));
     else whole = true;
   };
 
   const checkRef = (ref: AnswerRef, where: string) => {
     const quote = normalizeForQuote(ref.quote);
-    const fail = (message: string) => {
-      problem(where, message);
+    const fail = (message: string, cause: ProblemCause) => {
+      problem(where, message, cause);
       quotes.set(ref, "not-found");
     };
-    if (quote === "") return fail("a ref has an empty quote.");
+    if (quote === "") return fail("a ref has an empty quote.", "quote-empty");
     let text: string | undefined;
     let place: string;
     if (ref.kind === "source") {
       const source = sources.get(ref.id);
-      if (!source) return fail(`"${ref.id}" is not the id of a source that was sent.`);
+      if (!source) return fail(`"${ref.id}" is not the id of a source that was sent.`, "unknown-ref");
       if (source.text === null) return void quotes.set(ref, "not-checked");
       text = sourceTexts.get(ref.id);
       place = `the source "${source.title}"`;
     } else if (ref.kind === "section") {
       text = sectionTexts.get(ref.id);
-      if (text === undefined) return fail(`"${ref.id}" is not one of her sections that were sent.`);
+      if (text === undefined) return fail(`"${ref.id}" is not one of her sections that were sent.`, "unknown-ref");
       place = `her section "${ref.id}"`;
     } else {
       text = notes;
@@ -481,21 +568,23 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     }
     const words = quote.split(" ").filter((word) => /[\p{L}\p{N}]/u.test(word));
     if (words.length < MIN_QUOTE_WORDS || !words.some((word) => /\p{L}/u.test(word))) {
-      return fail(`the quote "${ref.quote.slice(0, 80)}" is too short: copy at least ${MIN_QUOTE_WORDS} words, with words around the value.`);
+      return fail(`the quote "${ref.quote.slice(0, 80)}" is too short: copy at least ${MIN_QUOTE_WORDS} words, with words around the value.`, "quote-too-short");
     }
     if (text?.includes(quote)) return void quotes.set(ref, "found");
-    return fail(`the quote "${ref.quote.slice(0, 80)}" is not found word for word in ${place}.`);
+    return fail(`the quote "${ref.quote.slice(0, 80)}" is not found word for word in ${place}.`, "quote-not-found");
   };
 
   const visitClaim = (claim: AnswerClaim | null, where: string, options: { threshold?: boolean } = {}) => {
     if (!claim) return;
     const before = problems.length;
+    inClaim = true;
     checkOneClaim(claim, where, options);
+    inClaim = false;
     if (problems.length > before) failedClaims.add(claim);
   };
   const checkOneClaim = (claim: AnswerClaim, where: string, options: { threshold?: boolean }) => {
     claim.refs.forEach((ref, index) => checkRef(ref, `${where}.refs[${index}]`));
-    if ((claim.origin === "extracted" || claim.origin === "her") && claim.refs.length === 0) problem(where, "a value a source or her text states needs a ref with its quote.");
+    if ((claim.origin === "extracted" || claim.origin === "her") && claim.refs.length === 0) problem(where, "a value a source or her text states needs a ref with its quote.", "no-ref");
     // Only PDFs cited: their text cannot be read yet, so nothing can be checked (D32).
     if (claim.refs.length > 0 && claim.refs.every((ref) => quotes.get(ref) === "not-checked")) return;
     const quotedIn = (state: QuoteCheck) => claim.refs.filter((ref) => quotes.get(ref) === state).flatMap((ref) => numbersIn(ref.quote));
@@ -508,22 +597,28 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     if (unchecked.length > 0 && missing.length === 0) pdfNumbers.add(claim);
     if (missing.length === 0) return;
     numbers.add(claim);
+    unquotedNumbers.set(claim, missing);
     if (options.threshold && THRESHOLD.test(claim.value) && thresholdNumbers.size === 0) {
-      problem(where, `"${claim.value.slice(0, 80)}" gives a threshold that no standing instruction gives: write [MISSING: your threshold for …] in its place.`);
+      problem(where, `"${claim.value.slice(0, 80)}" gives a threshold that no standing instruction gives: write [MISSING: your threshold for …] in its place.`, "threshold");
     } else {
-      problem(where, `the number ${missing.map((number) => number.replace(/^d:/u, "")).join(", ")} in "${claim.value.slice(0, 80)}" is not written in any of its quotes.`);
+      problem(where, `the number ${missing.map((number) => number.replace(/^d:/u, "")).join(", ")} in "${claim.value.slice(0, 80)}" is not written in any of its quotes.`, "number-not-quoted");
     }
   };
   const visitAll = (claims: readonly AnswerClaim[], where: string) => claims.forEach((claim, index) => visitClaim(claim, `${where}[${index}]`));
   const uniqueKeys = (items: ReadonlyArray<{ key: string }>, where: string) => {
     const seen = new Set<string>();
     for (const item of items) {
-      if (seen.has(item.key)) problem(where, `the key "${item.key}" is used twice.`);
+      if (seen.has(item.key)) problem(where, `the key "${item.key}" is used twice.`, "duplicate-key");
       seen.add(item.key);
     }
   };
+  /** A value outside its fixed list: the value's own problem, which a repair can fix alone. */
   const oneOf = (claim: AnswerClaim | null, values: readonly string[], where: string) => {
-    if (claim && !values.includes(claim.value)) problem(where, `"${claim.value}" is not one of ${values.join(", ")}.`);
+    if (!claim || values.includes(claim.value)) return;
+    inClaim = true;
+    problem(where, `"${claim.value}" is not one of ${values.join(", ")}.`, "not-in-list");
+    inClaim = false;
+    failedClaims.add(claim);
   };
 
   if (kind === "map-facts") {
@@ -552,10 +647,8 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
       visitClaim(item.area, `deficits[${index}].area`);
       visitClaim(item.impact, `deficits[${index}].impact`);
       visitAll(item.evidence, `deficits[${index}].evidence`);
-      item.scores.forEach((score, at) => {
-        const where = `deficits[${index}].scores[${at}]`;
-        for (const key of ["instrument", "scale", "score", "percentile", "level"] as const) visitClaim(score[key], `${where}.${key}`);
-      });
+      // A score row is one claim: every number of its five fields is checked against its quotes.
+      visitAll(item.scores, `deficits[${index}].scores`);
     });
     facts.strengths.forEach((item, index) => {
       for (const key of ["text", "kind", "setting"] as const) visitClaim(item[key], `strengths[${index}].${key}`);
@@ -564,7 +657,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     facts.facts.forEach((item, index) => visitClaim(item.text, `facts[${index}].text`));
     facts.report.forEach((item, index) => {
       item.refs.forEach((ref, at) => checkRef(ref, `report[${index}].refs[${at}]`));
-      for (const id of item.sections) if (!sectionTexts.has(id)) problem(`report[${index}]`, `"${id}" is not one of her sections that were sent.`);
+      for (const id of item.sections) if (!sectionTexts.has(id)) problem(`report[${index}]`, `"${id}" is not one of her sections that were sent.`, "unknown-ref");
     });
     uniqueKeys(facts.caregivers, "caregivers");
     uniqueKeys(facts.settings, "settings");
@@ -588,66 +681,143 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
       });
       visitAll(behavior.baseline.other, `${where}.baseline.other`);
       behavior.function.evidence.forEach((entry, at) => visitClaim(entry.result, `${where}.function.evidence[${at}].result`));
-      for (const id of behavior.settingIds) if (!context.settingIds.has(id)) problem(`${where}.settingIds`, `"${id}" is not the id of a setting in <map-facts>.`);
+      for (const id of behavior.settingIds) if (!context.settingIds.has(id)) problem(`${where}.settingIds`, `"${id}" is not the id of a setting in <map-facts>.`, "unknown-link");
       const both = behavior.function.primary.filter((name) => behavior.function.secondary.includes(name));
-      if (both.length > 0) problem(`${where}.function`, `${both.join(", ")} is both primary and secondary.`);
+      if (both.length > 0) problem(`${where}.function`, `${both.join(", ")} is both primary and secondary.`, "function-both");
     });
     const grouped = new Map<string, string>();
     const byKey = new Map(found.behaviors.map((behavior) => [behavior.key, behavior]));
     found.groups.forEach((group, index) => {
       const where = `groups[${index}]`;
       for (const key of group.behaviorKeys) {
-        if (!named(key)) problem(where, `"${key}" is not the key of a behavior in this answer or the id of one in the map.`);
-        if (grouped.has(key)) problem(where, `the behavior "${key}" is in two groups (${grouped.get(key)} and ${group.key}).`);
+        if (!named(key)) problem(where, `"${key}" is not the key of a behavior in this answer or the id of one in the map.`, "unknown-link");
+        if (grouped.has(key)) problem(where, `the behavior "${key}" is in two groups (${grouped.get(key)} and ${group.key}).`, "group-rule");
         grouped.set(key, group.key);
         // Her rule: one function and one measure for the whole group (review round 1, S8).
         const member = byKey.get(key);
         if (!member) continue;
-        if (group.function && !member.function.primary.includes(group.function)) problem(where, `the group's function ${group.function} is not a primary function of "${key}".`);
-        if (group.measure && member.measure && member.measure.value !== group.measure) problem(where, `the group's measure ${group.measure} is not the measure of "${key}" (${member.measure.value}).`);
+        if (group.function && !member.function.primary.includes(group.function)) problem(where, `the group's function ${group.function} is not a primary function of "${key}".`, "group-rule");
+        if (group.measure && member.measure && member.measure.value !== group.measure) problem(where, `the group's measure ${group.measure} is not the measure of "${key}" (${member.measure.value}).`, "group-rule");
       }
     });
     found.risks.forEach((risk, index) => {
       visitClaim(risk.what, `risks[${index}].what`);
       visitClaim(risk.level, `risks[${index}].level`);
       visitAll(risk.evidence, `risks[${index}].evidence`);
-      for (const key of risk.behaviorKeys) if (!named(key)) problem(`risks[${index}]`, `"${key}" is not the key of a behavior in this answer or the id of one in the map.`);
+      for (const key of risk.behaviorKeys) if (!named(key)) problem(`risks[${index}]`, `"${key}" is not the key of a behavior in this answer or the id of one in the map.`, "unknown-link");
     });
     uniqueKeys(found.behaviors, "behaviors");
     uniqueKeys(found.groups, "groups (keys)");
     uniqueKeys(found.risks, "risks (keys)");
   }
-  return { problems: [...new Set(problems)], quotes, numbers, pdfNumbers, failedClaims, failing, whole };
+  return { problems, quotes, numbers, unquotedNumbers, pdfNumbers, failedClaims, failing, whole, itemLevel, causes, failedValues: failedClaims.size + itemProblems };
 }
 
-/* The repair (review round 1, B1): only the items that failed are asked about, and the answer is merged back by key */
+/*
+ * The repair (review round 1, B1; case map speed, 2026-11-23): only what failed is asked
+ * about, and the answer is merged back by key, field by field and entry by entry.
+ */
 
-/** An absent claim, as the wire form writes it. */
-const EMPTY_CLAIM = { value: "", refs: [], origin: "extracted", check: "" };
+/** How much of the first answer a repair quotes: the values that failed, whole items (a problem of the item's own), or the whole answer. */
+export type RepairScope = "values" | "items" | "whole";
+
+/** What a repair quotes of the first answer, and how much. */
+export interface RepairInput {
+  previousAnswer: Record<string, unknown>;
+  scope: RepairScope;
+}
 
 /**
- * The part of an answer a repair quotes: the items that failed, in the request's shape,
- * every other list empty (and the client's values empty unless the client failed). The
- * whole answer when a problem belongs to no single item.
+ * The part of an answer a repair quotes. For an item whose problems are all its values'
+ * (a quote not found, a number in no quote, a value outside its list), only those values,
+ * under the item's key: a repair then writes a few values, not the item again. For an item
+ * with a problem of its own (a link, a function both primary and secondary, a report item),
+ * the item whole, as the AI wrote it. Every other item is left out. The whole answer when
+ * a problem belongs to no single item (a key used twice).
  */
-export function failingItems(kind: MapRequestKind, raw: Record<string, unknown>, checks: CheckResult): Record<string, unknown> {
-  if (checks.whole) return raw;
-  const pick = (list: string) => {
+export function repairInput(kind: MapRequestKind, raw: Record<string, unknown>, answer: MapAnswer, checks: CheckResult): RepairInput {
+  if (checks.whole) return { previousAnswer: raw, scope: "whole" };
+  let wholeItems = false;
+  const pick = (list: string, parsed: ReadonlyArray<Record<string, unknown>>) => {
     const items = Array.isArray(raw[list]) ? (raw[list] as unknown[]) : [];
-    const wanted = checks.failing.get(list) ?? new Set<number>();
-    return items.filter((_item, index) => wanted.has(index));
+    const wanted = [...(checks.failing.get(list) ?? new Set<number>())].sort((a, b) => a - b);
+    return wanted.flatMap((index) => {
+      if (checks.itemLevel.get(list)?.has(index) || list === "report") {
+        wholeItems = true;
+        return items[index] === undefined ? [] : [items[index]];
+      }
+      const item = parsed[index];
+      return item ? [onlyFailed(item, checks.failedClaims)] : [];
+    });
   };
+  const rows = (list: readonly unknown[]) => list as ReadonlyArray<Record<string, unknown>>;
+  let previousAnswer: Record<string, unknown>;
   if (kind === "map-facts") {
-    const client = checks.failing.has("client") ? raw.client : emptyClient();
-    return { client, caregivers: pick("caregivers"), settings: pick("settings"), deficits: pick("deficits"), strengths: pick("strengths"), facts: pick("facts"), openItems: [], report: pick("report") };
+    const facts = answer as FactsAnswer;
+    previousAnswer = {
+      ...(checks.failing.has("client") && facts.client ? { client: onlyFailed(facts.client as unknown as Record<string, unknown>, checks.failedClaims) } : {}),
+      caregivers: pick("caregivers", rows(facts.caregivers)),
+      settings: pick("settings", rows(facts.settings)),
+      deficits: pick("deficits", rows(facts.deficits)),
+      strengths: pick("strengths", rows(facts.strengths)),
+      facts: pick("facts", rows(facts.facts)),
+      report: pick("report", rows(facts.report)),
+    };
+  } else {
+    const found = answer as BehaviorsAnswer;
+    previousAnswer = { behaviors: pick("behaviors", rows(found.behaviors)), groups: pick("groups", rows(found.groups)), risks: pick("risks", rows(found.risks)) };
   }
-  return { behaviors: pick("behaviors"), groups: pick("groups"), risks: pick("risks"), openItems: [] };
+  // Lists with nothing to fix are left out, so the quote holds only what failed.
+  for (const [key, value] of Object.entries(previousAnswer)) if (Array.isArray(value) && value.length === 0) delete previousAnswer[key];
+  return { previousAnswer, scope: wholeItems ? "items" : "values" };
 }
 
-function emptyClient(): Record<string, unknown> {
+/** A claim (or a score row) in the wire's form: "" for no check, a row's empty fields as "". */
+function wireClaim(claim: AnswerClaim): Record<string, unknown> {
+  const { value, refs, origin, check, ...rest } = claim as AnswerClaim & Record<string, unknown>;
+  if ("instrument" in rest) {
+    const row = Object.fromEntries(SCORE_FIELDS.map((field) => [field, (rest[field] as string | null) ?? ""]));
+    return { ...row, refs, origin, check: check ?? "" };
+  }
+  return { value, refs, origin, check: check ?? "" };
+}
+
+/**
+ * An item with only the values that failed, in the wire's form: its key, the failed claims,
+ * and of a list of entries (observations, a function's evidence, other services) the failed
+ * entries with what names them (a date, an instrument, a tool and its respondent). Nothing
+ * else: what the repair leaves empty stays as the first answer had it.
+ */
+function onlyFailed(item: Record<string, unknown>, failed: ReadonlySet<unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const key of ["age", "diagnosis", "severityLevel", "evaluator", "evaluationDate", "school", "grade", "schedule", "iep"]) out[key] = EMPTY_CLAIM;
-  return { ...out, medications: [], otherServices: [], languages: [] };
+  for (const [key, value] of Object.entries(item)) {
+    if (key === "key") out.key = value;
+    else if (isClaim(value)) {
+      if (failed.has(value)) out[key] = wireClaim(value);
+    } else if (Array.isArray(value)) {
+      const kept = value.flatMap((entry): unknown[] => {
+        if (isClaim(entry)) return failed.has(entry) ? [wireClaim(entry)] : [];
+        if (isPlain(entry) && entryFailed(entry, failed)) return [{ ...identifyingFields(entry), ...onlyFailed(entry, failed) }];
+        return [];
+      });
+      if (kept.length > 0) out[key] = kept;
+    } else if (isPlain(value)) {
+      const inner = onlyFailed(value, failed);
+      if (Object.keys(inner).length > 0) out[key] = inner;
+    }
+  }
+  return out;
+}
+
+/** What names an entry of a list (its date, instrument, name, or tool with its respondent), so the repair's entry is merged into the right one. */
+function identifyingFields(entry: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of [...ENTRY_ID_FIELDS, "respondent"]) {
+    const value = entry[key];
+    if (value === undefined || value === null) continue;
+    out[key] = isClaim(value) ? wireClaim(value) : value;
+  }
+  return out;
 }
 
 const isPlain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -694,7 +864,7 @@ function entryId(entry: Record<string, unknown>): string | null {
 }
 
 /** An entry has failed when one of its own claims failed the checks. */
-const entryFailed = (entry: Record<string, unknown>, failed: ReadonlySet<unknown>) => Object.values(entry).some((value) => failed.has(value));
+const entryFailed = (entry: Record<string, unknown>, failed: ReadonlySet<unknown>): boolean => failed.has(entry) || Object.values(entry).some((value) => failed.has(value) || (isPlain(value) && !isClaim(value) && entryFailed(value, failed)));
 
 /**
  * A list of objects after a repair (review check of 039ce31, R4-M1), entry by entry, by its
@@ -740,7 +910,7 @@ function mergeClaimList(first: AnswerClaim[], repaired: AnswerClaim[], failed: R
 
 /**
  * Items by key. After a repair about some items: the first answer's list, each item merged
- * field by field with the repair's item of the same key, then the repair's new keys. After a
+ * field by field with the repair's item of the same key (a key it never used is left out). After a
  * whole-answer repair: the repair's list first, merged the same way, then the first answer's
  * keys it lacks, once each, so a key the first answer used twice is not doubled (review round 2, M2).
  */
@@ -753,10 +923,10 @@ function mergeKeyed<T extends { key: string }>(first: readonly T[], repaired: re
     for (const [key, item] of firstByKey) if (!present.has(key)) out.push(item);
     return out;
   }
+  // A repair about some items answers under their keys; an item under a key the first answer
+  // never used would be a few values with no item around them, so it is left out.
   const fromRepair = new Map(repaired.map((item) => [item.key, item]));
-  const out = first.map((item) => (fromRepair.has(item.key) ? mergeFields(item, fromRepair.get(item.key)!, failed) : item));
-  for (const item of repaired) if (!firstByKey.has(item.key)) out.push(item);
-  return out;
+  return first.map((item) => (fromRepair.has(item.key) ? mergeFields(item, fromRepair.get(item.key)!, failed) : item));
 }
 
 const sameText = (a: string, b: string) => normalizeForQuote(a) === normalizeForQuote(b);
