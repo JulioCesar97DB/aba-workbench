@@ -8,6 +8,7 @@ import { useAppInfo } from "../app-info.tsx";
 import { CASE_STEPS, casePath, caseSummaryPath, stepTitle, type CaseStep } from "../case-steps.tsx";
 import { casesFolderProblemText, useShowInFolderLabel } from "../cases-folder.tsx";
 import { Button } from "../components/Button.tsx";
+import { ChoiceCards } from "../components/ChoiceCards.tsx";
 import { Dialog, DialogClose, DialogDescription } from "../components/Dialog.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { ButtonLink, TextLink } from "../components/Link.tsx";
@@ -18,6 +19,7 @@ import { useProviders } from "../drafting-provider.tsx";
 import { formatAge, formatDate, formatShortDate, formatTime, relativeDay } from "../format.ts";
 import { useLanguage } from "../language.tsx";
 import { useFailedSaves } from "../case-saves.tsx";
+import { markStartedFromParts } from "../half-done.ts";
 import { currentStep, nextThing, nextThingPath, stepStates, type NextInputs, type NextThing } from "../next-thing.ts";
 import { useNextWords } from "../next-thing-words.tsx";
 import { copiedSections, readySections } from "../step-states.ts";
@@ -54,7 +56,18 @@ export function Home() {
       header={
         <PageHeader
           title={t("home.title")}
-          actions={<NewCaseDialog open={newCaseOpen} onOpenChange={setNewCaseOpen} primary={!hasCases} onCreated={(created) => navigate(casePath(created.id))} />}
+          actions={
+            <NewCaseDialog
+              open={newCaseOpen}
+              onOpenChange={setNewCaseOpen}
+              primary={!hasCases}
+              onCreated={(created, start) => {
+                // Both land on Documentos; "Ya escribí partes" adds its line there and the paste card on top of the report (T9: not stored).
+                if (start === "parts") markStartedFromParts(created.id);
+                navigate(casePath(created.id));
+              }}
+            />
+          }
         />
       }
       contentClassName="max-w-list"
@@ -433,31 +446,35 @@ interface FormErrors {
   months?: string;
 }
 
+/** "¿Cómo empiezas?": from scratch, or from sections she already wrote in ABA Matrix (owner's decision T9: not stored). */
+type StartFrom = "scratch" | "parts";
+
 /**
- * New case: a label, and the client's age if the user wants to give it. Opened from the
- * header or from the empty Home's card (`open` is Home's). The form lives only while the
- * dialog is open, so each opening starts empty.
+ * New case (mockup 02): a label, the client's age if the user wants to give it, and how she
+ * starts. Opened from the header or from the empty Home's card (`open` is Home's). The form
+ * lives only while the dialog is open, so each opening starts empty, "Desde cero" chosen.
  */
-function NewCaseDialog({ open, onOpenChange, primary, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; primary: boolean; onCreated: (created: CaseSummary) => void }) {
+function NewCaseDialog({ open, onOpenChange, primary, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; primary: boolean; onCreated: (created: CaseSummary, start: StartFrom) => void }) {
   const { t } = useTranslation();
   return (
     <Dialog title={t("newCase.title")} open={open} onOpenChange={onOpenChange} trigger={<Button variant={primary ? "primary" : "secondary"}>{t("home.newCase")}</Button>}>
       <NewCaseForm
-        onCreated={(created) => {
+        onCreated={(created, start) => {
           onOpenChange(false);
-          onCreated(created);
+          onCreated(created, start);
         }}
       />
     </Dialog>
   );
 }
 
-function NewCaseForm({ onCreated }: { onCreated: (created: CaseSummary) => void }) {
+function NewCaseForm({ onCreated }: { onCreated: (created: CaseSummary, start: StartFrom) => void }) {
   const { t } = useTranslation();
   const platform = useAppInfo()?.platform;
   const [label, setLabel] = useState("");
   const [years, setYears] = useState("");
   const [months, setMonths] = useState("");
+  const [start, setStart] = useState<StartFrom>("scratch");
   const [errors, setErrors] = useState<FormErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -490,7 +507,7 @@ function NewCaseForm({ onCreated }: { onCreated: (created: CaseSummary) => void 
     try {
       const result = await window.aba.createCase({ label: checked.label, clientAge });
       if (result.outcome === "created") {
-        onCreated(result.case);
+        onCreated(result.case, start);
       } else if (result.outcome === "folder-problem") {
         setFormError(casesFolderProblemText(t, result.problem, platform));
       } else {
@@ -546,6 +563,16 @@ function NewCaseForm({ onCreated }: { onCreated: (created: CaseSummary) => void 
             />
           </div>
         </fieldset>
+        <ChoiceCards
+          legend={t("newCase.startLegend")}
+          testId="start-from"
+          value={start}
+          onChange={setStart}
+          options={[
+            { value: "scratch", title: t("newCase.startScratch"), body: t("newCase.startScratchBody") },
+            { value: "parts", title: t("newCase.startParts"), body: t("newCase.startPartsBody") },
+          ]}
+        />
         <p role="alert" className="text-sm font-medium text-danger empty:hidden">
           {formError}
         </p>

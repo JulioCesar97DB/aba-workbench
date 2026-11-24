@@ -234,6 +234,12 @@ export interface FailedSave {
   editing: number | null;
   /** For a map item: "<part>/<items or groups>/<item id>"; null otherwise. */
   mapItem: string | null;
+  /**
+   * For a section's text: it came from a box of "Pegar lo que ya escribiste" (saved as "hers", also over an AI draft).
+   * The paste screen puts back only these, and the section screen saves one it puts back with the same flag, so the
+   * flag never changes when a kept text moves between the two screens (UX-6 review round 2, S1). False otherwise.
+   */
+  pasted: boolean;
 }
 
 export type ReadSourceTextResult = { outcome: "read"; text: string } | { outcome: "source-not-found" } | { outcome: "case-unavailable" };

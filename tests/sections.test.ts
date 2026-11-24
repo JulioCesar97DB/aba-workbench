@@ -6,7 +6,8 @@ import { after, test } from "node:test";
 import { mockProvider } from "../src/lib/providers/mock.ts";
 import type { GenerateEvent, GenerateOptions, Provider, ProviderCredential } from "../src/lib/providers/types.ts";
 import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
-import { contextSections, saveOwnText, startNewSession, setNotes } from "../src/main/case-sections.ts";
+import { contextSections, finalVersion, saveOwnText, startNewSession, setNotes } from "../src/main/case-sections.ts";
+import { herSectionsOf } from "../src/main/case-map-draft.ts";
 import { addMapItem } from "../src/main/case-map.ts";
 import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
 import { hasLinesInParagraphs, isParagraphAnswer, linesAsParagraphs, paragraphSpans, replaceParagraph, splitParagraphs } from "../src/shared/section-text.ts";
@@ -1162,4 +1163,111 @@ test("revision: every saved change answers with a later revision, so the screen 
   assert.ok(!isOlderRevision(read.section.revision, shown.section.revision));
   // A revision that does not parse is never taken for an older one.
   assert.ok(!isOlderRevision("not a date", shown.section.revision));
+});
+
+/* UX-6 review B1 (owner's decision) */
+
+test("B1: a text pasted in \"Pegar lo que ya escribiste\" over an AI draft is hers: the other sections and the case map use it", async () => {
+  const { service, caseId, caseFile, cases, model } = await setup();
+  await generate(service, caseId, "background-information", { kind: "draft" });
+  const aiText = JSON.parse(readFileSync(caseFile, "utf8")).sections["background-information"].versions[0].text as string;
+  // The bulk paste's save: through the failed saves, under the section's own key, with the pasted flag.
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => "Invented case" });
+  const pasted = saved(await failed.save<SectionSaveResult>(caseId, { kind: "section-text", sectionId: "background-information", text: "Her background, pasted from ABA Matrix.", editing: null, pasted: true }));
+  const version = pasted.section.versions.find((item) => item.number === 2)!;
+  assert.equal(version.kind, "hers", "a pasted text is hers, also over an AI draft");
+  assert.equal(pasted.section.currentVersion, 2);
+  const stored = JSON.parse(readFileSync(caseFile, "utf8"));
+  assert.equal(stored.sections["background-information"].versions[1].basedOn, 1, "it still says what it replaced");
+  assert.equal(stored.sections["background-information"].versions[1].fromApproved, undefined);
+  const data = readCaseFile(readFileSync(caseFile, "utf8"));
+  assert.ok(data.ok);
+  assert.equal(finalVersion(data.data, "background-information")?.number, 2, "final for the other sections");
+  assert.deepEqual(
+    herSectionsOf(data.data).map((section) => [section.id, section.version, section.text]),
+    [["background-information", 2, "Her background, pasted from ABA Matrix."]],
+    "the case map's draft reads it",
+  );
+  await generate(service, caseId, "crisis-plan", { kind: "draft" });
+  const draft = model.prompts.find((prompt) => prompt.task.includes('"Crisis Plan"') && prompt.task.includes("Draft request"))!;
+  assert.match(draft.task, /Her background, pasted from ABA Matrix\./, "the next AI draft builds on it");
+  if (aiText.trim() !== "") assert.ok(!draft.task.includes(aiText.trim()), "not on the AI draft it replaced");
+
+  // The section screen's own save (no flag) of the same section over an AI draft stays an edit of it.
+  await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  const edit = saved(await service.saveText(caseId, "medical-necessity", "The draft, edited by her.", null));
+  assert.equal(edit.section.versions.find((item) => item.number === 2)!.kind, "edited");
+  const after = readCaseFile(readFileSync(caseFile, "utf8"));
+  assert.ok(after.ok);
+  assert.equal(finalVersion(after.data, "medical-necessity"), null, "her edit of an AI draft she has not approved is still not final");
+
+  // A flag that is not true or false is refused.
+  await assert.rejects(service.saveText(caseId, "background-information", "Text.", null, "yes"), /Refused/);
+});
+
+test("B1: a pasted box that could not be saved keeps its flag, so Try again saves it as hers", async () => {
+  let failing = false;
+  const { service, caseId, caseFile, cases } = await setup({}, { failWrites: () => failing });
+  await generate(service, caseId, "background-information", { kind: "draft" });
+  let n = 0;
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => "Invented case", newId: () => `id-${++n}` });
+  failing = true;
+  assert.equal((await failed.save(caseId, { kind: "section-text", sectionId: "background-information", text: "Her pasted text.", editing: null, pasted: true })).outcome, "not-saved");
+  failing = false;
+  assert.equal((await failed.retry(failed.list()[0].id)).outcome, "saved");
+  const versions = JSON.parse(readFileSync(caseFile, "utf8")).sections["background-information"].versions;
+  assert.deepEqual(versions.map((version: { kind: string }) => version.kind), ["draft", "hers"]);
+});
+
+/* UX-6 review round 2, S1 */
+
+test("S1 round 2: a kept section text says whether it was pasted, and the flag decides its kind whichever screen saves it", async () => {
+  let failing = false;
+  const { service, caseId, caseFile, cases } = await setup({}, { failWrites: () => failing });
+  await generate(service, caseId, "background-information", { kind: "draft" });
+  await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  let n = 0;
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => "Invented case", newId: () => `id-${++n}` });
+  failing = true;
+  // A box of the paste screen over an AI draft, and the section screen's first save of a hand edit of another AI draft: both fail.
+  await failed.save(caseId, { kind: "section-text", sectionId: "background-information", text: "Her pasted background.", editing: null, pasted: true });
+  await failed.save(caseId, { kind: "section-text", sectionId: "medical-necessity", text: "The draft, half edited by hand.", editing: null });
+  assert.deepEqual(
+    failed.list().map((item) => [item.sectionId, item.pasted]),
+    [
+      ["background-information", true],
+      ["medical-necessity", false],
+    ],
+  );
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "A note." })).outcome, "not-saved");
+  assert.equal(failed.list().find((item) => item.about === "notes")?.pasted, false, "only a section's text can be pasted");
+  failing = false;
+
+  // The section screen puts the pasted text back and saves it with the flag (first save), then updates it in place.
+  const first = saved(await failed.save<SectionSaveResult>(caseId, { kind: "section-text", sectionId: "background-information", text: "Her pasted background.", editing: null, pasted: true }));
+  const pass = first.section.currentVersion;
+  saved(await failed.save<SectionSaveResult>(caseId, { kind: "section-text", sectionId: "background-information", text: "Her pasted background, one word added.", editing: pass, pasted: false }));
+  // Try again of the section screen's kept edit (from Home, or wherever) keeps it an edit of the AI draft.
+  const edit = failed.list().find((item) => item.sectionId === "medical-necessity")!;
+  assert.equal((await failed.retry(edit.id)).outcome, "saved");
+  assert.equal(failed.size, 1, "only the note is left");
+
+  const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections;
+  assert.deepEqual(
+    stored["background-information"].versions.map((v: { kind: string; text: string }) => [v.kind, v.text]),
+    [
+      ["draft", stored["background-information"].versions[0].text],
+      ["hers", "Her pasted background, one word added."],
+    ],
+    "one version of hers, updated in place by the same pass",
+  );
+  assert.deepEqual(
+    stored["medical-necessity"].versions.map((v: { kind: string }) => v.kind),
+    ["draft", "edited"],
+    "an edit of an AI draft never becomes hers",
+  );
+  const data = readCaseFile(readFileSync(caseFile, "utf8"));
+  assert.ok(data.ok);
+  assert.equal(finalVersion(data.data, "background-information")?.number, 2);
+  assert.equal(finalVersion(data.data, "medical-necessity"), null);
 });
