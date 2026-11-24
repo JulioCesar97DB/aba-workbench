@@ -77,7 +77,8 @@ test("New case: how she starts decides where she lands, and nothing about it is 
   // Not stored (T9): the data files are a new case's, and after a restart the case is like any other.
   for (const label of ["Scratch case", "Parts case"]) {
     const data = caseData(home, label).read();
-    expect(Object.keys(data).sort()).toEqual(["clientAge", "createdAt", "files", "id", "label", "schemaVersion", "sections", "sources", "updatedAt"]);
+    // No age given in the form, so no clientAge key either.
+    expect(Object.keys(data).sort()).toEqual(["createdAt", "files", "id", "label", "schemaVersion", "sections", "sources", "updatedAt"]);
     expect(data.sections).toEqual({});
   }
   await app.close();
@@ -97,6 +98,9 @@ test("Paste what you already wrote: each filled box becomes her version of its s
   const { read } = caseData(home, "Paste case");
   // One section is hers already: what she pastes there is a new version, the earlier one stays.
   expect((await call<{ outcome: string }>(page, "saveSectionText", id, "crisis-plan", "Her earlier crisis plan.", null)).outcome).toBe("saved");
+  // Saved behind the window's back: a reload so the window reads it.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.reload());
+  await page.waitForEvent("load");
 
   await goTo(page, `/cases/${id}/report`);
   await page.getByTestId("paste-card").getByRole("link", { name: "Paste the sections" }).click();
@@ -203,7 +207,7 @@ test("Paste what you already wrote: a text pasted over an AI draft is hers, so t
   const page = await firstScreen(await launch());
   await goTo(page, `/cases/${id}/report/paste`);
   await expect(heading(page)).toHaveText("Paste what you already wrote");
-  await expect(row(page, "background-information").getByTestId("state-chip")).toHaveAttribute("data-state", "drafted");
+  await expect(row(page, "background-information").getByTestId("state-chip")).toHaveAttribute("data-state", "ai-draft");
   const box = await openRow(page, "background-information");
   await expect(row(page, "background-information")).toContainText("This section already has text in the app: what you paste becomes a new version, and the earlier ones stay.");
   await box.fill("Her background from ABA Matrix.");
