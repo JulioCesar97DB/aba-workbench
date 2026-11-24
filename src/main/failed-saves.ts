@@ -228,6 +228,8 @@ export class FailedSaves {
         text: typedText(op),
         editing: (op.kind === "section-text" || op.kind === "map-item") && typeof op.editing === "number" ? op.editing : null,
         mapItem: op.kind === "map-item" ? mapItemOf(op) : null,
+        // In memory only, like the rest of this list: nothing about it is stored.
+        pasted: op.kind === "section-text" && op.pasted === true,
       }));
   }
 

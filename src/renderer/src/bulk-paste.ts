@@ -1,6 +1,7 @@
 import { REPORT_SECTIONS, type ReportSectionId } from "../../shared/report-sections.ts";
 import { MAX_SECTION_TEXT_LENGTH, normalizeLineEndings } from "../../shared/section-text.ts";
 import type { SectionState } from "../../shared/sections.ts";
+import type { FailedSave } from "../../shared/sources.ts";
 import type { ChipState } from "./components/chip-state.ts";
 
 /*
@@ -64,4 +65,18 @@ export function sectionChip(state: SectionState): ChipState {
   if (state === "drafted") return "ai-draft";
   if (state === "approved") return "approved";
   return "not-started";
+}
+
+/**
+ * The texts this screen puts back in its boxes: the newest kept text of each section that came from a box here (`pasted`),
+ * from the main process's list (oldest first). A kept text of the section's own screen (an edit, with or without an
+ * editing pass) is that screen's alone: saved from here it would become "hers" (UX-6 review round 2, S1).
+ */
+export function pastedKeptTexts(failures: ReadonlyArray<FailedSave>): Map<ReportSectionId, { id: string; text: string }> {
+  const kept = new Map<ReportSectionId, { id: string; text: string }>();
+  for (const item of failures) {
+    const section = REPORT_SECTIONS.find((candidate) => candidate.id === item.sectionId);
+    if (item.about === "section" && item.pasted && section && item.editing === null && item.text !== null) kept.set(section.id, { id: item.id, text: item.text });
+  }
+  return kept;
 }

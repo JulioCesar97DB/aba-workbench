@@ -1218,3 +1218,56 @@ test("B1: a pasted box that could not be saved keeps its flag, so Try again save
   const versions = JSON.parse(readFileSync(caseFile, "utf8")).sections["background-information"].versions;
   assert.deepEqual(versions.map((version: { kind: string }) => version.kind), ["draft", "hers"]);
 });
+
+/* UX-6 review round 2, S1 */
+
+test("S1 round 2: a kept section text says whether it was pasted, and the flag decides its kind whichever screen saves it", async () => {
+  let failing = false;
+  const { service, caseId, caseFile, cases } = await setup({}, { failWrites: () => failing });
+  await generate(service, caseId, "background-information", { kind: "draft" });
+  await generate(service, caseId, "medical-necessity", { kind: "draft" });
+  let n = 0;
+  const failed = new FailedSaves({ run: runSaves(cases, () => service), labelOf: () => "Invented case", newId: () => `id-${++n}` });
+  failing = true;
+  // A box of the paste screen over an AI draft, and the section screen's first save of a hand edit of another AI draft: both fail.
+  await failed.save(caseId, { kind: "section-text", sectionId: "background-information", text: "Her pasted background.", editing: null, pasted: true });
+  await failed.save(caseId, { kind: "section-text", sectionId: "medical-necessity", text: "The draft, half edited by hand.", editing: null });
+  assert.deepEqual(
+    failed.list().map((item) => [item.sectionId, item.pasted]),
+    [
+      ["background-information", true],
+      ["medical-necessity", false],
+    ],
+  );
+  assert.equal((await failed.save(caseId, { kind: "notes", text: "A note." })).outcome, "not-saved");
+  assert.equal(failed.list().find((item) => item.about === "notes")?.pasted, false, "only a section's text can be pasted");
+  failing = false;
+
+  // The section screen puts the pasted text back and saves it with the flag (first save), then updates it in place.
+  const first = saved(await failed.save<SectionSaveResult>(caseId, { kind: "section-text", sectionId: "background-information", text: "Her pasted background.", editing: null, pasted: true }));
+  const pass = first.section.currentVersion;
+  saved(await failed.save<SectionSaveResult>(caseId, { kind: "section-text", sectionId: "background-information", text: "Her pasted background, one word added.", editing: pass, pasted: false }));
+  // Try again of the section screen's kept edit (from Home, or wherever) keeps it an edit of the AI draft.
+  const edit = failed.list().find((item) => item.sectionId === "medical-necessity")!;
+  assert.equal((await failed.retry(edit.id)).outcome, "saved");
+  assert.equal(failed.size, 1, "only the note is left");
+
+  const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections;
+  assert.deepEqual(
+    stored["background-information"].versions.map((v: { kind: string; text: string }) => [v.kind, v.text]),
+    [
+      ["draft", stored["background-information"].versions[0].text],
+      ["hers", "Her pasted background, one word added."],
+    ],
+    "one version of hers, updated in place by the same pass",
+  );
+  assert.deepEqual(
+    stored["medical-necessity"].versions.map((v: { kind: string }) => v.kind),
+    ["draft", "edited"],
+    "an edit of an AI draft never becomes hers",
+  );
+  const data = readCaseFile(readFileSync(caseFile, "utf8"));
+  assert.ok(data.ok);
+  assert.equal(finalVersion(data.data, "background-information")?.number, 2);
+  assert.equal(finalVersion(data.data, "medical-necessity"), null);
+});

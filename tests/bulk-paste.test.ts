@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { REPORT_SECTIONS, type ReportSectionId } from "../src/shared/report-sections.ts";
 import { MAX_SECTION_TEXT_LENGTH } from "../src/shared/section-text.ts";
-import { filledBoxes, isFilled, isTooLong, saveBoxes, sectionChip } from "../src/renderer/src/bulk-paste.ts";
+import { filledBoxes, isFilled, isTooLong, pastedKeptTexts, saveBoxes, sectionChip } from "../src/renderer/src/bulk-paste.ts";
+import type { FailedSave } from "../src/shared/sources.ts";
 
 /*
  * "Pegar lo que ya escribiste" (owner's decision T10): the filled boxes in ABA Matrix's
@@ -86,4 +87,30 @@ test("bulk paste: a text longer than a section can hold is left out of the save,
   // Counted as the main process counts it: a Windows line break is one character.
   assert.equal(isTooLong(`${"x".repeat(max - 1)}\r\n`), false);
   assert.deepEqual(filledBoxes({ [S1]: "x".repeat(max + 1), [S2]: "fits" }), [{ sectionId: S2, text: "fits" }]);
+});
+
+test("bulk paste: only kept texts pasted here come back in the boxes, the newest of each section (review round 2, S1)", () => {
+  const item = (id: string, sectionId: string, text: string | null, pasted: boolean, editing: number | null = null, about: FailedSave["about"] = "section"): FailedSave => ({
+    id,
+    caseId: "case",
+    label: "Invented case",
+    failure: "not-saved",
+    about,
+    sectionId,
+    text,
+    editing,
+    mapItem: null,
+    pasted,
+  });
+  const kept = pastedKeptTexts([
+    item("1", "background-information", "Older paste.", true),
+    item("2", "background-information", "Newer paste.", true),
+    // The section screen's first save of a hand edit (no editing pass): that screen's alone.
+    item("3", "medical-necessity", "Her hand edit of the AI draft.", false),
+    // The section screen's later saves of a pass, her instructions, and an id that is no section: never here.
+    item("4", "risk-assessment", "An edit in a pass.", false, 2),
+    item("5", "crisis-plan", "Her instructions.", false, null, "instructions"),
+    item("6", "not-a-section", "Text.", true),
+  ]);
+  assert.deepEqual([...kept], [["background-information", { id: "2", text: "Newer paste." }]]);
 });

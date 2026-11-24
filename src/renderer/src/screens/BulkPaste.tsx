@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 import { REPORT_SECTIONS, type ReportSection, type ReportSectionId } from "../../../shared/report-sections.ts";
 import { countWords, hasLinesInParagraphs, linesAsParagraphs, MAX_SECTION_TEXT_LENGTH, splitParagraphs } from "../../../shared/section-text.ts";
 import type { SectionState } from "../../../shared/sections.ts";
-import { filledBoxes, isFilled, isTooLong, saveBoxes, sectionChip, type PastedTexts } from "../bulk-paste.ts";
-import { onRetried, useFailedSavesLoaded, useSectionFailures, type SectionFailure } from "../case-saves.tsx";
+import { filledBoxes, isFilled, isTooLong, pastedKeptTexts, saveBoxes, sectionChip, type PastedTexts } from "../bulk-paste.ts";
+import { onRetried, useFailedSavesLoaded, useSectionFailures } from "../case-saves.tsx";
 import { casePath, stepTitle } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { cn } from "../components/cn.ts";
@@ -35,16 +35,6 @@ import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 
 type RowOutcome = "saving" | "saved" | "failed";
 
-/** The newest kept text of each section with no editing pass, from the main process's list (oldest first). */
-function keptTexts(failures: SectionFailure[]): Map<ReportSectionId, { id: string; text: string }> {
-  const kept = new Map<ReportSectionId, { id: string; text: string }>();
-  for (const item of failures) {
-    const section = REPORT_SECTIONS.find((candidate) => candidate.id === item.sectionId);
-    if (item.about === "section" && section && item.editing === null && item.text !== null) kept.set(section.id, { id: item.id, text: item.text });
-  }
-  return kept;
-}
-
 export function BulkPasteScreen() {
   const { t } = useTranslation();
   const opened = useOpenedCase();
@@ -61,14 +51,14 @@ export function BulkPasteScreen() {
 
   /*
    * A text that could not be saved is kept by the main process, not here (half-done.ts, review round 1, S1): each time
-   * the screen opens (a reload, or coming back to it), a section's kept text with no editing pass goes back in its box,
-   * shown as not saved, unless she has text waiting in that box. Decided once per opening, when the list is known.
-   * The section's own editor sends its first save with no editing pass too, so a text she could not save there shows
-   * here as well; both boxes show the same kept text, and whichever saves it first makes it go from the other.
+   * the screen opens (a reload, or coming back to it), a section's kept text from a box here (`pasted`) goes back in its
+   * box, shown as not saved, unless she has text waiting in that box. Decided once per opening, when the list is known.
+   * A kept edit from the section's own screen is never shown here (review round 2, S1). The section's screen does show
+   * a kept pasted text, and saves it as pasted; whichever saves it first makes it go from the other.
    */
   const loaded = useFailedSavesLoaded();
   const failures = useSectionFailures(caseId);
-  const kept = keptTexts(failures);
+  const kept = pastedKeptTexts(failures);
   const [restored, setRestored] = useState<string[] | null>(null);
   if (restored === null && loaded) {
     const shown = [...kept].filter(([id]) => !isFilled(texts[id]));

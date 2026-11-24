@@ -174,10 +174,8 @@ test("Paste what you already wrote: each filled box becomes her version of its s
   await expect(page.getByTestId("paste-card")).not.toHaveAttribute("data-first", "true");
 });
 
-test("Paste what you already wrote: a text pasted over an AI draft is hers, so the AI and the case map use it (review B1, the owner's decision)", async ({ launch, home }) => {
-  // A case whose Background Information has an AI draft, written into its data file before the app starts. Invented.
-  const casesFolder = defaultCasesFolder(home);
-  const id = "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+/** A case whose sections have an AI draft each, written into its data file before the app starts. Invented. */
+function seedDraftedCase(home: string, label: string, id: string, sectionIds: string[] = ["background-information"]) {
   const at = "2026-11-20T10:00:00.000Z";
   const generation = {
     provider: "anthropic",
@@ -191,22 +189,17 @@ test("Paste what you already wrote: a text pasted over an AI draft is hers, so t
     usage: { uncachedInputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500, reasoningTokens: null },
     costUsd: null,
   };
-  const folder = seedCase(casesFolder, "Drafted case", {
-    schemaVersion: 4,
-    id,
-    label: "Drafted case",
-    createdAt: at,
-    updatedAt: at,
-    sources: [],
-    sections: {
-      "background-information": {
-        currentVersion: 1,
-        approvedVersion: null,
-        versions: [{ number: 1, kind: "draft", createdAt: at, text: "An invented AI draft of the background.", generation }],
-      },
-    },
-  });
-  const read = () => JSON.parse(readFileSync(path.join(folder, "aba-case.json"), "utf8"));
+  const sections = Object.fromEntries(
+    sectionIds.map((sectionId) => [sectionId, { currentVersion: 1, approvedVersion: null, versions: [{ number: 1, kind: "draft", createdAt: at, text: `An invented AI draft of ${sectionId}.`, generation }] }]),
+  );
+  const folder = seedCase(defaultCasesFolder(home), label, { schemaVersion: 4, id, label, createdAt: at, updatedAt: at, sources: [], sections });
+  return { folder, read: () => JSON.parse(readFileSync(path.join(folder, "aba-case.json"), "utf8")) };
+}
+
+test("Paste what you already wrote: a text pasted over an AI draft is hers, so the AI and the case map use it (review B1, the owner's decision)", async ({ launch, home }) => {
+  // A case whose Background Information has an AI draft, written into its data file before the app starts. Invented.
+  const id = "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const { read } = seedDraftedCase(home, "Drafted case", id);
   const page = await firstScreen(await launch());
   await goTo(page, `/cases/${id}/report/paste`);
   await expect(heading(page)).toHaveText("Paste what you already wrote");
@@ -222,7 +215,7 @@ test("Paste what you already wrote: a text pasted over an AI draft is hers, so t
   // On disk: a new version of hers, not a correction of the draft; it still says what it replaced, and the draft stays.
   const versions = read().sections["background-information"].versions;
   expect(versions.map((v: { number: number; kind: string; basedOn?: number; text: string }) => [v.number, v.kind, v.basedOn, v.text])).toEqual([
-    [1, "draft", undefined, "An invented AI draft of the background."],
+    [1, "draft", undefined, "An invented AI draft of background-information."],
     [2, "hers", 1, "Her background from ABA Matrix."],
   ]);
   expect(versions[1].generation).toBeUndefined();
@@ -399,4 +392,61 @@ test("Paste what you already wrote: a box not saved here and then saved newer on
   await expect(row(page, "background-information").getByTestId("paste-box")).toHaveCount(0);
   await expect(page.getByTestId("bulk-paste-save")).toBeDisabled();
   expect(read().sections["background-information"].versions.map((v: { text: string }) => v.text)).toEqual(["Newer text, saved on the section's screen."]);
+});
+
+test("Paste what you already wrote: a pasted box not saved stays hers when the section's own screen saves it (review round 2, S1)", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const id = "8d2e3f4a-5b6c-4d7e-8f9a-0b1c2d3e4f5a";
+  const { folder, read } = seedDraftedCase(home, "Kept paste case", id);
+  const app = await launch();
+  const page = await firstScreen(app);
+  await goTo(page, `/cases/${id}/report/paste`);
+  await expect(heading(page)).toHaveText("Paste what you already wrote");
+  await (await openRow(page, "background-information")).fill("Her pasted background, not saved yet.");
+  await failNextSaveOf(app, folder, "background-information");
+  await page.getByTestId("bulk-paste-save").click();
+  await expect(row(page, "background-information")).toHaveAttribute("data-outcome", "failed");
+  expect((await call<Array<{ pasted: boolean }>>(page, "listFailedSaves")).map((item) => item.pasted)).toEqual([true]);
+
+  // The section's own screen puts the kept text back, as hers, not as a correction of the draft; she leaves without typing.
+  await goTo(page, `/cases/${id}/report/background-information`);
+  await expect(heading(page)).toHaveText("Background Information");
+  await expect(page.getByTestId("section-text")).toHaveValue("Her pasted background, not saved yet.");
+  await expect(page.getByTestId("state-chip").first()).toHaveAttribute("data-state", "hers");
+  await goTo(page, `/cases/${id}/report`);
+  await expect.poll(async () => (await call<unknown[]>(page, "listFailedSaves")).length).toBe(0);
+  expect(read().sections["background-information"].versions.map((v: { kind: string; basedOn?: number; text: string }) => [v.kind, v.basedOn, v.text])).toEqual([
+    ["draft", undefined, "An invented AI draft of background-information."],
+    ["hers", 1, "Her pasted background, not saved yet."],
+  ]);
+});
+
+test("Paste what you already wrote: a hand edit of an AI draft not saved on the section's screen is never put in a box here (review round 2, S1)", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const id = "9e3f4a5b-6c7d-4e8f-9a0b-1c2d3e4f5a6b";
+  const { folder, read } = seedDraftedCase(home, "Kept edit case", id, ["medical-necessity"]);
+  const page = await firstScreen(await launch());
+  await goTo(page, `/cases/${id}/report/medical-necessity`);
+  await expect(heading(page)).toHaveText("Medical Necessity Criteria");
+  await page.getByRole("button", { name: "Edit by hand" }).click();
+  chmodSync(folder, 0o555);
+  try {
+    await page.getByTestId("section-text").fill("The AI draft, half edited by hand.");
+    await expect.poll(async () => (await call<Array<{ pasted: boolean; editing: number | null }>>(page, "listFailedSaves")).map((item) => [item.pasted, item.editing])).toEqual([[false, null]]);
+    // On the paste screen (leaving the section saves again, and fails again): no box shows her edit, and nothing is offered to save.
+    await goTo(page, `/cases/${id}/report/paste`);
+    await expect(heading(page)).toHaveText("Paste what you already wrote");
+    await expect(row(page, "medical-necessity")).not.toHaveAttribute("data-outcome", "failed");
+    await expect(row(page, "medical-necessity").getByTestId("paste-box")).toHaveCount(0);
+    await expect(page.getByTestId("bulk-paste-save")).toBeDisabled();
+  } finally {
+    chmodSync(folder, 0o755);
+  }
+  // Try again saves it as what it is: her edit of the draft, which the other sections do not build on until she approves it.
+  const [kept] = await call<Array<{ id: string }>>(page, "listFailedSaves");
+  expect((await call<{ outcome: string }>(page, "retryFailedSave", kept.id)).outcome).toBe("saved");
+  expect(read().sections["medical-necessity"].versions.map((v: { kind: string; text: string }) => [v.kind, v.text])).toEqual([
+    ["draft", "An invented AI draft of medical-necessity."],
+    ["edited", "The AI draft, half edited by hand."],
+  ]);
 });
