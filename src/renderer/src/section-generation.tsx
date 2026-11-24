@@ -209,6 +209,17 @@ export function useSectionGeneration(caseId: string, sectionId: string): Section
   return byKey.get(keyOf(caseId, sectionId)) ?? null;
 }
 
+/** The case's sections the AI is writing now (not only checking): "Pegar lo que ya escribiste" leaves their boxes for later. */
+export function useSectionsBeingWritten(caseId: string): ReadonlySet<string> {
+  useEffect(ensureSubscribed, []);
+  useSyncExternalStore(subscribe, () => snapshot);
+  const writing = new Set<string>();
+  for (const generation of byKey.values()) {
+    if (generation.caseId === caseId && isRunning(generation) && generation.phase !== "checking") writing.add(generation.sectionId);
+  }
+  return writing;
+}
+
 /** Called with every section saved by a request (the new version, then its check). */
 export function useOnSectionSaved(listener: SavedListener): void {
   useEffect(() => {

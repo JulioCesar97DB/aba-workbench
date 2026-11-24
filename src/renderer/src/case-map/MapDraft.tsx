@@ -1,20 +1,23 @@
-import { useId, useState } from "react";
+import type { TFunction } from "i18next";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { THRESHOLDS_DRAFT } from "../../../shared/case-map-thresholds.ts";
 import { aiErrorKind, aiErrorNeedsSettings } from "../ai-errors.ts";
 import { trackSave } from "../case-saves.tsx";
 import { Button } from "../components/Button.tsx";
 import { Dialog, DialogClose } from "../components/Dialog.tsx";
+import { Icon } from "../components/Icon.tsx";
+import { TwoWays } from "../components/TwoWays.tsx";
 import { ButtonLink, TextLink } from "../components/Link.tsx";
 import { PROVIDER_NAMES, useProviders } from "../drafting-provider.tsx";
 import { Eyebrow } from "../shell/WorkArea.tsx";
-import { dismissMapDraft, isDrafting, startMapDraft, stopMapDraft, useMapDraft, type MapDraft } from "./draft.ts";
+import { dismissMapDraft, isDrafting, previewsNotSaved, startMapDraft, stopMapDraft, useMapDraft, type MapDraft } from "./draft.ts";
 
 /*
  * The case map's AI way (step 1, pull request 2): the action that drafts or updates the
- * map, its progress per part, and her definition thresholds. Kept apart from the screen
- * so it moves as it is into the "Con la IA" side of the two-ways bar when that lands
- * (the UX redesign, UX-3).
+ * map, its progress per part, and her definition thresholds. An empty map offers it in the
+ * "Con la IA" card of the shared two ways (UX-3's TwoWays); once the map has content it
+ * stays in the header until the step adopts the two-ways bar.
  */
 
 /**
@@ -40,7 +43,8 @@ export function MapAiButton({ caseId, hasMap, align = "end" }: { caseId: string;
   return (
     <span className={align === "end" ? "inline-flex flex-col items-end gap-1" : "inline-flex flex-col items-start gap-1"}>
       <span className="inline-flex items-center gap-2">
-        <Button variant="primary" disabled={running || providers.provider === null} onClick={() => void start()} aria-describedby={noteId}>
+        <Button variant="ai" disabled={running || providers.provider === null} onClick={() => void start()} aria-describedby={noteId}>
+          <Icon name="sparkle" />
           {hasMap ? t("caseMap.ai.update") : t("caseMap.ai.draft")}
         </Button>
         <span className="rounded-sm border border-accent px-1.5 py-0.5 text-xs font-semibold tracking-wide text-accent uppercase">{t("caseMap.ai.beta")}</span>
@@ -59,13 +63,17 @@ export function MapAiButton({ caseId, hasMap, align = "end" }: { caseId: string;
 
 const PARTS_OF_STEP = { "map-facts": "caseMap.ai.stepFacts", "map-behaviors": "caseMap.ai.stepBehaviors" } as const;
 
-/** Where a draft is, while it runs, and how it ended. Nothing shows when no draft was started here. */
-export function MapDraftPanel({ caseId }: { caseId: string }) {
+/**
+ * Where a draft is, while it runs, and how it ended. With no draft started here, a line
+ * says to connect the AI when none is, unless `quiet`: the empty map's AI card says it
+ * already (review round 1 of case map speed, M4).
+ */
+export function MapDraftPanel({ caseId, quiet = false }: { caseId: string; quiet?: boolean }) {
   const { t } = useTranslation();
   const draft = useMapDraft(caseId);
   const providers = useProviders();
   if (!draft) {
-    return providers.provider === null ? (
+    return providers.provider === null && !quiet ? (
       <p className="max-w-measure text-sm text-fg-muted">
         {t("caseMap.ai.notConnected")} <TextLink to="/settings">{t("caseMap.ai.settingsLink")}</TextLink>
       </p>
@@ -78,12 +86,40 @@ export function MapDraftPanel({ caseId }: { caseId: string }) {
   );
 }
 
+/** The time now, again every second while a draft runs, so the time shown is the time it took. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/** A length of time as "12 min 5 s" ("min" and "s" in both screen languages). */
+function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  return minutes > 0 ? `${minutes} min ${seconds % 60} s` : `${seconds} s`;
+}
+
+/**
+ * What a repair asks for, by its scope (review round 1 of case map speed, S5): those values
+ * only, the items that hold them, or the whole answer again.
+ */
+function repairLine(t: TFunction, draft: MapDraft): string {
+  if (draft.scope === "values" && draft.values > 0) return t("caseMap.ai.repairingValues", { count: draft.values });
+  if (draft.scope === "items") return draft.values > 0 ? t("caseMap.ai.repairingItems", { count: draft.values }) : t("caseMap.ai.repairing");
+  return draft.values > 0 ? t("caseMap.ai.repairingWhole", { count: draft.values }) : t("caseMap.ai.repairingAnswer");
+}
+
 function Running({ draft }: { draft: MapDraft }) {
   const { t } = useTranslation();
+  const now = useNow();
   const step = draft.step ?? "map-facts";
   const phase =
     draft.phase === "repairing"
-      ? t("caseMap.ai.repairing")
+      ? repairLine(t, draft)
       : draft.phase === "plain-json"
         ? t("caseMap.ai.plainJson")
         : draft.characters > 0
@@ -108,6 +144,16 @@ function Running({ draft }: { draft: MapDraft }) {
         ))}
       </ol>
       <p className="text-sm">{phase}</p>
+      {/* Two sentences, each with its own count, so each plural follows its own number (M3). */}
+      {draft.arrived > 0 && draft.phase !== "repairing" ? (
+        <p className="text-sm">
+          {t("caseMap.ai.arrived", { count: draft.arrived })} {t("caseMap.ai.shown", { count: draft.shown })}
+        </p>
+      ) : null}
+      {/* The time it has taken, measured; no estimate of the time left (owner's decision, 2026-11-23). */}
+      <p className="text-xs tabular-nums" data-testid="map-elapsed">
+        {t("caseMap.ai.elapsed", { total: formatElapsed(now - draft.startedAt), step: formatElapsed(now - draft.stepStartedAt) })}
+      </p>
       <p className="text-xs text-fg-muted">{t("caseMap.ai.time")}</p>
     </>
   );
@@ -150,6 +196,8 @@ function Finished({ draft }: { draft: MapDraft }) {
           </p>
         </details>
       ) : null}
+      {/* The items she saw arrive went with the request that did not save: said, not left to be guessed (M5). */}
+      {outcome?.kind !== "saved" && previewsNotSaved(draft) ? <p className="text-sm">{t("caseMap.ai.previewsNotSaved")}</p> : null}
       {draft.problems > 0 ? <p className="text-sm text-warning">{t("caseMap.ai.problems", { count: draft.problems })}</p> : null}
       {draft.kept.length > 0 ? <p className="text-sm text-fg-muted">{t("caseMap.ai.kept")}</p> : null}
       <div>
@@ -161,23 +209,37 @@ function Finished({ draft }: { draft: MapDraft }) {
   );
 }
 
-/** The two ways to start an empty map: by hand, or with the AI. */
+/**
+ * The two ways to start an empty map, as on every step (UX-3's TwoWays): by hand, or with
+ * the AI. With no AI connected, the AI card offers "Connect the AI" instead (P7).
+ */
 export function MapWays({ caseId, onByHand }: { caseId: string; onByHand: () => void }) {
   const { t } = useTranslation();
+  const providers = useProviders();
   return (
-    <div className="grid gap-3 @3xl:grid-cols-2">
-      <section className="flex flex-col items-start gap-2 rounded-lg border border-border p-4">
-        <h2 className="text-md font-semibold">{t("caseMap.ways.byHandTitle")}</h2>
-        <p className="text-sm text-fg-muted">{t("caseMap.ways.byHandBody")}</p>
-        <Button onClick={onByHand}>{t("caseMap.add.behaviors")}</Button>
-      </section>
-      <section className="flex flex-col items-start gap-2 rounded-lg border border-accent bg-mark p-4">
-        <h2 className="text-md font-semibold">{t("caseMap.ways.withAiTitle")}</h2>
-        <p className="text-sm">{t("caseMap.ways.withAiBody")}</p>
-        <MapAiButton caseId={caseId} hasMap={false} align="start" />
-        <p className="text-xs text-fg-muted">{t("caseMap.ai.time")}</p>
-      </section>
-    </div>
+    <TwoWays
+      layout="cards"
+      aiConnected={providers.provider !== null || providers.loading}
+      hand={{
+        title: t("caseMap.ways.byHandTitle"),
+        body: t("caseMap.ways.byHandBody"),
+        actions: (
+          <Button onClick={onByHand}>
+            <Icon name="pencil" />
+            {t("caseMap.add.behaviors")}
+          </Button>
+        ),
+      }}
+      ai={{
+        title: t("caseMap.ways.withAiTitle"),
+        body: (
+          <>
+            {t("caseMap.ways.withAiBody")} {t("caseMap.ai.time")}
+          </>
+        ),
+        actions: <MapAiButton caseId={caseId} hasMap={false} align="start" />,
+      }}
+    />
   );
 }
 

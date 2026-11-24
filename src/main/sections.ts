@@ -27,6 +27,7 @@ import {
   markCopied,
   NotesSchema,
   ownTextBefore,
+  PastedSchema,
   saveOwnText,
   SectionIdSchema,
   SectionRequestSchema,
@@ -147,11 +148,12 @@ export class SectionService {
     return { outcome: "saved", section: await this.detail(result.data, id), sections: sectionSummaries(result.data) };
   }
 
-  async saveText(caseId: unknown, sectionId: unknown, text: unknown, editing: unknown): Promise<SectionSaveResult> {
+  async saveText(caseId: unknown, sectionId: unknown, text: unknown, editing: unknown, pasted: unknown = false): Promise<SectionSaveResult> {
     const id = parse(SectionIdSchema, sectionId, "not a section.");
     const raw = parse(SectionTextSchema, text, "the text must be text.");
     const pass = parse(EditingSchema, editing, "not a version.");
-    return this.change(caseId, id, (data, now) => saveOwnText(data, id, raw, pass, now)?.data ?? null);
+    const fromPaste = parse(PastedSchema, pasted, "pasted must be true or false.");
+    return this.change(caseId, id, (data, now) => saveOwnText(data, id, raw, pass, now, { pasted: fromPaste })?.data ?? null);
   }
 
   async setCurrent(caseId: unknown, sectionId: unknown, version: unknown): Promise<SectionSaveResult> {

@@ -60,6 +60,8 @@
   --color-ai-subtle: #fff4dc;
   /* The case summary's "Lo siguiente" card: the light amber tint of mockup 03, accepted with it (UX-5 review round 1, M4). */
   --color-next-subtle: #fff4dc;
+  /* The chosen option of a choice shown as cards (New case's "¿Cómo empiezas?"): the same tint, as in mockup 02. */
+  --color-choice-subtle: #fff4dc;
 
   --color-backdrop: rgb(22 32 42 / 0.55);
 

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, beforeEach, test } from "node:test";
-import { checkMapAnswer, mapAnswerSchema, mergeRepair, normalizeForQuote, numbersIn, parseMapAnswer, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer } from "../src/lib/case-map-extraction.ts";
+import { checkMapAnswer, mapAnswerSchema, mergeRepair, normalizeForQuote, numbersIn, parseMapAnswer, repairInput, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer } from "../src/lib/case-map-extraction.ts";
 import { mockProvider } from "../src/lib/providers/mock.ts";
 import { CHATGPT_MAP_TASK_PREAMBLE, CHATGPT_TASK_PREAMBLE, responsesRequest } from "../src/lib/providers/openai.ts";
 import { ProviderError, type GenerateEvent, type GenerateOptions, type Provider } from "../src/lib/providers/types.ts";
@@ -66,7 +66,8 @@ function factsAnswer(ids: { obs: string; interview: string; pdf: string }, overr
       {
         key: "new-5",
         area: claim("Communication", [ref(ids.pdf, "Communication")]),
-        scores: [{ instrument: claim("Vineland-3", [ref(ids.pdf, "Vineland-3")]), scale: claim("Communication", [ref(ids.pdf, "Communication")]), score: claim("68", [ref(ids.pdf, "Communication 68")]), percentile: none(), level: none() }],
+        // One claim per score row (case map speed): the row's fields under the quote of its line.
+        scores: [{ instrument: "Vineland-3", scale: "Communication", score: "68", percentile: "", level: "", refs: [ref(ids.pdf, "Communication 68")], origin: "extracted", check: "" }],
         evidence: [],
         impact: none(),
       },
@@ -507,7 +508,7 @@ test("M5: only a refusal that names the schema or the format switches the route 
 test("M6: a ref the checks never reached is stored as not found, never as a PDF's 'not checked'", () => {
   const parsed = parseMapAnswer("map-facts", JSON.stringify(factsAnswer({ obs: "o", interview: "i", pdf: "p" })));
   assert.ok(parsed.ok);
-  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failedClaims: new Set(), failing: new Map(), whole: false };
+  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failedClaims: new Set(), failing: new Map(), whole: false, unquotedNumbers: new Map(), unquotedFields: new Map(), itemLevel: new Map(), causes: {}, failedValues: 0, failedFields: new Map() };
   const parts = toAnswerParts("map-facts", parsed.answer, empty, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
   const role = (parts.caregivers!.items[0] as Record<string, { refs: Array<{ checked: string }> }>).role;
   assert.equal(role.refs[0].checked, "not-found");
@@ -791,4 +792,474 @@ test("R4-M1: a repair that returns only the fixed observation keeps the observat
   teacher.behaviors[0].function.evidence = [{ ...teacher.behaviors[0].function.evidence[0], respondent: "Teacher" }];
   const evidence = (mergeRepair("map-behaviors", a, teacher, checks.failing, false, checks.failedClaims) as BehaviorsAnswer).behaviors[0].function.evidence;
   assert.deepEqual(evidence.map((entry) => entry.respondent), ["Mother", "Teacher"]);
+});
+
+/* Case map speed (2026-11-23): one claim per score row, repairs of only what failed, and the items shown as they arrive. */
+
+/** A behavior in the wire's form with every value empty but its key: what a repair about a few values answers around them. */
+function emptyBehavior(key: string, overrides: Answer = {}): Answer {
+  return {
+    key,
+    name: none(),
+    topographies: [],
+    measure: none(),
+    definition: none(),
+    onset: none(),
+    offset: none(),
+    examples: [],
+    nonExamples: [],
+    baseline: { observations: [], other: [] },
+    settingIds: [],
+    antecedents: [],
+    consequences: [],
+    function: { primary: [], secondary: [], evidence: [], reasoning: "", check: "" },
+    barriers: [],
+    risks: [],
+    ...overrides,
+  };
+}
+
+test("speed: a score row is one claim on the wire, every number of the row is checked against its quotes, and it is stored as five claims", () => {
+  const scores = (mapAnswerSchema("map-facts") as { properties: { deficits: { items: { properties: { scores: { items: { required: string[] } } } } } } }).properties.deficits.items.properties.scores.items;
+  assert.deepEqual(scores.required, ["instrument", "scale", "score", "percentile", "level", "refs", "origin", "check"], "one claim per row");
+  const report = "Score report, invented.\nVineland-3 Adaptive Behavior Scales\n| Communication | 68 | 2 | Low |\n| Socialization | 74 | 4 | Moderately low |";
+  const context = checkContext({ sources: [{ id: "v", title: "Vineland", text: report }] });
+  const row = (fields: Answer, refs: unknown[]) => ({ instrument: "Vineland-3", scale: "Communication", score: "68", percentile: "2", level: "Low", refs, origin: "extracted", check: "", ...fields });
+  const withRows = (rows: unknown[]) => {
+    const answer = factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [{ key: "new-1", area: claim("Communication", [ref("v", "Communication | 68 | 2")]), scores: rows, evidence: [], impact: none() }] });
+    const parsed = parseMapAnswer("map-facts", JSON.stringify(answer));
+    assert.ok(parsed.ok, parsed.ok ? "" : parsed.problems.join("; "));
+    return parsed.answer as FactsAnswer;
+  };
+  // The row's line and the report's title: every number found, the instrument's "3" too.
+  const good = withRows([row({}, [ref("v", "Communication | 68 | 2 | Low"), ref("v", "Vineland-3 Adaptive Behavior Scales")])]);
+  assert.deepEqual(checkMapAnswer("map-facts", good, context).problems, []);
+  // Without the title, the instrument's number is in no quote: still checked, as when it was its own claim.
+  const noTitle = checkMapAnswer("map-facts", withRows([row({}, [ref("v", "Communication | 68 | 2 | Low")])]), context);
+  assert.match(noTitle.problems.join("\n"), /deficits\[0\]\.scores\[0\]: the number 3 in "Vineland-3 · Communication · 68 · 2 · Low" is not written/);
+  // A score the line does not give: a problem of the row, flagged on the score when stored.
+  const wrong = withRows([row({ score: "86" }, [ref("v", "Communication | 68 | 2 | Low"), ref("v", "Vineland-3 Adaptive Behavior Scales")])]);
+  const checks = checkMapAnswer("map-facts", wrong, context);
+  assert.equal(checks.problems.length, 1);
+  assert.equal(checks.causes["number-not-quoted"], 1);
+  const parts = toAnswerParts("map-facts", wrong, checks, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
+  const stored = (parts.deficits!.items[0] as unknown as { scores: Array<Record<string, { value: string; refs: Array<{ quote: string; checked: string }>; check: string | null } | null>> }).scores[0];
+  assert.deepEqual(Object.keys(stored), ["instrument", "scale", "score", "percentile", "level"], "the stored shape is today's five claims");
+  assert.equal(stored.score!.value, "86");
+  assert.match(stored.score!.check ?? "", /not written in the quote/);
+  assert.equal(stored.percentile!.check, null, "the other fields carry no check");
+  assert.equal(stored.instrument!.check, null);
+  for (const field of ["instrument", "scale", "score", "percentile", "level"]) assert.deepEqual(stored[field]!.refs.map((item) => item.quote), ["Communication | 68 | 2 | Low", "Vineland-3 Adaptive Behavior Scales"], `${field} keeps the row's refs`);
+  // A blank field of the report is an empty field of the row, stored as no claim; a row with no field at all is no row.
+  const blank = withRows([row({ percentile: "", level: "" }, [ref("v", "Communication | 68 | 2 | Low"), ref("v", "Vineland-3 Adaptive Behavior Scales")]), row({ instrument: "", scale: "", score: "", percentile: "", level: "" }, [])]);
+  assert.equal(blank.deficits[0].scores.length, 1);
+  const blankStored = toAnswerParts("map-facts", blank, checkMapAnswer("map-facts", blank, context), { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
+  assert.equal((blankStored.deficits!.items[0] as unknown as { scores: Array<Record<string, unknown>> }).scores[0].percentile, null);
+});
+
+test("speed: a repair quotes only the values that failed, under their item's key; the answer around them is merged back and why is recorded", async () => {
+  const { service, caseId, caseFile, model } = await setup((found) => {
+    const first = behaviorsAnswer(found, []);
+    const behaviors = first.behaviors as Array<Record<string, unknown>>;
+    behaviors[0].examples = [claim("He spat at his mother's arm during homework", [ref(found.obs, "spat toward his mother's forearm twice")]), claim("He spat at his brother at dinner", [ref(found.obs, "spat at his brother during dinner")])];
+    // The repair answers the one example that failed, every other value empty.
+    const repair = { behaviors: [emptyBehavior("new-1", { examples: [claim("He spat once on the floor next to his grandmother", [ref(found.obs, "he spat once on the floor next to his grandmother")])] })], groups: [], risks: [], openItems: [] };
+    return { facts: [{ answer: factsAnswer(found) }], behaviors: [{ answer: first }, { answer: repair }] };
+  });
+  const events = await draft(service, caseId);
+  assert.equal(model.sent.length, 3);
+  const task = model.sent[2].prompt.task;
+  const previous = JSON.parse(task.slice(task.indexOf("<previous-answer>") + "<previous-answer>".length, task.indexOf("</previous-answer>")).trim()) as { behaviors: Array<Record<string, unknown>> };
+  assert.deepEqual(Object.keys(previous), ["behaviors"], "lists with nothing to fix are left out");
+  assert.deepEqual(previous.behaviors.length, 1, "only the item that failed");
+  assert.deepEqual(Object.keys(previous.behaviors[0]), ["key", "examples"], "and of it, only its key and the value that failed");
+  assert.deepEqual((previous.behaviors[0].examples as Array<{ value: string }>).map((example) => example.value), ["He spat at his brother at dinner"]);
+  assert.match(task, /behaviors\[0\]\.examples\[1\]\.refs\[0\]: the quote "spat at his brother during dinner" is not found word for word in the source "[^"]+"\. \(item "new-1"\)/);
+  assert.match(task, /Leave empty every value and every list that <previous-answer> does not show/);
+  const map = stored(caseFile);
+  const spitting = map.parts.behaviors.versions[0].content.items[0];
+  assert.deepEqual(
+    spitting.examples.map((example: { value: string }) => example.value),
+    ["He spat at his mother's arm during homework", "He spat once on the floor next to his grandmother"],
+    "the example that passed stays; the failed one is replaced",
+  );
+  assert.match(spitting.definition.value, /^Any instance/, "what the repair left empty stays as it was");
+  assert.equal(spitting.name.value, "Spitting");
+  assert.equal(spitting.baseline.observations.length, 1);
+  assert.equal(map.parts.behaviors.versions[0].content.items.length, 2);
+  const record = map.extractions[1];
+  assert.equal(record.repairScope, "values");
+  assert.deepEqual(record.repairCauses, { "quote-not-found": 1 }, "why the repair happened");
+  assert.equal(record.repairValues, 1);
+  assert.deepEqual(record.problems, []);
+  assert.equal(typeof record.seconds.answer, "number");
+  assert.equal(typeof record.seconds.repair, "number");
+  assert.equal(map.extractions[0].seconds.repair, undefined, "no repair, no repair time");
+  // The screen hears how many values the repair fixes.
+  assert.ok(events.some((event) => event.type === "map-progress" && event.step === "map-behaviors" && event.phase === "repairing" && event.values === 1));
+  // And what the repair asks for again, so the line says "those values only" only then (review round 1 of case map speed, S5).
+  assert.ok(events.filter((event) => event.type === "map-progress" && event.phase === "repairing").every((event) => event.type === "map-progress" && event.scope === "values"));
+});
+
+test("speed: an item with a problem of its own (a link, a function twice) is quoted whole; the scope says so", async () => {
+  const { service, caseId, caseFile, model } = await setup((found) => {
+    const first = behaviorsAnswer(found, []);
+    const behaviors = first.behaviors as Array<Record<string, unknown>>;
+    behaviors[0].examples = [claim("He spat at his brother at dinner", [ref(found.obs, "spat at his brother during dinner")])];
+    behaviors[1].function = { primary: ["escape"], secondary: ["escape"], evidence: [], reasoning: "", check: "" };
+    return { facts: [{ answer: factsAnswer(found) }], behaviors: [{ answer: first }, { answer: { behaviors: [], groups: [], risks: [], openItems: [] } }] };
+  });
+  const events = await draft(service, caseId);
+  assert.ok(events.some((event) => event.type === "map-progress" && event.phase === "repairing" && event.scope === "items" && event.values === 2), "the screen hears that items are rewritten");
+  const task = model.sent[2].prompt.task;
+  const previous = JSON.parse(task.slice(task.indexOf("<previous-answer>") + "<previous-answer>".length, task.indexOf("</previous-answer>")).trim()) as { behaviors: Array<Record<string, unknown>> };
+  assert.deepEqual(Object.keys(previous.behaviors[0]), ["key", "examples"], "new-1: only its failed value");
+  assert.equal(previous.behaviors[1].key, "new-2");
+  assert.ok("definition" in previous.behaviors[1] && "baseline" in previous.behaviors[1], "new-2: whole, as the AI wrote it");
+  const record = stored(caseFile).extractions[1];
+  assert.equal(record.repairScope, "items");
+  assert.deepEqual(record.repairCauses, { "quote-not-found": 1, "function-both": 1 });
+  assert.equal(record.repairValues, 2);
+  assert.equal(record.repairUsed, true);
+  // The repair answered nothing: the first answer is kept whole, its problems flagged.
+  assert.equal(record.problems.length, 2);
+});
+
+test("speed: each item that passes its own checks is shown as it arrives, before its request saves; one that fails is not", async () => {
+  const { service, caseId, caseFile } = await setup((found) => {
+    const facts = factsAnswer(found);
+    (facts.caregivers as Array<Record<string, unknown>>)[0].role = claim("Mother", [ref(found.interview, "the mother said she works nights")]);
+    const fixed = factsAnswer(found, { caregivers: [(factsAnswer(found).caregivers as unknown[])[0]], settings: [], deficits: [], openItems: [] });
+    return { facts: [{ answer: facts }, { answer: fixed }], behaviors: [{ answer: behaviorsAnswer(found, []) }] };
+  });
+  const events = await draft(service, caseId);
+  const previews = events.filter((event) => event.type === "map-preview");
+  const factsSaved = events.findIndex((event) => event.type === "map-saved" && event.step === "map-facts");
+  const factsPreviews = previews.filter((event) => event.type === "map-preview" && event.step === "map-facts");
+  assert.deepEqual(
+    factsPreviews.map((event) => event.type === "map-preview" && event.id),
+    ["preview:map-facts:caregivers:1", "preview:map-facts:settings:0", "preview:map-facts:settings:1", "preview:map-facts:deficits:0", "preview:map-facts:openItems:0"],
+    "the caregiver whose quote fails is not shown; the empty client is nothing to show",
+  );
+  assert.ok(factsPreviews.every((event) => events.indexOf(event) < factsSaved), "shown before the request saves");
+  const setting = factsPreviews[1];
+  assert.ok(setting.type === "map-preview" && setting.part === "settings");
+  const item = setting.item as { key: string; name: { value: string; refs: Array<{ checked: string }> } };
+  assert.equal(item.name.value, "Home");
+  assert.equal(item.name.refs[0].checked, "found", "in the map's stored shape, with its checks");
+  // The progress counts what arrived and what was shown, for the writing answer only.
+  const writing = events.filter((event) => event.type === "map-progress" && event.step === "map-facts" && event.phase === "writing");
+  const last = writing.at(-1);
+  assert.ok(last?.type === "map-progress");
+  assert.deepEqual([last.arrived, last.shown], [7, 5]);
+  // The behaviors: a risk that names a behavior that arrived before it is shown too; groups wait for the save.
+  const behaviorsPreviews = previews.filter((event) => event.type === "map-preview" && event.step === "map-behaviors").map((event) => event.type === "map-preview" && event.part);
+  assert.deepEqual(behaviorsPreviews, ["behaviors", "behaviors", "risks"]);
+  // Nothing is saved by a preview: the saved map is the request's, after its checks and repair.
+  assert.equal(stored(caseFile).parts.caregivers.versions[0].content.items[0].role.refs[0].checked, "found");
+});
+
+/* A value over a length limit is that value's own problem (owner's decision, 2026-11-23): repaired alone, never the whole answer. */
+
+/** The observation notes' first three lines, one passage over the 300 characters a quote may hold. */
+const LONG_QUOTE = OBSERVATIONS.split("\n").slice(0, 3).join(" ");
+const LONG_DATE = "11/04/2026, in the afternoon, at home, after school and homework";
+
+test("limits: a value or a quote over its limit no longer makes the answer unreadable; it is the value's own problem", () => {
+  assert.ok(LONG_QUOTE.length > 300 && LONG_DATE.length > 40);
+  const answer = factsAnswer({ obs: "o", interview: "i", pdf: "p" }, {
+    client: { ...absentClient(), evaluationDate: claim(LONG_DATE, [ref("o", "11/04/2026, home, 2 hours")]) },
+    deficits: [],
+    facts: [{ key: "new-9", text: claim("The first home observation was on 11/04/2026.", [ref("o", LONG_QUOTE)]), homeSection: 3 }],
+    openItems: [{ kind: "missing", text: "x".repeat(2000), homeSection: 0 }],
+  });
+  const parsed = parseMapAnswer("map-facts", JSON.stringify(answer));
+  assert.ok(parsed.ok, "readable: the lengths are the code checks' now");
+  const checks = checkMapAnswer("map-facts", parsed.answer, checkContext());
+  const long = checks.problems.filter((text) => /characters long/.test(text));
+  assert.equal(long.length, 2, checks.problems.join("\n"));
+  assert.match(long.join("\n"), /client\.evaluationDate\.value: it is 64 characters long, and this field takes at most 40/);
+  assert.match(long.join("\n"), /facts\[0\]\.text\.refs\[0\]: the quote .* is \d+ characters long, and a quote takes at most 300/);
+  assert.equal(checks.causes["too-long"], 2);
+  assert.equal(checks.whole, false);
+  // The long quote is found word for word all the same.
+  assert.equal(checks.quotes.get((parsed.answer as FactsAnswer).facts[0].text!.refs[0]), "found");
+  // The repair quotes those two values only.
+  const input = repairInput("map-facts", parsed.raw, parsed.answer, checks);
+  assert.equal(input.scope, "values");
+  assert.deepEqual(Object.keys(input.previousAnswer).sort(), ["client", "facts"]);
+  assert.deepEqual(Object.keys(input.previousAnswer.client as object), ["evaluationDate"]);
+  assert.deepEqual(Object.keys((input.previousAnswer.facts as Array<object>)[0]), ["key", "text"]);
+  // An open item (never repaired: the AI's note to her) over its limit is cut to fit.
+  const note = (parsed.answer as FactsAnswer).openItems[0].text;
+  assert.equal(note.length, 1500);
+  assert.ok(note.endsWith("…"));
+});
+
+test("limits: a draft whose values are too long is repaired value by value; what is still too long is cut to fit, flagged, and saved", async () => {
+  for (const fixes of [true, false]) {
+    const { service, caseId, caseFile, model } = await setup((found) => {
+      const first = factsAnswer(found, {
+        client: { ...absentClient(), evaluationDate: claim(LONG_DATE, [ref(found.obs, "11/04/2026, home, 2 hours")]) },
+        facts: [{ key: "new-9", text: claim("The first home observation was on 11/04/2026.", [ref(found.obs, LONG_QUOTE)]), homeSection: 3 }],
+      });
+      const repair = fixes
+        ? factsAnswer(found, {
+            client: { ...absentClient(), evaluationDate: claim("11/04/2026", [ref(found.obs, "11/04/2026, home, 2 hours")]) },
+            caregivers: [],
+            settings: [],
+            deficits: [],
+            facts: [{ key: "new-9", text: claim("The first home observation was on 11/04/2026.", [ref(found.obs, "11/04/2026, home, 2 hours")]), homeSection: 0 }],
+            openItems: [],
+          })
+        : first;
+      return { facts: [{ answer: first }, { answer: repair }], behaviors: [{ answer: behaviorsAnswer(found, []) }] };
+    });
+    const events = await draft(service, caseId);
+    assert.equal(model.sent.length, 3, "one repair, then the behaviors");
+    const previous = model.sent[1].prompt.task.slice(model.sent[1].prompt.task.indexOf("<previous-answer>"), model.sent[1].prompt.task.indexOf("</previous-answer>"));
+    assert.doesNotMatch(previous, /Grandmother|Laundromat|Vineland/, "never the whole answer");
+    const map = stored(caseFile);
+    const record = map.extractions[0];
+    assert.equal(record.repairScope, "values");
+    assert.deepEqual(record.repairCauses, { "too-long": 2 });
+    assert.equal(record.repairValues, 2);
+    assert.ok(events.some((event) => event.type === "map-saved" && event.step === "map-facts" && event.result.outcome === "saved"), "saved");
+    const client = map.parts.client.versions[0].content.items[0];
+    const fact = map.parts.facts.versions[0].content.items[0];
+    assert.equal(map.parts.caregivers.versions[0].content.items.length, 2, "the rest of the first answer is kept");
+    if (fixes) {
+      assert.equal(client.evaluationDate.value, "11/04/2026");
+      assert.equal(fact.text.refs[0].quote, "11/04/2026, home, 2 hours");
+      assert.equal(fact.homeSection, 3, "what the repair left empty stays as it was");
+      assert.deepEqual(record.problems, []);
+    } else {
+      assert.ok(client.evaluationDate.value.length <= 40 && client.evaluationDate.value.endsWith("…"), client.evaluationDate.value);
+      assert.match(client.evaluationDate.check, /longer than the map allows/);
+      const quote = fact.text.refs[0].quote as string;
+      assert.ok(quote.length <= 300 && LONG_QUOTE.startsWith(quote), "the first words that fit, still word for word");
+      assert.equal(fact.text.refs[0].checked, "found");
+      assert.equal(record.problems.length, 2);
+    }
+  }
+});
+
+test("limits: a reasoning, a group's reason or a respondent too long is quoted alone and merged back alone", () => {
+  const found = { obs: "o", interview: "i" };
+  const first = behaviorsAnswer(found, []);
+  const behavior = (first.behaviors as Array<Record<string, unknown>>)[0];
+  behavior.function = { ...(behavior.function as Record<string, unknown>), reasoning: "r".repeat(1600), evidence: [{ tool: "interview", respondent: "M".repeat(130), result: claim("Spitting stops the homework", [ref("i", "he spits and then I have to stop the homework to clean")]), supports: ["escape"] }] };
+  (first.groups as Array<Record<string, unknown>>)[0].reason = "g".repeat(1600);
+  const a = parsedBehaviors(first);
+  const checks = checkMapAnswer("map-behaviors", a, checkContext());
+  assert.equal(checks.causes["too-long"], 3, checks.problems.join("\n"));
+  const input = repairInput("map-behaviors", first, a, checks);
+  assert.equal(input.scope, "values");
+  const quoted = input.previousAnswer as { behaviors: Array<Record<string, unknown>>; groups: Array<Record<string, unknown>> };
+  assert.deepEqual(Object.keys(quoted.behaviors[0]), ["key", "function"]);
+  assert.deepEqual(Object.keys(quoted.behaviors[0].function as object).sort(), ["evidence", "reasoning"]);
+  assert.deepEqual(Object.keys(quoted.groups[0]), ["key", "reason"]);
+  // The repair gives the three texts shorter, every other value empty.
+  const repaired = parsedBehaviors({
+    behaviors: [emptyBehavior("new-1", { function: { primary: [], secondary: [], evidence: [{ tool: "interview", respondent: "Mother", result: none(), supports: [] }], reasoning: "The observation and the interview point to escape.", check: "" } })],
+    groups: [{ key: "new-3", behaviorKeys: [], nature: "", function: "none", measure: "none", reason: "Same response class, function and measure." }],
+    risks: [],
+    openItems: [],
+  });
+  const failed = new Set<unknown>([...checks.failedClaims, ...checks.failedFields.keys()]);
+  const merged = mergeRepair("map-behaviors", a, repaired, checks.failing, false, failed) as BehaviorsAnswer;
+  const fn = merged.behaviors[0].function;
+  assert.equal(fn.reasoning, "The observation and the interview point to escape.");
+  assert.deepEqual(fn.primary, ["escape"], "the rest of the function stays");
+  assert.equal(fn.evidence.length, 1, "the evidence is merged into its entry, not added");
+  assert.equal(fn.evidence[0].respondent, "Mother");
+  assert.equal(fn.evidence[0].result?.value, "Spitting stops the homework", "its result, which passed, stays");
+  assert.equal(merged.groups[0].reason, "Same response class, function and measure.");
+  assert.deepEqual(merged.groups[0].behaviorKeys, ["new-1", "new-2"]);
+  assert.deepEqual(checkMapAnswer("map-behaviors", merged, checkContext()).problems, []);
+});
+
+/* Review round 1 of case map speed (2026-11-23): the reviewer's probes. */
+
+const parsedFacts = (answer: Answer) => {
+  const parsed = parseMapAnswer("map-facts", JSON.stringify(answer));
+  assert.ok(parsed.ok, parsed.ok ? "" : parsed.problems.join("; "));
+  return parsed.answer as FactsAnswer;
+};
+/** The first answer's failed values and the objects holding a failed text, as the draft passes them to the merge. */
+const failedOf = (checks: CheckResult) => new Set<unknown>([...checks.failedClaims, ...checks.failedFields.keys()]);
+
+test("review B1: a repair that rewrites the value naming an entry (an observation's date, a service's name), or an entry with no name, keeps the entry's passed values", () => {
+  const found = { obs: "o", interview: "i" };
+  const withObservation = (observation: unknown) => {
+    const answer = behaviorsAnswer(found, []);
+    (answer.behaviors as Array<{ baseline: { observations: unknown[] } }>)[0].baseline.observations = [observation];
+    return answer;
+  };
+  const passed = { setting: claim("Home", [ref("o", "11/04/2026, home, 2 hours")]), length: claim("2 hours", [ref("o", "11/04/2026, home, 2 hours")]), value: claim("3", [ref("o", "Spitting counts: 3 on 11/04")]) };
+  const row = (answer: BehaviorsAnswer) => {
+    const entry = answer.behaviors[0].baseline.observations;
+    return entry.map((item) => ({ date: item.date?.value ?? null, setting: item.setting?.value ?? null, length: item.length?.value ?? null, value: item.value?.value ?? null }));
+  };
+  // Probe 1: the date's quote is not found; the repair writes the date another way, with a found quote.
+  const a = parsedBehaviors(withObservation({ date: claim("11/04/2026", [ref("o", "on 11/04/2026 at home")]), ...passed }));
+  const checks = checkMapAnswer("map-behaviors", a, checkContext());
+  assert.ok(checks.problems.length > 0 && checks.problems.every((problem) => /observations\[0\]\.date/.test(problem)), checks.problems.join("\n"));
+  const quoted = repairInput("map-behaviors", {}, a, checks).previousAnswer as { behaviors: Array<{ baseline: { observations: Array<Record<string, unknown>> } }> };
+  assert.deepEqual(Object.keys(quoted.behaviors[0].baseline.observations[0]), ["date"], "only the failed date is quoted");
+  const fix = parsedBehaviors({ behaviors: [emptyBehavior("new-1", { baseline: { observations: [{ date: claim("November 4, 2026", [ref("o", "11/04/2026, home, 2 hours")]), setting: none(), length: none(), value: none() }], other: [] } })], groups: [], risks: [], openItems: [] });
+  const merged = mergeRepair("map-behaviors", a, fix, checks.failing, false, failedOf(checks)) as BehaviorsAnswer;
+  assert.deepEqual(row(merged), [{ date: "November 4, 2026", setting: "Home", length: "2 hours", value: "3" }], "the count that passed stays");
+  assert.deepEqual(checkMapAnswer("map-behaviors", merged, checkContext()).problems, []);
+  // Probe 2: an observation with no date, whose value of 9 failed; the repair gives 3.
+  const noDate = parsedBehaviors(withObservation({ date: none(), setting: passed.setting, length: passed.length, value: claim("9", [ref("o", "Spitting counts: 3 on 11/04")]) }));
+  const noDateChecks = checkMapAnswer("map-behaviors", noDate, checkContext());
+  const three = parsedBehaviors({ behaviors: [emptyBehavior("new-1", { baseline: { observations: [{ date: none(), setting: none(), length: none(), value: passed.value }], other: [] } })], groups: [], risks: [], openItems: [] });
+  assert.deepEqual(row(mergeRepair("map-behaviors", noDate, three, noDateChecks.failing, false, failedOf(noDateChecks)) as BehaviorsAnswer), [{ date: null, setting: "Home", length: "2 hours", value: "3" }]);
+  // Probe 3: a service's name failed; the repair names it another way.
+  const services = "Other services, invented: speech-language therapy at school with Ms. Rivera, paid by the family.";
+  const context = checkContext({ sources: [...checkContext().sources, { id: "s", title: "Services", text: services }] });
+  const withService = (service: Answer) => factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { client: { ...absentClient(), otherServices: [service] }, deficits: [] });
+  const first = parsedFacts(withService({ name: claim("Speech therapy", [ref("s", "speech therapy at school")]), provider: claim("Ms. Rivera", [ref("s", "at school with Ms. Rivera")]), paid: claim("not-paid", [ref("s", "paid by the family")]) }));
+  const firstChecks = checkMapAnswer("map-facts", first, context);
+  assert.equal(firstChecks.problems.length, 1, firstChecks.problems.join("\n"));
+  const renamed = parsedFacts(withService({ name: claim("Speech-language therapy", [ref("s", "speech-language therapy at school")]), provider: none(), paid: none() }));
+  const service = (mergeRepair("map-facts", first, renamed, firstChecks.failing, false, failedOf(firstChecks)) as FactsAnswer).client!.otherServices;
+  assert.deepEqual(service.map((item) => [item.name?.value, item.provider?.value, item.paid?.value]), [["Speech-language therapy", "Ms. Rivera", "not-paid"]], "the provider and 'paid' that passed stay");
+});
+
+test("review S1: the report's title vouches for the instrument's number only, never for a wrong percentile", () => {
+  const report = "Score report, invented.\nVineland-3 Adaptive Behavior Scales\n| Communication | 68 | 2 | Low |";
+  const context = checkContext({ sources: [{ id: "v", title: "Vineland", text: report }] });
+  const rows = (percentile: string) =>
+    parsedFacts(
+      factsAnswer({ obs: "o", interview: "i", pdf: "p" }, {
+        caregivers: [],
+        settings: [],
+        deficits: [{ key: "new-1", area: claim("Communication", [ref("v", "Communication | 68 | 2")]), scores: [{ instrument: "Vineland-3", scale: "Communication", score: "68", percentile, level: "Low", refs: [ref("v", "| Communication | 68 | 2 | Low |"), ref("v", "Vineland-3 Adaptive Behavior Scales")], origin: "extracted", check: "" }], evidence: [], impact: none() }],
+      }),
+    );
+  assert.deepEqual(checkMapAnswer("map-facts", rows("2"), context).problems, [], "the right row passes, the instrument's 3 from the title");
+  const wrong = rows("3");
+  const checks = checkMapAnswer("map-facts", wrong, context);
+  assert.equal(checks.problems.length, 1);
+  assert.match(checks.problems[0], /deficits\[0\]\.scores\[0\]: the number 3 in .* is not written in any of its quotes/);
+  // Stored, the [CHECK] is on the percentile, not on the instrument whose 3 the title gives.
+  const parts = toAnswerParts("map-facts", wrong, checks, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
+  const row = (parts.deficits!.items[0] as unknown as { scores: Array<Record<string, { check: string | null }>> }).scores[0];
+  assert.match(row.percentile.check ?? "", /not written in the quote/);
+  assert.equal(row.instrument.check, null);
+});
+
+test("review S2: a repaired score row is merged into the failed row field by field, in its place", () => {
+  const report = "Score report, invented.\nVineland-3 Adaptive Behavior Scales\n| Communication | 68 | 2 | Low |\n| Socialization | 74 | 4 | Moderately low |";
+  const context = checkContext({ sources: [{ id: "v", title: "Vineland", text: report }] });
+  const title = ref("v", "Vineland-3 Adaptive Behavior Scales");
+  const row = (fields: Answer, line: string) => ({ instrument: "Vineland-3", scale: "Communication", score: "68", percentile: "2", level: "Low", refs: [ref("v", line), title], origin: "extracted", check: "", ...fields });
+  const deficit = (scores: unknown[]) => factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [{ key: "new-1", area: claim("Communication", [ref("v", "Communication | 68 | 2")]), scores, evidence: [], impact: none() }] });
+  // Only the Communication score fails (86 for 68); Socialization passes.
+  const first = parsedFacts(deficit([row({ score: "86" }, "| Communication | 68 | 2 | Low |"), row({ scale: "Socialization", score: "74", percentile: "4", level: "Moderately low" }, "| Socialization | 74 | 4 | Moderately low |")]));
+  const checks = checkMapAnswer("map-facts", first, context);
+  assert.equal(checks.problems.length, 1, checks.problems.join("\n"));
+  // The repair writes back only the corrected score.
+  const repaired = parsedFacts(deficit([{ instrument: "", scale: "", score: "68", percentile: "", level: "", refs: [ref("v", "| Communication | 68 | 2 | Low |")], origin: "extracted", check: "" }]));
+  const merged = mergeRepair("map-facts", first, repaired, checks.failing, false, failedOf(checks)) as FactsAnswer;
+  assert.deepEqual(
+    merged.deficits[0].scores.map((item) => item.value),
+    ["Vineland-3 · Communication · 68 · 2 · Low", "Vineland-3 · Socialization · 74 · 4 · Moderately low"],
+    "the repaired row keeps its instrument, scale, percentile and level, in the report's order",
+  );
+  assert.deepEqual(merged.deficits[0].scores[0].refs.map((item) => item.quote), ["| Communication | 68 | 2 | Low |"]);
+  // A repair that names the row is matched by its instrument and scale.
+  const named = parsedFacts(deficit([{ instrument: "Vineland-3", scale: "Communication", score: "68", percentile: "", level: "", refs: [ref("v", "| Communication | 68 | 2 | Low |"), title], origin: "extracted", check: "" }]));
+  const byName = mergeRepair("map-facts", first, named, checks.failing, false, failedOf(checks)) as FactsAnswer;
+  assert.equal(byName.deficits[0].scores[0].value, "Vineland-3 · Communication · 68 · 2 · Low");
+  assert.equal(byName.deficits[0].scores.length, 2);
+  assert.deepEqual(checkMapAnswer("map-facts", byName, context).problems, []);
+});
+
+test("review S3, M1, M2: a cut quote keeps the passage with the value's number, or the value is flagged; cut texts that are not claims are flagged; a cut note joins an earlier check", () => {
+  const convert = { notesSession: null, sectionVersions: new Map(), settingIds: new Set<string>(), behaviorIds: new Set<string>() };
+  // S3: a found quote of 385 characters whose "30" is near its end.
+  const story = `${"The mother said the child talks a lot at home but it is hard to follow, and then: ".repeat(4)}the child goes to Speech therapy 30 minutes twice a week at school.`;
+  assert.ok(story.length > 300 && story.indexOf("30") > 300);
+  const context = checkContext({ sources: [{ id: "n", title: "Notes", text: story }] });
+  const answer = parsedFacts(factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [], facts: [{ key: "new-1", text: claim("Speech therapy 30 minutes twice a week", [ref("n", story)]), homeSection: 3 }] }));
+  const checks = checkMapAnswer("map-facts", answer, context);
+  assert.equal(checks.quotes.get(answer.facts[0].text!.refs[0]), "found");
+  const fact = (toAnswerParts("map-facts", answer, checks, convert).facts!.items[0] as unknown as { text: { refs: Array<{ quote: string; checked: string }>; check: string | null } }).text;
+  const quote = fact.refs[0].quote;
+  assert.ok(quote.length <= 300 && story.includes(quote), "still word for word");
+  assert.match(quote, /\b30 minutes/, "the passage that holds the value's number");
+  assert.equal(fact.refs[0].checked, "found");
+  // A value whose numbers no passage of the limit holds together: flagged.
+  const far = `There were 12 sessions. ${"x ".repeat(160)}and 30 minutes each.`;
+  const farContext = checkContext({ sources: [{ id: "n", title: "Notes", text: far }] });
+  const farAnswer = parsedFacts(factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [], facts: [{ key: "new-1", text: claim("12 sessions of 30 minutes", [ref("n", far)]), homeSection: 3 }] }));
+  const farFact = (toAnswerParts("map-facts", farAnswer, checkMapAnswer("map-facts", farAnswer, farContext), convert).facts!.items[0] as unknown as { text: { check: string | null } }).text;
+  assert.match(farFact.check ?? "", /This quote was cut to fit: check the value against the source\./);
+  // M2: a value too long that already has a check is told both.
+  const long = parsedFacts(factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { caregivers: [], settings: [], deficits: [], facts: [{ key: "new-1", text: claim(`Spitting at home. ${"y".repeat(1600)}`, [ref("o", "the child spat toward his mother's forearm")], "extracted", "The AI was unsure of this."), homeSection: 3 }] }));
+  const longFact = (toAnswerParts("map-facts", long, checkMapAnswer("map-facts", long, checkContext()), convert).facts!.items[0] as unknown as { text: { check: string } }).text;
+  assert.match(longFact.check, /^The AI was unsure of this\. This value was longer than the map allows/);
+  // M1: a reasoning cut to fit says so in the function's check; a group's reason in an open item; a report item's text too.
+  const first = behaviorsAnswer({ obs: "o", interview: "i" }, []);
+  const behavior = (first.behaviors as Array<Record<string, unknown>>)[0];
+  behavior.function = { ...(behavior.function as Record<string, unknown>), reasoning: "r ".repeat(900) };
+  (first.groups as Array<Record<string, unknown>>)[0].reason = "g ".repeat(900);
+  const a = parsedBehaviors(first);
+  const parts = toAnswerParts("map-behaviors", a, checkMapAnswer("map-behaviors", a, checkContext()), convert);
+  const fn = (parts.behaviors!.items[0] as unknown as { function: { reasoning: string; check: string } }).function;
+  assert.ok(fn.reasoning.endsWith("…"));
+  assert.match(fn.check, /The reasoning was longer than the map allows/);
+  assert.ok(parts.openItems!.items.some((item) => /The group "Spitting": its reason was longer than the map allows/.test(String(item.text))));
+  const report = parsedFacts(factsAnswer({ obs: "o", interview: "i", pdf: "p" }, { report: [{ kind: "thread-gap", text: `Section 3 lacks dates. ${"z ".repeat(900)}`, sections: [], refs: [] }] }));
+  const reportParts = toAnswerParts("map-facts", report, checkMapAnswer("map-facts", report, checkContext()), convert);
+  assert.ok(reportParts.openItems!.items.some((item) => /^The report item "Section 3 lacks dates\..*was longer than the map allows/.test(String(item.text))));
+});
+
+test("review S4: an update shows nothing of a part she approved or of an item she changed, and marks the AI's new version of a saved item", async () => {
+  let caregiverIds: string[] = [];
+  const { service, caseId, caseFile, cases } = await setup((found) => {
+    const base = factsAnswer(found);
+    return {
+      facts: [
+        { answer: factsAnswer(found) },
+        {
+          answer: {
+            ...base,
+            get caregivers() {
+              return (factsAnswer(found).caregivers as Array<Record<string, unknown>>).map((item, index) => ({ ...item, key: caregiverIds[index] }));
+            },
+          },
+        },
+      ],
+      behaviors: [{ answer: behaviorsAnswer(found, []) }, { answer: behaviorsAnswer(found, []) }],
+    };
+  });
+  await draft(service, caseId);
+  const first = stored(caseFile);
+  caregiverIds = first.parts.caregivers.versions[0].content.items.map((item: { id: string }) => item.id);
+  assert.equal(caregiverIds.length, 2);
+  // She changes the first caregiver by hand and approves the behaviors.
+  await cases.changeCase(caseId, (data, _folder, now) => {
+    const typed = saveMapItem(data, "caregivers", "items", caregiverIds[0], { role: { value: "Mother (her words)", check: null } }, null, now);
+    assert.ok(typed && typed !== "item-not-found");
+    return { save: approveMapPart(typed.data, "behaviors", 1, now), value: null };
+  });
+  const events = await draft(service, caseId);
+  const previews = events.filter((event) => event.type === "map-preview");
+  assert.ok(!previews.some((event) => event.part === "behaviors"), "nothing of the approved behaviors");
+  const caregivers = previews.filter((event) => event.part === "caregivers");
+  assert.deepEqual(
+    caregivers.map((event) => event.replaces),
+    [caregiverIds[1]],
+    "her changed caregiver is not shown; the other is the AI's new version of the saved one",
+  );
+  assert.ok(previews.filter((event) => event.part === "settings").every((event) => event.replaces === null), "a new key is a new item");
+  // The progress counts only what is shown.
+  const writing = events.filter((event) => event.type === "map-progress" && event.step === "map-behaviors" && event.phase === "writing").at(-1);
+  assert.ok(writing?.type === "map-progress");
+  assert.equal(writing.shown, previews.filter((event) => event.step === "map-behaviors").length);
+  assert.equal(stored(caseFile).parts.behaviors.versions.length, 1, "the approved part is left as it is");
 });

@@ -4,6 +4,7 @@ import { RouterProvider } from "react-router/dom";
 import { AppInfoProvider } from "./app-info.tsx";
 import { ConnectionsProvider } from "./connections.tsx";
 import { TooltipProvider } from "./components/Tooltip.tsx";
+import { BulkPasteScreen } from "./screens/BulkPaste.tsx";
 import { CaseRoute, ReportScreen } from "./screens/Case.tsx";
 import { CaseSummaryScreen } from "./screens/CaseSummary.tsx";
 import { PlanScreen } from "./screens/ComingLater.tsx";
@@ -44,6 +45,8 @@ const router = createHashRouter([
           { path: "case-map", element: <CaseMapScreen /> },
           { path: "interventions", element: <PlanScreen /> },
           { path: "report", element: <ReportScreen /> },
+          // Before report/:sectionId: "paste" is no section's id (src/shared/report-sections.ts).
+          { path: "report/paste", element: <BulkPasteScreen /> },
           { path: "report/:sectionId", element: <SectionScreen /> },
           { path: "review", element: <ReviewScreen /> },
           { path: "review/read", element: <ReadAllScreen /> },

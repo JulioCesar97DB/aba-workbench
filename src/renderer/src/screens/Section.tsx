@@ -401,7 +401,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     ) : display === "paste" ? (
       <StateChip state="hers" detail={t("section.chipEditing")} />
     ) : display === "edit" && current ? (
-      <StateChip state={isAiVersion(current) || isCorrection(detail.versions, current) ? "corrected" : "hers"} detail={t("section.chipEditing")} />
+      <StateChip state={keptOpen?.pasted !== true && (isAiVersion(current) || isCorrection(detail.versions, current)) ? "corrected" : "hers"} detail={t("section.chipEditing")} />
     ) : current ? (
       <StateChip state={versionChip(detail, current, copiedNumber)} />
     ) : null;
@@ -476,6 +476,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     sectionId: section.id,
     keptId: keptOpen?.id ?? null,
     editing: keptOpen?.editing ?? null,
+    pasted: keptOpen?.pasted === true,
     onState: onEditorState,
     textRef: editorText,
     flushRef: editorFlush,
@@ -520,7 +521,8 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     body = <WritingView generation={generation} base={current} />;
     footer = <WaitingComposer nextNumber={nextNumber} />;
   } else if (display === "paste" || (display === "edit" && current)) {
-    const correcting = display === "edit" && current !== null && (isAiVersion(current) || isCorrection(detail.versions, current));
+    // A kept text pasted in "Pegar lo que ya escribiste" is saved as hers, not as a correction (review round 2, S1).
+    const correcting = display === "edit" && current !== null && keptOpen?.pasted !== true && (isAiVersion(current) || isCorrection(detail.versions, current));
     body = (
       <>
         <TwoWays layout="bar" active="hand" hand={{ body: t("section.handBarBody") }} ai={{ body: t("section.handBarAi") }} />
@@ -902,7 +904,7 @@ function copiedSentence(t: TFunction, copied: Copied | "failed", section: Report
 }
 
 /** Text with single line breaks reads as one paragraph (review M3): say so, and offer each line as a paragraph. */
-function LinesNotice({ onTreat }: { onTreat: () => void }) {
+export function LinesNotice({ onTreat }: { onTreat: () => void }) {
   const { t } = useTranslation();
   return (
     <div data-testid="lines-notice" className="flex max-w-reading flex-col items-start gap-2 rounded-md border border-border-control bg-surface-muted px-3.5 py-2.5 text-sm">
@@ -926,6 +928,7 @@ function OwnTextEditor({
   savedValue,
   keptId,
   editing: initialEditing,
+  pasted,
   onSaved,
   onTreatLines,
   onState,
@@ -941,6 +944,12 @@ function OwnTextEditor({
   /** The kept text it starts from (review round 2, B3), told to the main process once shown. */
   keptId: string | null;
   editing: number | null;
+  /**
+   * It starts from a kept text pasted in "Pegar lo que ya escribiste": its first save (no editing pass yet) goes with the
+   * same flag, so the text stays "hers" whichever screen saves it; the next saves update that version in place (UX-6
+   * review round 2, S1). False for her own edits here, which keep their kinds.
+   */
+  pasted: boolean;
   onSaved: (detail: SectionDetail, sections?: ReturnType<typeof useOpenedCase>["sections"]) => void;
   onTreatLines: (text: string, flush: () => Promise<boolean>) => Promise<void>;
   /** Told the save state, the version this pass writes to and whether it can be improved, for the header and the foot. */
@@ -962,7 +971,7 @@ function OwnTextEditor({
     initial: initialText,
     savedValue,
     save: async (value) => {
-      const result = await window.aba.saveSectionText(caseId, sectionId, value, editing.current);
+      const result = await window.aba.saveSectionText(caseId, sectionId, value, editing.current, pasted && editing.current === null);
       if (result.outcome !== "saved") return false;
       // The newest version is the one this pass writes to from now on.
       editing.current = result.section.currentVersion;

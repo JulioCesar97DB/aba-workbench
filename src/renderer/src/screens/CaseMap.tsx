@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router";
 import type { MapSaveResult } from "../../../shared/api.ts";
@@ -10,7 +10,7 @@ import { useAutosave, useKeptText } from "../autosave.tsx";
 import { onRetried, retry, useMapFailures } from "../case-saves.tsx";
 import { MapFields, type MapFormContext } from "../case-map/CaseMapFields.tsx";
 import { MapAiButton, MapDraftPanel, MapWays, ThresholdsBlock } from "../case-map/MapDraft.tsx";
-import { isDrafting, useMapDraft, useOnMapSaved } from "../case-map/draft.ts";
+import { isDrafting, useMapDraft, useOnMapSaved, type MapPreview } from "../case-map/draft.ts";
 import { checksOf, countChecks, fieldsOf, itemInput, itemTitle } from "../case-map/specs.ts";
 import { MAP_TERMS } from "../i18n/terms.ts";
 import { Button } from "../components/Button.tsx";
@@ -178,8 +178,9 @@ export function CaseMapScreen() {
                 </Button>
               )
             ) : null}
-            {/* The AI's way: moves into the "Con la IA" side of the two-ways bar when the UX redesign's UX-3 lands. */}
-            <MapAiButton caseId={caseId} hasMap={opened.caseMap.withContent > 0} />
+            {/* The AI's way, for a map with content: moves into the "Con la IA" side of the two-ways bar when the UX redesign's UX-3 lands.
+                An empty map's AI card holds the action, so the header has none (review round 1 of case map speed, M4; P7, U4). */}
+            {opened.caseMap.withContent > 0 ? <MapAiButton caseId={caseId} hasMap /> : null}
           </>
         ) : null
       }
@@ -221,6 +222,10 @@ export function CaseMapScreen() {
       return other ? (itemTitle("groups", other as unknown as Record<string, unknown>) ?? other.id) : null;
     },
   });
+  // The items of the answer that passed their checks and are not saved yet, in this part (case map speed).
+  const previews = (draft?.previews ?? []).filter((preview) => preview.part === part);
+  const selectedPreview = selectedId?.startsWith("preview:") ? previews.find((preview) => preview.id === selectedId) : undefined;
+  const previewView = selectedPreview ? <PreviewItem key={selectedPreview.id} part={part} preview={selectedPreview} context={context} /> : null;
   const selectedCollection = selectedId ? collectionOf(selectedId) : "items";
   const selected = selectedId ? (selectedCollection === "groups" ? view.groups : view.items).find((item) => item.id === selectedId) : undefined;
   const clientItem = part === "client" ? view.items[0] : undefined;
@@ -266,7 +271,7 @@ export function CaseMapScreen() {
     >
       <div className="flex flex-col gap-4">
         <PartBar map={map} part={part} />
-        <MapDraftPanel caseId={caseId} />
+        <MapDraftPanel caseId={caseId} quiet={showWays} />
         {showWays ? (
           <MapWays
             caseId={caseId}
@@ -295,10 +300,10 @@ export function CaseMapScreen() {
           </p>
         ) : null}
         {view.outOfDate ? <p className="text-sm text-warning">{t("caseMap.outOfDate", { reasons: view.outOfDate.reasons.join("; ") })}</p> : null}
-        {part === "report" && view.items.length === 0 ? (
+        {part === "report" && view.items.length === 0 && previews.length === 0 ? (
           <p className="max-w-measure text-md text-fg-muted">{t("caseMap.reportEmpty")}</p>
         ) : part === "client" ? (
-          editor ?? (
+          (editor ?? (previews[0] ? <PreviewItem part={part} preview={previews[0]} context={context} /> : null)) ?? (
             <div className="flex flex-col items-start gap-3">
               <p className="max-w-measure text-md text-fg-muted">{t("caseMap.clientEmpty")}</p>
               <Button onClick={() => void add("items")}>{t("caseMap.add.client")}</Button>
@@ -306,8 +311,8 @@ export function CaseMapScreen() {
           )
         ) : showWays && part === "behaviors" ? null : (
           <div className="grid items-start gap-5 @3xl:grid-cols-[15rem_1fr]">
-            <ItemList view={view} part={part} selectedId={selectedId} addRef={addButton} onAdd={(collection) => void add(collection)} onSelect={(id) => select(part, id)} />
-            <div className="min-w-0">{editor ?? <p className="text-md text-fg-muted">{view.items.length === 0 ? t("caseMap.emptyPart") : t("caseMap.chooseItem")}</p>}</div>
+            <ItemList view={view} part={part} previews={previews} selectedId={selectedId} addRef={addButton} onAdd={(collection) => void add(collection)} onSelect={(id) => select(part, id)} />
+            <div className="min-w-0">{previewView ?? editor ?? <p className="text-md text-fg-muted">{view.items.length === 0 && previews.length === 0 ? t("caseMap.emptyPart") : t("caseMap.chooseItem")}</p>}</div>
           </div>
         )}
       </div>
@@ -393,6 +398,7 @@ function PartBar({ map, part }: { map: CaseMapView; part: MapPartId }) {
 function ItemList({
   view,
   part,
+  previews,
   selectedId,
   addRef,
   onAdd,
@@ -400,6 +406,7 @@ function ItemList({
 }: {
   view: MapPartView;
   part: MapPartId;
+  previews: readonly MapPreview[];
   selectedId: string | null;
   addRef: RefObject<HTMLButtonElement | null>;
   onAdd: (collection: MapCollection) => void;
@@ -412,26 +419,51 @@ function ItemList({
     const names = [...(fn?.primary ?? []), ...(fn?.secondary ?? [])].map((name) => (MAP_TERMS.functions as Record<string, string>)[name] ?? name);
     return names.length > 0 ? names.join(" · ") : null;
   };
+  const previewRow = (preview: MapPreview) => (
+    <li key={preview.id} className={preview.replaces ? "ms-3" : undefined}>
+      <button
+        type="button"
+        aria-current={selectedId === preview.id ? "true" : undefined}
+        onClick={() => onSelect(preview.id)}
+        className="flex w-full flex-col items-start gap-0.5 rounded-md border border-dashed border-accent px-2.5 py-2 text-left hover:bg-surface-muted aria-current:bg-mark"
+      >
+        <span lang="en" className="text-sm font-semibold break-words">
+          {itemTitle(part, preview.item) ?? t("caseMap.untitled")}
+        </span>
+        <span className="text-xs text-fg-muted">
+          <StatusBadge tone="accent">{preview.replaces ? t("caseMap.previewReplaces") : t("caseMap.preview")}</StatusBadge>
+        </span>
+      </button>
+    </li>
+  );
+  // On an update, the AI's new version of a saved item is shown under that item, not as a new row (S4).
+  const savedIds = new Set(view.items.map((item) => item.id));
+  const replacing = new Map(previews.filter((preview) => preview.replaces !== null && savedIds.has(preview.replaces)).map((preview) => [preview.replaces!, preview]));
+  const added = previews.filter((preview) => preview.replaces === null || !savedIds.has(preview.replaces));
   const row = (item: Record<string, unknown> & { id: string; editedAt: string | null }, collection: MapCollection) => {
     const checks = countChecks(item);
+    const next = collection === "items" ? replacing.get(item.id) : undefined;
     return (
-      <li key={item.id}>
-        <button
-          type="button"
-          aria-current={selectedId === item.id ? "true" : undefined}
-          onClick={() => onSelect(item.id)}
-          className="flex w-full flex-col items-start gap-0.5 rounded-md border border-transparent px-2.5 py-2 text-left hover:bg-surface-muted aria-current:border-border-control aria-current:bg-mark"
-        >
-          <span lang="en" className="text-sm font-semibold break-words">
-            {itemTitle(collection === "groups" ? "groups" : part, item) ?? t("caseMap.untitled")}
-          </span>
-          <span className="flex flex-wrap items-center gap-1.5 text-xs text-fg-muted">
-            {item.editedAt ? <StatusBadge tone="accent">{t("caseMap.editedByYou")}</StatusBadge> : <StatusBadge>{t("caseMap.status.draft")}</StatusBadge>}
-            {part === "behaviors" && collection === "items" && functionsOf(item) ? <span lang="en">{functionsOf(item)}</span> : null}
-            {checks > 0 ? <span>{t("caseMap.checks", { count: checks })}</span> : null}
-          </span>
-        </button>
-      </li>
+      <Fragment key={item.id}>
+        <li>
+          <button
+            type="button"
+            aria-current={selectedId === item.id ? "true" : undefined}
+            onClick={() => onSelect(item.id)}
+            className="flex w-full flex-col items-start gap-0.5 rounded-md border border-transparent px-2.5 py-2 text-left hover:bg-surface-muted aria-current:border-border-control aria-current:bg-mark"
+          >
+            <span lang="en" className="text-sm font-semibold break-words">
+              {itemTitle(collection === "groups" ? "groups" : part, item) ?? t("caseMap.untitled")}
+            </span>
+            <span className="flex flex-wrap items-center gap-1.5 text-xs text-fg-muted">
+              {item.editedAt ? <StatusBadge tone="accent">{t("caseMap.editedByYou")}</StatusBadge> : <StatusBadge>{t("caseMap.status.draft")}</StatusBadge>}
+              {part === "behaviors" && collection === "items" && functionsOf(item) ? <span lang="en">{functionsOf(item)}</span> : null}
+              {checks > 0 ? <span>{t("caseMap.checks", { count: checks })}</span> : null}
+            </span>
+          </button>
+        </li>
+        {next ? previewRow(next) : null}
+      </Fragment>
     );
   };
   return (
@@ -444,6 +476,11 @@ function ItemList({
         </div>
       ) : null}
       <ul className="flex flex-col gap-0.5">{view.items.map((item) => row(item as unknown as Record<string, unknown> & { id: string; editedAt: string | null }, "items"))}</ul>
+      {added.length > 0 ? (
+        <ul aria-label={t("caseMap.preview")} className="flex flex-col gap-0.5">
+          {added.map(previewRow)}
+        </ul>
+      ) : null}
       {part === "behaviors" ? (
         <div className="flex flex-col gap-2 border-t border-border pt-3">
           <Eyebrow className="text-fg-muted">{t("caseMap.groupsHeading")}</Eyebrow>
@@ -557,6 +594,33 @@ function ItemEditor({
       ) : null}
       <fieldset disabled={!ready} className="contents" onBlur={() => void box.flush()}>
         <MapFields fields={fields} labelPart={labelPart} value={value} saved={item} onChange={(next) => box.setValue(JSON.stringify(next))} context={context} />
+      </fieldset>
+    </section>
+  );
+}
+
+/**
+ * An item of the AI's answer that passed its checks and is not saved yet (case map speed,
+ * 2026-11-23): its fields read-only, with their chips, marked "checked, not saved yet". It
+ * becomes an item she can correct when its request saves. On an update, an item the AI
+ * wrote again is marked as the saved item's new version (review round 1 of case map speed, S4).
+ */
+function PreviewItem({ part, preview, context }: { part: MapPartId; preview: MapPreview; context: MapFormContext }) {
+  const { t } = useTranslation();
+  const fields = fieldsOf(part, "items");
+  const value = itemInput(fields, preview.item) as Record<string, unknown>;
+  return (
+    <section aria-label={itemTitle(part, preview.item) ?? t("caseMap.untitled")} data-testid="map-preview" className="@container flex flex-col gap-4 rounded-lg border border-dashed border-accent p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 lang="en" className="text-md font-semibold break-words">
+          {itemTitle(part, preview.item) ?? t("caseMap.untitled")}
+        </h2>
+        <StatusBadge tone="accent">{preview.replaces ? t("caseMap.previewReplaces") : t("caseMap.preview")}</StatusBadge>
+      </div>
+      <p className="max-w-measure text-sm text-fg-muted">{preview.replaces ? t("caseMap.previewReplacesNote") : t("caseMap.previewNote")}</p>
+      {part === "report" ? <ReportText item={preview.item} /> : null}
+      <fieldset disabled className="contents">
+        <MapFields fields={fields} labelPart={part} value={value} saved={preview.item} onChange={() => undefined} context={context} />
       </fieldset>
     </section>
   );

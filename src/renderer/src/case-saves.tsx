@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
+import type { SectionSummary } from "../../shared/sections.ts";
 import type { CaseSources, FailedSave, SourceSaveFailure, SourceSaveResult } from "../../shared/sources.ts";
 import { useOpenedCase, useSetCaseSources } from "./open-case.tsx";
 
@@ -89,10 +90,15 @@ export function runSave<T>(caseId: string, save: () => Promise<SaveAnswer<T>>, o
   );
 }
 
-/** Told when a change that is not a source's (a section's text, instructions, notes) was saved by "Try again", so its screen reads it again. */
-const retriedListeners = new Set<(item: FailedSave) => void>();
+/**
+ * Told when a change that is not a source's (a section's text, instructions, notes) was saved by "Try again", so its
+ * screen reads it again. For a section's text, `sections` is the case's section summaries as the save left them (the
+ * main process builds them: no screen builds one by hand, UX-6 review round 2, S2); null otherwise.
+ */
+type RetriedListener = (item: FailedSave, sections: SectionSummary[] | null) => void;
+const retriedListeners = new Set<RetriedListener>();
 
-export function onRetried(listener: (item: FailedSave) => void): () => void {
+export function onRetried(listener: RetriedListener): () => void {
   retriedListeners.add(listener);
   return () => retriedListeners.delete(listener);
 }
@@ -104,7 +110,10 @@ export function retry(item: FailedSave, onSaved: (sources: CaseSources) => void)
     async (): Promise<SaveAnswer<null>> => {
       const result = await window.aba.retryFailedSave(item.id);
       if (result.outcome !== "saved") return { ok: false, failure: result.outcome === "case-full" || result.outcome === "case-unavailable" || result.outcome === "source-not-found" ? result.outcome : "not-saved" };
-      if (item.about !== "source") for (const listener of retriedListeners) listener(item);
+      if (item.about !== "source") {
+        const sections = item.about === "section" && "sections" in result ? result.sections : null;
+        for (const listener of retriedListeners) listener(item, sections);
+      }
       return { ok: true, sources: "sources" in result ? result.sources : null, value: null };
     },
     onSaved,
