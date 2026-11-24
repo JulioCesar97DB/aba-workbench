@@ -15,8 +15,9 @@ import { CaseMapSchema } from "./case-map.ts";
  * sources (pasted texts, and PDFs copied into the folder). Version 3 adds the report's
  * sections (every version of each, hers and the AI's) and her notes for the session.
  * Version 4 adds the case map (src/main/case-map.ts), which a case has only once she
- * drafts or types one. Later phases add their own top-level keys and raise the version,
- * with a migration.
+ * drafts or types one. Version 5 adds, on a section, when she last copied it for ABA
+ * Matrix and which version (owner's decision T8, Revisión y copia); a section never copied
+ * has neither. Later phases add their own keys and raise the version, with a migration.
  *
  * Rules that keep a user's data safe:
  * - A key this version does not know is kept as it is when the file is saved.
@@ -27,7 +28,7 @@ import { CaseMapSchema } from "./case-map.ts";
 
 export const CASE_FILE_NAME = "aba-case.json";
 /** Raise it, and add a step to MIGRATIONS, when the shape changes. */
-export const CASE_SCHEMA_VERSION = 4;
+export const CASE_SCHEMA_VERSION = 5;
 /**
  * A data file larger than this is not one the app wrote, and a save that would make one
  * is refused. Pasted texts live in the file: a case with a dozen long reports is a few
@@ -196,11 +197,14 @@ const StoredSectionSchema = z.looseObject({
   currentVersion: VersionNumberSchema.nullable(),
   approvedVersion: VersionNumberSchema.nullable(),
   approvedAt: TimestampSchema.optional(),
+  /** When she last copied the section for ABA Matrix (version 5, T8), and the version she copied: both or neither. */
+  copiedAt: TimestampSchema.optional(),
+  copiedVersion: VersionNumberSchema.optional(),
   versions: z
     .array(StoredVersionSchema)
     .max(10_000)
     .refine((versions) => new Set(versions.map((version) => version.number)).size === versions.length),
-});
+}).refine((section) => (section.copiedAt === undefined) === (section.copiedVersion === undefined));
 
 /** Her notes for the session under way: used in every request until she starts a new session. */
 const SessionNotesSchema = z.looseObject({
@@ -251,9 +255,10 @@ export type Migration = (data: Record<string, unknown>) => Record<string, unknow
 
 /**
  * MIGRATIONS[n] upgrades a version-n file. A version 1 file is read as version 2 with no
- * sources, a version 2 file as version 3 with no sections, and a version 3 file as
- * version 4 with no case map (D7: no map until she drafts or types one); it is written in
- * the current version only when the case is next saved.
+ * sources, a version 2 file as version 3 with no sections, a version 3 file as version 4
+ * with no case map (D7: no map until she drafts or types one), and a version 4 file as
+ * version 5 with no section copied (T8: the marks start with the first copy); it is
+ * written in the current version only when the case is next saved.
  */
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   // A key "sources" in a version 1 file (none was ever written) is kept and must then read as version 2's.
@@ -262,6 +267,8 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   2: (data) => ("sections" in data ? data : { ...data, sections: {} }),
   // Nothing to add: the case map is optional. A key "caseMap" in a version 3 file (none was ever written) is kept and must read as version 4's.
   3: (data) => data,
+  // Nothing to add: a section's copied mark is optional, so an older file reads as nothing copied (T8).
+  4: (data) => data,
 };
 
 export type CaseFileProblem = "damaged" | "newer-version";

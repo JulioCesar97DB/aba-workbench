@@ -73,6 +73,7 @@ const api: AbaApi = {
   getAiPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.getAiPreferences),
   setModel: (provider, model) => ipcRenderer.invoke(IPC_CHANNELS.setModel, provider, model),
   copySection: (caseId, sectionId, version) => ipcRenderer.invoke(IPC_CHANNELS.copySection, caseId, sectionId, version),
+  readReport: (caseId) => ipcRenderer.invoke(IPC_CHANNELS.readReport, caseId),
   judgeSection: (caseId, sectionId, generationId, provider, input) => ipcRenderer.invoke(IPC_CHANNELS.judgeSection, caseId, sectionId, generationId, provider, input),
   getCaseMap: (caseId) => ipcRenderer.invoke(IPC_CHANNELS.getCaseMap, caseId),
   saveMapItem: (caseId, part, collection, itemId, item, editing) => ipcRenderer.invoke(IPC_CHANNELS.saveMapItem, caseId, part, collection, itemId, item, editing),

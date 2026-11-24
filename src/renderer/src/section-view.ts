@@ -1,5 +1,5 @@
 import { REPORT_SECTIONS, type ReportSection, type ReportSectionId } from "../../shared/report-sections.ts";
-import { findMarkers, splitParagraphs } from "../../shared/section-text.ts";
+import { splitParagraphs } from "../../shared/section-text.ts";
 import { AI_VERSION_KINDS, type SectionDetail, type SectionSummary, type SectionVersion } from "../../shared/sections.ts";
 import type { ChipState } from "./components/chip-state.ts";
 
@@ -87,11 +87,14 @@ export function paragraphBeingWritten(streamed: string): number {
   return Math.max(1, splitParagraphs(streamed).length);
 }
 
-/** What the copied line says first: plain "Copied.", or how many details are still marked, and of which kind. */
-export function copiedLead(text: string): { key: "copiedLead" } | { key: "copiedMissing" | "copiedMarked"; count: number } {
-  const markers = findMarkers(text);
-  if (markers.length === 0) return { key: "copiedLead" };
-  return { key: markers.every((marker) => marker.kind === "missing") ? "copiedMissing" : "copiedMarked", count: markers.length };
+/**
+ * What the copied line says first: plain "Copied.", or how many details are still marked,
+ * and of which kind. From what the main process put on the clipboard (the copy's own
+ * answer, `markers` and `allMissing`), never from a text the screen may not have yet.
+ */
+export function copiedLead(copied: { markers: number; allMissing: boolean }): { key: "copiedLead" } | { key: "copiedMissing" | "copiedMarked"; count: number } {
+  if (copied.markers === 0) return { key: "copiedLead" };
+  return { key: copied.allMissing ? "copiedMissing" : "copiedMarked", count: copied.markers };
 }
 
 /** Her own text: what she pasted, or edited by hand (a hand edit is her word on the facts, even of an AI text). */

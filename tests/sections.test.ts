@@ -5,9 +5,10 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { mockProvider } from "../src/lib/providers/mock.ts";
 import type { GenerateEvent, GenerateOptions, Provider, ProviderCredential } from "../src/lib/providers/types.ts";
-import { CASE_FILE_NAME, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
+import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
 import { contextSections, finalVersion, saveOwnText, startNewSession, setNotes } from "../src/main/case-sections.ts";
 import { herSectionsOf } from "../src/main/case-map-draft.ts";
+import { addMapItem } from "../src/main/case-map.ts";
 import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
 import { hasLinesInParagraphs, isParagraphAnswer, linesAsParagraphs, paragraphSpans, replaceParagraph, splitParagraphs } from "../src/shared/section-text.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
@@ -140,7 +141,7 @@ test("a draft streams in and becomes a version with what made it; nothing to com
   assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
   assert.deepEqual(checked.result.section.versions[0].consistency, { status: "nothing-to-compare", items: [], stale: false });
   const stored = JSON.parse(readFileSync(caseFile, "utf8"));
-  assert.equal(stored.schemaVersion, 4);
+  assert.equal(stored.schemaVersion, 5);
   const record = stored.sections["medical-necessity"].versions[0].generation;
   assert.equal(record.deidentified, false);
   assert.equal(record.effort, "high");
@@ -413,10 +414,177 @@ test("a check records its tokens and cost, as a version does", async () => {
 test("copy for ABA Matrix puts plain text and minimal HTML on the clipboard and counts the markers", async () => {
   const { service, caseId, clipboard } = await setup();
   saved(await service.saveText(caseId, "crisis-plan", "One <b> & [MISSING: x].\n\nTwo\nlines [CHECK: y].", null));
-  assert.deepEqual(await service.copy(caseId, "crisis-plan", 1), { outcome: "copied", markers: 2 });
+  const copied = await service.copy(caseId, "crisis-plan", 1);
+  assert.ok(copied.outcome === "copied");
+  assert.equal(copied.markers, 2);
+  // One [MISSING] and one [CHECK]: not all missing. The copied line is chosen from this answer, not from the screen's text (S1).
+  assert.equal(copied.allMissing, false);
   assert.deepEqual(clipboard, [{ text: "One <b> & [MISSING: x].\n\nTwo\nlines [CHECK: y].", html: "<p>One &lt;b&gt; &amp; [MISSING: x].</p><p>Two<br>lines [CHECK: y].</p>" }]);
   assert.deepEqual(await service.copy(caseId, "crisis-plan", 9), { outcome: "version-not-found" });
+  // Nothing more on the clipboard for a version that is not there.
+  assert.equal(clipboard.length, 1);
   assert.deepEqual(abaMatrixClipboard("\n\nA\n\n\nB\n").text, "A\n\nB");
+});
+
+test("T8: a copy is marked in the case once the clipboard holds it; a newer version or another approval makes it not copied again", async () => {
+  const { service, caseId, caseFile } = await setup();
+  saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
+  saved(await service.approve(caseId, "crisis-plan", 1));
+  const before = JSON.parse(readFileSync(caseFile, "utf8"));
+  assert.equal(before.schemaVersion, 5);
+  assert.equal(before.sections["crisis-plan"].copiedAt, undefined);
+  const copied = await service.copy(caseId, "crisis-plan", 1);
+  assert.ok(copied.outcome === "copied" && copied.marked);
+  assert.equal(copied.marked.section.copiedVersion, 1);
+  assert.equal(copied.marked.section.copied, true);
+  assert.equal(copied.marked.sections.find((summary) => summary.id === "crisis-plan")?.copied, true);
+  const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections["crisis-plan"];
+  assert.equal(stored.copiedVersion, 1);
+  assert.ok(Date.parse(stored.copiedAt) > 0);
+  // Copying changes nothing else: the version shown and the approval stay.
+  assert.equal(stored.approvedVersion, 1);
+  assert.equal(stored.currentVersion, 1);
+  // Her edit is a new version (the approval goes): what is in ABA Matrix is no longer what the app holds.
+  const edited = saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan, changed.", null));
+  assert.equal(edited.section.copiedVersion, 1);
+  assert.equal(edited.section.copied, false);
+  // Approving the version she copied makes it copied again; approving the newer one does not.
+  assert.equal(saved(await service.approve(caseId, "crisis-plan", 1)).section.copied, true);
+  assert.equal(saved(await service.approve(caseId, "crisis-plan", 2)).section.copied, false);
+  // The last copy is the one kept.
+  const again = await service.copy(caseId, "crisis-plan", 2);
+  assert.ok(again.outcome === "copied" && again.marked);
+  assert.equal(again.marked.section.copiedVersion, 2);
+  assert.equal(again.marked.section.copied, true);
+});
+
+test("T8: a copy whose mark cannot be saved is still on the clipboard, and says the mark was not saved", async () => {
+  let failing = false;
+  const { service, caseId, clipboard, caseFile } = await setup({}, { failWrites: () => failing });
+  saved(await service.saveText(caseId, "risk-assessment", "Her risk assessment.", null));
+  failing = true;
+  const copied = await service.copy(caseId, "risk-assessment", 1);
+  assert.deepEqual(copied, { outcome: "copied", markers: 0, allMissing: true, marked: null });
+  assert.equal(clipboard.length, 1);
+  assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).sections["risk-assessment"].copiedAt, undefined);
+});
+
+test("T8: the clipboard is written before the mark; a clipboard that fails marks nothing", async () => {
+  const { caseId, caseFile, cases, userData } = await setup();
+  const service = new SectionService({
+    cases,
+    instructions: new InstructionsStore(path.join(userData, INSTRUCTIONS_FILE_NAME), { log: () => undefined }),
+    rulesDir: path.join(process.cwd(), "rules"),
+    provider: () => mockProvider,
+    credential: async () => null,
+    chosenModel: async () => null,
+    rememberProvider: async () => undefined,
+    writeClipboard: async () => {
+      throw new Error("The clipboard is busy (test)");
+    },
+  });
+  saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
+  await assert.rejects(service.copy(caseId, "crisis-plan", 1));
+  assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).sections["crisis-plan"].copiedAt, undefined);
+});
+
+test("S1: a copy answers what it put on the clipboard: how many markers, and whether all are [MISSING]", async () => {
+  const { service, caseId } = await setup();
+  saved(await service.saveText(caseId, "risk-assessment", "Risk [MISSING: last episode].\n\nAnd [MISSING: phone].", null));
+  const copied = await service.copy(caseId, "risk-assessment", 1);
+  assert.ok(copied.outcome === "copied");
+  assert.deepEqual({ markers: copied.markers, allMissing: copied.allMissing }, { markers: 2, allMissing: true });
+});
+
+test("S3: copying and reading the report never touch a case a newer app wrote", async () => {
+  const { service, caseId, caseFile, clipboard } = await setup();
+  saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
+  const newer = JSON.stringify({ ...JSON.parse(readFileSync(caseFile, "utf8")), schemaVersion: CASE_SCHEMA_VERSION + 1 }, null, 2);
+  writeFileSync(caseFile, newer);
+  assert.deepEqual(await service.copy(caseId, "crisis-plan", 1), { outcome: "case-unavailable" });
+  assert.deepEqual(await service.readReport(caseId), { outcome: "case-unavailable" });
+  assert.equal(readFileSync(caseFile, "utf8"), newer, "the file is left byte for byte");
+  assert.deepEqual(clipboard, [], "nothing reaches the clipboard");
+});
+
+test("S3: the copied mark's save keeps unknown keys, at the top and in the section, and leaves the case map as it was", async () => {
+  const { service, caseId, caseFile } = await setup();
+  saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
+  const before = readCaseFile(readFileSync(caseFile, "utf8"));
+  assert.ok(before.ok);
+  // A map typed by hand, through the case map's own change, so it is the shape the app writes.
+  const withMap = addMapItem(before.data, "behaviors", "items", { name: { value: "Invented behavior", check: null } }, null, before.data.updatedAt).data;
+  const current = JSON.parse(serializeCaseFile(withMap));
+  const caseMap = current.caseMap;
+  assert.ok(caseMap);
+  const v4 = {
+    ...current,
+    schemaVersion: 4,
+    fromALaterApp: { kept: true },
+    sections: { ...current.sections, "crisis-plan": { ...current.sections["crisis-plan"], laterKey: [1, 2] } },
+    caseMap,
+  };
+  const read = readCaseFile(JSON.stringify(v4));
+  assert.ok(read.ok, "the invented v4 case with a map reads");
+  writeFileSync(caseFile, JSON.stringify(v4, null, 2));
+  const copied = await service.copy(caseId, "crisis-plan", 1);
+  assert.ok(copied.outcome === "copied" && copied.marked);
+  const written = JSON.parse(readFileSync(caseFile, "utf8"));
+  assert.equal(written.schemaVersion, CASE_SCHEMA_VERSION);
+  assert.deepEqual(written.fromALaterApp, { kept: true });
+  assert.deepEqual(written.sections["crisis-plan"].laterKey, [1, 2]);
+  assert.equal(written.sections["crisis-plan"].copiedVersion, 1);
+  assert.deepEqual(written.caseMap, JSON.parse(serializeCaseFile(read.data)).caseMap);
+  assert.deepEqual(written.caseMap, caseMap);
+});
+
+test("Revisión y copia reads every section with the text she would copy: the approved version, or else the one shown", async () => {
+  const { service, caseId } = await setup();
+  saved(await service.saveText(caseId, "background-information", "Version one.", null));
+  saved(await service.saveText(caseId, "background-information", "Version two.", null));
+  saved(await service.approve(caseId, "background-information", 1));
+  saved(await service.setCurrent(caseId, "background-information", 2));
+  saved(await service.saveText(caseId, "crisis-plan", "Her plan [MISSING: phone].", null));
+  const report = await service.readReport(caseId);
+  assert.ok(report.outcome === "read");
+  assert.deepEqual(
+    report.sections.map((item) => item.summary.id),
+    ["background-information", "medical-necessity", "strengths-and-weaknesses", "environmental-changes", "family-caregiver-involvement", "generalization-and-maintenance", "discharge-and-service-fading-plan", "risk-assessment", "crisis-plan"],
+  );
+  assert.deepEqual(report.sections[0], { summary: report.sections[0].summary, version: 1, text: "Version one." });
+  assert.deepEqual({ version: report.sections[8].version, text: report.sections[8].text }, { version: 1, text: "Her plan [MISSING: phone]." });
+  assert.deepEqual({ version: report.sections[1].version, text: report.sections[1].text }, { version: null, text: null });
+  await assert.rejects(service.readReport("not-a-case"), /not a case id/);
+  assert.deepEqual(await service.readReport("00000000-0000-4000-8000-999999999999"), { outcome: "case-unavailable" });
+});
+
+test("T8: a version 4 case reads as version 5 with nothing copied; a mark with half its parts is damaged", async () => {
+  const { service, caseId, caseFile } = await setup();
+  saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
+  const v5 = JSON.parse(readFileSync(caseFile, "utf8"));
+  const v4 = { ...v5, schemaVersion: 4 };
+  const read = readCaseFile(JSON.stringify(v4));
+  assert.ok(read.ok);
+  assert.equal(read.migratedFrom, 4);
+  assert.deepEqual(JSON.parse(serializeCaseFile(read.data)).sections, v5.sections);
+  writeFileSync(caseFile, JSON.stringify(v4));
+  const opened = await service.get(caseId, "crisis-plan");
+  assert.ok(opened.outcome === "read");
+  assert.equal(opened.section.copiedVersion, null);
+  assert.equal(opened.section.copied, false);
+  // Only the copy writes the file in version 5, as any save does.
+  const copied = await service.copy(caseId, "crisis-plan", 1);
+  assert.ok(copied.outcome === "copied" && copied.marked);
+  assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion, 5);
+  const half = { ...v5, sections: { "crisis-plan": { ...v5.sections["crisis-plan"], copiedAt: v5.createdAt } } };
+  assert.deepEqual(readCaseFile(JSON.stringify(half)), { ok: false, problem: "damaged" });
+  // A copied version the section no longer has is read, and shows as not copied.
+  const gone = { ...v5, sections: { "crisis-plan": { ...v5.sections["crisis-plan"], copiedAt: v5.createdAt, copiedVersion: 7 } } };
+  writeFileSync(caseFile, JSON.stringify(gone));
+  const readGone = await service.get(caseId, "crisis-plan");
+  assert.ok(readGone.outcome === "read");
+  assert.equal(readGone.section.copiedVersion, null);
+  assert.equal(readGone.section.copied, false);
 });
 
 test("a stopped request saves nothing", async () => {

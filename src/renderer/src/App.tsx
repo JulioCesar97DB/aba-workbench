@@ -7,7 +7,8 @@ import { TooltipProvider } from "./components/Tooltip.tsx";
 import { BulkPasteScreen } from "./screens/BulkPaste.tsx";
 import { CaseRoute, ReportScreen } from "./screens/Case.tsx";
 import { CaseSummaryScreen } from "./screens/CaseSummary.tsx";
-import { PlanScreen, ReviewScreen } from "./screens/ComingLater.tsx";
+import { PlanScreen } from "./screens/ComingLater.tsx";
+import { ReadAllScreen, ReviewScreen } from "./screens/Review.tsx";
 import { SectionScreen } from "./screens/Section.tsx";
 import { CaseMapScreen } from "./screens/CaseMap.tsx";
 import { DevCheck } from "./screens/DevCheck.tsx";
@@ -48,6 +49,7 @@ const router = createHashRouter([
           { path: "report/paste", element: <BulkPasteScreen /> },
           { path: "report/:sectionId", element: <SectionScreen /> },
           { path: "review", element: <ReviewScreen /> },
+          { path: "review/read", element: <ReadAllScreen /> },
           { path: "*", element: <NotFound /> },
         ],
       },

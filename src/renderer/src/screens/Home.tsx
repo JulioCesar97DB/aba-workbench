@@ -22,7 +22,7 @@ import { useFailedSaves } from "../case-saves.tsx";
 import { markStartedFromParts } from "../half-done.ts";
 import { currentStep, nextThing, nextThingPath, stepStates, type NextInputs, type NextThing } from "../next-thing.ts";
 import { useNextWords } from "../next-thing-words.tsx";
-import { readySections } from "../step-states.ts";
+import { copiedSections, readySections } from "../step-states.ts";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 
@@ -167,7 +167,8 @@ function progressWords(t: TFunction, progress: CaseProgress, step: CaseStep | nu
   if (step === "sources") return t("home.progress.noDocuments");
   if (step === "case-map") return caseMap.withContent === 0 ? t("home.progress.mapNotStarted", { count: sources }) : t("home.progress.mapParts", { approved: caseMap.approved, total: caseMap.withContent });
   if (step === "report") return t("home.progress.reportReady", { ready: readySections(sections), total });
-  return t("home.progress.allReady", { total });
+  if (step === "review") return t("home.progress.reviewCopied", { copied: copiedSections(sections), total });
+  return t("home.progress.allCopied", { total });
 }
 
 /** The step the case is at and its progress: "Informe · 3 de 9 secciones listas"; "Lista · …" once done. */
