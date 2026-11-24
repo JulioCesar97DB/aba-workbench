@@ -65,14 +65,17 @@ async function start(launch: (options?: { language?: "en" | "es" }) => Promise<E
 
 /**
  * Resizes the window and waits for the page to have that size. A runner's screen can be
- * smaller than the window asked for (1024x768 on some): the test is skipped there, since
- * what it measures is the size itself.
+ * smaller than the window asked for (1024x768 on some, where app.ts also zooms the page
+ * out): the test is skipped there, since what it measures is the size itself.
  */
 async function sized(app: ElectronApplication, page: Page, width: number, height: number) {
   await resize(app, width, height);
   const inner = () => page.evaluate(() => ({ width: (globalThis as unknown as { innerWidth: number }).innerWidth, height: (globalThis as unknown as { innerHeight: number }).innerHeight }));
-  await expect.poll(async () => (await inner()).width, { timeout: 5_000 }).toBeLessThanOrEqual(width);
-  const got = await inner();
+  let got = await inner();
+  for (let tries = 0; tries < 20 && (got.width !== width || got.height !== height); tries++) {
+    await page.waitForTimeout(100);
+    got = await inner();
+  }
   test.skip(got.width !== width || got.height !== height, `the screen gives a ${got.width}x${got.height} window, not ${width}x${height}`);
 }
 
@@ -95,6 +98,8 @@ async function sidebarList(page: Page) {
 
 test("below 1024 px the rail is a panel opened from the header, which says the open checks (T2)", async ({ launch, home }) => {
   const { app, page } = await start(launch, home, "es");
+  // One section of hers, so the consistency check has something to compare with.
+  expect((await aba<{ outcome: string }>(page, "saveSectionText", SAMPLE_CASE.id, "background-information", LONG, null)).outcome).toBe("saved");
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/medical-necessity`);
   await page.getByRole("button", { name: "Redactar con la IA" }).click();
   await expect(page.getByTestId("section-checks")).toContainText("Contradice tus secciones", { timeout: 20_000 });
@@ -221,7 +226,7 @@ test("today's notes: the button says what it opens, and closed from a narrow win
   await expect(button).toBeFocused();
 
   // From the Menu panel, which closes as the notes open: the focus goes back to the Menu button.
-  await resize(app, 700, 760);
+  await sized(app, page, 700, 760);
   const menu = page.getByRole("button", { name: "Menu" });
   await menu.click();
   await page.getByRole("dialog", { name: "Navigation" }).getByTestId("notes-open").click();
@@ -236,7 +241,7 @@ test("notes that could not be saved are said on a narrow window's bar, which ope
   test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
   const { app, page, caseFolder } = await start(launch, home, "es");
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/crisis-plan`);
-  await resize(app, 700, 760);
+  await sized(app, page, 700, 760);
   await expect(page.getByTestId("notes-unsaved-bar")).toHaveCount(0);
   await page.getByRole("button", { name: "Menú" }).click();
   await page.getByRole("dialog", { name: "Navegación" }).getByTestId("notes-open").click();
@@ -304,7 +309,8 @@ test("at 1366x690 (a maximized window on a 1366x768 laptop) a section shows its 
 test("the version menu works from the keyboard alone", async ({ launch, home }) => {
   const { page } = await start(launch, home, "en");
   await aba(page, "saveSectionText", SAMPLE_CASE.id, "crisis-plan", "First text of hers.", null);
-  await aba(page, "saveSectionText", SAMPLE_CASE.id, "crisis-plan", "Second text of hers.", 1);
+  // null: a new version (an editing pass, given its version, would change that one in place).
+  await aba(page, "saveSectionText", SAMPLE_CASE.id, "crisis-plan", "Second text of hers.", null);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/crisis-plan`);
   const menu = page.getByTestId("version-menu");
   await expect(menu).toContainText("Version 2 of 2");
