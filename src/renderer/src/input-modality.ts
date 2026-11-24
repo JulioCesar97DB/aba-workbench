@@ -24,10 +24,10 @@ export function trackInputModality(target: EventTarget, set: (modality: InputMod
   };
   const onPointer = () => tell("pointer");
   // Capture: a screen that stops a key or a press from going further still tells this first.
-  target.addEventListener("keydown", onKey, true);
-  target.addEventListener("pointerdown", onPointer, true);
-  return () => {
-    target.removeEventListener("keydown", onKey, true);
-    target.removeEventListener("pointerdown", onPointer, true);
-  };
+  // Stopped by a signal, which removes both the same way everywhere (Node 24's EventTarget,
+  // used by the unit test, kept a capture listener removed with a boolean).
+  const stop = new AbortController();
+  target.addEventListener("keydown", onKey, { capture: true, signal: stop.signal });
+  target.addEventListener("pointerdown", onPointer, { capture: true, signal: stop.signal });
+  return () => stop.abort();
 }
