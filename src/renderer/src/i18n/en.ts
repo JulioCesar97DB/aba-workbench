@@ -800,6 +800,7 @@ export const en = {
       stopped: "Stopped. Nothing was saved.",
       failed: "The draft did not finish, so nothing more was saved.",
       refused: "The AI declined this request. Nothing was saved.",
+      previewsNotSaved: "The items shown while the AI wrote were not saved.",
       problems_one: "{{count}} problem was left after the AI's fix: the values concerned are marked [CHECK].",
       problems_other: "{{count}} problems were left after the AI's fix: the values concerned are marked [CHECK].",
       kept: "The parts you had approved were left as they are.",

@@ -11,7 +11,7 @@ import { TwoWays } from "../components/TwoWays.tsx";
 import { ButtonLink, TextLink } from "../components/Link.tsx";
 import { PROVIDER_NAMES, useProviders } from "../drafting-provider.tsx";
 import { Eyebrow } from "../shell/WorkArea.tsx";
-import { dismissMapDraft, isDrafting, startMapDraft, stopMapDraft, useMapDraft, type MapDraft } from "./draft.ts";
+import { dismissMapDraft, isDrafting, previewsNotSaved, startMapDraft, stopMapDraft, useMapDraft, type MapDraft } from "./draft.ts";
 
 /*
  * The case map's AI way (step 1, pull request 2): the action that drafts or updates the
@@ -196,6 +196,8 @@ function Finished({ draft }: { draft: MapDraft }) {
           </p>
         </details>
       ) : null}
+      {/* The items she saw arrive went with the request that did not save: said, not left to be guessed (M5). */}
+      {outcome?.kind !== "saved" && previewsNotSaved(draft) ? <p className="text-sm">{t("caseMap.ai.previewsNotSaved")}</p> : null}
       {draft.problems > 0 ? <p className="text-sm text-warning">{t("caseMap.ai.problems", { count: draft.problems })}</p> : null}
       {draft.kept.length > 0 ? <p className="text-sm text-fg-muted">{t("caseMap.ai.kept")}</p> : null}
       <div>

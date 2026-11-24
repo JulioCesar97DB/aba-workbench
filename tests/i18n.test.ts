@@ -111,3 +111,8 @@ test("strings: the repair line says 'values only' only for a repair of values; t
   assert.equal(en.caseMap.ai.shown_one, "{{count}} passed its checks and shows in the map, not saved yet.");
   assert.equal(es.caseMap.ai.shown_other, "{{count}} pasaron las comprobaciones y se ven en el mapa, aún sin guardar.");
 });
+
+test("strings: a draft that did not save says the items shown while the AI wrote were not saved, in both languages (review round 1 of case map speed, M5)", () => {
+  assert.equal(en.caseMap.ai.previewsNotSaved, "The items shown while the AI wrote were not saved.");
+  assert.equal(es.caseMap.ai.previewsNotSaved, "Los elementos que se vieron mientras la IA escribía no se guardaron.");
+});

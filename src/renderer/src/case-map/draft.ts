@@ -55,6 +55,8 @@ export interface MapDraft {
   scope: "values" | "items" | "whole";
   /** The items that passed their checks and are not saved yet. */
   previews: MapPreview[];
+  /** The requests that showed items as they arrived: one that did not save showed items that were not saved (M5). */
+  previewed: MapRequestKind[];
   /** The requests whose parts are saved. */
   saved: MapRequestKind[];
   /** The parts written, over both requests, and the approved ones left as they were. */
@@ -108,7 +110,7 @@ function apply(update: GenerationUpdate) {
       return;
     }
     case "map-preview":
-      set({ ...current, previews: [...current.previews.filter((preview) => preview.id !== event.id), { step: event.step, part: event.part, id: event.id, item: event.item, replaces: event.replaces ?? null }] });
+      set({ ...current, previewed: current.previewed.includes(event.step) ? current.previewed : [...current.previewed, event.step], previews: [...current.previews.filter((preview) => preview.id !== event.id), { step: event.step, part: event.part, id: event.id, item: event.item, replaces: event.replaces ?? null }] });
       return;
     case "map-saved":
       if (event.result.outcome === "saved") {
@@ -159,7 +161,7 @@ function subscribe(listener: () => void) {
 
 function fresh(id: string, caseId: string, provider: DraftingProvider): MapDraft {
   const now = Date.now();
-  return { id, caseId, provider, step: null, phase: "starting", characters: 0, startedAt: now, stepStartedAt: now, arrived: 0, shown: 0, values: 0, scope: "values", previews: [], saved: [], written: [], kept: [], problems: 0, outcome: null };
+  return { id, caseId, provider, step: null, phase: "starting", characters: 0, startedAt: now, stepStartedAt: now, arrived: 0, shown: 0, values: 0, scope: "values", previews: [], previewed: [], saved: [], written: [], kept: [], problems: 0, outcome: null };
 }
 
 /** Starts a draft (or an update) of the case's map; the outcome says why it did not start. */
@@ -219,6 +221,14 @@ export function useOnMapSaved(listener: SavedListener): void {
       savedListeners.delete(listener);
     };
   }, [listener]);
+}
+
+/**
+ * Whether a finished draft showed items, as they arrived, that were never saved: a request
+ * that showed some and did not save (review round 1 of case map speed, M5).
+ */
+export function previewsNotSaved(draft: Pick<MapDraft, "previewed" | "saved">): boolean {
+  return draft.previewed.some((step) => !draft.saved.includes(step));
 }
 
 export function isDrafting(draft: MapDraft | null): boolean {

@@ -784,6 +784,7 @@ export const es: Messages = {
       stopped: "Detenido. No se guardó nada.",
       failed: "No terminó, así que no se guardó nada más.",
       refused: "La IA rechazó este pedido. No se guardó nada.",
+      previewsNotSaved: "Los elementos que se vieron mientras la IA escribía no se guardaron.",
       problems_one: "Quedó {{count}} problema después de la corrección de la IA: los valores afectados están marcados [CHECK].",
       problems_other: "Quedaron {{count}} problemas después de la corrección de la IA: los valores afectados están marcados [CHECK].",
       kept: "Las partes que ya habías aprobado se quedaron como estaban.",
