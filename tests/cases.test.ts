@@ -354,7 +354,13 @@ test("cases: create a case, list it, open it; the folder holds only its data fil
   const restarted = library(folder).lib;
   const list = await restarted.list();
   assert.deepEqual(list.folder, { displayPath: folder, isDefault: false, state: "ready" });
-  assert.deepEqual(list.cases, [created.case]);
+  // Listed with how far it is (Home, UX-5): nothing yet.
+  assert.deepEqual(list.cases, [
+    {
+      ...created.case,
+      progress: { sources: 0, caseMap: { approved: 0, withContent: 0 }, mapPartToApprove: null, sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started" })) },
+    },
+  ]);
   assert.deepEqual(list.unreadable, []);
   const opened = await restarted.open(created.case.id);
   assert.deepEqual(opened, {
@@ -366,8 +372,32 @@ test("cases: create a case, list it, open it; the folder holds only its data fil
       sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0 })),
       notes: "",
       caseMap: { approved: 0, withContent: 0 },
+      progress: { sources: 0, caseMap: { approved: 0, withContent: 0 }, mapPartToApprove: null, sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started" })) },
     },
   });
+});
+
+test("cases: the case saved last first, whenever it was made; then the newer made, then the folder's name (UX-5 review round 1, S1)", async () => {
+  const folder = tempFolder();
+  const write = (name: string, id: string, createdAt: string, updatedAt: string) => {
+    mkdirSync(path.join(folder, name));
+    const data = { ...newCaseData({ id, label: name, clientAge: null, now: new Date(createdAt) }), updatedAt };
+    writeFileSync(path.join(folder, name, CASE_FILE_NAME), serializeCaseFile(data));
+  };
+  // Made first, saved last: listed first.
+  write("Old, saved today", "10000000-0000-4000-8000-000000000001", "2026-11-01T10:00:00.000Z", "2026-11-23T09:00:00.000Z");
+  write("New, untouched", "10000000-0000-4000-8000-000000000002", "2026-11-22T10:00:00.000Z", "2026-11-22T10:00:00.000Z");
+  // Saved at the same moment as the next: the newer made comes first.
+  write("Tie, made later", "10000000-0000-4000-8000-000000000003", "2026-11-10T10:00:00.000Z", "2026-11-20T10:00:00.000Z");
+  write("Tie, made earlier", "10000000-0000-4000-8000-000000000004", "2026-11-05T10:00:00.000Z", "2026-11-20T10:00:00.000Z");
+  // Both times the same: by folder name.
+  write("Twin B", "10000000-0000-4000-8000-000000000005", "2026-11-02T10:00:00.000Z", "2026-11-03T10:00:00.000Z");
+  write("Twin A", "10000000-0000-4000-8000-000000000006", "2026-11-02T10:00:00.000Z", "2026-11-03T10:00:00.000Z");
+  const list = await library(folder).lib.list();
+  assert.deepEqual(
+    list.cases.map((c) => c.label),
+    ["Old, saved today", "New, untouched", "Tie, made later", "Tie, made earlier", "Twin A", "Twin B"],
+  );
 });
 
 test("cases: newest first; two cases with the same label get two folders, none overwritten", async () => {

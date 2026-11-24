@@ -1,4 +1,4 @@
-import { test as base, _electron as electron, expect, type ElectronApplication, type Page } from "@playwright/test";
+import { test as base, _electron as electron, expect, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -261,6 +261,14 @@ export async function holdAnswers(app: ElectronApplication, channel: string): Pr
     app.evaluate((_electron, name) => {
       (globalThis as unknown as { heldAnswers: Record<string, () => void> }).heldAnswers[name]();
     }, channel);
+}
+
+/**
+ * The header's "New case" button. An empty Home also has one in its card (UX-5), so a test
+ * that means the header's says so.
+ */
+export function newCaseButton(page: Page, name = "New case"): Locator {
+  return page.locator("[data-region='header']").getByRole("button", { name });
 }
 
 /** Shows a screen by its address (the part after #), as a link inside the app would. */

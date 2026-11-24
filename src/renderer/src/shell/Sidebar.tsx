@@ -7,8 +7,9 @@ import { Link, NavLink, useLocation } from "react-router";
 import type { Language } from "../../../shared/api.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
-import { CASE_STEPS, casePath, stepSubtitle, stepTitle } from "../case-steps.tsx";
+import { CASE_STEPS, casePath, caseSummaryPath, stepSubtitle, stepTitle } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { NavItem, SectionNavItem, StepNavItem } from "../components/NavItem.tsx";
 import { readySections, stepCount, stepState, type StepState } from "../step-states.ts";
 import { Tooltip } from "../components/Tooltip.tsx";
@@ -118,8 +119,20 @@ export function CaseSidebar({
       top={
         <div className="flex flex-col gap-0.5 px-2">
           <Brand />
-          <p className="text-lg font-semibold break-words">{caseName}</p>
-          <p className="text-xs text-fg-on-nav-muted">{caseDetail}</p>
+          {/* The case's name opens its summary, where the case opens (owner's decision T6, mockup 03). */}
+          <NavLink
+            to={caseSummaryPath(caseId)}
+            end
+            data-testid="case-summary-link"
+            className="-mx-2 flex flex-col gap-0.5 rounded-md px-2 text-fg-on-nav no-underline transition-colors hover:bg-nav-hover aria-[current=page]:bg-nav-hover"
+          >
+            <span className="flex items-center gap-1.5 text-lg font-semibold break-words">
+              {caseName}
+              <Icon name="forward" size={14} className="shrink-0" />
+            </span>
+            <span className="text-xs text-fg-on-nav-muted">{caseDetail}</span>
+            <span className="sr-only">, {t("summary.title")}</span>
+          </NavLink>
           <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs">
             <Link to="/" className="rounded-sm text-fg-on-nav underline underline-offset-2 hover:decoration-2">
               {t("nav.allCases")}

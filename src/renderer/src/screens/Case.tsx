@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, Outlet } from "react-router";
+import { Outlet } from "react-router";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
 import { CASE_STEPS, casePath, stepTitle, type CaseStep } from "../case-steps.tsx";
@@ -8,12 +8,10 @@ import { casesFolderProblemText } from "../cases-folder.tsx";
 import { TextLink } from "../components/Link.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, TableRowHeader } from "../components/Table.tsx";
-import { TransWithTerms } from "../components/Trans.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 import { useOpenCaseState, useOpenedCase } from "../open-case.tsx";
 import { sourceName, sourceNameLang } from "../source-labels.tsx";
-import { Placeholder } from "./Placeholder.tsx";
 import { sectionStateText } from "../shell/Sidebar.tsx";
 import { formatUsd } from "./Section.tsx";
 import { useLanguage } from "../language.tsx";
@@ -21,9 +19,9 @@ import type { SectionSummary } from "../../../shared/sections.ts";
 
 /*
  * The case workspace: the five steps and the report's sections. AppShell opens the case
- * (src/renderer/src/open-case.tsx). Documents has its own screens (Sources.tsx, SourceText.tsx),
- * and so does the case map (CaseMap.tsx); Plan and Review and copy are placeholders until
- * later phases fill them.
+ * (src/renderer/src/open-case.tsx). The case opens on its summary (CaseSummary.tsx, owner's
+ * decision T6). Documents has its own screens (Sources.tsx, SourceText.tsx), and so does the
+ * case map (CaseMap.tsx); Plan and Review and copy say they come later (ComingLater.tsx).
  */
 
 /** The case's screens, once it is open; otherwise why it cannot be. */
@@ -58,32 +56,10 @@ export function CaseRoute() {
   );
 }
 
-export function CaseIndex() {
-  return <Navigate to="sources" replace />;
-}
-
 export function useStepMeta(step: CaseStep): string {
   const { t } = useTranslation();
   const opened = useOpenedCase();
   return `${opened.label} · ${t("steps.position", { number: CASE_STEPS.indexOf(step) + 1, total: CASE_STEPS.length })}`;
-}
-
-const STEP_BODIES = {
-  interventions: "workspace.interventionsBody",
-  review: "workspace.reviewBody",
-} as const;
-
-/** Plan, Review and copy: placeholders for now. */
-export function StepScreen({ step }: { step: keyof typeof STEP_BODIES }) {
-  const { t } = useTranslation();
-  const meta = useStepMeta(step);
-  return (
-    <WorkArea header={<PageHeader title={stepTitle(t, step)} meta={meta} />} rail={<CaseRail />}>
-      <Placeholder>
-        <TransWithTerms i18nKey={STEP_BODIES[step]} />
-      </Placeholder>
-    </WorkArea>
-  );
 }
 
 /** The report: its sections, each with its status. */

@@ -12,7 +12,7 @@ import type { FailedSave } from "../../../shared/sources.ts";
 import { aiErrorCanRetry, aiErrorKind, aiErrorNeedsSettings } from "../ai-errors.ts";
 import { useAutosave, useKeptText, type AutosaveStatus } from "../autosave.tsx";
 import { onRetried, retry, useFailedSavesLoaded, useSectionFailures } from "../case-saves.tsx";
-import { casePath } from "../case-steps.tsx";
+import { casePath, caseSummaryPath } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { cn } from "../components/cn.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -1412,14 +1412,15 @@ function RailPart({ children }: { children: ReactNode }) {
 }
 
 /**
- * "Siguiente paso" for a section: the next one not ready; with none left, Revisión y copia
+ * "Siguiente paso" for a section: the next one not ready; with none left, the case's summary
  * (review round 1, M1), said "all ready" only once this section is ready too (round 2, S-1).
+ * Revisión y copia is not built yet, so "Siguiente paso" skips it (owner's decision P3, UX-5).
  */
 function SectionNextStep({ caseId, step, primary }: { caseId: string; step: ReturnType<typeof nextStep>; primary: boolean }) {
   const { t } = useTranslation();
   if (step.kind === "review") {
-    const name = step.allReady ? t("section.allReadyName", { total: REPORT_SECTIONS.length }) : t("section.thenReviewName");
-    return <NextStepCard name={name} body={t(step.allReady ? "section.allReadyBody" : "section.thenReviewBody")} to={casePath(caseId, "review")} action={t("section.toReview")} primary={primary} />;
+    const name = step.allReady ? t("section.allReadyName", { total: REPORT_SECTIONS.length }) : t("section.thenSummaryName");
+    return <NextStepCard name={name} body={t(step.allReady ? "section.allReadyBody" : "section.thenSummaryBody")} to={caseSummaryPath(caseId)} action={t("section.toSummary")} primary={primary} />;
   }
   return <NextStepCard name={step.section.title} nameLang="en" body={t("section.nextSectionBody")} to={casePath(caseId, "report", step.section.id)} action={t("section.nextSectionAction")} primary={primary} />;
 }

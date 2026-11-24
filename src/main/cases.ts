@@ -8,8 +8,10 @@ import {
   type CaseDetail,
   type CaseFile,
   type CaseList,
+  type CaseProgress,
   type CasesFolderInfo,
   type CaseSummary,
+  type ListedCase,
   type CreateCaseResult,
   type OpenCaseResult,
   type UnreadableFolder,
@@ -34,7 +36,8 @@ import {
 } from "./case-sources.ts";
 import { caseFolderNames } from "./case-folder-name.ts";
 import { SectionInputError, sectionSummaries, sessionNotes } from "./case-sections.ts";
-import { caseMapSummary } from "./case-map.ts";
+import { mapProgress } from "../shared/case-progress.ts";
+import { caseMapSummary, caseMapView } from "./case-map.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { finishInterruptedSave, isLeftBehind, isTemporaryFileOf, writeFileDurably } from "./durable-write.ts";
 
@@ -100,6 +103,36 @@ export function caseSummary(data: CaseData): CaseSummary {
     updatedAt: data.updatedAt,
     pdfCount: data.files.length,
   };
+}
+
+/**
+ * How far a case is, for Home and the case summary (owner's decisions T7, P8): read from its
+ * data as it is now, through the sections' and the case map's own read functions, each map
+ * part's view built once (review round 1, M6); nothing is stored. The map's counts are its
+ * parts with something in them, approved or not (mapProgress).
+ */
+export function caseProgress(data: CaseData): CaseProgress {
+  return {
+    sources: data.sources.filter((source) => !source.removedAt).length,
+    ...mapProgress(caseMapView(data).parts),
+    sections: sectionSummaries(data).map(({ id, state }) => ({ id, state })),
+  };
+}
+
+/**
+ * A case as Home lists it. Its progress is read with code that a file a later version wrote
+ * could surprise: if it throws, the case is still listed, without its progress, and the
+ * others are not affected (review round 1, M6).
+ */
+export function listedCase(data: CaseData, log: (message: string) => void, progressOf: (data: CaseData) => CaseProgress = caseProgress): ListedCase {
+  let progress: CaseProgress | null;
+  try {
+    progress = progressOf(data);
+  } catch (error) {
+    log(`A case's progress could not be read (${(error as Error).message}).`);
+    progress = null;
+  }
+  return { ...caseSummary(data), progress };
 }
 
 /** Reads one folder of the cases folder as a case. Never throws, never writes. */
@@ -192,10 +225,17 @@ function sameFiles(a: readonly CaseFile[], b: readonly CaseFile[]): boolean {
   return a.length === b.length && a.every((file, i) => file.name === b[i].name && file.bytes === b[i].bytes && file.modifiedAt === b[i].modifiedAt);
 }
 
-/** Newest first by created time (as times, not text), then by folder name, the same on every system. */
-function newestFirst(a: { data: CaseData; name: string }, b: { data: CaseData; name: string }): number {
-  const difference = Date.parse(b.data.createdAt) - Date.parse(a.data.createdAt);
-  if (difference !== 0) return difference;
+/**
+ * The case saved last first (owner's decision on UX-5 review round 1, S1, as mockup 01): by
+ * updatedAt, then by created time (as times, not text), then by folder name, the same on every
+ * system. Home's "Sigue donde lo dejaste" is the first one. Opening a case does not move it:
+ * it is rewritten only when the PDFs in its folder changed.
+ */
+function lastSavedFirst(a: { data: CaseData; name: string }, b: { data: CaseData; name: string }): number {
+  const saved = Date.parse(b.data.updatedAt) - Date.parse(a.data.updatedAt);
+  if (saved !== 0) return saved;
+  const created = Date.parse(b.data.createdAt) - Date.parse(a.data.createdAt);
+  if (created !== 0) return created;
   return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
 }
 
@@ -365,8 +405,8 @@ export class CaseLibrary {
     this.folders = folders;
     this.listedFolder = folder;
     this.unreadableNames = new Set(unreadable.map((entry) => entry.folderName));
-    cases.sort(newestFirst);
-    return { folder: info, cases: cases.map(({ data }) => caseSummary(data)), unreadable };
+    cases.sort(lastSavedFirst);
+    return { folder: info, cases: cases.map(({ data }) => listedCase(data, this.options.log)), unreadable };
   }
 
   async create(input: unknown): Promise<CreateCaseResult> {
@@ -488,6 +528,8 @@ export class CaseLibrary {
         sections: sectionSummaries(data),
         notes: sessionNotes(data),
         caseMap: caseMapSummary(data),
+        // The same progress as Home's, so the summary names the map part to approve at once (review round 1, M1).
+        progress: listedCase(data, this.options.log).progress,
       };
       return { outcome: "opened", case: detail };
     });
