@@ -16,7 +16,7 @@ import { sourceName, sourceNameLang } from "../source-labels.tsx";
 import { sectionStateText } from "../shell/Sidebar.tsx";
 import { formatUsd } from "./Section.tsx";
 import { useLanguage } from "../language.tsx";
-import { useStartedFromParts } from "../half-done.ts";
+import { useWaitsForHerSections } from "../half-done.ts";
 import type { SectionSummary } from "../../../shared/sections.ts";
 
 /*
@@ -75,7 +75,7 @@ export function ReportScreen() {
   // What the AI cost for this case: every version and check whose price is known (review, low 2).
   const spent = opened.sections.reduce((sum, section) => sum + section.costUsd, 0);
   // "Ya escribí partes" at creation puts the paste card first (T9); otherwise it waits under the sections, at any time (§4).
-  const pasteFirst = useStartedFromParts(caseId);
+  const pasteFirst = useWaitsForHerSections(caseId, opened.sections);
   return (
     <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />}>
       <div className="flex max-w-measure flex-col gap-5">

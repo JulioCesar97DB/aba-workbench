@@ -237,10 +237,100 @@ test("Paste what you already wrote: a box that could not be saved keeps its text
   await row(page, "medical-necessity").getByRole("button", { name: "Volver a intentar" }).click();
   await expect(page.getByTestId("bulk-paste-result")).toHaveText("1 sección guardada como tuya.");
   await expect(row(page, "medical-necessity")).toHaveAttribute("data-outcome", "saved");
+  // The button went with the row: the focus is on the row's own button (review round 1, minor 3).
+  await expect(row(page, "medical-necessity").getByRole("button", { expanded: false })).toBeFocused();
   const data = read();
   expect(data.sections["medical-necessity"].versions.map((v: { text: string }) => v.text)).toEqual(["Medical necessity que falla."]);
   expect(data.sections["background-information"].versions).toHaveLength(1);
   expect(data.sections["crisis-plan"].versions).toHaveLength(1);
   // Nothing is left unsaved.
   expect(await call<unknown[]>(page, "listFailedSaves")).toEqual([]);
+});
+
+test("Paste what you already wrote: boxes left unsaved are saved on a reload and on quitting, one version of hers each (review round 1, S2)", async ({ launch, home }) => {
+  let app = await launch();
+  let page = await firstScreen(app);
+  await createCase(page, "Close case", "I already wrote parts in ABA Matrix");
+  const id = page.url().match(/cases\/([^/]+)\/sources$/)![1];
+  const { read } = caseData(home, "Close case");
+  // An approved section says, before she saves, that a paste takes its approval away (review round 1, S3).
+  expect((await call<{ outcome: string }>(page, "saveSectionText", id, "medical-necessity", "Her approved text.", null)).outcome).toBe("saved");
+  expect((await call<{ outcome: string }>(page, "approveSection", id, "medical-necessity", 1)).outcome).toBe("saved");
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.reload());
+  await page.waitForEvent("load");
+  await goTo(page, `/cases/${id}/report/paste`);
+  await expect(heading(page)).toHaveText("Paste what you already wrote");
+  await openRow(page, "medical-necessity");
+  await expect(row(page, "medical-necessity")).toContainText("This section is approved: what you paste becomes a new version, and you will need to approve it again.");
+  await expect(page.getByRole("complementary")).toContainText("What you leave in the boxes is also saved if you close the app.");
+
+  // Two boxes filled, "Save" never pressed, then a reload.
+  await (await openRow(page, "background-information")).fill("Background left in its box.");
+  await (await openRow(page, "risk-assessment")).fill("Risk assessment left in its box.");
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.reload());
+  await page.waitForEvent("load");
+  await expect(heading(page)).toHaveText("Paste what you already wrote");
+  let data = read();
+  expect(data.sections["background-information"].versions.map((v: { kind: string; text: string }) => [v.kind, v.text])).toEqual([["hers", "Background left in its box."]]);
+  expect(data.sections["risk-assessment"].versions.map((v: { kind: string; text: string }) => [v.kind, v.text])).toEqual([["hers", "Risk assessment left in its box."]]);
+  // The approved section was not touched: nothing was pasted in its box.
+  expect(data.sections["medical-necessity"].approvedVersion).toBe(1);
+  expect(await call<unknown[]>(page, "listFailedSaves")).toEqual([]);
+  // Saved once: after the reload the boxes are empty and nothing shows as not saved.
+  await expect(page.getByTestId("paste-box")).toHaveCount(0);
+  await expect(page.locator("[data-testid='paste-row'][data-outcome='failed']")).toHaveCount(0);
+  await goTo(page, `/cases/${id}/sources`);
+  await expect(page.getByTestId("half-done-banner")).toHaveCount(0);
+
+  // One more box, then she quits the app.
+  await goTo(page, `/cases/${id}/report/paste`);
+  await (await openRow(page, "crisis-plan")).fill("Crisis plan left in its box.");
+  const closed = app.waitForEvent("close");
+  await app.evaluate(({ app: electronApp }) => electronApp.quit());
+  await closed;
+  data = read();
+  expect(data.sections["crisis-plan"].versions.map((v: { kind: string; text: string }) => [v.kind, v.text])).toEqual([["hers", "Crisis plan left in its box."]]);
+  expect(data.sections["background-information"].versions).toHaveLength(1);
+
+  app = await launch();
+  page = await firstScreen(app);
+  await goTo(page, `/cases/${id}/report/paste`);
+  await expect(heading(page)).toHaveText("Paste what you already wrote");
+  await expect(page.getByTestId("paste-box")).toHaveCount(0);
+  await expect(row(page, "crisis-plan").getByTestId("state-chip")).toHaveAttribute("data-state", "hers");
+});
+
+test("Paste what you already wrote: a box not saved here and then saved newer on the section's own screen never comes back (review round 1, S1)", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const app = await launch();
+  const page = await firstScreen(app);
+  await createCase(page, "Stale case", "I already wrote parts in ABA Matrix");
+  const id = page.url().match(/cases\/([^/]+)\/sources$/)![1];
+  const { folder, read } = caseData(home, "Stale case");
+  await goTo(page, `/cases/${id}/report/paste`);
+  await (await openRow(page, "background-information")).fill("Older text, not saved.");
+  await failNextSaveOf(app, folder, "background-information");
+  await page.getByTestId("bulk-paste-save").click();
+  await expect(row(page, "background-information")).toHaveAttribute("data-outcome", "failed");
+
+  // On the section's own screen the kept text is in its editor; she changes it there, and that newer text is saved.
+  await goTo(page, `/cases/${id}/report/background-information`);
+  await expect(heading(page)).toHaveText("Background Information");
+  const editor = page.getByTestId("section-text");
+  await expect(editor).toHaveValue("Older text, not saved.");
+  await editor.fill("Newer text, saved on the section's screen.");
+  await page.getByTestId("section-done").click();
+  await expect(page.getByTestId("section-view")).toContainText("Newer text, saved on the section's screen.");
+  expect(await call<unknown[]>(page, "listFailedSaves")).toEqual([]);
+  // A section of hers saved on its own screen also ends the wait for her sections (review round 1, minor 9).
+  await goTo(page, `/cases/${id}/sources`);
+  await expect(page.getByTestId("half-done-banner")).toHaveCount(0);
+
+  // Back on the paste screen: the box is empty, nothing shows as not saved, and Save has nothing to put back.
+  await goTo(page, `/cases/${id}/report/paste`);
+  await expect(heading(page)).toHaveText("Paste what you already wrote");
+  await expect(row(page, "background-information")).not.toHaveAttribute("data-outcome", "failed");
+  await expect(row(page, "background-information").getByTestId("paste-box")).toHaveCount(0);
+  await expect(page.getByTestId("bulk-paste-save")).toBeDisabled();
+  expect(read().sections["background-information"].versions.map((v: { text: string }) => v.text)).toEqual(["Newer text, saved on the section's screen."]);
 });

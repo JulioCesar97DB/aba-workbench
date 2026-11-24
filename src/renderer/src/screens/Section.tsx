@@ -860,7 +860,7 @@ function copiedSentence(t: TFunction, copied: Copied | "failed", section: Report
 }
 
 /** Text with single line breaks reads as one paragraph (review M3): say so, and offer each line as a paragraph. */
-function LinesNotice({ onTreat }: { onTreat: () => void }) {
+export function LinesNotice({ onTreat }: { onTreat: () => void }) {
   const { t } = useTranslation();
   return (
     <div data-testid="lines-notice" className="flex max-w-reading flex-col items-start gap-2 rounded-md border border-border-control bg-surface-muted px-3.5 py-2.5 text-sm">

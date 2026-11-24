@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { REPORT_SECTIONS, type ReportSectionId } from "../src/shared/report-sections.ts";
-import { filledBoxes, isFilled, saveBoxes, sectionChip } from "../src/renderer/src/bulk-paste.ts";
+import { MAX_SECTION_TEXT_LENGTH } from "../src/shared/section-text.ts";
+import { filledBoxes, isFilled, isTooLong, saveBoxes, sectionChip } from "../src/renderer/src/bulk-paste.ts";
 
 /*
  * "Pegar lo que ya escribiste" (owner's decision T10): the filled boxes in ABA Matrix's
@@ -76,4 +77,13 @@ test("bulk paste: each row's chip says the section's state", () => {
   assert.equal(sectionChip("hers"), "hers");
   assert.equal(sectionChip("drafted"), "ai-draft");
   assert.equal(sectionChip("approved"), "approved");
+});
+
+test("bulk paste: a text longer than a section can hold is left out of the save, never cut (review round 1, minor 5)", () => {
+  const max = MAX_SECTION_TEXT_LENGTH;
+  assert.equal(isTooLong("x".repeat(max)), false);
+  assert.equal(isTooLong("x".repeat(max + 1)), true);
+  // Counted as the main process counts it: a Windows line break is one character.
+  assert.equal(isTooLong(`${"x".repeat(max - 1)}\r\n`), false);
+  assert.deepEqual(filledBoxes({ [S1]: "x".repeat(max + 1), [S2]: "fits" }), [{ sectionId: S2, text: "fits" }]);
 });

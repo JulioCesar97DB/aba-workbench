@@ -25,7 +25,7 @@ import { TwoWays } from "../components/TwoWays.tsx";
 import { CHECKLIST, documentList, stepChecks, type ChecklistRow } from "../document-checklist.ts";
 import { useProviders } from "../drafting-provider.tsx";
 import { formatDate } from "../format.ts";
-import { useStartedFromParts } from "../half-done.ts";
+import { useWaitsForHerSections } from "../half-done.ts";
 import { useIgnoredFolderPdfs } from "../ignored-folder-pdfs.ts";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase, useSetCaseSources } from "../open-case.tsx";
@@ -319,11 +319,11 @@ export function SourcesScreen() {
 /**
  * The case was started with "Ya escribí partes en ABA Matrix" (owner's proposal §4 "Nuevo
  * caso", T9): after the documents, her sections go in "Pegar lo que ya escribiste". Gone
- * once a pasted section is saved (half-done.ts).
+ * once a section of hers is saved, here or on its own screen (half-done.ts).
  */
 function HalfDoneBanner({ caseId }: { caseId: string }) {
   const { t } = useTranslation();
-  const fromParts = useStartedFromParts(caseId);
+  const fromParts = useWaitsForHerSections(caseId, useOpenedCase().sections);
   if (!fromParts) return null;
   return (
     <div data-testid="half-done-banner" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border-control bg-surface-muted px-4 py-2.5 text-md">

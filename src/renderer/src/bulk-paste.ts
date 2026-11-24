@@ -1,4 +1,5 @@
 import { REPORT_SECTIONS, type ReportSectionId } from "../../shared/report-sections.ts";
+import { MAX_SECTION_TEXT_LENGTH, normalizeLineEndings } from "../../shared/section-text.ts";
 import type { SectionState } from "../../shared/sections.ts";
 import type { ChipState } from "./components/chip-state.ts";
 
@@ -18,11 +19,19 @@ export function isFilled(text: string | undefined): text is string {
   return text !== undefined && text.trim() !== "";
 }
 
+/**
+ * Longer than a section can hold (the main process refuses it, counting line breaks as one character). The box says so and is left
+ * out of "Guardar" until she shortens it, rather than cutting the paste silently (review round 1, minor 5).
+ */
+export function isTooLong(text: string | undefined): boolean {
+  return text !== undefined && normalizeLineEndings(text).length > MAX_SECTION_TEXT_LENGTH;
+}
+
 /** The filled boxes, in ABA Matrix's order: what one press of "Guardar" saves, one call each. Their text goes as she pasted it. */
 export function filledBoxes(texts: PastedTexts): Array<{ sectionId: ReportSectionId; text: string }> {
   return REPORT_SECTIONS.flatMap((section) => {
     const text = texts[section.id];
-    return isFilled(text) ? [{ sectionId: section.id, text }] : [];
+    return isFilled(text) && !isTooLong(text) ? [{ sectionId: section.id, text }] : [];
   });
 }
 
