@@ -236,6 +236,20 @@ test("case map: removing an item makes a version without it; the earlier version
   assert.equal(mapPartView(setMapPartVersion(again.data, "behaviors", 1)!, "behaviors").items.length, 1);
 });
 
+test("case map: the sidebar's count is of parts with something in them: a part approved while empty is not counted (case map speed)", () => {
+  let data = blank();
+  data = addMapItem(data, "behaviors", "items", { name: claim("Hair pulling") }, null, T1).data;
+  data = addMapItem(data, "caregivers", "items", { role: claim("Mother") }, null, T1).data;
+  const removed = removeMapItem(data, "caregivers", "items", "cg-1", null, T2);
+  assert.ok(removed !== "item-not-found");
+  // The caregivers' version 2 holds nothing, and she approves it.
+  data = approveMapPart(removed.data, "caregivers", 2, T2)!;
+  assert.equal(mapPartView(data, "caregivers").status, "approved");
+  assert.deepEqual(caseMapSummary(data), { approved: 0, withContent: 1 }, "approved never exceeds the parts with content");
+  data = approveMapPart(data, "behaviors", 1, T3)!;
+  assert.deepEqual(caseMapSummary(data), { approved: 1, withContent: 1 });
+});
+
 test("case map: a part's status follows the version shown (D2)", () => {
   assert.equal(mapPartStatus([], null, null), "empty");
   assert.equal(mapPartStatus([{ number: 1, kind: "ai" }], 1, null), "draft");

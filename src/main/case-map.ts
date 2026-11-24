@@ -408,8 +408,11 @@ export function caseMapSummary(data: WithCaseMap): CaseMapSummary {
   let withContent = 0;
   for (const part of MAP_PARTS) {
     const view = mapPartView(data, part);
+    // Only parts with something in them count, approved or not, as the case summary and Home
+    // count them (UX-5): a part approved while empty never makes "approved" exceed the parts.
+    if (view.items.length === 0 && view.groups.length === 0) continue;
+    withContent++;
     if (view.status === "approved") approved++;
-    if (view.items.length > 0 || view.groups.length > 0) withContent++;
   }
   return { approved, withContent };
 }
