@@ -73,7 +73,7 @@ export function ReportScreen() {
   // What the AI cost for this case: every version and check whose price is known (review, low 2).
   const spent = opened.sections.reduce((sum, section) => sum + section.costUsd, 0);
   return (
-    <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />}>
+    <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />} railLabel={t("rail.sources")}>
       <div className="flex max-w-measure flex-col gap-5">
         <p className="text-md">{t("workspace.reportBody")}</p>
         {spent > 0 ? <p className="text-sm text-fg-muted">{t("section.caseCost", { cost: formatUsd(language, spent) })}</p> : null}

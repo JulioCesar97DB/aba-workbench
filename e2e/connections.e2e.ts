@@ -286,7 +286,12 @@ test("Claude: a wrong key says so, a good key connects and is kept, removing it 
   await setStubAnswers(app, { claudeStatus: 401 });
   await page.getByTestId("claude-card").getByRole("button", { name: "Check connection" }).click();
   await expect(page.getByTestId("claude-card").getByText("Needs attention")).toBeVisible();
-  await page.getByTestId("claude-card").getByRole("button", { name: "Remove key" }).click();
+  // Removing the key is in "⋯", with a question first (layout rule 9).
+  await page.getByTestId("claude-card").getByRole("button", { name: "More actions for the Claude key" }).click();
+  await page.getByRole("menuitem", { name: "Remove key" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Remove the Claude key?" });
+  await expect(confirm).toContainText("deletes it from this computer");
+  await confirm.getByRole("button", { name: "Remove key" }).click();
   await expect(page.getByTestId("claude-message")).toHaveText("Key removed from ABA Workbench.");
   await expect(page.getByTestId("ai-status")).toHaveText("AI not connected");
   expect(JSON.parse(readFileSync(file, "utf8")).claude).toBeNull();

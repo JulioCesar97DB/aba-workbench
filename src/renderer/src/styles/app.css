@@ -24,14 +24,19 @@
   }
 
   /*
-   * Focus is always visible: every focusable element gets the same ring when it is
-   * reached from the keyboard. The sidebar (and anything dark) sets --focus-ring to its
-   * own color.
+   * Focus is always visible from the keyboard: every focusable element gets the same ring
+   * once the last input was a key (data-input="keyboard" on <html>, set by input-modality.ts).
+   * After a click or a touch it is not drawn, also where the app moves the focus itself (the
+   * screen's title after a navigation, audit L11): the browser's own rule would draw it there.
+   * The sidebar (and anything dark) sets --focus-ring to its own color.
    */
   :root {
     --focus-ring: var(--color-focus);
   }
   :focus-visible {
+    outline: none;
+  }
+  :root[data-input="keyboard"] :focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }

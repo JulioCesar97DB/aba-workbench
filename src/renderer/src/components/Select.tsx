@@ -18,9 +18,12 @@ export function Select<Value extends string>({
   value,
   options,
   onValueChange,
+  describedBy,
 }: {
   label: string;
   description?: React.ReactNode;
+  /** The id of a hint shown elsewhere that the control is described by too. */
+  describedBy?: string;
   value: Value;
   options: SelectOption<Value>[];
   onValueChange: (value: Value) => void;
@@ -43,7 +46,7 @@ export function Select<Value extends string>({
           </p>
         ) : null}
         <BaseSelect.Trigger
-          aria-describedby={description ? descriptionId : undefined}
+          aria-describedby={[description ? descriptionId : null, describedBy ?? null].filter(Boolean).join(" ") || undefined}
           className="inline-flex min-h-control w-full max-w-72 items-center justify-between gap-3 rounded-md border border-border-control bg-surface px-3 text-left hover:bg-surface-muted data-popup-open:bg-surface-muted"
         >
           <BaseSelect.Value>{() => <span lang={selected?.lang}>{selected?.label}</span>}</BaseSelect.Value>

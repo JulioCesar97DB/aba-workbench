@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 import { NavLink } from "react-router";
 import { cn } from "./cn.ts";
+import { titleWhenCut } from "./truncate.ts";
 import type { StepState } from "../step-states.ts";
 
 /*
@@ -87,6 +88,8 @@ export function StepNavItem({ to, number, state, stateText, laterTag, detail, su
  * A report section: a status dot, its English title, and its state in words after it
  * ("Yours", "v3", "Approved"; read by a screen reader too). The dot repeats the state:
  * hollow when not started, green when hers or approved, amber when an AI draft waits.
+ * The title keeps one line, cut with its whole title as a tooltip, so the nine sections and
+ * the step after them fit a 1366x768 window (UX-7 follow-up); a screen reader reads it whole.
  */
 export function SectionNavItem({ to, title, state, detail, statusLabel }: { to: string; title: string; state: "not-started" | "hers" | "drafted" | "approved"; detail: string | null; statusLabel: string }) {
   return (
@@ -108,7 +111,11 @@ export function SectionNavItem({ to, title, state, detail, statusLabel }: { to: 
           state === "drafted" && "bg-dot-draft",
         )}
       />
-      <span lang="en" className="min-w-0 flex-1">
+      <span
+        lang="en"
+        className="min-w-0 flex-1 truncate"
+        onPointerEnter={(event) => titleWhenCut(event.currentTarget, title)}
+      >
         {title}
       </span>
       {detail ? (
