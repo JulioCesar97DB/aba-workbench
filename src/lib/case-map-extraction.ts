@@ -133,26 +133,48 @@ export function mapAnswerSchema(kind: MapRequestKind): Schema {
   return kind === "map-facts" ? factsSchema : behaviorsSchema;
 }
 
-/* The same shape, checked with Zod, with the map's limits (D6). Absent forms become null; null itself is accepted too (plain JSON). */
+/*
+ * The same shape, checked with Zod, with the map's limits (D6). Absent forms become null;
+ * null itself is accepted too (plain JSON).
+ *
+ * The length of a value, a quote or a note is not checked by Zod (owner's decision,
+ * 2026-11-23, case map speed): one value over its limit would make the whole answer
+ * unreadable and cost a repair of the whole answer. Each claim keeps its field's limit
+ * (`limitOf`), and the code checks make a value over it that value's own problem, which a
+ * repair of that value alone fixes. What is still too long after the repair is cut to fit
+ * when it is stored, with a [CHECK] (src/main/case-map-draft.ts). Keys, ids and how many
+ * items a list holds stay Zod's.
+ */
 
 const T = MAP_TEXT_LIMITS;
-const RefZ = z.strictObject({ kind: z.enum(REF_KINDS), id: z.string().max(64), quote: z.string().max(T.quote) });
-const WireClaimZ = (max: number) => z.strictObject({ value: z.string().max(max), refs: z.array(RefZ).max(MAX_MAP_REFS), origin: z.enum(ORIGIN_VALUES), check: z.string().max(T.text).nullable() });
-type WireClaim = z.infer<ReturnType<typeof WireClaimZ>>;
+/** The longest a value of each field may be, by the claim the answer was read into. */
+const LIMITS = new WeakMap<object, number>();
+/** The longest a claim's value may be, as its field allows (T.text when unknown). */
+export function limitOf(claim: object): number {
+  return LIMITS.get(claim) ?? T.text;
+}
+/** The limits of a score row's fields, and of the texts that are not claims. */
+export const SCORE_LIMITS = { instrument: T.name, scale: T.name, score: T.short, percentile: T.short, level: T.name } as const;
+export const TEXT_LIMITS = { respondent: T.name, reasoning: T.text, check: T.text, nature: T.name, reason: T.text, report: T.text, openItem: T.text, quote: T.quote } as const;
+const RefZ = z.strictObject({ kind: z.enum(REF_KINDS), id: z.string().max(64), quote: z.string() });
+const WireClaimZ = z.strictObject({ value: z.string(), refs: z.array(RefZ).max(MAX_MAP_REFS), origin: z.enum(ORIGIN_VALUES), check: z.string().nullable() });
+type WireClaim = z.infer<typeof WireClaimZ>;
 const absent = (claim: WireClaim | null): claim is null => claim === null || claim.value.trim() === "";
-const finish = (claim: WireClaim) => ({ ...claim, check: claim.check !== null && claim.check.trim() !== "" ? claim.check : null });
-const maybe = (max: number = T.text) => WireClaimZ(max).nullable().transform((claim) => (absent(claim) ? null : finish(claim)));
+const finish = (claim: WireClaim, max: number = T.text) => {
+  const out = { ...claim, check: claim.check !== null && claim.check.trim() !== "" ? claim.check : null };
+  LIMITS.set(out, max);
+  return out;
+};
+const maybe = (max: number = T.text) => WireClaimZ.nullable().transform((claim) => (absent(claim) ? null : finish(claim, max)));
 const ClaimsZ = (max: number = T.text) =>
   z
-    .array(WireClaimZ(max))
+    .array(WireClaimZ)
     .max(MAX_MAP_LIST)
-    .transform((values) => values.filter((claim) => !absent(claim)).map(finish));
-const TextOrNullZ = (max: number) =>
-  z
-    .string()
-    .max(max)
-    .nullable()
-    .transform((text) => (text !== null && text.trim() !== "" ? text : null));
+    .transform((values) => values.filter((claim) => !absent(claim)).map((claim) => finish(claim, max)));
+const TextOrNullZ = z
+  .string()
+  .nullable()
+  .transform((text) => (text !== null && text.trim() !== "" ? text : null));
 const HomeSectionZ = z
   .int()
   .min(0)
@@ -174,14 +196,14 @@ export const SCORE_FIELDS = ["instrument", "scale", "score", "percentile", "leve
  */
 const ScoreRowZ = z
   .strictObject({
-    instrument: TextOrNullZ(T.name),
-    scale: TextOrNullZ(T.name),
-    score: TextOrNullZ(T.short),
-    percentile: TextOrNullZ(T.short),
-    level: TextOrNullZ(T.name),
+    instrument: TextOrNullZ,
+    scale: TextOrNullZ,
+    score: TextOrNullZ,
+    percentile: TextOrNullZ,
+    level: TextOrNullZ,
     refs: z.array(RefZ).max(MAX_MAP_REFS),
     origin: z.enum(ORIGIN_VALUES),
-    check: z.string().max(T.text).nullable(),
+    check: z.string().nullable(),
   })
   .transform((row) => ({
     value: rowValue(row),
@@ -198,7 +220,15 @@ const rowValue = (row: Record<(typeof SCORE_FIELDS)[number], string | null>) =>
   SCORE_FIELDS.map((field) => row[field])
     .filter((text): text is string => text !== null)
     .join(" · ");
-const OpenItemZ = z.strictObject({ kind: z.enum(OPEN_ITEM_KINDS), text: z.string().max(T.text), homeSection: HomeSectionZ });
+/** An open item is never repaired (it is the AI's note to her, not a sourced value): one over the limit is cut to fit. */
+const OpenItemZ = z.strictObject({ kind: z.enum(OPEN_ITEM_KINDS), text: z.string().transform((text) => cutText(text, TEXT_LIMITS.openItem)), homeSection: HomeSectionZ });
+/** A text cut to its limit, at a word when it can be, ending with "…". */
+export function cutText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const room = text.slice(0, max - 1);
+  const space = room.lastIndexOf(" ");
+  return `${(space > max / 2 ? room.slice(0, space) : room).trimEnd()}…`;
+}
 
 const ClientZ = z.strictObject({
   age: maybe(T.name),
@@ -243,7 +273,7 @@ export const FactsAnswerSchema = z.strictObject({
   facts: z.array(z.strictObject({ key: KeyZ, text: maybe(), homeSection: HomeSectionZ })).max(MAP_PART_LIMITS.facts),
   openItems: z.array(OpenItemZ).max(MAP_PART_LIMITS.openItems),
   report: z
-    .array(z.strictObject({ kind: z.enum(REPORT_ITEM_KINDS), text: z.string().max(T.text), sections: z.array(z.string().max(64)).max(22), refs: z.array(RefZ).max(MAX_MAP_REFS) }))
+    .array(z.strictObject({ kind: z.enum(REPORT_ITEM_KINDS), text: z.string(), sections: z.array(z.string().max(64)).max(22), refs: z.array(RefZ).max(MAX_MAP_REFS) }))
     .max(MAP_PART_LIMITS.report),
 });
 
@@ -270,9 +300,9 @@ export const BehaviorsAnswerSchema = z.strictObject({
         function: z.strictObject({
           primary: z.array(z.enum(FUNCTION_NAMES)).max(5),
           secondary: z.array(z.enum(FUNCTION_NAMES)).max(5),
-          evidence: z.array(z.strictObject({ tool: z.enum(EVIDENCE_TOOLS), respondent: TextOrNullZ(T.name), result: maybe(), supports: z.array(z.enum(FUNCTION_NAMES)).max(5) })).max(MAX_MAP_LIST),
-          reasoning: TextOrNullZ(T.text),
-          check: TextOrNullZ(T.text),
+          evidence: z.array(z.strictObject({ tool: z.enum(EVIDENCE_TOOLS), respondent: TextOrNullZ, result: maybe(), supports: z.array(z.enum(FUNCTION_NAMES)).max(5) })).max(MAX_MAP_LIST),
+          reasoning: TextOrNullZ,
+          check: TextOrNullZ,
         }),
         barriers: z.array(z.enum(BARRIER_TAGS)).max(9),
         risks: ClaimsZ(),
@@ -280,7 +310,7 @@ export const BehaviorsAnswerSchema = z.strictObject({
     )
     .max(MAP_PART_LIMITS.behaviors),
   groups: z
-    .array(z.strictObject({ key: KeyZ, behaviorKeys: z.array(KeyZ).max(MAX_MAP_LIST), nature: z.string().max(T.name), function: orNone(FUNCTION_NAMES), measure: orNone(MEASURES), reason: z.string().max(T.text) }))
+    .array(z.strictObject({ key: KeyZ, behaviorKeys: z.array(KeyZ).max(MAX_MAP_LIST), nature: z.string(), function: orNone(FUNCTION_NAMES), measure: orNone(MEASURES), reason: z.string() }))
     .max(MAX_MAP_GROUPS),
   risks: z.array(z.strictObject({ key: KeyZ, behaviorKeys: z.array(KeyZ).max(MAX_MAP_LIST), what: maybe(), evidence: ClaimsZ(), level: maybe(T.name) })).max(MAP_PART_LIMITS.risks),
   openItems: z.array(OpenItemZ).max(MAP_PART_LIMITS.openItems),
@@ -473,6 +503,12 @@ export interface CheckResult {
   causes: Record<string, number>;
   /** How many values the repair is asked to fix: the values that failed, and each item-level problem. */
   failedValues: number;
+  /**
+   * Texts that are not claims and failed on their own (a function's reasoning longer than
+   * its limit, a respondent, a group's reason): by the object that holds them, their field
+   * names. The repair quotes them like a failed value.
+   */
+  failedFields: Map<object, Set<string>>;
 }
 
 /** The kinds of problem, as recorded (MapExtractionRecord.repairCauses). */
@@ -489,6 +525,7 @@ export type ProblemCause =
   | "duplicate-key"
   | "group-rule"
   | "function-both"
+  | "too-long"
   | "unreadable";
 
 const LISTS = ["caregivers", "settings", "deficits", "strengths", "facts", "report", "behaviors", "groups", "risks"] as const;
@@ -514,6 +551,20 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   let whole = false;
   /** Inside the check of one value: its problems are the value's, not the item's. */
   let inClaim = false;
+  const failedFields = new Map<object, Set<string>>();
+  let fieldProblems = 0;
+  const longMessage = (length: number, max: number) => `it is ${length} characters long, and this field takes at most ${max}: shorten it, keeping its meaning and its numbers.`;
+  /** A text that is not a claim, over its limit: that text's own problem (owner's decision, 2026-11-23), repaired alone. */
+  const textTooLong = (holder: object, field: string, text: string | null, max: number, where: string) => {
+    if (text === null || text.length <= max) return;
+    inClaim = true;
+    problem(`${where}.${field}`, longMessage(text.length, max), "too-long");
+    inClaim = false;
+    const fields = failedFields.get(holder) ?? new Set<string>();
+    fields.add(field);
+    failedFields.set(holder, fields);
+    fieldProblems++;
+  };
   const sources = new Map(context.sources.map((source) => [source.id, source]));
   const sourceTexts = new Map(context.sources.filter((source) => source.text !== null).map((source) => [source.id, normalizeForQuote(source.text ?? "")]));
   const sectionTexts = new Map(context.sections.map((section) => [section.id, normalizeForQuote(section.text)]));
@@ -544,6 +595,10 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   };
 
   const checkRef = (ref: AnswerRef, where: string) => {
+    // A quote over the limit is that quote's problem; whether it is found is still checked, so a found one cut to fit stays verbatim.
+    if (ref.quote.length > TEXT_LIMITS.quote) {
+      problem(where, `the quote "${ref.quote.slice(0, 80)}…" is ${ref.quote.length} characters long, and a quote takes at most ${TEXT_LIMITS.quote}: copy a shorter passage, word for word, that still shows the value.`, "too-long");
+    }
     const quote = normalizeForQuote(ref.quote);
     const fail = (message: string, cause: ProblemCause) => {
       problem(where, message, cause);
@@ -584,6 +639,14 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   };
   const checkOneClaim = (claim: AnswerClaim, where: string, options: { threshold?: boolean }) => {
     claim.refs.forEach((ref, index) => checkRef(ref, `${where}.refs[${index}]`));
+    // Longer than its field allows: the value's own problem (owner's decision, 2026-11-23). A score row's fields each have their own limit.
+    if (isScoreRow(claim)) {
+      for (const field of SCORE_FIELDS) {
+        const text = claim[field];
+        if (text !== null && text.length > SCORE_LIMITS[field]) problem(`${where}.${field}`, longMessage(text.length, SCORE_LIMITS[field]), "too-long");
+      }
+    } else if (claim.value.length > limitOf(claim)) problem(`${where}.value`, longMessage(claim.value.length, limitOf(claim)), "too-long");
+    if (claim.check !== null && claim.check.length > TEXT_LIMITS.check) problem(`${where}.check`, longMessage(claim.check.length, TEXT_LIMITS.check), "too-long");
     if ((claim.origin === "extracted" || claim.origin === "her") && claim.refs.length === 0) problem(where, "a value a source or her text states needs a ref with its quote.", "no-ref");
     // Only PDFs cited: their text cannot be read yet, so nothing can be checked (D32).
     if (claim.refs.length > 0 && claim.refs.every((ref) => quotes.get(ref) === "not-checked")) return;
@@ -657,6 +720,8 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     facts.facts.forEach((item, index) => visitClaim(item.text, `facts[${index}].text`));
     facts.report.forEach((item, index) => {
       item.refs.forEach((ref, at) => checkRef(ref, `report[${index}].refs[${at}]`));
+      // A report item is always quoted whole by a repair, so its text over the limit is the item's problem.
+      if (item.text.length > TEXT_LIMITS.report) problem(`report[${index}].text`, longMessage(item.text.length, TEXT_LIMITS.report), "too-long");
       for (const id of item.sections) if (!sectionTexts.has(id)) problem(`report[${index}]`, `"${id}" is not one of her sections that were sent.`, "unknown-ref");
     });
     uniqueKeys(facts.caregivers, "caregivers");
@@ -680,7 +745,12 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
         for (const key of ["date", "setting", "length", "value"] as const) visitClaim(observation[key], `${place}.${key}`);
       });
       visitAll(behavior.baseline.other, `${where}.baseline.other`);
-      behavior.function.evidence.forEach((entry, at) => visitClaim(entry.result, `${where}.function.evidence[${at}].result`));
+      behavior.function.evidence.forEach((entry, at) => {
+        visitClaim(entry.result, `${where}.function.evidence[${at}].result`);
+        textTooLong(entry, "respondent", entry.respondent, TEXT_LIMITS.respondent, `${where}.function.evidence[${at}]`);
+      });
+      textTooLong(behavior.function, "reasoning", behavior.function.reasoning, TEXT_LIMITS.reasoning, `${where}.function`);
+      textTooLong(behavior.function, "check", behavior.function.check, TEXT_LIMITS.check, `${where}.function`);
       for (const id of behavior.settingIds) if (!context.settingIds.has(id)) problem(`${where}.settingIds`, `"${id}" is not the id of a setting in <map-facts>.`, "unknown-link");
       const both = behavior.function.primary.filter((name) => behavior.function.secondary.includes(name));
       if (both.length > 0) problem(`${where}.function`, `${both.join(", ")} is both primary and secondary.`, "function-both");
@@ -689,6 +759,8 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     const byKey = new Map(found.behaviors.map((behavior) => [behavior.key, behavior]));
     found.groups.forEach((group, index) => {
       const where = `groups[${index}]`;
+      textTooLong(group, "nature", group.nature, TEXT_LIMITS.nature, where);
+      textTooLong(group, "reason", group.reason, TEXT_LIMITS.reason, where);
       for (const key of group.behaviorKeys) {
         if (!named(key)) problem(where, `"${key}" is not the key of a behavior in this answer or the id of one in the map.`, "unknown-link");
         if (grouped.has(key)) problem(where, `the behavior "${key}" is in two groups (${grouped.get(key)} and ${group.key}).`, "group-rule");
@@ -710,7 +782,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     uniqueKeys(found.groups, "groups (keys)");
     uniqueKeys(found.risks, "risks (keys)");
   }
-  return { problems, quotes, numbers, unquotedNumbers, pdfNumbers, failedClaims, failing, whole, itemLevel, causes, failedValues: failedClaims.size + itemProblems };
+  return { problems, quotes, numbers, unquotedNumbers, pdfNumbers, failedClaims, failing, whole, itemLevel, causes, failedValues: failedClaims.size + fieldProblems + itemProblems, failedFields };
 }
 
 /*
@@ -747,7 +819,7 @@ export function repairInput(kind: MapRequestKind, raw: Record<string, unknown>, 
         return items[index] === undefined ? [] : [items[index]];
       }
       const item = parsed[index];
-      return item ? [onlyFailed(item, checks.failedClaims)] : [];
+      return item ? [onlyFailed(item, checks.failedClaims, checks.failedFields)] : [];
     });
   };
   const rows = (list: readonly unknown[]) => list as ReadonlyArray<Record<string, unknown>>;
@@ -755,7 +827,7 @@ export function repairInput(kind: MapRequestKind, raw: Record<string, unknown>, 
   if (kind === "map-facts") {
     const facts = answer as FactsAnswer;
     previousAnswer = {
-      ...(checks.failing.has("client") && facts.client ? { client: onlyFailed(facts.client as unknown as Record<string, unknown>, checks.failedClaims) } : {}),
+      ...(checks.failing.has("client") && facts.client ? { client: onlyFailed(facts.client as unknown as Record<string, unknown>, checks.failedClaims, checks.failedFields) } : {}),
       caregivers: pick("caregivers", rows(facts.caregivers)),
       settings: pick("settings", rows(facts.settings)),
       deficits: pick("deficits", rows(facts.deficits)),
@@ -788,21 +860,24 @@ function wireClaim(claim: AnswerClaim): Record<string, unknown> {
  * entries with what names them (a date, an instrument, a tool and its respondent). Nothing
  * else: what the repair leaves empty stays as the first answer had it.
  */
-function onlyFailed(item: Record<string, unknown>, failed: ReadonlySet<unknown>): Record<string, unknown> {
+function onlyFailed(item: Record<string, unknown>, failed: ReadonlySet<unknown>, fields: ReadonlyMap<object, Set<string>> = new Map()): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+  const failedHere = fields.get(item);
   for (const [key, value] of Object.entries(item)) {
     if (key === "key") out.key = value;
+    // A text that is not a claim and failed on its own (a reasoning too long): quoted as it is.
+    else if (failedHere?.has(key)) out[key] = value;
     else if (isClaim(value)) {
       if (failed.has(value)) out[key] = wireClaim(value);
     } else if (Array.isArray(value)) {
       const kept = value.flatMap((entry): unknown[] => {
         if (isClaim(entry)) return failed.has(entry) ? [wireClaim(entry)] : [];
-        if (isPlain(entry) && entryFailed(entry, failed)) return [{ ...identifyingFields(entry), ...onlyFailed(entry, failed) }];
+        if (isPlain(entry) && (entryFailed(entry, failed) || fields.has(entry))) return [{ ...identifyingFields(entry), ...onlyFailed(entry, failed, fields) }];
         return [];
       });
       if (kept.length > 0) out[key] = kept;
     } else if (isPlain(value)) {
-      const inner = onlyFailed(value, failed);
+      const inner = onlyFailed(value, failed, fields);
       if (Object.keys(inner).length > 0) out[key] = inner;
     }
   }
@@ -823,6 +898,8 @@ function identifyingFields(entry: Record<string, unknown>): Record<string, unkno
 const isPlain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 /** A claim: a string value with its refs. An observation also has a field named value, which is a claim, so the shape decides. */
 const isClaim = (value: unknown): value is AnswerClaim => isPlain(value) && typeof value.value === "string" && Array.isArray(value.refs);
+/** A score row: a claim with the row's five fields. */
+export const isScoreRow = (value: unknown): value is ScoreRow => isClaim(value) && "instrument" in value;
 const emptyValue = (value: unknown) => value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
 
 /**
@@ -881,7 +958,10 @@ function mergeObjectList(first: Array<Record<string, unknown>>, repaired: Array<
   for (const entry of repaired) {
     const id = entryId(entry);
     const candidates = id === null ? [] : first.map((item, index) => ({ item, index })).filter(({ item, index }) => !matchOf.has(index) && entryId(item) === id);
-    const match = candidates.find(({ item }) => entryFailed(item, failed)) ?? candidates[0];
+    // An evidence whose respondent was the value that failed comes back with another
+    // respondent: it is the failed entry of the same tool.
+    const sameTool = id === null ? [] : first.map((item, index) => ({ item, index })).filter(({ item, index }) => !matchOf.has(index) && entryFailed(item, failed) && entryId(item)?.split("|")[0] === id.split("|")[0]);
+    const match = candidates.find(({ item }) => entryFailed(item, failed)) ?? candidates[0] ?? sameTool[0];
     if (match) matchOf.set(match.index, entry);
     else extra.push(entry);
   }

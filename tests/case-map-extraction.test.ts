@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, beforeEach, test } from "node:test";
-import { checkMapAnswer, mapAnswerSchema, mergeRepair, normalizeForQuote, numbersIn, parseMapAnswer, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer } from "../src/lib/case-map-extraction.ts";
+import { checkMapAnswer, mapAnswerSchema, mergeRepair, normalizeForQuote, numbersIn, parseMapAnswer, repairInput, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer } from "../src/lib/case-map-extraction.ts";
 import { mockProvider } from "../src/lib/providers/mock.ts";
 import { CHATGPT_MAP_TASK_PREAMBLE, CHATGPT_TASK_PREAMBLE, responsesRequest } from "../src/lib/providers/openai.ts";
 import { ProviderError, type GenerateEvent, type GenerateOptions, type Provider } from "../src/lib/providers/types.ts";
@@ -508,7 +508,7 @@ test("M5: only a refusal that names the schema or the format switches the route 
 test("M6: a ref the checks never reached is stored as not found, never as a PDF's 'not checked'", () => {
   const parsed = parseMapAnswer("map-facts", JSON.stringify(factsAnswer({ obs: "o", interview: "i", pdf: "p" })));
   assert.ok(parsed.ok);
-  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failedClaims: new Set(), failing: new Map(), whole: false, unquotedNumbers: new Map(), itemLevel: new Map(), causes: {}, failedValues: 0 };
+  const empty: CheckResult = { problems: [], quotes: new Map(), numbers: new Set(), pdfNumbers: new Set(), failedClaims: new Set(), failing: new Map(), whole: false, unquotedNumbers: new Map(), itemLevel: new Map(), causes: {}, failedValues: 0, failedFields: new Map() };
   const parts = toAnswerParts("map-facts", parsed.answer, empty, { notesSession: null, sectionVersions: new Map(), settingIds: new Set(), behaviorIds: new Set() });
   const role = (parts.caregivers!.items[0] as Record<string, { refs: Array<{ checked: string }> }>).role;
   assert.equal(role.refs[0].checked, "not-found");
@@ -954,4 +954,124 @@ test("speed: each item that passes its own checks is shown as it arrives, before
   assert.deepEqual(behaviorsPreviews, ["behaviors", "behaviors", "risks"]);
   // Nothing is saved by a preview: the saved map is the request's, after its checks and repair.
   assert.equal(stored(caseFile).parts.caregivers.versions[0].content.items[0].role.refs[0].checked, "found");
+});
+
+/* A value over a length limit is that value's own problem (owner's decision, 2026-11-23): repaired alone, never the whole answer. */
+
+/** The observation notes' first three lines, one passage over the 300 characters a quote may hold. */
+const LONG_QUOTE = OBSERVATIONS.split("\n").slice(0, 3).join(" ");
+const LONG_DATE = "11/04/2026, in the afternoon, at home, after school and homework";
+
+test("limits: a value or a quote over its limit no longer makes the answer unreadable; it is the value's own problem", () => {
+  assert.ok(LONG_QUOTE.length > 300 && LONG_DATE.length > 40);
+  const answer = factsAnswer({ obs: "o", interview: "i", pdf: "p" }, {
+    client: { ...absentClient(), evaluationDate: claim(LONG_DATE, [ref("o", "11/04/2026, home, 2 hours")]) },
+    deficits: [],
+    facts: [{ key: "new-9", text: claim("The first home observation was on 11/04/2026.", [ref("o", LONG_QUOTE)]), homeSection: 3 }],
+    openItems: [{ kind: "missing", text: "x".repeat(2000), homeSection: 0 }],
+  });
+  const parsed = parseMapAnswer("map-facts", JSON.stringify(answer));
+  assert.ok(parsed.ok, "readable: the lengths are the code checks' now");
+  const checks = checkMapAnswer("map-facts", parsed.answer, checkContext());
+  const long = checks.problems.filter((text) => /characters long/.test(text));
+  assert.equal(long.length, 2, checks.problems.join("\n"));
+  assert.match(long.join("\n"), /client\.evaluationDate\.value: it is 64 characters long, and this field takes at most 40/);
+  assert.match(long.join("\n"), /facts\[0\]\.text\.refs\[0\]: the quote .* is \d+ characters long, and a quote takes at most 300/);
+  assert.equal(checks.causes["too-long"], 2);
+  assert.equal(checks.whole, false);
+  // The long quote is found word for word all the same.
+  assert.equal(checks.quotes.get((parsed.answer as FactsAnswer).facts[0].text!.refs[0]), "found");
+  // The repair quotes those two values only.
+  const input = repairInput("map-facts", parsed.raw, parsed.answer, checks);
+  assert.equal(input.scope, "values");
+  assert.deepEqual(Object.keys(input.previousAnswer).sort(), ["client", "facts"]);
+  assert.deepEqual(Object.keys(input.previousAnswer.client as object), ["evaluationDate"]);
+  assert.deepEqual(Object.keys((input.previousAnswer.facts as Array<object>)[0]), ["key", "text"]);
+  // An open item (never repaired: the AI's note to her) over its limit is cut to fit.
+  const note = (parsed.answer as FactsAnswer).openItems[0].text;
+  assert.equal(note.length, 1500);
+  assert.ok(note.endsWith("…"));
+});
+
+test("limits: a draft whose values are too long is repaired value by value; what is still too long is cut to fit, flagged, and saved", async () => {
+  for (const fixes of [true, false]) {
+    const { service, caseId, caseFile, model } = await setup((found) => {
+      const first = factsAnswer(found, {
+        client: { ...absentClient(), evaluationDate: claim(LONG_DATE, [ref(found.obs, "11/04/2026, home, 2 hours")]) },
+        facts: [{ key: "new-9", text: claim("The first home observation was on 11/04/2026.", [ref(found.obs, LONG_QUOTE)]), homeSection: 3 }],
+      });
+      const repair = fixes
+        ? factsAnswer(found, {
+            client: { ...absentClient(), evaluationDate: claim("11/04/2026", [ref(found.obs, "11/04/2026, home, 2 hours")]) },
+            caregivers: [],
+            settings: [],
+            deficits: [],
+            facts: [{ key: "new-9", text: claim("The first home observation was on 11/04/2026.", [ref(found.obs, "11/04/2026, home, 2 hours")]), homeSection: 0 }],
+            openItems: [],
+          })
+        : first;
+      return { facts: [{ answer: first }, { answer: repair }], behaviors: [{ answer: behaviorsAnswer(found, []) }] };
+    });
+    const events = await draft(service, caseId);
+    assert.equal(model.sent.length, 3, "one repair, then the behaviors");
+    const previous = model.sent[1].prompt.task.slice(model.sent[1].prompt.task.indexOf("<previous-answer>"), model.sent[1].prompt.task.indexOf("</previous-answer>"));
+    assert.doesNotMatch(previous, /Grandmother|Laundromat|Vineland/, "never the whole answer");
+    const map = stored(caseFile);
+    const record = map.extractions[0];
+    assert.equal(record.repairScope, "values");
+    assert.deepEqual(record.repairCauses, { "too-long": 2 });
+    assert.equal(record.repairValues, 2);
+    assert.ok(events.some((event) => event.type === "map-saved" && event.step === "map-facts" && event.result.outcome === "saved"), "saved");
+    const client = map.parts.client.versions[0].content.items[0];
+    const fact = map.parts.facts.versions[0].content.items[0];
+    assert.equal(map.parts.caregivers.versions[0].content.items.length, 2, "the rest of the first answer is kept");
+    if (fixes) {
+      assert.equal(client.evaluationDate.value, "11/04/2026");
+      assert.equal(fact.text.refs[0].quote, "11/04/2026, home, 2 hours");
+      assert.equal(fact.homeSection, 3, "what the repair left empty stays as it was");
+      assert.deepEqual(record.problems, []);
+    } else {
+      assert.ok(client.evaluationDate.value.length <= 40 && client.evaluationDate.value.endsWith("…"), client.evaluationDate.value);
+      assert.match(client.evaluationDate.check, /longer than the map allows/);
+      const quote = fact.text.refs[0].quote as string;
+      assert.ok(quote.length <= 300 && LONG_QUOTE.startsWith(quote), "the first words that fit, still word for word");
+      assert.equal(fact.text.refs[0].checked, "found");
+      assert.equal(record.problems.length, 2);
+    }
+  }
+});
+
+test("limits: a reasoning, a group's reason or a respondent too long is quoted alone and merged back alone", () => {
+  const found = { obs: "o", interview: "i" };
+  const first = behaviorsAnswer(found, []);
+  const behavior = (first.behaviors as Array<Record<string, unknown>>)[0];
+  behavior.function = { ...(behavior.function as Record<string, unknown>), reasoning: "r".repeat(1600), evidence: [{ tool: "interview", respondent: "M".repeat(130), result: claim("Spitting stops the homework", [ref("i", "he spits and then I have to stop the homework to clean")]), supports: ["escape"] }] };
+  (first.groups as Array<Record<string, unknown>>)[0].reason = "g".repeat(1600);
+  const a = parsedBehaviors(first);
+  const checks = checkMapAnswer("map-behaviors", a, checkContext());
+  assert.equal(checks.causes["too-long"], 3, checks.problems.join("\n"));
+  const input = repairInput("map-behaviors", first, a, checks);
+  assert.equal(input.scope, "values");
+  const quoted = input.previousAnswer as { behaviors: Array<Record<string, unknown>>; groups: Array<Record<string, unknown>> };
+  assert.deepEqual(Object.keys(quoted.behaviors[0]), ["key", "function"]);
+  assert.deepEqual(Object.keys(quoted.behaviors[0].function as object).sort(), ["evidence", "reasoning"]);
+  assert.deepEqual(Object.keys(quoted.groups[0]), ["key", "reason"]);
+  // The repair gives the three texts shorter, every other value empty.
+  const repaired = parsedBehaviors({
+    behaviors: [emptyBehavior("new-1", { function: { primary: [], secondary: [], evidence: [{ tool: "interview", respondent: "Mother", result: none(), supports: [] }], reasoning: "The observation and the interview point to escape.", check: "" } })],
+    groups: [{ key: "new-3", behaviorKeys: [], nature: "", function: "none", measure: "none", reason: "Same response class, function and measure." }],
+    risks: [],
+    openItems: [],
+  });
+  const failed = new Set<unknown>([...checks.failedClaims, ...checks.failedFields.keys()]);
+  const merged = mergeRepair("map-behaviors", a, repaired, checks.failing, false, failed) as BehaviorsAnswer;
+  const fn = merged.behaviors[0].function;
+  assert.equal(fn.reasoning, "The observation and the interview point to escape.");
+  assert.deepEqual(fn.primary, ["escape"], "the rest of the function stays");
+  assert.equal(fn.evidence.length, 1, "the evidence is merged into its entry, not added");
+  assert.equal(fn.evidence[0].respondent, "Mother");
+  assert.equal(fn.evidence[0].result?.value, "Spitting stops the homework", "its result, which passed, stays");
+  assert.equal(merged.groups[0].reason, "Same response class, function and measure.");
+  assert.deepEqual(merged.groups[0].behaviorKeys, ["new-1", "new-2"]);
+  assert.deepEqual(checkMapAnswer("map-behaviors", merged, checkContext()).problems, []);
 });
