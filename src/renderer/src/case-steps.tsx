@@ -12,6 +12,11 @@ export function casePath(caseId: string, step: CaseStep = "sources", sectionId?:
   return sectionId ? `/cases/${caseId}/${step}/${sectionId}` : `/cases/${caseId}/${step}`;
 }
 
+/** "Pegar lo que ya escribiste": the nine sections on one screen, under the report (owner's decision T10). */
+export function bulkPastePath(caseId: string): string {
+  return `/cases/${caseId}/report/paste`;
+}
+
 /** A pasted text of the case, to read and edit. */
 export function sourceTextPath(caseId: string, sourceId: string): string {
   return `/cases/${caseId}/sources/text/${sourceId}`;

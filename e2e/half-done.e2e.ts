@@ -1,0 +1,246 @@
+import type { ElectronApplication, Page } from "@playwright/test";
+import { chmodSync, readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { defaultCasesFolder, expect, firstScreen, goTo, newCaseButton, test } from "./app.ts";
+
+/*
+ * A half-done assessment (UX-6; owner's proposal §4 "Nuevo caso", "4 · Informe" and "Picking
+ * up a half-done assessment", decisions T9 and T10): "¿Cómo empiezas?" in New case, the line
+ * on Documentos, "Pegar lo que ya escribiste" on the report, and the screen that saves each
+ * pasted section as her version. Cases are made in a temporary home folder. No AI. Invented
+ * data only.
+ */
+
+const heading = (page: Page) => page.getByRole("heading", { level: 1 });
+
+const call = <T>(page: Page, fn: string, ...args: unknown[]) =>
+  page.evaluate(([f, a]) => (globalThis as unknown as { aba: Record<string, (...x: unknown[]) => Promise<unknown>> }).aba[f as string](...(a as unknown[])) as Promise<T>, [fn, args] as const);
+
+const row = (page: Page, sectionId: string) => page.locator(`[data-testid='paste-row'][data-section='${sectionId}']`);
+
+async function openRow(page: Page, sectionId: string) {
+  const box = row(page, sectionId).getByTestId("paste-box");
+  if (!(await box.isVisible())) await row(page, sectionId).getByRole("button", { expanded: false }).click();
+  await expect(box).toBeVisible();
+  return box;
+}
+
+function caseData(home: string, label: string) {
+  const folder = path.join(defaultCasesFolder(home), label);
+  return { folder, read: () => JSON.parse(readFileSync(path.join(folder, "aba-case.json"), "utf8")) };
+}
+
+async function createCase(page: Page, label: string, start: "From scratch" | "I already wrote parts in ABA Matrix") {
+  await newCaseButton(page).click();
+  const dialog = page.getByRole("dialog", { name: "New case" });
+  await dialog.getByRole("textbox", { name: "Label" }).fill(label);
+  const group = dialog.getByRole("radiogroup", { name: "How are you starting?" });
+  // "From scratch" is chosen when the form opens.
+  await expect(group.getByRole("radio", { name: "From scratch" })).toBeChecked();
+  await expect(group.getByRole("radio", { name: "From scratch" })).toHaveAccessibleDescription("You add the client's documents and follow the steps.");
+  if (start !== "From scratch") await group.getByRole("radio", { name: start }).click();
+  await expect(group.getByRole("radio", { name: start })).toBeChecked();
+  await dialog.getByRole("button", { name: "Create case" }).click();
+  await expect(dialog).toBeHidden();
+}
+
+test("New case: how she starts decides where she lands, and nothing about it is stored", async ({ launch, home }) => {
+  const app = await launch();
+  const page = await firstScreen(app);
+
+  // From scratch: Documentos, with no line about her sections; the report's paste card waits under the sections.
+  await createCase(page, "Scratch case", "From scratch");
+  await expect(heading(page)).toHaveText("Documents");
+  await expect(page.getByTestId("half-done-banner")).toHaveCount(0);
+  const scratchId = page.url().match(/cases\/([^/]+)\/sources$/)![1];
+  await goTo(page, `/cases/${scratchId}/report`);
+  await expect(page.getByTestId("paste-card")).toBeVisible();
+  await expect(page.getByTestId("paste-card")).not.toHaveAttribute("data-first", "true");
+  await expect(page.getByTestId("paste-card").getByRole("link", { name: "Paste the sections" })).not.toHaveClass(/bg-accent/);
+
+  // I already wrote parts: Documentos too, with the line and its way to the paste screen; the card comes first on the report.
+  await goTo(page, "/");
+  await createCase(page, "Parts case", "I already wrote parts in ABA Matrix");
+  await expect(heading(page)).toHaveText("Documents");
+  const banner = page.getByTestId("half-done-banner");
+  await expect(banner).toContainText("After adding the documents, paste the sections you already have.");
+  const id = page.url().match(/cases\/([^/]+)\/sources$/)![1];
+  await goTo(page, `/cases/${id}/report`);
+  await expect(page.getByTestId("paste-card")).toHaveAttribute("data-first", "true");
+  // First, before the table, and the screen's primary.
+  await expect(page.getByTestId("paste-card").getByRole("link", { name: "Paste the sections" })).toHaveClass(/bg-accent/);
+  await goTo(page, `/cases/${id}/sources`);
+  await banner.getByRole("link", { name: "Paste the sections" }).click();
+  await expect(heading(page)).toHaveText("Paste what you already wrote");
+  expect(page.url()).toMatch(new RegExp(`#/cases/${id}/report/paste$`));
+
+  // Not stored (T9): the data files are a new case's, and after a restart the case is like any other.
+  for (const label of ["Scratch case", "Parts case"]) {
+    const data = caseData(home, label).read();
+    expect(Object.keys(data).sort()).toEqual(["clientAge", "createdAt", "files", "id", "label", "schemaVersion", "sections", "sources", "updatedAt"]);
+    expect(data.sections).toEqual({});
+  }
+  await app.close();
+  const again = await firstScreen(await launch());
+  await goTo(again, `/cases/${id}/sources`);
+  await expect(heading(again)).toHaveText("Documents");
+  await expect(again.getByTestId("half-done-banner")).toHaveCount(0);
+  await goTo(again, `/cases/${id}/report`);
+  await expect(again.getByTestId("paste-card")).not.toHaveAttribute("data-first", "true");
+});
+
+test("Paste what you already wrote: each filled box becomes her version of its section, one save each", async ({ launch, home }) => {
+  const app = await launch();
+  const page = await firstScreen(app);
+  await createCase(page, "Paste case", "I already wrote parts in ABA Matrix");
+  const id = page.url().match(/cases\/([^/]+)\/sources$/)![1];
+  const { read } = caseData(home, "Paste case");
+  // One section is hers already: what she pastes there is a new version, the earlier one stays.
+  expect((await call<{ outcome: string }>(page, "saveSectionText", id, "crisis-plan", "Her earlier crisis plan.", null)).outcome).toBe("saved");
+
+  await goTo(page, `/cases/${id}/report`);
+  await page.getByTestId("paste-card").getByRole("link", { name: "Paste the sections" }).click();
+  await expect(heading(page)).toHaveText("Paste what you already wrote");
+  // The nine sections, collapsed, in ABA Matrix's order, their titles in English.
+  const rows = page.getByTestId("paste-row");
+  await expect(rows).toHaveCount(9);
+  await expect(page.getByTestId("paste-box")).toHaveCount(0);
+  await expect(rows.locator("[lang='en']")).toHaveText([
+    "Background Information",
+    "Medical Necessity Criteria",
+    "Strengths and Weaknesses",
+    "Environmental Changes",
+    "Family/Caregiver Involvement",
+    "Generalization and Maintenance",
+    "Discharge and Service Fading Plan",
+    "Risk Assessment",
+    "Crisis Plan",
+  ]);
+  await expect(row(page, "crisis-plan").getByTestId("state-chip")).toHaveAttribute("data-state", "hers");
+  const save = page.getByTestId("bulk-paste-save");
+  await expect(save).toBeDisabled();
+
+  // Opening a row puts the focus in its box, named for its section.
+  await row(page, "background-information").getByRole("button", { expanded: false }).click();
+  await expect(page.getByRole("textbox", { name: "Your text for Background Information" })).toBeFocused();
+  await page.getByRole("textbox", { name: "Your text for Background Information" }).fill("First paragraph.\n\nSecond paragraph.");
+  await expect(row(page, "background-information")).toContainText("2 paragraphs · 4 words.");
+  await (await openRow(page, "risk-assessment")).fill("Invented risk assessment.");
+  // Only spaces: not counted, not saved.
+  await (await openRow(page, "environmental-changes")).fill("   \n  ");
+  const crisis = await openRow(page, "crisis-plan");
+  await expect(row(page, "crisis-plan")).toContainText("This section already has text in the app: what you paste becomes a new version, and the earlier ones stay.");
+  await crisis.fill("Her crisis plan from ABA Matrix.");
+  await expect(save).toHaveText("Save 3 sections");
+
+  // Leaving the screen and coming back keeps what the boxes hold (while the app runs).
+  await goTo(page, `/cases/${id}/report`);
+  await goTo(page, `/cases/${id}/report/paste`);
+  await expect(row(page, "risk-assessment").getByTestId("paste-box")).toHaveValue("Invented risk assessment.");
+  await expect(save).toHaveText("Save 3 sections");
+
+  await save.click();
+  await expect(page.getByTestId("bulk-paste-result")).toHaveText("3 sections saved as yours.");
+  for (const section of ["background-information", "risk-assessment", "crisis-plan"]) {
+    await expect(row(page, section)).toHaveAttribute("data-outcome", "saved");
+    await expect(row(page, section).getByTestId("state-chip")).toHaveAttribute("data-state", "hers");
+    await expect(row(page, section).getByRole("link", { name: "Open the section" })).toBeVisible();
+  }
+  await expect(save).toBeDisabled();
+  // Nothing waits: "Next step" to the report is the screen's primary now.
+  await expect(page.getByTestId("next-step")).toHaveAttribute("data-primary", "true");
+
+  // On disk: each as she pasted it, one version of hers each; the earlier crisis plan stays as version 1.
+  const data = read();
+  expect(data.sections["background-information"].versions.map((v: { text: string }) => v.text)).toEqual(["First paragraph.\n\nSecond paragraph."]);
+  expect(data.sections["risk-assessment"].versions.map((v: { text: string }) => v.text)).toEqual(["Invented risk assessment."]);
+  expect(data.sections["crisis-plan"].versions.map((v: { text: string }) => v.text)).toEqual(["Her earlier crisis plan.", "Her crisis plan from ABA Matrix."]);
+  expect(data.sections["environmental-changes"]).toBeUndefined();
+  // Hers, through the section's own save: "hers" for a first text, "edited" over an earlier one.
+  expect(data.sections["background-information"].versions[0].kind).toBe("hers");
+  expect(data.sections["crisis-plan"].versions.map((v: { kind: string }) => v.kind)).toEqual(["hers", "edited"]);
+
+  // The sidebar's sections say so, the section's own screen shows it as hers, and the case no longer waits for her sections.
+  await row(page, "background-information").getByRole("link", { name: "Open the section" }).click();
+  await expect(heading(page)).toHaveText("Background Information");
+  await expect(page.getByTestId("state-chip").first()).toHaveAttribute("data-state", "hers");
+  await expect(page.getByTestId("section-view")).toContainText("Second paragraph.");
+  await goTo(page, `/cases/${id}/sources`);
+  await expect(page.getByTestId("half-done-banner")).toHaveCount(0);
+  await goTo(page, `/cases/${id}/report`);
+  await expect(page.getByTestId("paste-card")).not.toHaveAttribute("data-first", "true");
+});
+
+async function failNextSaveOf(app: ElectronApplication, caseFolder: string, sectionId: string) {
+  // The case folder refuses only that one save: the others before and after it are saved.
+  await app.evaluate(
+    ({ ipcMain }, [folder, failing]) => {
+      type Handler = (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown;
+      const fs = process.getBuiltinModule("node:fs");
+      const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, Handler> })._invokeHandlers;
+      const original = handlers.get("sections:save-text");
+      if (!original) throw new Error("No handler for sections:save-text");
+      let used = false;
+      ipcMain.removeHandler("sections:save-text");
+      ipcMain.handle("sections:save-text", async (event, ...args) => {
+        if (used || args[1] !== failing) return original(event, ...args);
+        used = true;
+        fs.chmodSync(folder, 0o555);
+        try {
+          return await original(event, ...args);
+        } finally {
+          fs.chmodSync(folder, 0o755);
+        }
+      });
+    },
+    [caseFolder, sectionId] as const,
+  );
+}
+
+test("Paste what you already wrote: a box that could not be saved keeps its text, says so, survives a reload, and Try again saves it", async ({ launch, home }) => {
+  test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
+  const app = await launch({ language: "es" });
+  const page = await firstScreen(app);
+  const id = (await call<{ case: { id: string } }>(page, "createCase", { label: "Caso que falla", clientAge: null })).case.id;
+  const { folder, read } = caseData(home, readdirSync(defaultCasesFolder(home))[0]);
+  await goTo(page, `/cases/${id}/report/paste`);
+  await expect(heading(page)).toHaveText("Pegar lo que ya escribiste");
+  await (await openRow(page, "background-information")).fill("Background que se guarda.");
+  await (await openRow(page, "medical-necessity")).fill("Medical necessity que falla.");
+  await (await openRow(page, "crisis-plan")).fill("Crisis plan que se guarda.");
+  await failNextSaveOf(app, folder, "medical-necessity");
+  await page.getByTestId("bulk-paste-save").click();
+
+  // The failure does not stop the others; the box keeps her text, edged and said in words.
+  await expect(page.getByTestId("bulk-paste-result")).toHaveText("No se pudo guardar 1 sección: su texto sigue en su caja. Vuelve a intentarlo.");
+  await expect(row(page, "medical-necessity")).toHaveAttribute("data-outcome", "failed");
+  await expect(row(page, "medical-necessity").getByRole("alert")).toContainText("No se pudo guardar. Tu texto sigue aquí.");
+  await expect(row(page, "medical-necessity").getByTestId("paste-box")).toHaveValue("Medical necessity que falla.");
+  await expect(row(page, "background-information")).toHaveAttribute("data-outcome", "saved");
+  await expect(row(page, "crisis-plan")).toHaveAttribute("data-outcome", "saved");
+  expect(read().sections["medical-necessity"]).toBeUndefined();
+  await expect(page.getByTestId("bulk-paste-save")).toHaveText("Guardar 1 sección");
+
+  // A reload with the folder still refusing: the page starts with nothing in memory, the main process kept the text.
+  chmodSync(folder, 0o555);
+  try {
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.reload());
+    await page.waitForEvent("load");
+    await expect(heading(page)).toHaveText("Pegar lo que ya escribiste");
+    await expect(row(page, "medical-necessity").getByTestId("paste-box")).toHaveValue("Medical necessity que falla.");
+    await expect(row(page, "medical-necessity")).toHaveAttribute("data-outcome", "failed");
+    // The two saved before are not put back.
+    await expect(row(page, "background-information").getByTestId("paste-box")).toHaveCount(0);
+  } finally {
+    chmodSync(folder, 0o755);
+  }
+  await row(page, "medical-necessity").getByRole("button", { name: "Volver a intentar" }).click();
+  await expect(page.getByTestId("bulk-paste-result")).toHaveText("1 sección guardada como tuya.");
+  await expect(row(page, "medical-necessity")).toHaveAttribute("data-outcome", "saved");
+  const data = read();
+  expect(data.sections["medical-necessity"].versions.map((v: { text: string }) => v.text)).toEqual(["Medical necessity que falla."]);
+  expect(data.sections["background-information"].versions).toHaveLength(1);
+  expect(data.sections["crisis-plan"].versions).toHaveLength(1);
+  // Nothing is left unsaved.
+  expect(await call<unknown[]>(page, "listFailedSaves")).toEqual([]);
+});

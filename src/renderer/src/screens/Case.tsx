@@ -3,9 +3,10 @@ import { useTranslation } from "react-i18next";
 import { Outlet } from "react-router";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { useAppInfo } from "../app-info.tsx";
-import { CASE_STEPS, casePath, stepTitle, type CaseStep } from "../case-steps.tsx";
+import { bulkPastePath, CASE_STEPS, casePath, stepTitle, type CaseStep } from "../case-steps.tsx";
 import { casesFolderProblemText } from "../cases-folder.tsx";
-import { TextLink } from "../components/Link.tsx";
+import { Icon } from "../components/Icon.tsx";
+import { ButtonLink, TextLink } from "../components/Link.tsx";
 import { StatusBadge } from "../components/StatusBadge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, TableRowHeader } from "../components/Table.tsx";
 import { PageHeader } from "../shell/PageHeader.tsx";
@@ -15,6 +16,7 @@ import { sourceName, sourceNameLang } from "../source-labels.tsx";
 import { sectionStateText } from "../shell/Sidebar.tsx";
 import { formatUsd } from "./Section.tsx";
 import { useLanguage } from "../language.tsx";
+import { useStartedFromParts } from "../half-done.ts";
 import type { SectionSummary } from "../../../shared/sections.ts";
 
 /*
@@ -72,11 +74,14 @@ export function ReportScreen() {
   const { language } = useLanguage();
   // What the AI cost for this case: every version and check whose price is known (review, low 2).
   const spent = opened.sections.reduce((sum, section) => sum + section.costUsd, 0);
+  // "Ya escribí partes" at creation puts the paste card first (T9); otherwise it waits under the sections, at any time (§4).
+  const pasteFirst = useStartedFromParts(caseId);
   return (
     <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />}>
       <div className="flex max-w-measure flex-col gap-5">
         <p className="text-md">{t("workspace.reportBody")}</p>
         {spent > 0 ? <p className="text-sm text-fg-muted">{t("section.caseCost", { cost: formatUsd(language, spent) })}</p> : null}
+        {pasteFirst ? <PasteCard caseId={caseId} primary /> : null}
         <Table>
           <TableHead>
             <TableRow>
@@ -104,8 +109,29 @@ export function ReportScreen() {
             ))}
           </TableBody>
         </Table>
+        {pasteFirst ? null : <PasteCard caseId={caseId} />}
       </div>
     </WorkArea>
+  );
+}
+
+/** "Pegar lo que ya escribiste": the nine sections on one screen (owner's decision T10). */
+function PasteCard({ caseId, primary = false }: { caseId: string; primary?: boolean }) {
+  const { t } = useTranslation();
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} data-testid="paste-card" data-first={primary || undefined} className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-lg border border-border-control bg-surface px-4 py-3.5">
+      <div className="flex min-w-0 flex-1 basis-72 flex-col gap-1">
+        <h2 id={headingId} className="flex items-center gap-2 text-base font-semibold">
+          <Icon name="pencil" className="text-fg-muted" />
+          {t("workspace.pasteCardTitle")}
+        </h2>
+        <p className="text-sm text-fg-muted">{t("workspace.pasteCardBody")}</p>
+      </div>
+      <ButtonLink to={bulkPastePath(caseId)} variant={primary ? "primary" : "secondary"} className="shrink-0" aria-describedby={headingId}>
+        {t("workspace.pasteCardAction")}
+      </ButtonLink>
+    </section>
   );
 }
 

@@ -54,6 +54,8 @@ const TEXT_PAIRS: Array<[text: string, background: string]> = [
   ["fg-on-accent-subtle", "next-subtle"], // the case summary's "Lo siguiente": its heading
   ["fg", "next-subtle"], // its sentence
   ["fg-muted", "next-subtle"], // its second sentence
+  ["fg", "choice-subtle"], // New case's "¿Cómo empiezas?": the chosen option's title
+  ["fg-muted", "choice-subtle"], // and its sentence
 ];
 
 const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
@@ -74,6 +76,8 @@ const NON_TEXT_PAIRS: Array<[element: string, background: string]> = [
   ["warning", "surface-muted"], // a point to look at, in the rail
   ["border-control", "surface-muted"], // Documentos: the buttons of the card for the folder's PDFs
   ["accent", "next-subtle"], // the case summary's "Lo siguiente": its edge
+  ["accent", "choice-subtle"], // New case's chosen option: its edge and its radio
+  ["focus", "choice-subtle"],
 ];
 
 function luminance(hex: string): number {

@@ -12,7 +12,7 @@ import {
   type SourceType,
 } from "../../../shared/sources.ts";
 import { sourceAnswer, useCaseSaves, type SaveState } from "../case-saves.tsx";
-import { CASE_STEPS, casePath, newTextPath, sourceTextPath, stepTitle } from "../case-steps.tsx";
+import { bulkPastePath, CASE_STEPS, casePath, newTextPath, sourceTextPath, stepTitle } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
 import { Dialog, DialogClose, DialogDescription } from "../components/Dialog.tsx";
@@ -25,6 +25,7 @@ import { TwoWays } from "../components/TwoWays.tsx";
 import { CHECKLIST, documentList, stepChecks, type ChecklistRow } from "../document-checklist.ts";
 import { useProviders } from "../drafting-provider.tsx";
 import { formatDate } from "../format.ts";
+import { useStartedFromParts } from "../half-done.ts";
 import { useIgnoredFolderPdfs } from "../ignored-folder-pdfs.ts";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase, useSetCaseSources } from "../open-case.tsx";
@@ -262,6 +263,7 @@ export function SourcesScreen() {
       <div className="flex flex-col gap-5">
         <SaveFailure />
         <NoticeBar notice={notice} onUndo={(source) => void restore(source)} onDismiss={() => setNotice(null)} />
+        <HalfDoneBanner caseId={caseId} />
         {empty ? (
           <>
             <p className="max-w-reading text-md">{t("sources.intro")}</p>
@@ -311,6 +313,28 @@ export function SourcesScreen() {
       </div>
       {dragging ? <DropOverlay /> : null}
     </WorkArea>
+  );
+}
+
+/**
+ * The case was started with "Ya escribí partes en ABA Matrix" (owner's proposal §4 "Nuevo
+ * caso", T9): after the documents, her sections go in "Pegar lo que ya escribiste". Gone
+ * once a pasted section is saved (half-done.ts).
+ */
+function HalfDoneBanner({ caseId }: { caseId: string }) {
+  const { t } = useTranslation();
+  const fromParts = useStartedFromParts(caseId);
+  if (!fromParts) return null;
+  return (
+    <div data-testid="half-done-banner" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border-control bg-surface-muted px-4 py-2.5 text-md">
+      <p className="flex min-w-0 flex-1 basis-64 items-baseline gap-2">
+        <Icon name="pencil" className="shrink-0 self-center text-fg-muted" />
+        {t("sources.halfDoneBanner")}
+      </p>
+      <ButtonLink to={bulkPastePath(caseId)} size="sm" className="shrink-0">
+        {t("sources.halfDoneAction")}
+      </ButtonLink>
+    </div>
   );
 }
 
