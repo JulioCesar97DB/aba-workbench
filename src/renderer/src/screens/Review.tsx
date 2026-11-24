@@ -81,7 +81,10 @@ function reviewEyebrow(t: TFunction): string {
 }
 
 /** What the last copy did, shown under its row and said by the screen's live region; the markers are the main process's count of what it copied (review round 1, S1). */
-type LastCopy = { sectionId: ReportSectionId; outcome: "copied"; markers: number; allMissing: boolean; approved: boolean; marked: boolean } | { sectionId: ReportSectionId; outcome: "failed" };
+/** The last copy on this screen: `version` is the version copied; `serial` counts the copies, so a mark that fails again is said again. */
+type LastCopy =
+  | { sectionId: ReportSectionId; outcome: "copied"; version: number; serial: number; markers: number; allMissing: boolean; approved: boolean; marked: boolean }
+  | { sectionId: ReportSectionId; outcome: "failed" };
 
 export function ReviewScreen() {
   const { t } = useTranslation();
@@ -97,6 +100,7 @@ export function ReviewScreen() {
 
   /** The sections being copied now: a second press while one runs does nothing (review round 1, minor 7). */
   const copying = useRef(new Set<ReportSectionId>());
+  const copies = useRef(0);
 
   async function copy(summary: SectionSummary) {
     const version = versionToCopy(summary);
@@ -107,7 +111,7 @@ export function ReviewScreen() {
     copying.current.delete(summary.id);
     if (result?.outcome === "copied") {
       if (result.marked) patch(opened.id, { sections: result.marked.sections });
-      setLast({ sectionId: summary.id, outcome: "copied", markers: result.markers, allMissing: result.allMissing, approved: summary.approvedVersion === version, marked: result.marked !== null });
+      setLast({ sectionId: summary.id, outcome: "copied", version, serial: ++copies.current, markers: result.markers, allMissing: result.allMissing, approved: summary.approvedVersion === version, marked: result.marked !== null });
     } else {
       setLast({ sectionId: summary.id, outcome: "failed" });
     }
@@ -116,7 +120,7 @@ export function ReviewScreen() {
 
   const header = <StepHeader eyebrow={reviewEyebrow(t)} title={stepTitle(t, "review")} />;
   return (
-    <WorkArea header={header} rail={<ReviewRail rows={rows} copied={copied} />} contentClassName="max-w-list">
+    <WorkArea header={header} rail={<ReviewRail rows={rows} copied={copied} />} railLabel={t("review.progressHeading")} contentClassName="max-w-list">
       <div className="flex flex-col gap-5">
         <p role="status" data-testid="review-announcer" className="sr-only">
           {announced && last ? copySentence(t, last) : ""}
@@ -248,7 +252,7 @@ function ReviewRow({
           )}
         </div>
       </div>
-      {last ? <CopiedLine last={last} section={section} /> : null}
+      {last ? <CopiedLine last={last} section={section} copiedVersion={summary.copiedVersion} /> : null}
     </li>
   );
 }
@@ -264,7 +268,7 @@ function MarkedChip({ marked }: { marked: Marked }) {
 }
 
 /** After a copy, under its row: the section screen's copied line (P2), in the same words. */
-function CopiedLine({ last, section }: { last: LastCopy; section: ReportSection }) {
+function CopiedLine({ last, section, copiedVersion }: { last: LastCopy; section: ReportSection; copiedVersion: number | null }) {
   const { t } = useTranslation();
   if (last.outcome === "failed") {
     return (
@@ -281,7 +285,12 @@ function CopiedLine({ last, section }: { last: LastCopy; section: ReportSection 
         {lead.key === "copiedLead" ? t("section.copiedLead") : t(`section.${lead.key}`, { count: lead.count })} {pasteWhere(t, section)}
         {last.approved ? null : ` ${t("section.copiedNotApprovedYet")}`}
       </p>
-      {last.marked ? null : <MarkNotSaved className="pl-8.5" />}
+      {/*
+       * A mark the case already holds for this version still makes it "Copiada": only its newer
+       * time was lost, so nothing is said (UX-7 review round 2, minor 1). Keyed by the copy, so a
+       * mark that fails again is announced again (minor 2).
+       */}
+      {last.marked || copiedVersion === last.version ? null : <MarkNotSaved key={last.serial} className="pl-8.5" />}
     </>
   );
 }
@@ -402,7 +411,7 @@ export function ReadAllScreen() {
     </nav>
   );
   return (
-    <WorkArea header={header} rail={rail}>
+    <WorkArea header={header} rail={rail} railLabel={t("review.contents")}>
       <div className="flex max-w-reading flex-col gap-8" aria-busy={!read}>
         <p className="text-md">{t("review.readIntro")}</p>
         {failed ? (

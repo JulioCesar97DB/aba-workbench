@@ -77,7 +77,7 @@ export function ReportScreen() {
   // "Ya escribí partes" at creation puts the paste card first (T9); otherwise it waits under the sections, at any time (§4).
   const pasteFirst = useWaitsForHerSections(caseId, opened.sections);
   return (
-    <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />}>
+    <WorkArea header={<PageHeader title={stepTitle(t, "report")} meta={meta} />} rail={<CaseRail />} railLabel={t("rail.sources")}>
       <div className="flex max-w-measure flex-col gap-5">
         <p className="text-md">{t("workspace.reportBody")}</p>
         {spent > 0 ? <p className="text-sm text-fg-muted">{t("section.caseCost", { cost: formatUsd(language, spent) })}</p> : null}

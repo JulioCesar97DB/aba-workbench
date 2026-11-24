@@ -3,7 +3,10 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatGptConnection, ChatGptSignInResult, CheckConnectionResult, ClaudeConnection, CredentialsProblem, SaveClaudeKeyResult } from "../../../shared/api.ts";
 import { Button } from "../components/Button.tsx";
+import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
 import { Dialog, DialogClose, DialogDescription } from "../components/Dialog.tsx";
+import { Icon } from "../components/Icon.tsx";
+import { MenuButton } from "../components/Menu.tsx";
 import { StatusBadge, type StatusTone } from "../components/StatusBadge.tsx";
 import { TextField } from "../components/TextField.tsx";
 import { useConnections } from "../connections.tsx";
@@ -335,6 +338,7 @@ function ClaudeCard({ connection, blocked }: { connection: ClaudeConnection | nu
   const [message, setMessage] = useState<Message>(null);
   const [replacing, setReplacing] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const state = connection?.state ?? null;
 
   async function save(event: { preventDefault(): void }) {
@@ -401,7 +405,8 @@ function ClaudeCard({ connection, blocked }: { connection: ClaudeConnection | nu
             onChange={(event) => setKey(event.currentTarget.value)}
           />
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="primary" disabled={blocked || busy !== null} focusableWhenDisabled>
+            {/* Secondary: Claude is the optional way, and ChatGPT's "Iniciar sesión" is the screen's one primary (audit L9). */}
+            <Button type="submit" disabled={blocked || busy !== null} focusableWhenDisabled>
               {busy === "saving" ? t("claude.saving") : t("claude.save")}
             </Button>
           </div>
@@ -415,11 +420,28 @@ function ClaudeCard({ connection, blocked }: { connection: ClaudeConnection | nu
             </Button>
           ) : null}
           {state === "connected" && !replacing ? <Button onClick={() => setReplacing(true)}>{t("claude.replaceKey")}</Button> : null}
-          <Button disabled={busy !== null} focusableWhenDisabled onClick={() => void remove()}>
-            {t("claude.remove")}
-          </Button>
+          {/* Removing the key is in "⋯", with a question first (layout rule 9): she would have to find the key again. */}
+          <MenuButton
+            label={t("claude.moreActions")}
+            trigger={
+              <Button aria-label={t("claude.moreActions")} disabled={busy !== null} focusableWhenDisabled className="px-3">
+                <Icon name="more" size={16} />
+              </Button>
+            }
+            items={[{ key: "remove", label: t("claude.remove"), onSelect: () => setConfirmingRemove(true) }]}
+          />
         </div>
       ) : null}
+      <ConfirmDialog
+        open={confirmingRemove}
+        onOpenChange={setConfirmingRemove}
+        title={t("claude.removeTitle")}
+        confirmLabel={t("claude.remove")}
+        cancelLabel={t("claude.removeCancel")}
+        onConfirm={() => void remove()}
+      >
+        <p>{t("claude.removeBody")}</p>
+      </ConfirmDialog>
       <StatusLine message={message} testId="claude-message" />
     </Card>
   );

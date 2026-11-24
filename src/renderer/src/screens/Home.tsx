@@ -48,8 +48,10 @@ export function Home() {
     );
   }, []);
   useEffect(load, [load]);
-  // "Nuevo caso" is the primary action only while there is no case to continue (§4).
+  // "Nuevo caso" is the primary action only while there is no case to continue (§4), and the
+  // cases folder works: with it missing, "Elegir otra carpeta" is the screen's one primary (audit L9).
   const hasCases = state.status === "loaded" && state.list.cases.length > 0;
+  const folderProblem = state.status === "loaded" && hasFolderProblem(state.list.folder);
 
   return (
     <WorkArea
@@ -60,7 +62,7 @@ export function Home() {
             <NewCaseDialog
               open={newCaseOpen}
               onOpenChange={setNewCaseOpen}
-              primary={!hasCases}
+              primary={!hasCases && !folderProblem}
               onCreated={(created, start) => {
                 // Both land on Documentos; "Ya escribí partes" adds its line there and the paste card on top of the report (T9: not stored).
                 if (start === "parts") markStartedFromParts(created.id);
@@ -117,9 +119,15 @@ function UnsavedChanges() {
   );
 }
 
+/** The cases folder is missing, not allowed or cannot be written to: Home says so, and its "choose another folder" is the primary. */
+function hasFolderProblem(folder: CasesFolderInfo): boolean {
+  return folder.state !== "ready" && folder.state !== "not-created-yet";
+}
+
 function CasesView({ list, onFolderChosen, onNewCase }: { list: CaseList; onFolderChosen: () => void; onNewCase: () => void }) {
   const { folder, cases, unreadable } = list;
   const usable = folder.state === "ready" || folder.state === "not-created-yet" || folder.state === "not-writable";
+  const folderProblem = hasFolderProblem(folder);
   const providers = useProviders();
   const noAi = !providers.loading && providers.available.length === 0;
   const unsaved = new Set(useFailedSaves().map((item) => item.caseId));
@@ -127,14 +135,14 @@ function CasesView({ list, onFolderChosen, onNewCase }: { list: CaseList; onFold
   const last = cases.at(0);
   return (
     <>
-      {usable && folder.state !== "not-writable" ? null : <FolderProblem folder={folder} onChosen={onFolderChosen} />}
+      {folderProblem ? <FolderProblem folder={folder} onChosen={onFolderChosen} /> : null}
       {usable && cases.length === 0 && unreadable.length === 0 ? (
         <>
           <EmptyState onNewCase={onNewCase} />
           {noAi ? <ConnectAi layout="card" /> : null}
         </>
       ) : null}
-      {last ? <ContinueCard item={last} unsaved={unsaved.has(last.id)} /> : null}
+      {last ? <ContinueCard item={last} unsaved={unsaved.has(last.id)} primary={!folderProblem} /> : null}
       {cases.length > 0 && noAi ? <ConnectAi layout="bar" /> : null}
       {cases.length > 0 ? <CasesList cases={cases} unsaved={unsaved} /> : null}
       {unreadable.length > 0 ? <UnreadableFolders folders={unreadable} /> : null}
@@ -177,7 +185,7 @@ function stepWords(t: TFunction, work: NonNullable<ReturnType<typeof caseWork>>)
 }
 
 /** "Sigue donde lo dejaste": the case saved last, its step, what comes next, and "Continuar". */
-function ContinueCard({ item, unsaved }: { item: ListedCase; unsaved: boolean }) {
+function ContinueCard({ item, unsaved, primary }: { item: ListedCase; unsaved: boolean; primary: boolean }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const headingId = useId();
@@ -205,7 +213,7 @@ function ContinueCard({ item, unsaved }: { item: ListedCase; unsaved: boolean })
       {/* Its name says the case and its next thing, not only the card's heading (review round 1, M3). */}
       <ButtonLink
         to={work ? nextThingPath(item.id, work.thing) : caseSummaryPath(item.id)}
-        variant="primary"
+        variant={primary ? "primary" : "secondary"}
         className="shrink-0 self-start @split:self-auto"
         aria-describedby={work ? `${labelId} ${nextId}` : labelId}
       >
@@ -257,8 +265,9 @@ function CaseRow({ item, unsaved }: { item: ListedCase; unsaved: boolean }) {
   const open = !work || work.thing.kind === "all-ready";
   const age = formatAge(t, language, item.clientAge) ?? t("case.ageNotGiven");
   return (
-    <li data-testid="case-row" className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border px-4 py-2.5 last:border-b-0">
-      <div className="flex min-w-0 flex-1 basis-60 flex-col">
+    // The name gives way first, so the bar, the time and the button stay on its line down to a 700 px window (UX-5 follow-up).
+    <li data-testid="case-row" className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-2.5 last:border-b-0">
+      <div className="flex min-w-0 flex-1 basis-40 flex-col">
         <Link id={nameId} data-testid="case-name" to={caseSummaryPath(item.id)} className="self-start rounded-sm text-base font-semibold break-words text-fg underline-offset-2 hover:underline">
           {item.label}
         </Link>

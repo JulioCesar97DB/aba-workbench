@@ -376,7 +376,7 @@ export const es: Messages = {
     copiedNotAdded: "{{names}}: se copió en la carpeta del caso, pero no se pudo agregar al caso. Agrégalo desde los PDF de la carpeta, más abajo.",
     openFailed: "No se pudo abrir el PDF. Puede que ya no esté en la carpeta del caso.",
     saving: "Guardando…",
-    saved: "Todos los cambios guardados",
+    saved: "Todo guardado",
     tryAgain: "Volver a intentar",
     typeLabel: "Tipo",
     titleLabel: "Título (opcional)",
@@ -481,7 +481,11 @@ export const es: Messages = {
     error: "No se pudo guardar tu último cambio. Vuelve a intentarlo en un momento.",
   },
   rail: {
-    label: "Documentos y comprobaciones",
+    /** The rail's name when a screen gives none: its landmark and, below 1024 px, the button that opens it as a panel (T2). */
+    label: "Detalles",
+    close: "Cerrar",
+    /** Said after the rail button's name when it carries a count. */
+    count: "{{count}} por revisar",
     sources: "Documentos",
     noSources: "Todavía no hay documentos.",
     filesHeading: "PDF en la carpeta del caso",
@@ -508,6 +512,8 @@ export const es: Messages = {
     heading: "Siguiente paso",
   },
   section: {
+    /** The rail's name, and below 1024 px its button, with the count of open checks (T2, mockup 13). */
+    railLabel: "Revisión",
     stateHers: "Tuya",
     stateDraft: "v{{number}}",
     stateDraftLong: "Borrador, versión {{number}}",
@@ -571,6 +577,8 @@ export const es: Messages = {
     notesHas: "(tiene notas)",
     notesClose: "Cerrar",
     notesUnsaved: "Sin guardar",
+    /** On the narrow window's bar, where the sidebar's notes button is out of view (UX-1 follow-up m1). */
+    notesUnsavedBar: "Notas de hoy sin guardar",
     notesPlaceholder: "Por ejemplo: la mamá confirmó hoy que la escuela ya aplica el plan de comunicación.",
     newSession: "Empezar una sesión nueva",
     newSessionHint: "Las notas de hoy se guardan en el caso; la IA deja de usarlas.",
@@ -587,9 +595,6 @@ export const es: Messages = {
     tooLong: "La respuesta de la IA era más larga de lo que puede ser una sección, así que no se guardó nada. Tus versiones siguen igual.",
     consistencyStale: "Tus otras secciones cambiaron desde esta comprobación.",
     checkAgain: "Comprobar de nuevo",
-    checksSummary_one: "Comprobaciones: {{count}} por revisar",
-    checksSummary_other: "Comprobaciones: {{count}} por revisar",
-    checksSummaryClear: "Comprobaciones: nada por revisar",
     caseCost: "Gastado en IA en este caso hasta ahora: {{cost}} (con una clave; un plan de ChatGPT no suma nada aquí).",
     checkStructure: "Estructura",
     checkMissing: "Datos faltantes",
@@ -805,6 +810,10 @@ export const es: Messages = {
     keySaved: "Hay una clave guardada en ABA Workbench.",
     replaceKey: "Pegar una clave nueva",
     remove: "Quitar la clave",
+    moreActions: "Más acciones de la clave de Claude",
+    removeTitle: "¿Quitar la clave de Claude?",
+    removeBody: "ABA Workbench la borra de esta computadora. Para volver a usar Claude tendrás que pegarla otra vez. En la Anthropic Console la clave sigue igual.",
+    removeCancel: "Cancelar",
     resultSaved: "Clave guardada. Claude está conectado.",
     resultEmpty: "Primero pega una clave.",
     resultNotAKey: "Esto no es una clave de API de Claude. Las claves de Claude empiezan con sk-ant-.",

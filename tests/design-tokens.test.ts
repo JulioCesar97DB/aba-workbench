@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { SIDEBAR_BREAKPOINT, WINDOW_BACKGROUND } from "../src/shared/theme.ts";
+import { RAIL_BREAKPOINT, SIDEBAR_BREAKPOINT, WINDOW_BACKGROUND } from "../src/shared/theme.ts";
 
 /*
  * Text contrast (WCAG 2.2, 1.4.3): every pair of text and background tokens the
@@ -113,4 +113,8 @@ test("design tokens: control borders, focus rings and status dots reach 3:1", ()
 test("design tokens: the values code repeats (src/shared/theme.ts) match the tokens", () => {
   assert.equal(WINDOW_BACKGROUND, color("nav"));
   assert.equal(/--breakpoint-sidebar:\s*([^;]+);/.exec(tokensCss)?.[1], SIDEBAR_BREAKPOINT);
+  // The rail sits beside the content from a 1024 px window (T2): the sidebar plus the working area's split width.
+  const rem = (name: string) => Number(/^([0-9.]+)rem$/.exec(new RegExp(`--${name}:\\s*([^;]+);`).exec(tokensCss)?.[1] ?? "")?.[1]);
+  assert.equal(`${rem("spacing-sidebar") + rem("container-split")}rem`, RAIL_BREAKPOINT);
+  assert.equal(RAIL_BREAKPOINT, "64rem");
 });

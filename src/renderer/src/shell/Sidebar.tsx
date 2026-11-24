@@ -10,6 +10,7 @@ import { useAppInfo } from "../app-info.tsx";
 import { CASE_STEPS, casePath, caseSummaryPath, stepSubtitle, stepTitle } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { titleWhenCut } from "../components/truncate.ts";
 import { NavItem, SectionNavItem, StepNavItem } from "../components/NavItem.tsx";
 import { readySections, stepCount, stepState, type StepState } from "../step-states.ts";
 import { Tooltip } from "../components/Tooltip.tsx";
@@ -126,8 +127,11 @@ export function CaseSidebar({
             data-testid="case-summary-link"
             className="-mx-2 flex flex-col gap-0.5 rounded-md px-2 text-fg-on-nav no-underline transition-colors hover:bg-nav-hover aria-[current=page]:bg-nav-hover"
           >
-            <span className="flex items-center gap-1.5 text-lg font-semibold break-words">
-              {caseName}
+            {/* One line, cut with its whole name as a tooltip, so a long name never pushes the steps out of view (UX-5 follow-up). */}
+            <span className="flex min-w-0 items-center gap-1.5 text-lg font-semibold">
+              <span data-testid="case-name-line" className="min-w-0 truncate" onPointerEnter={(event) => titleWhenCut(event.currentTarget, caseName)}>
+                {caseName}
+              </span>
               <Icon name="forward" size={14} className="shrink-0" />
             </span>
             <span className="text-xs text-fg-on-nav-muted">{caseDetail}</span>

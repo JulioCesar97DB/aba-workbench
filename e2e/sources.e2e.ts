@@ -108,7 +108,7 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
   await expect(checklistRow(page, "Parent interview")).toContainText("Interview with the parents or caregivers · Your notes");
   await expect(checklistRow(page, "Parent interview").getByRole("heading", { name: "Parent interview" })).toHaveAttribute("lang", "en");
   // "Next step" waits for the first document.
-  const rail = page.getByRole("complementary", { name: "Documents and checks" });
+  const rail = page.getByRole("complementary", { name: "This step" });
   await expect(rail.getByRole("button", { name: "Go to the case map" })).toBeDisabled();
   await screenshot(page, "sources-empty-en");
 
@@ -124,7 +124,7 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
   // The system's date field follows the computer's region, so its hint says the order (owner's decision T20).
   await expect(page.getByText(/Type it as (month\/day\/year|day\/month\/year|year\/month\/day), the order your computer uses for dates\./)).toBeVisible();
   await text.fill("Invented CDE notes.\nThe child is 4 years old and speaks about 20 single words.");
-  await expect(page.getByText("All changes saved").first()).toBeVisible();
+  await expect(page.getByText("All saved").first()).toBeVisible();
   await expect(heading(page)).toHaveText("CDE, psychologist's report");
   // The box fills the pane and grows with the text: no scroll and no resize handle of its own (T16); no count far from the limit.
   await expect(text).toHaveCSS("resize", "none");
@@ -160,7 +160,7 @@ test("paste a text: saved as it is typed, no Save button, and there after a rest
   await expect(page.getByTestId("two-ways")).toHaveAttribute("data-layout", "bar");
   await expect(page.getByTestId("document-list").getByRole("listitem")).toHaveCount(7);
   await expect(page.getByTestId("checklist-row")).toHaveText([/^Parent interview/, /^Direct observation/, /^FBA questionnaire/, /^Vineland-3/, /^BASC-3/, /^IEP/]);
-  const next = page.getByRole("complementary", { name: "Documents and checks" }).getByTestId("next-step");
+  const next = page.getByRole("complementary", { name: "This step" }).getByTestId("next-step");
   await expect(next).toHaveAttribute("data-primary", "true");
   await expect(next.getByRole("link", { name: "Go to the case map" })).toHaveAttribute("href", `#/cases/${SAMPLE_CASE.id}/case-map`);
   await expect(page.getByRole("complementary").getByText("With the CDE, the parent interview and your observations you can go on.")).toBeVisible();
@@ -192,7 +192,7 @@ test("a very long paste stays quick and is saved whole", async ({ launch, home }
     area.value = text;
     area.dispatchEvent(new (globalThis as unknown as { InputEvent: new (type: string, init: object) => unknown }).InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
   }, long);
-  await expect(page.getByText("All changes saved").first()).toBeVisible();
+  await expect(page.getByText("All saved").first()).toBeVisible();
   expect(Date.now() - started).toBeLessThan(5_000);
   // Typing in it stays quick.
   started = Date.now();
@@ -388,7 +388,7 @@ test("Add PDF from a checklist row gives the PDF that row's type unless its name
     await expect.poll(() => caseData(casesFolder).sources.map((source: { type: string }) => source.type)).toEqual(["vineland-3", "basc-3"]);
     await expect(checklistRow(page, "CDE")).toBeVisible();
     // Only the PDFs' sizes are checked, and the rail says no more than that (review S1).
-    await expect(page.getByRole("complementary", { name: "Documents and checks" })).toContainText("No PDF is too large for ChatGPT or Claude.");
+    await expect(page.getByRole("complementary", { name: "This step" })).toContainText("No PDF is too large for ChatGPT or Claude.");
 
     const other = path.join(originals, "school notes.pdf");
     writeFileSync(other, inventedPdf("school notes"));
@@ -464,7 +464,7 @@ test("in Spanish and at a narrow window: the step fits, and the clinical terms s
   await expect(page.getByRole("combobox", { name: "Tipo" })).toHaveText(/Direct observation/);
   await expect(page.getByText(/Escríbela como (mes\/día\/año|día\/mes\/año|año\/mes\/día), el orden de fechas de tu computadora\./)).toBeVisible();
   await page.getByRole("textbox", { name: "Texto" }).fill("Notas inventadas de una observación directa.");
-  await expect(page.getByText("Todos los cambios guardados").first()).toBeVisible();
+  await expect(page.getByText("Todo guardado").first()).toBeVisible();
   await page.getByRole("link", { name: "Volver a Documentos" }).click();
   await expect(heading(page)).toHaveText("Documentos");
   await dropFiles(page, [{ name: "basc-3.pdf", bytes: inventedPdf("BASC-3") }]);
@@ -526,7 +526,7 @@ async function newText(page: Page, type: string, text: string) {
   await checklistRow(page, type).getByRole("link", { name: "Paste text" }).click();
   const area = page.getByRole("textbox", { name: "Text" });
   await area.fill(text);
-  await expect(page.getByText("All changes saved").first()).toBeVisible();
+  await expect(page.getByText("All saved").first()).toBeVisible();
   return area;
 }
 
@@ -767,17 +767,17 @@ test("the packaged app's menu has no Reload or developer tools, its window canno
 test("the header's buttons stay put as the save state changes, so a click lands where it was aimed (a narrow window)", async ({ launch, home }) => {
   test.skip(process.platform === "win32", "a read-only folder is made with POSIX permissions");
   const { app, page, caseFolder } = await openSources(launch, home);
-  // The header wraps at this width, as on a smaller screen.
+  // The smallest window with the rail beside the content: the header keeps one row (T2).
   await resize(app, 1024, 700);
   const area = await newText(page, "CDE", "First part.");
-  // A long title, so the header wraps and the buttons sit after the save state.
+  // A long title, cut in the header, and the buttons after the save state.
   await page.getByRole("textbox", { name: "Title (optional)" }).fill("CDE, psychologist's report from the developmental clinic");
   await area.click();
   await expect(heading(page)).toHaveText("CDE, psychologist's report from the developmental clinic");
-  await expect(page.getByText("All changes saved")).toBeVisible();
+  await expect(page.getByText("All saved")).toBeVisible();
   const back = page.getByRole("link", { name: "Back to documents" });
   const saved = await back.boundingBox();
-  // A save that fails clears "All changes saved": the button must not move for it.
+  // A save that fails clears "All saved": the button must not move for it.
   chmodSync(caseFolder, 0o555);
   try {
     await area.press("ControlOrMeta+End");
@@ -788,7 +788,7 @@ test("the header's buttons stay put as the save state changes, so a click lands 
     chmodSync(caseFolder, 0o755);
   }
   await page.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByText("All changes saved")).toBeVisible();
+  await expect(page.getByText("All saved")).toBeVisible();
   expect(await back.boundingBox()).toEqual(saved);
   await back.click();
   await expect(heading(page)).toHaveText("Documents");

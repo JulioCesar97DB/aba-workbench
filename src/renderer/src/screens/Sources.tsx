@@ -30,7 +30,7 @@ import { useIgnoredFolderPdfs } from "../ignored-folder-pdfs.ts";
 import { useLanguage } from "../language.tsx";
 import { useOpenedCase, useSetCaseSources } from "../open-case.tsx";
 import { StepHeader } from "../shell/PageHeader.tsx";
-import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
+import { Eyebrow, useNarrowWindow, WorkArea } from "../shell/WorkArea.tsx";
 import { formatCount, formatFileSize, formatSourceDate, SourceTypeLabel, sourceName, sourceNameLang, sourceTypeLang, sourceTypeName } from "../source-labels.tsx";
 import { SourceDetailFields, useSourceDetails } from "../source-details.tsx";
 
@@ -58,6 +58,9 @@ type Notice =
   | { kind: "added"; count: number; problems: Array<{ name: string; problem: PdfProblem }> }
   | { kind: "error"; message: string };
 
+/** Given to the new text's screen by the generic "Pegar un texto" (not a checklist row): its type is still to be chosen there. */
+const PICK_TYPE = { pickType: true };
+
 /** The step's place in the path, for every Documentos screen's eyebrow ("PASO 1 DE 5"). */
 export function useDocumentsEyebrow(): string {
   const { t } = useTranslation();
@@ -70,6 +73,7 @@ export function SourcesScreen() {
   const caseId = opened.id;
   const { sources } = opened;
   const eyebrow = useDocumentsEyebrow();
+  const narrow = useNarrowWindow();
   const { run } = useCaseSaves();
   const setSources = useSetCaseSources();
   const providers = useProviders();
@@ -81,13 +85,13 @@ export function SourcesScreen() {
   // The control to focus once the screen has drawn the change (review S2): the one she pressed
   // (a checklist row's or a folder PDF's button, Ignorar, Mostrar) has gone with what it changed.
   const focusNext = useRef<string | null>(null);
+  // Tried once, after the first render that follows the change, then dropped: a target that
+  // never appears must not take the focus later, on another change (UX-4 review round 2, minor 2).
   useEffect(() => {
     const selector = focusNext.current;
     if (!selector) return;
-    const target = document.querySelector<HTMLElement>(selector);
-    if (!target) return;
     focusNext.current = null;
-    target.focus();
+    document.querySelector<HTMLElement>(selector)?.focus();
   });
   /** After PDFs are added: the first new document's "Abrir". */
   const focusAdded = (added: string[]) => {
@@ -252,14 +256,22 @@ export function SourcesScreen() {
     <StepHeader
       eyebrow={eyebrow}
       title={stepTitle(t, "sources")}
-      status={<SaveStatus />}
-      secondary={empty ? undefined : <ButtonLink to={newTextPath(caseId, "other")}>{pasteLabel}</ButtonLink>}
+      // Below 1024 px the header keeps one row for the rail's button and the two actions: the list's
+      // saves (remove, restore) say themselves in the notice, and a failure in SaveFailure (T2).
+      status={narrow ? undefined : <SaveStatus />}
+      secondary={
+        empty ? undefined : (
+          <ButtonLink to={newTextPath(caseId, "other")} state={PICK_TYPE}>
+            {pasteLabel}
+          </ButtonLink>
+        )
+      }
       primary={empty ? undefined : addPdfButton()}
     />
   );
 
   return (
-    <WorkArea header={header} rail={<DocumentsRail active={active} sources={sources} />} contentClassName="max-w-list">
+    <WorkArea header={header} rail={<DocumentsRail active={active} sources={sources} />} railLabel={t("sources.stepHeading")} contentClassName="max-w-list">
       <div className="flex flex-col gap-5">
         <SaveFailure />
         <NoticeBar notice={notice} onUndo={(source) => void restore(source)} onDismiss={() => setNotice(null)} />
@@ -276,7 +288,7 @@ export function SourcesScreen() {
                 body: t("sources.handBody"),
                 actions: (
                   <>
-                    <ButtonLink variant="primary" to={newTextPath(caseId, "other")}>
+                    <ButtonLink variant="primary" to={newTextPath(caseId, "other")} state={PICK_TYPE}>
                       {pasteLabel}
                     </ButtonLink>
                     {addPdfButton()}
@@ -339,7 +351,7 @@ function HalfDoneBanner({ caseId }: { caseId: string }) {
 }
 
 /**
- * "Saving…" or "All changes saved", where the header's actions are. Shared with the text
+ * "Saving…" or "All saved" ("Todo guardado", §3.6), where the header's actions are. Shared with the text
  * editor and the details dialog. Shown, not announced: a screen reader would hear it after
  * every typing pause. Only a failure is announced (SaveFailure, role="alert").
  */

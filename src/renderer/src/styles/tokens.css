@@ -100,9 +100,11 @@
      script that closes the panel, and tests/design-tokens.test.ts keeps the two equal. */
   --breakpoint-sidebar: 48rem;
   /* The working area (a container) puts the rail beside the content from --container-split
-     (the @split: variant), and widens it from --container-split-wide (a window about
-     1280 px wide with the sidebar shown). */
-  --container-split: 50rem;
+     (the @split: variant): with the 16rem sidebar, a window 1024 px wide (owner's decision T2;
+     src/shared/theme.ts repeats the window's width as RAIL_BREAKPOINT). Below it the rail is a
+     panel opened from the header, and the header keeps one row with its title cut. It widens
+     the rail from --container-split-wide (a window about 1280 px wide with the sidebar shown). */
+  --container-split: 48rem;
   --container-split-wide: 64rem;
 
   /* Fixed sizes. Spacing otherwise uses Tailwind's 4px scale (p-2 = 8px, p-4.5 = 18px...). */

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useParams } from "react-router";
+import { Navigate, useLocation, useParams } from "react-router";
 import { isSourceType, MAX_SOURCE_TEXT_LENGTH, type SourceType } from "../../../shared/sources.ts";
 import { registerFlusher, sourceAnswer, useCaseSaves } from "../case-saves.tsx";
 import { casePath, sourceTextPath, stepTitle } from "../case-steps.tsx";
@@ -73,6 +73,10 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
   const idRef = useRef(existingId);
   const textId = useId();
   const counterId = useId();
+  const typeHintId = useId();
+  // Opened from the generic "Pegar un texto" (header or the A mano card), not from a checklist row:
+  // its type is still to be chosen (UX-4 review round 2, minor 1). "Otro documento → Pegar texto" chose "Otro".
+  const pickType = (useLocation().state as { pickType?: boolean } | null)?.pickType === true;
 
   useEffect(() => {
     if (!existingId) return;
@@ -179,16 +183,21 @@ function TextEditor({ initialType, existingId }: { initialType: SourceType; exis
     );
   }
 
+  const showTypeHint = !existingId && pickType && details.type === "other";
   const full = length >= MAX_SOURCE_TEXT_LENGTH;
   const counted = length >= COUNTER_FROM;
   return (
     <WorkArea header={header} contentClassName="flex min-h-full max-w-list flex-col">
       <div className="flex flex-1 flex-col gap-4">
         <div data-testid="text-details" className="flex flex-col gap-4 @split:flex-row @split:items-start [&>*:nth-child(2)]:flex-1">
-          <SourceDetailFields details={details} />
+          <SourceDetailFields details={details} typeHintId={showTypeHint ? typeHintId : undefined} />
         </div>
-        {/* A new text of no type yet ("Pegar un texto"): say that the type is chosen here (review, minor 2). */}
-        {!existingId && details.type === "other" ? <p className="max-w-reading text-sm text-fg-muted">{t("sources.otherTypeHint")}</p> : null}
+        {/* A new text of no type yet ("Pegar un texto"): say that the type is chosen here (review, minor 2), and describe the type field with it. */}
+        {showTypeHint ? (
+          <p id={typeHintId} className="max-w-reading text-sm text-fg-muted">
+            {t("sources.otherTypeHint")}
+          </p>
+        ) : null}
         <div className="flex flex-1 flex-col gap-1.5">
           <label htmlFor={textId} className="font-medium">
             {t("sources.textLabel")}

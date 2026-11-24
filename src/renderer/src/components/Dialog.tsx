@@ -26,6 +26,10 @@ export interface DialogProps {
   titleHidden?: boolean;
   /** Where focus goes when it opens (Base UI's initialFocus): by default the first control in it. */
   initialFocus?: ComponentProps<typeof BaseDialog.Popup>["initialFocus"];
+  /** Where focus goes when it closes (Base UI's finalFocus): by default back to what opened it. */
+  finalFocus?: ComponentProps<typeof BaseDialog.Popup>["finalFocus"];
+  /** The popup's id, for a button elsewhere that opens it (aria-controls). */
+  id?: string;
 }
 
 const popupClasses = {
@@ -37,14 +41,14 @@ const popupClasses = {
     "fixed inset-y-0 right-0 flex w-[min(22rem,calc(100vw-3rem))] flex-col gap-3 overflow-y-auto border-l border-border bg-surface p-5 text-fg shadow-popup transition-transform data-ending-style:translate-x-full data-starting-style:translate-x-full",
 };
 
-export function Dialog({ trigger, title, children, variant = "center", open, onOpenChange, popupClassName, titleHidden, initialFocus }: DialogProps) {
+export function Dialog({ trigger, title, children, variant = "center", open, onOpenChange, popupClassName, titleHidden, initialFocus, finalFocus, id }: DialogProps) {
   const modal = variant !== "panel";
   return (
     <BaseDialog.Root open={open} onOpenChange={onOpenChange ? (next) => onOpenChange(next) : undefined} modal={modal}>
       {trigger ? <BaseDialog.Trigger render={trigger} /> : null}
       <BaseDialog.Portal keepMounted={!modal}>
         {modal ? <BaseDialog.Backdrop className="fixed inset-0 bg-backdrop transition-opacity data-ending-style:opacity-0 data-starting-style:opacity-0" /> : null}
-        <BaseDialog.Popup className={cn(popupClasses[variant], popupClassName)} initialFocus={initialFocus}>
+        <BaseDialog.Popup id={id} className={cn(popupClasses[variant], popupClassName)} initialFocus={initialFocus} finalFocus={finalFocus}>
           <BaseDialog.Title className={titleHidden ? "sr-only" : "text-lg font-semibold"}>{title}</BaseDialog.Title>
           {children}
         </BaseDialog.Popup>

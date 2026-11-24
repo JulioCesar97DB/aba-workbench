@@ -24,24 +24,38 @@ import { usePatchOpenedCase, useSetCaseSources } from "../open-case.tsx";
  * every screen of the case, until it is saved (review round 1, S2).
  */
 
-/** Opens today's notes: given by AppShell, used by the sidebar's button. */
-export const OpenNotesContext = createContext<(() => void) | null>(null);
+/**
+ * Today's notes for the buttons that open them: given by AppShell, used by the sidebar's
+ * button and the narrow window's bar. `open` remembers what opened them, for the focus when
+ * they close; `isOpen` and `panelId` let a button say what it opens (UX-1 follow-up m2).
+ */
+export interface NotesControl {
+  open: () => void;
+  isOpen: boolean;
+  panelId: string;
+}
 
-const isNotesOf = (caseId: string) => (item: FailedSave) => item.about === "notes" && item.caseId === caseId;
+export const OpenNotesContext = createContext<NotesControl | null>(null);
+
+export const isNotesOf = (caseId: string) => (item: FailedSave) => item.about === "notes" && item.caseId === caseId;
 
 /** The button at the foot of the case's sidebar. */
 export function NotesButton({ caseId, notes }: { caseId: string; notes: string }) {
   const { t } = useTranslation();
-  const open = useContext(OpenNotesContext);
+  const control = useContext(OpenNotesContext);
   const unsaved = useFailedSaveList().some(isNotesOf(caseId));
   const hasNotes = notes.trim() !== "";
   return (
     <button
       type="button"
       data-testid="notes-open"
+      // It opens a panel, says whether it is open, and names it (UX-1 follow-up m2).
+      aria-haspopup="dialog"
+      aria-expanded={control?.isOpen ?? false}
+      aria-controls={control?.panelId}
       // In the Menu panel of a narrow window, the Menu panel closes as the notes open.
       data-closes-menu=""
-      onClick={() => open?.()}
+      onClick={() => control?.open()}
       className="flex min-h-control w-full items-center justify-between gap-2 rounded-lg border border-nav-hover px-2.5 text-left text-sm font-medium text-fg-on-nav transition-colors hover:bg-nav-hover"
     >
       <span>{t("section.notesOpen")}</span>
@@ -57,8 +71,28 @@ export function NotesButton({ caseId, notes }: { caseId: string; notes: string }
   );
 }
 
-/** The panel and its box: one for the open case, rendered by AppShell. */
-export function NotesPanel({ caseId, notes, open, onOpenChange }: { caseId: string; notes: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+/**
+ * The panel and its box: one for the open case, rendered by AppShell. Closed, the focus goes
+ * back to what opened it; when that is gone (the notes button of the Menu panel, which closed
+ * as the notes opened), to the Menu button (UX-1 follow-up m3), and failing that, to the
+ * sidebar's notes button.
+ */
+export function NotesPanel({
+  caseId,
+  notes,
+  open,
+  onOpenChange,
+  id,
+  opener,
+}: {
+  caseId: string;
+  notes: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  id: string;
+  /** What had the focus when the notes opened. */
+  opener: RefObject<HTMLElement | null>;
+}) {
   const { t } = useTranslation();
   const patch = usePatchOpenedCase();
   const boxRef = useRef<HTMLTextAreaElement>(null);
@@ -74,9 +108,11 @@ export function NotesPanel({ caseId, notes, open, onOpenChange }: { caseId: stri
   return (
     <Dialog
       variant="panel"
+      id={id}
       title={t("section.notesHeading")}
       open={open}
       onOpenChange={onOpenChange}
+      finalFocus={() => notesFinalFocus(opener.current)}
       // The caret goes after what she already wrote, so typing at once adds to it (review M5).
       initialFocus={() => {
         const box = boxRef.current;
@@ -89,6 +125,16 @@ export function NotesPanel({ caseId, notes, open, onOpenChange }: { caseId: stri
       <SessionNotes caseId={caseId} initial={notes} boxRef={boxRef} isMine={isMine} />
     </Dialog>
   );
+}
+
+/** Where the focus goes when the notes close: what opened them, else the Menu button, else the sidebar's notes button. */
+function notesFinalFocus(opener: HTMLElement | null): HTMLElement | true {
+  const shown = (element: HTMLElement | null | undefined): element is HTMLElement => Boolean(element?.isConnected && element.getClientRects().length > 0);
+  if (shown(opener)) return opener;
+  const menu = document.querySelector<HTMLElement>("[data-menu-button]");
+  if (shown(menu)) return menu;
+  const button = document.querySelector<HTMLElement>("[data-testid='notes-open']");
+  return shown(button) ? button : true;
 }
 
 function SessionNotes({ caseId, initial, boxRef, isMine }: { caseId: string; initial: string; boxRef: RefObject<HTMLTextAreaElement | null>; isMine: (item: FailedSave) => boolean }) {

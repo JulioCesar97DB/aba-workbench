@@ -122,12 +122,12 @@ export function useSourceDetails({ caseId, sourceId, initial }: { caseId: string
 
 export type SourceDetailsState = ReturnType<typeof useSourceDetails>;
 
-/** The type, title and date fields. */
-export function SourceDetailFields({ details }: { details: SourceDetailsState }) {
+/** The type, title and date fields. `typeHintId`: a hint about the type shown under them, which the type field is described by. */
+export function SourceDetailFields({ details, typeHintId }: { details: SourceDetailsState; typeHintId?: string }) {
   const { t } = useTranslation();
   return (
     <>
-      <SourceTypeSelect value={details.type} onChange={details.changeType} />
+      <SourceTypeSelect value={details.type} onChange={details.changeType} describedBy={typeHintId} />
       <TextField
         label={t("sources.titleLabel")}
         description={t("sources.titleDescription")}
@@ -143,11 +143,12 @@ export function SourceDetailFields({ details }: { details: SourceDetailsState })
   );
 }
 
-export function SourceTypeSelect({ value, onChange }: { value: SourceType; onChange: (type: SourceType) => void }) {
+export function SourceTypeSelect({ value, onChange, describedBy }: { value: SourceType; onChange: (type: SourceType) => void; describedBy?: string }) {
   const { t } = useTranslation();
   return (
     <Select
       label={t("sources.typeLabel")}
+      describedBy={describedBy}
       value={value}
       options={SOURCE_TYPES.map((type) => ({ value: type, label: sourceTypeName(t, type), lang: sourceTypeLang(type) }))}
       onValueChange={onChange}

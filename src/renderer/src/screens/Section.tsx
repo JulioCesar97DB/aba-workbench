@@ -129,17 +129,23 @@ function withSlot(sentence: string, node: ReactNode): ReactNode {
   );
 }
 
-/** What the editor tells the screen: its save state, the version this editing pass writes to, and how to save what is waiting. */
+/**
+ * What the editor tells the screen: its save state, the version this editing pass writes to,
+ * and whether "Mejorarla con la IA" can be pressed. Not the text itself: it is put in a ref,
+ * so typing re-renders the editor, not the header, the rail and the foot (UX-3 review round
+ * 2, m1). The screen re-renders only when one of these changes.
+ */
 interface EditorState {
   status: AutosaveStatus;
   saved: number | null;
-  /** What the box holds now. */
-  text: string;
+  canImprove: boolean;
 }
 
 /** What a copy on this screen did: the version, what was still marked in it (the main process's count), and whether its mark was saved (T8). */
 interface Copied {
   number: number;
+  /** Counts the copies made on this screen. */
+  serial: number;
   markers: number;
   allMissing: boolean;
   marked: boolean;
@@ -172,13 +178,13 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
   const editingSaved = useRef<number | null>(null);
   /** The version the editor opened on ("Editar a mano"); none when she pastes a new text. */
   const [editOpened, setEditOpened] = useState<SectionVersion | null>(null);
-  const [editor, setEditor] = useState<EditorState>({ status: "idle", saved: null, text: "" });
-  /** What the editor holds now, for "Mejorarla con la IA" at the moment she presses it. */
+  const [editor, setEditor] = useState<EditorState>({ status: "idle", saved: null, canImprove: false });
+  /** What the editor holds now, for "Mejorarla con la IA" at the moment she presses it (the editor keeps it up to date). */
   const editorText = useRef("");
   const onEditorState = useCallback((state: EditorState) => {
-    editorText.current = state.text;
-    setEditor(state);
+    setEditor((previous) => (previous.status === state.status && previous.saved === state.saved && previous.canImprove === state.canImprove ? previous : state));
   }, []);
+  const copies = useRef(0);
   /** After a copy that finished the section, the focus goes to what is now the primary (review round 1, S3). */
   const focusAfterCopy = useRef(false);
   const editorFlush = useRef<() => Promise<boolean>>(async () => true);
@@ -315,7 +321,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     // The line names where to paste it, what is still marked, and whether this is the approved version (P2).
     const done = result?.outcome === "copied";
     focusAfterCopy.current = done && finishes;
-    setCopied(result?.outcome === "copied" ? { number: version.number, markers: result.markers, allMissing: result.allMissing, marked: result.marked !== null } : "failed");
+    setCopied(result?.outcome === "copied" ? { number: version.number, serial: ++copies.current, markers: result.markers, allMissing: result.allMissing, marked: result.marked !== null } : "failed");
     setCopyAnnounced(true);
   }
 
@@ -472,6 +478,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
     editing: keptOpen?.editing ?? null,
     pasted: keptOpen?.pasted === true,
     onState: onEditorState,
+    textRef: editorText,
     flushRef: editorFlush,
     onTreatLines: async (text: string, flush: () => Promise<boolean>) => {
       if (await flush()) await linesToParagraphs(text);
@@ -522,6 +529,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         {display === "paste" ? (
           <OwnTextEditor
             {...editorProps}
+            opened={null}
             initialText={keptOpen?.text ?? ""}
             savedValue={keptOpen ? null : ""}
             onSaved={(next, sections) => {
@@ -532,6 +540,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
         ) : current ? (
           <OwnTextEditor
             {...editorProps}
+            opened={editOpened}
             initialText={keptOpen?.text ?? current.text}
             savedValue={keptOpen ? null : current.text}
             onSaved={(next, sections) => {
@@ -551,7 +560,7 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
           <Button
             variant="ai"
             data-testid="improve-from-editor"
-            disabled={providers.provider === null || !canImproveFromEditor(editor.text, display === "edit" ? editOpened : null)}
+            disabled={providers.provider === null || !editor.canImprove}
             onClick={() => void improveFromEditor()}
           >
             <Icon name="sparkle" />
@@ -581,6 +590,8 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
       header={header}
       contentClassName="flex min-h-full flex-col"
       footer={footer}
+      railLabel={t("section.railLabel")}
+      railCount={display === "view" ? openChecks(detail, current, false) : display === "paste" || display === "edit" ? openChecks(detail, detail.versions.find((candidate) => candidate.number === detail.currentVersion) ?? null, true) : null}
       rail={
         <SectionRail
           caseId={caseId}
@@ -618,13 +629,17 @@ function SectionWorkspace({ caseId, section, initial }: { caseId: string; sectio
           copied !== null ? (
             <>
               <CopiedLine copied={copied} section={section} approvedVersion={detail.approvedVersion} next={next} caseId={caseId} />
-              {copied !== "failed" && !copied.marked ? <MarkNotSaved /> : null}
+              {/*
+               * Not when the case already holds a mark for this version: it is still "Copiada", only the
+               * newer time was lost (UX-7 review round 2, minor 1). Keyed by the copy, so a mark that
+               * fails again is announced again (minor 2).
+               */}
+              {copied !== "failed" && !copied.marked && detail.copiedVersion !== copied.number ? <MarkNotSaved key={copied.serial} /> : null}
             </>
           ) : (
             <VersionLine detail={detail} version={current} changesShown={changesShown} onToggleChanges={() => setChangesFor(changesShown ? null : current.number)} />
           )
         ) : null}
-        {display === "view" && current ? <ChecksSummary detail={detail} version={current} /> : null}
         {actionFailed ? (
           <p role="alert" className="text-sm font-medium text-danger">
             {t("section.actionFailed")}
@@ -917,6 +932,8 @@ function OwnTextEditor({
   onSaved,
   onTreatLines,
   onState,
+  textRef,
+  opened,
   flushRef,
 }: {
   caseId: string;
@@ -935,8 +952,12 @@ function OwnTextEditor({
   pasted: boolean;
   onSaved: (detail: SectionDetail, sections?: ReturnType<typeof useOpenedCase>["sections"]) => void;
   onTreatLines: (text: string, flush: () => Promise<boolean>) => Promise<void>;
-  /** Told the save state and the version this pass writes to, for the header and the foot. */
+  /** Told the save state, the version this pass writes to and whether it can be improved, for the header and the foot. */
   onState: (state: EditorState) => void;
+  /** Set to what the box holds, as she types: read when she presses "Mejorarla con la IA". */
+  textRef: { current: string };
+  /** The version this pass opened on ("Editar a mano"); null for a new text. */
+  opened: SectionVersion | null;
   /** Set to this box's flush, for "Listo" and "Mejorarla con la IA". */
   flushRef: { current: () => Promise<boolean> };
 }) {
@@ -965,9 +986,13 @@ function OwnTextEditor({
   useEffect(() => {
     if (keptId) void window.aba.failedSaveShown(keptId).catch(() => undefined);
   }, [keptId]);
+  const canImprove = canImproveFromEditor(text.value, opened);
   useEffect(() => {
-    onState({ status: text.status, saved, text: text.value });
-  }, [onState, text.status, saved, text.value]);
+    onState({ status: text.status, saved, canImprove });
+  }, [onState, text.status, saved, canImprove]);
+  useEffect(() => {
+    textRef.current = text.value;
+  }, [textRef, text.value]);
   // The button that opened the editor is gone: the focus goes to the text, at its end (review round 1, M5).
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -1182,7 +1207,8 @@ function SectionText({
                   }}
                   className={cn(
                     "scroll-mt-4 cursor-pointer rounded-md border px-2.5 py-1.5 whitespace-pre-line",
-                    marked === index ? "border-accent bg-ai-subtle" : "border-transparent hover:bg-surface-muted",
+                    // Hovered, an outline only: a fill reads as marked, and the pointer often rests on a paragraph (audit L13).
+                    marked === index ? "border-accent bg-ai-subtle" : "border-transparent hover:border-border",
                     isChanged && marked !== index && "border-l-accent rounded-l-none border-l-[3px] bg-surface-muted",
                   )}
                 >
@@ -1782,24 +1808,16 @@ function LiveChecks({ detail, version }: { detail: SectionDetail; version: Secti
 }
 
 /**
- * At a narrow window the rail falls below the text and its request box (review, low 5): a
- * line near the top says how the checks stand and leads to them.
+ * How many checks are open on the text shown (what is marked, what the structure lacks, what
+ * contradicts her sections): the count on the rail's button below 1024 px (T2, mockup 13),
+ * where the rail is a panel and its checks are out of view. While she writes by hand, her text
+ * as last saved, as the rail's live checks read it. None while the AI writes or before a start.
  */
-function ChecksSummary({ detail, version }: { detail: SectionDetail; version: SectionVersion }) {
-  const { t } = useTranslation();
-  const count = checkStructure(version.text, detail.shape).length + findMarkers(version.text).length + (version.consistency?.status === "found" ? version.consistency.items.length : 0);
-  return (
-    <a
-      href="#section-checks"
-      onClick={(event) => {
-        event.preventDefault();
-        document.getElementById("section-checks")?.scrollIntoView();
-      }}
-      className="text-sm font-medium text-accent underline underline-offset-2 @split:hidden"
-    >
-      {count === 0 ? t("section.checksSummaryClear") : t("section.checksSummary", { count })}
-    </a>
-  );
+function openChecks(detail: SectionDetail, version: SectionVersion | null, editing: boolean): number | null {
+  if (!version) return null;
+  // While she edits, the consistency check waits for the end (LiveChecks): it is not counted.
+  const contradictions = !editing && version.consistency?.status === "found" ? version.consistency.items.length : 0;
+  return checkStructure(version.text, detail.shape).length + findMarkers(version.text).length + contradictions;
 }
 
 function structureIssueText(t: TFunction, issue: StructureIssue): string {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useOnSectionSaved } from "../section-generation.tsx";
 import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useMatch } from "react-router";
@@ -10,7 +10,8 @@ import { Button } from "../components/Button.tsx";
 import { Dialog, DialogClose } from "../components/Dialog.tsx";
 import { AppSidebar, CaseSidebar } from "./Sidebar.tsx";
 import { TrialBar } from "./TrialBar.tsx";
-import { NotesPanel, OpenNotesContext } from "./NotesPanel.tsx";
+import { isNotesOf, NotesPanel, OpenNotesContext, type NotesControl } from "./NotesPanel.tsx";
+import { useFailedSaveList } from "../case-saves.tsx";
 import { Eyebrow } from "./WorkArea.tsx";
 
 /*
@@ -33,7 +34,14 @@ export function AppShell() {
   // Open for the case it was opened in only, so another case never opens with it open.
   const [notesOpenFor, setNotesOpenFor] = useState<string | null>(null);
   const openedId = openCase?.outcome === "opened" ? openCase.case.id : null;
-  const openNotes = useCallback(() => setNotesOpenFor(openedId), [openedId]);
+  const notesId = useId();
+  // What had the focus when the notes opened: it gets it back when they close (UX-1 follow-up m3).
+  const notesOpener = useRef<HTMLElement | null>(null);
+  const openNotes = useCallback(() => {
+    notesOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setNotesOpenFor(openedId);
+  }, [openedId]);
+  const notesControl = useMemo<NotesControl>(() => ({ open: openNotes, isOpen: openedId !== null && notesOpenFor === openedId, panelId: notesId }), [openNotes, openedId, notesOpenFor, notesId]);
   const sidebar =
     openCase?.outcome === "opened" ? (
       <CaseSidebar
@@ -49,7 +57,7 @@ export function AppShell() {
       <AppSidebar />
     );
   return (
-    <OpenNotesContext value={openNotes}>
+    <OpenNotesContext value={notesControl}>
     <OpenCaseContext value={openCase}>
     <SetCaseSourcesContext value={setSources}>
     <PatchOpenedCaseContext value={patch}>
@@ -59,7 +67,7 @@ export function AppShell() {
         {sidebar}
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <NarrowBar sidebar={sidebar} />
+        <NarrowBar sidebar={sidebar} caseId={openedId} />
         <TrialBar />
         <div className="@container flex min-h-0 flex-1 flex-col">
           <Outlet />
@@ -72,6 +80,8 @@ export function AppShell() {
           notes={openCase.case.notes}
           open={notesOpenFor === openCase.case.id}
           onOpenChange={(next) => setNotesOpenFor(next ? openCase.case.id : null)}
+          id={notesId}
+          opener={notesOpener}
         />
       ) : null}
       <RouteAnnouncer />
@@ -102,9 +112,17 @@ function SkipLink() {
   );
 }
 
-function NarrowBar({ sidebar }: { sidebar: ReactNode }) {
+/**
+ * Below --breakpoint-sidebar: the app's name and the Menu button, which opens the sidebar as
+ * a panel. Inside a case, today's notes that could not be saved are said here too, where the
+ * sidebar's notes button is out of view, and pressing it opens them (UX-1 follow-up m1).
+ */
+function NarrowBar({ sidebar, caseId }: { sidebar: ReactNode; caseId: string | null }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const notes = useContext(OpenNotesContext);
+  const failedSaves = useFailedSaveList();
+  const notesUnsaved = caseId !== null && failedSaves.some(isNotesOf(caseId));
   // Widening the window brings the sidebar back, so the panel closes.
   useEffect(() => {
     const wide = window.matchMedia(`(min-width: ${SIDEBAR_BREAKPOINT})`);
@@ -119,13 +137,30 @@ function NarrowBar({ sidebar }: { sidebar: ReactNode }) {
       <Eyebrow as="p" className="text-xs text-fg-on-nav-muted">
         {t("app.name")}
       </Eyebrow>
+      {notesUnsaved ? (
+        <button
+          type="button"
+          data-testid="notes-unsaved-bar"
+          aria-haspopup="dialog"
+          aria-expanded={notes?.isOpen ?? false}
+          aria-controls={notes?.panelId}
+          onClick={() => notes?.open()}
+          className="ml-auto min-h-control-sm rounded-md px-2 text-xs font-semibold text-fg-on-nav-warning underline underline-offset-2 hover:bg-nav-hover"
+        >
+          {t("section.notesUnsavedBar")}
+        </button>
+      ) : null}
       <Dialog
         variant="sheet"
         open={open}
         onOpenChange={setOpen}
         title={t("nav.menuTitle")}
         titleHidden
-        trigger={<Button variant="nav">{t("nav.menu")}</Button>}
+        trigger={
+          <Button variant="nav" data-menu-button="">
+            {t("nav.menu")}
+          </Button>
+        }
         popupClassName="bg-nav text-fg-on-nav"
       >
         <div

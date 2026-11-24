@@ -134,7 +134,7 @@ test("the navigation reaches every screen", async ({ launch, home }) => {
   await page.getByRole("navigation", { name: "Steps of the case" }).getByRole("link", { name: "Documents" }).click();
   await expect(heading(page)).toHaveText("Documents");
   await expect(page.getByTestId("header-eyebrow")).toHaveText("Step 1 of 5");
-  const rail = page.getByRole("complementary", { name: "Documents and checks" });
+  const rail = page.getByRole("complementary", { name: "This step" });
   await expect(rail.getByTestId("next-step")).toContainText("Turns on when you add the first document.");
 
   const steps = page.getByRole("navigation", { name: "Steps of the case" });
@@ -344,9 +344,9 @@ test("the frame: the trial line is on every screen; the header and the rail stay
   seedCase(defaultCasesFolder(home));
   const app = await launch();
   const page = await openApp(app);
-  // The rail sits beside the text from a working area 50rem wide. A runner's screen can be
+  // The rail sits beside the text from a window 1024 px wide (T2). A runner's screen can be
   // smaller than the window asked for (1024x768 on some), so the page is zoomed out to give
-  // it a working area that wide whatever the screen.
+  // it a window that wide whatever the screen.
   await resize(app, 1280, 820);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(0.75));
   await expect.poll(() => page.evaluate(() => (globalThis as unknown as { innerWidth: number }).innerWidth)).toBeGreaterThanOrEqual(1300);
@@ -364,7 +364,7 @@ test("the frame: the trial line is on every screen; the header and the rail stay
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report/background-information`);
   await expect(page.getByTestId("section-view")).toContainText("Paragraph 30");
   const header = page.getByRole("main").locator("header");
-  const rail = page.getByRole("complementary", { name: "Documents and checks" });
+  const rail = page.getByRole("complementary", { name: "Checks" });
   // The rail is beside the text, not below it.
   const [textBox, railBox] = [await page.getByTestId("section-view").boundingBox(), await rail.boundingBox()];
   expect(railBox!.x).toBeGreaterThan(textBox!.x + textBox!.width);

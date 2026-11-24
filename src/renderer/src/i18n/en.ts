@@ -387,7 +387,7 @@ export const en = {
     copiedNotAdded: "{{names}}: copied into the case's folder, but it could not be added to the case. Add it from the PDFs in the folder, below.",
     openFailed: "The PDF could not be opened. It may no longer be in the case's folder.",
     saving: "Saving…",
-    saved: "All changes saved",
+    saved: "All saved",
     tryAgain: "Try again",
     typeLabel: "Type",
     titleLabel: "Title (optional)",
@@ -496,7 +496,11 @@ export const en = {
     error: "Your last change could not be saved. Try again in a moment.",
   },
   rail: {
-    label: "Documents and checks",
+    /** The rail's name when a screen gives none: its landmark and, below 1024 px, the button that opens it as a panel (T2). */
+    label: "Details",
+    close: "Close",
+    /** Said after the rail button's name when it carries a count. */
+    count: "{{count}} to look at",
     sources: "Documents",
     noSources: "No documents yet.",
     filesHeading: "PDFs in the case's folder",
@@ -523,6 +527,8 @@ export const en = {
     heading: "Next step",
   },
   section: {
+    /** The rail's name, and below 1024 px its button, with the count of open checks (T2, mockup 13). */
+    railLabel: "Checks",
     stateHers: "Yours",
     stateDraft: "v{{number}}",
     stateDraftLong: "Draft, version {{number}}",
@@ -587,6 +593,8 @@ export const en = {
     notesHas: "(has notes)",
     notesClose: "Close",
     notesUnsaved: "Not saved",
+    /** On the narrow window's bar, where the sidebar's notes button is out of view (UX-1 follow-up m1). */
+    notesUnsavedBar: "Today's notes not saved",
     notesPlaceholder: "For example: the mother confirmed today that the school started the communication plan.",
     newSession: "Start a new session",
     newSessionHint: "Today's notes are kept in the case; the AI stops using them.",
@@ -603,9 +611,6 @@ export const en = {
     tooLong: "The AI's answer was longer than a section can be, so nothing was saved. Your versions are unchanged.",
     consistencyStale: "Your other sections changed since this check.",
     checkAgain: "Check again",
-    checksSummary_one: "Checks: {{count}} to look at",
-    checksSummary_other: "Checks: {{count}} to look at",
-    checksSummaryClear: "Checks: nothing to look at",
     caseCost: "AI spent on this case so far: {{cost}} (with a key; a ChatGPT plan adds nothing here).",
     checkStructure: "Structure",
     checkMissing: "Missing data",
@@ -822,6 +827,10 @@ export const en = {
     keySaved: "A key is saved in ABA Workbench.",
     replaceKey: "Paste a new key",
     remove: "Remove key",
+    moreActions: "More actions for the Claude key",
+    removeTitle: "Remove the Claude key?",
+    removeBody: "ABA Workbench deletes it from this computer. To use Claude again you will need to paste it again. The key itself stays as it is in the Anthropic Console.",
+    removeCancel: "Cancel",
     resultSaved: "Key saved. Claude is connected.",
     resultEmpty: "Paste a key first.",
     resultNotAKey: "This is not a Claude API key. Claude keys start with sk-ant-.",
