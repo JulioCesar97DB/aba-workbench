@@ -10,25 +10,25 @@ License: Apache License 2.0 (see [LICENSE](LICENSE)). The IBM Plex fonts the int
 
 ## Download
 
-ABA Workbench 0.2.0 is the current release. It is **not ready for real client data**. Both installers are on its release page, [v0.2.0](https://github.com/JulioCesar97DB/aba-workbench/releases/tag/v0.2.0), which is also the [latest release](https://github.com/JulioCesar97DB/aba-workbench/releases/latest):
+ABA Workbench 0.3.0 is the current release. It is **not ready for real client data**. Both installers are on its release page, [v0.3.0](https://github.com/JulioCesar97DB/aba-workbench/releases/tag/v0.3.0), which is also the [latest release](https://github.com/JulioCesar97DB/aba-workbench/releases/latest):
 
 | System | File |
 | --- | --- |
-| Windows, x64 | [ABA-Workbench-Setup-0.2.0-windows-x64.exe](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.2.0/ABA-Workbench-Setup-0.2.0-windows-x64.exe) ([SHA-256](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.2.0/ABA-Workbench-Setup-0.2.0-windows-x64.exe.sha256)) |
-| Mac, Apple Silicon or Intel, macOS 13 Ventura or later | [ABA-Workbench-0.2.0-macos-universal.dmg](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.2.0/ABA-Workbench-0.2.0-macos-universal.dmg) ([SHA-256](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.2.0/ABA-Workbench-0.2.0-macos-universal.dmg.sha256)) |
+| Windows, x64 | [ABA-Workbench-Setup-0.3.0-windows-x64.exe](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.3.0/ABA-Workbench-Setup-0.3.0-windows-x64.exe) ([SHA-256](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.3.0/ABA-Workbench-Setup-0.3.0-windows-x64.exe.sha256)) |
+| Mac, Apple Silicon or Intel, macOS 13 Ventura or later | [ABA-Workbench-0.3.0-macos-universal.dmg](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.3.0/ABA-Workbench-0.3.0-macos-universal.dmg) ([SHA-256](https://github.com/JulioCesar97DB/aba-workbench/releases/download/v0.3.0/ABA-Workbench-0.3.0-macos-universal.dmg.sha256)) |
 
-The file links name the v0.2.0 release, because each file's name carries its version. GitHub's "latest release" link opens the newest stable release (a pre-release is never marked Latest); a later version gets new file links here.
+The file links name the v0.3.0 release, because each file's name carries its version. GitHub's "latest release" link opens the newest stable release (a pre-release is never marked Latest); a later version gets new file links here.
 
 ### Check the download (optional)
 
 Each file has a `.sha256` beside it, with the file's SHA-256; the release notes show it too. Compute the SHA-256 of the file you downloaded and check that the two are the same.
 
-- Windows, in PowerShell: `(Get-FileHash "$HOME\Downloads\ABA-Workbench-Setup-0.2.0-windows-x64.exe" -Algorithm SHA256).Hash.ToLower()` (lower case, as in the `.sha256` file)
-- Mac, in Terminal: `shasum -a 256 ~/Downloads/ABA-Workbench-0.2.0-macos-universal.dmg`
+- Windows, in PowerShell: `(Get-FileHash "$HOME\Downloads\ABA-Workbench-Setup-0.3.0-windows-x64.exe" -Algorithm SHA256).Hash.ToLower()` (lower case, as in the `.sha256` file)
+- Mac, in Terminal: `shasum -a 256 ~/Downloads/ABA-Workbench-0.3.0-macos-universal.dmg`
 
 ### Install on Windows
 
-1. Open `ABA-Workbench-Setup-0.2.0-windows-x64.exe`.
+1. Open `ABA-Workbench-Setup-0.3.0-windows-x64.exe`.
 2. The installer is not signed, so Windows SmartScreen says "Windows protected your PC". Click **More info**, then **Run anyway**.
 3. It installs for your Windows user only, with no administrator rights, adds ABA Workbench to the Start menu and the Desktop, and starts it.
 
@@ -36,7 +36,7 @@ To uninstall: Settings, Apps, ABA Workbench, Uninstall. Your cases folder and th
 
 ### Install on a Mac
 
-1. Open `ABA-Workbench-0.2.0-macos-universal.dmg` and drag **ABA Workbench** onto **Applications**. Then eject the disk image (the eject button beside it in Finder).
+1. Open `ABA-Workbench-0.3.0-macos-universal.dmg` and drag **ABA Workbench** onto **Applications**. Then eject the disk image (the eject button beside it in Finder).
 2. Open ABA Workbench from Applications. The app is not signed with an Apple certificate or notarized, so the first time macOS blocks it. Close the message: on macOS 15 and later it says "Apple could not verify…", click **Done**; on macOS 13 and 14 it says Apple cannot check it for malicious software, click **OK** (or **Cancel**).
 3. Open **System Settings**, then **Privacy & Security**. Scroll down to the message that ABA Workbench was blocked, and click **Open Anyway**. When macOS asks again, click **Open Anyway** (on macOS 13 and 14, **Open**), and enter your Mac's password if it asks.
 4. ABA Workbench opens. From now on it opens like any other app; this is needed only once (and again for each new version).

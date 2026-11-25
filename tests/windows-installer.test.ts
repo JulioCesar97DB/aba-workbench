@@ -249,7 +249,7 @@ test("release workflow: a plain vX.Y.Z tag publishes a normal release marked Lat
     assert.equal(run.status, 0, run.stderr);
     return run.stdout;
   };
-  assert.equal(kindOf("v0.2.0"), "--latest|ABA Workbench 0.2.0 (Windows and Mac)");
+  assert.equal(kindOf("v0.3.0"), "--latest|ABA Workbench 0.3.0 (Windows and Mac)");
   assert.equal(kindOf("v10.20.30"), "--latest|ABA Workbench 10.20.30 (Windows and Mac)");
   for (const tag of ["v0.3.0-beta.1", "v0.3.0-rc.2", "v1.0.0-alpha"]) {
     assert.equal(kindOf(tag), `--prerelease|--latest=false|ABA Workbench ${tag.slice(1)} (Windows and Mac, pre-release)`);
