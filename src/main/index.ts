@@ -54,6 +54,14 @@ if (hidden && process.platform === "darwin") {
   app.setActivationPolicy("accessory");
   app.dock?.hide();
 }
+/*
+ * Windows: Chromium draws a window that is never shown at one frame a second, whatever
+ * backgroundThrottling says. Every requestAnimationFrame and CSS transition then takes
+ * seconds: a dialog's 150 ms closing took 2 to 5 s on the runners, past the tests' waits
+ * (dev runs 45655443351, 45655474782). Without the limit the hidden window draws at the
+ * display's rate, as a shown one does.
+ */
+if (hidden && process.platform === "win32") app.commandLine.appendSwitch("disable-frame-rate-limit");
 
 /*
  * Windows: the installed app's taskbar identity is its appId, the one the installer gives
