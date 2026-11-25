@@ -57,13 +57,13 @@ If publishing fails halfway (a network error while `gh release create` uploads),
 To publish, once the change is merged (the owner does this; no worker pushes a tag):
 
 ```sh
-# package.json's version is the release's: 0.2.0 → tag v0.2.0
+# package.json's version is the release's: 0.3.0 → tag v0.3.0
 git switch dev && git pull
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
-The release page then has `ABA-Workbench-Setup-0.2.0-windows-x64.exe`, `ABA-Workbench-0.2.0-macos-universal.dmg` and a `.sha256` for each; the download link to give her is her system's file, as in the README's [Download](../README.md#download) section. For a later version, raise `version` in `package.json` first, then tag that, and change the README's links to the new version.
+The release page then has `ABA-Workbench-Setup-0.3.0-windows-x64.exe`, `ABA-Workbench-0.3.0-macos-universal.dmg` and a `.sha256` for each; the download link to give her is her system's file, as in the README's [Download](../README.md#download) section. For a later version, raise `version` in `package.json` first, then tag that, and change the README's links to the new version.
 
 ## Windows readiness
 
