@@ -1,9 +1,9 @@
 ---
 id: behaviors
-version: 2
-updated: 2026-11-23
+version: 3
+updated: 2026-11-27
 sources: The owner's notes on three of the BCBA's assessments (patterns only, in our own words, 2026-11-23), the instruments file's guidance on FBA tools, and the owner's decisions D16 to D19. The example is about an invented child and shares nothing with the invented evaluation cases. No text from any real assessment.
-confirmed: no, pending review by the BCBA
+confirmed: in part, by the BCBA's questionnaire answers of 2026-11-27 (the wording of definitions, examples and functions); her thresholds and defaults reach the app through her standing instructions
 ---
 
 # Target behaviors: definitions, functions and groups
@@ -21,7 +21,8 @@ A reviewer and an RBT must be able to count the behavior from the definition alo
 - **Onset and offset.** When an instance starts and when it ends, as observable events. For a behavior counted by episodes, the offset is a stretch of time without the behavior.
 - **Counting.** Whether each discrete instance counts on its own, or a continuous episode counts once; say which.
 - **Exclusions.** When two of the target behaviors could catch the same event, write in each definition which one it belongs to, so a single event never counts toward two behaviors.
-- **Examples.** Short scenes of this child from the sources, each opening with the child's name, each with its quote. Two or three when the sources record that many incidents of this child; never invent one to reach the number.
+- **Wording.** The name, the definition, the examples and the non-examples are pasted into ABA Matrix as they are, so they follow the style guide: no dates, no names of caregivers or professionals, no quoted speech (paraphrase what the child said), no long dashes.
+- **Examples.** Short scenes of this child from the sources, each opening with the child's name, each with its quote in the claim's ref (the example itself paraphrases). Two or three when the sources record that many incidents of this child; never invent one to reach the number.
 - **Non-examples.** Two or three: the replacement the plan will teach (for example a request for help, a request for a break, or going with permission), plus accidental or harmless forms. A repetitive movement during free time that interrupts nothing is a non-example.
 - **Measure.** frequency for counted instances, duration for timed episodes, latency when the time to start matters.
 
@@ -47,7 +48,7 @@ Use her five functions: tangibles, attention, escape, sensory, automatic.
 - When the tools disagree (the mother's FAST points to escape, the grandmother's MAS to attention), state each result with its respondent in the evidence, choose nothing that the direct data do not support, and write the disagreement as the function's `check`. Never average scores across tools or respondents.
 - A function supported by one indirect tool alone is not primary; say in the reasoning that only that tool supports it.
 - When no function meets the bar for primary, leave primary empty, name the best-supported candidate in the reasoning, and add an open item asking her which function is primary.
-- **Reasoning**: one to three sentences on how the evidence combines.
+- **Reasoning**: one to three sentences on how the evidence combines. Write the function as what maintains the behavior ("is maintained by escape from demands"), never as "hypothesized".
 
 ## Groups
 
@@ -65,7 +66,7 @@ A group gathers behaviors that will share one consequence procedure later. Her r
 
 ## An example
 
-One behavior from a case map, for an invented child, Nadia. Her standing instructions give the offset threshold (10 seconds); the counts and incidents come from her father's interview and the BCBA's observation of 05/14/2026. Never reuse its sentences, names, dates or numbers.
+One behavior from a case map, for an invented child, Nadia. Her standing instructions give the offset threshold (10 seconds); the counts and incidents come from her father's interview and the direct observation of 05/14/2026. Never reuse its sentences, names, dates or numbers.
 
 > Name: Climbing furniture
 >
@@ -73,7 +74,7 @@ One behavior from a case map, for an invented child, Nadia. Her standing instruc
 >
 > Definition: Any instance in which Nadia raises both feet off the floor onto furniture not made for sitting or lying on (the counter, the bookshelf, the sofa back, a table). Onset: her second foot leaves the floor or the chair. Offset: both feet are back on the floor and she stays off the furniture for 10 seconds. Each climb is counted separately. Exclusions: climbing on playground equipment, and sitting or lying on the sofa or a bed.
 >
-> Examples: Nadia climbed the bookshelf during the home observation on 05/14/2026, within a minute of her father saying that the markers were put away. Nadia climbs from a kitchen chair onto the counter to reach the art supplies on top of the refrigerator.
+> Examples: Nadia climbed the bookshelf during direct observation in the home, within a minute of her father saying that the markers were put away. Nadia climbs from a kitchen chair onto the counter to reach the art supplies on top of the refrigerator.
 >
 > Non-examples: Nadia asks her father to get the markers down. Nadia climbs the ladder of the slide at the park. Nadia sits on the sofa to read.
 >

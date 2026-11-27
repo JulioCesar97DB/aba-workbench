@@ -110,10 +110,11 @@ test("the case map's definition example lives in the behaviors rules, sent with 
   const behaviors = readFileSync("rules/behaviors.md", "utf8");
   assert.match(behaviors, /## An example[\s\S]*Climbing furniture/);
   assert.match(behaviors, /Never reuse its sentences, names, dates or numbers/);
-  // examples.md is in the cached prefix of every section request: it stays as it was before the case map.
+  // examples.md is in the cached prefix of every section request: the case map's example stays out of it.
+  // Version 4 (2026-11-27) rewrote its examples to her questionnaire answers, still without the case map's.
   const examples = readFileSync("rules/examples.md", "utf8");
   assert.doesNotMatch(examples, /Climbing furniture|Case map/);
-  assert.match(examples, /^version: 3$/m);
+  assert.match(examples, /^version: 4$/m);
 });
 
 test("the examples stay labeled as invented, with the rule never to reuse them", () => {
@@ -127,4 +128,26 @@ test("the whole-assessment rules keep the four kinds of content and the line on 
   assert.match(text, /## Four kinds of content/);
   assert.match(text, /Her standard practice/);
   assert.match(text, /you never write a proposal into a section/);
+});
+
+test("the interventions rules wait for the Plan step: listed in the README, sent with no request yet (2026-11-27)", async () => {
+  const text = readFileSync("rules/interventions.md", "utf8");
+  assert.match(text, /^id: interventions$/m);
+  assert.match(text, /No request loads this file yet/);
+  assert.match(readFileSync("rules/README.md", "utf8"), /`interventions.md`/);
+  for (const section of ["medical-necessity", "crisis-plan", "family-caregiver-involvement"] as const) {
+    const { prompt, rulesVersions } = await buildPrompt(section, [{ id: "a", title: "A", kind: "text", text: "x" }]);
+    assert.equal("interventions" in rulesVersions, false, section);
+    assert.doesNotMatch(prompt.system + prompt.task, /# Interventions: what she uses/, section);
+  }
+});
+
+test("the points of her answers that bear on sections drafted today are in those sections' rules (2026-11-27)", () => {
+  const read = (file: string) => readFileSync(`rules/${file}`, "utf8");
+  assert.match(read("sections/family-caregiver-involvement.md"), /never given by telehealth/);
+  assert.match(read("sections/crisis-plan.md"), /Never restraint or seclusion/);
+  assert.match(read("sections/medical-necessity.md"), /never name extinction or a punishment procedure/);
+  assert.match(read("sections/medical-necessity.md"), /Never state, mark or mention a DSM-5 severity level/);
+  const style = read("style.md");
+  for (const rule of [/No dates in narrative text/, /Never quote anyone/, /by their role only/, /Never "the BCBA observed"/, /"utilize", "facilitate", "leverage"/, /Never "hypothesized"/]) assert.match(style, rule);
 });

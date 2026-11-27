@@ -1,10 +1,10 @@
 ---
 id: section-discharge-and-service-fading-plan
-version: 6
-updated: 2026-11-23
+version: 7
+updated: 2026-11-27
 paragraphs: 2-3
-sources: The ABA Matrix template as exported by her agency (section 18, read 2026-11-21), the payer facts on transition and discharge (Molina guide section 8), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the quality runs on an invented case (2026-11-23: sentences commenting on the evidence instead of stating criteria).
-confirmed: no, pending review by the BCBA
+sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 18, read 2026-11-21), the payer facts on transition and discharge (Molina guide section 8), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the quality runs on an invented case (2026-11-23: sentences commenting on the evidence instead of stating criteria).
+confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Section 18: Discharge and Service Fading Plan
@@ -15,7 +15,7 @@ It tells the reviewer when and how services will end: the objective criteria for
 
 ## What to write
 
-The narrative only, in 2 or 3 paragraphs. In ABA Matrix this section also has a table of three phases; do not write the table, and do not describe the phases in the narrative either.
+The narrative only, in 2 or 3 paragraphs. In ABA Matrix this section also has a table of phases, which she fills in and adjusts for each child and agency; the phases go only in that table: do not write it, and do not describe the phases in the narrative.
 
 Her assessments build the narrative in this order:
 
@@ -27,9 +27,10 @@ What starts fading, what happens if skills slip, and the periods in 2 and 3 are 
 
 Within that order:
 
-- Discharge criteria tied to this child: the behaviors and skills named in the assessment, with measurable conditions drawn from the plan (for example a reduction of the named behavior, or a skill performed across the settings named), and the caregivers' ability to carry out the strategies. Do not invent target numbers: a criterion whose number is not in the sources or her sections gets [MISSING: ...].
-- How services will be faded: hours reduced gradually as goals are met, caregiver training continuing as direct hours decrease and, as the payer expects of a strong transition plan, becoming more frequent as the child nears the discharge criteria, and the transition planned with the family and other providers named in the sources.
-- The community resources and supports that will help keep the gains after discharge, only as the sources or her instructions name them; otherwise [MISSING: community resources and supports after discharge].
+- Discharge criteria tied to this child: the behaviors and skills named in the assessment, with measurable conditions drawn from the plan (for example a reduction of the named behavior, or a skill performed across the settings named), and the caregivers' ability to carry out the strategies. The criteria's numbers are written in the text, as digits. Do not invent them: a criterion whose number is not in the sources, her sections or her standing instructions gets [MISSING: ...] where the number goes.
+- Zero as a criterion only for the dangerous behaviors (aggression, self-injury, elopement, property destruction, mouthing or pica); for the others, the criterion is a low rate she sets.
+- How services will be faded: hours reduced gradually as goals are met, caregiver training continuing as direct hours decrease and increasing as the child nears the discharge criteria (her practice, and what the payer expects of a strong transition plan; always write it), and the transition planned with the family and other providers named in the sources.
+- The community resources and supports that will help keep the gains after discharge, only when the sources or her instructions name some; when they name none, leave them out, without a marker.
 - Circumstances that lead to discharge or transition other than meeting goals, only when the sources or her instructions give them.
 
 Do not state hours or units for the current request; they belong to Summary and Recommendations.
@@ -43,4 +44,4 @@ Do not state hours or units for the current request; they belong to Summary and 
 
 ## Not yet settled with the BCBA
 
-The order above comes from her texts, not from her answers, and she has not confirmed these rules. Not settled: her usual conditions and periods for fading and for ending services, and her rule when skills slip (a draft of her standing instruction for this section is prepared for her to confirm); whether her standard criteria are ever made specific to one behavior, as the payer prefers; and whether the narrative ever describes the phases of the table.
+Her usual conditions and periods for fading and for ending services, and her rule when skills slip (they reach the AI through her standing instructions for this section).

@@ -1,8 +1,9 @@
 ---
 id: payer-florida-molina
-version: 3
-updated: 2026-11-23
-sources: Florida Medicaid Behavior Analysis Services Coverage Policy (December 2024), sections 2.2, 4.2.1, 4.2.2, 5.2, 6.2.2, 7.2 and the EPSDT paragraph; Molina Healthcare of Florida Behavioral Health Authorization and Documentation Guide (July 2026), sections 2 to 5 and 8
+version: 4
+updated: 2026-11-27
+sources: Florida Medicaid Behavior Analysis Services Coverage Policy (December 2024), sections 2.2, 4.2.1, 4.2.2, 5.2, 6.2.2, 7.2 and the EPSDT paragraph; Molina Healthcare of Florida Behavioral Health Authorization and Documentation Guide (July 2026), sections 2 to 5 and 8. Our mapping onto the sections follows the BCBA's questionnaire answers of 2026-11-27.
+confirmed: the payer facts are the payers' own; our mapping, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # What the Florida payers look for
@@ -98,14 +99,14 @@ And under "authorization request snags":
 
 ## What each section must show
 
-Our mapping of the facts above onto the agency's sections, not payer text.
+Our mapping of the facts above onto the agency's sections, not payer text. She writes the same way for every payer; these facts are the minimum. Where her practice differs from a payer's wording (she never states a severity level; the agency supplies the reason for referral, the physician's order and the diagnosis codes), her practice is what the sections follow.
 
-- Background Information: reason for referral and who referred; the diagnosis as the clinician states it; medical and developmental history with the medications prescribed for behavior; relevant family history; school and its plan; every other service the child receives.
+- Background Information: the diagnosis as the clinician states it; medical and developmental history with the medications prescribed for behavior; relevant family history; school and its plan; every other service the child receives.
 - Medical Necessity Criteria: the Vineland-3 and BASC-3 PRQ results explained; impairment in more than one setting, with the kind of evidence for each; this child's own data on the behaviors (how often, how long, how severe, with what harm); why ABA, and how it complements rather than duplicates the other services.
 - The behavior sections (maladaptive and replacement behaviors, assessments conducted, hypothesis based interventions, interventions): each behavior with its observable definition, measurement, baseline, antecedents, consequences and hypothesized function with its evidence; functionally equivalent replacement behaviors; strategies for each goal that the named implementers can carry out.
 - Family/Caregiver Involvement: who takes part; their capacity to carry out the strategies; when a parent cannot take part, the reason, the likely impact and how it is mitigated.
 - Generalization and Maintenance: how each skill is generalized across settings and people.
-- Discharge and Service Fading Plan: objective, individualized criteria per behavior, skill and caregiver; how hours step down; community resources; caregiver training increasing near transition.
+- Discharge and Service Fading Plan: objective, individualized criteria per behavior, skill and caregiver; how hours step down; community resources when there are some; caregiver training increasing near transition.
 - Crisis Plan: the crisis management plan, with no seclusion or restraint.
 - Summary and Recommendations: units per code with their medical necessity; place of service; a weekly schedule within the child's availability; the supervisor named.
 
@@ -113,7 +114,7 @@ Our mapping of the facts above onto the agency's sections, not payer text.
 
 What a reviewer checks before reading closely. When the assessment lacks one of these and the sources do not give it, the gap stays visible as [MISSING: ...] in the section that owns it.
 
-1. The diagnosis stated by a qualified clinician, with its severity, and the referral and physician's order.
+1. The diagnosis stated by a qualified clinician (the referral and the physician's order come from the agency; she never states a severity level).
 2. Vineland-3 (with the Maladaptive Behavior domain from age 3) and BASC-3 PRQ (ages 2 to 18) results.
 3. Impairment shown in at least two settings, each with whose evidence it is.
 4. Every targeted behavior with an observable definition, frequency or rate, duration, intensity and harm, baseline, antecedents, consequences and hypothesized function with its evidence.
