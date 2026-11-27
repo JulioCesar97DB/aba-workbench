@@ -556,7 +556,7 @@ export const DATE_NAME_PATTERNS: Array<{ id: string; pattern: RegExp; what: stri
   { id: "numeric-date", pattern: /\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/u, what: "a numeric date (she gives the source, not the date; a needed date reads \"October 5, 2026\")" },
   { id: "full-date", pattern: new RegExp(`\\b(?:${MONTHS})\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`, "u"), what: "a date in narrative (only a coming change may give its day)", unless: COMING },
   { id: "doctor-name", pattern: /\bDr\.?\s+\p{Lu}/u, what: "a professional named by name (she names the role)" },
-  { id: "credentials", pattern: new RegExp(`\\b\\p{Lu}[\\p{L}'’-]+,?\\s+(?:${CREDENTIALS})\\b`, "u"), what: "a person named with credentials (she names the role)" },
+  { id: "credentials", pattern: new RegExp(`\\b(?!(?:The|A|An|This|That|Each|Every|Any|No|Her|His|Their|Our|Your)\\b)\\p{Lu}[\\p{L}'’-]+,?\\s+(?:${CREDENTIALS})\\b`, "u"), what: "a person named with credentials (she names the role)" },
   { id: "honorific-name", pattern: /\b(?:Mr|Mrs|Ms|Miss)\.?\s+\p{Lu}/u, what: "a person named by title and surname (caregivers by relation, professionals by role)" },
 ];
 

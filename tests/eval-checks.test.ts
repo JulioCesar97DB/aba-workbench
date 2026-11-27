@@ -300,6 +300,7 @@ test("dates and names: numeric dates, dates outside a coming change, professiona
   assert.deepEqual(found("The CDE by Marta Supuesta, Ph.D., gives the diagnosis."), ["credentials"]);
   assert.deepEqual(found("Ms. Inventada reported it."), ["honorific-name"]);
   assert.deepEqual(found("According to the CDE, completed by the evaluating psychologist, her psychiatrist prescribes it."), []);
+  assert.deepEqual(found("The BCBA will review the data. Each BCBA visit is logged."), [], "\"The BCBA\" is the form she requires, not a name with credentials");
 });
 
 test("numbers: a sibling aged 21 or older is her rule, not a number in need of a source", () => {
