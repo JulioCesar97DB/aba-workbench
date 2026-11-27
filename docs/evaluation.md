@@ -75,6 +75,7 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 | `pnpm eval --cases case-b-sofia` | Only these cases |
 | `pnpm eval --mode independent` | Drafts without approving, so no consistency checks |
 | `pnpm eval --baseline <name>` | Compares with `eval/baselines/<name>/` instead of the newest |
+| `pnpm eval --baseline-run <run folder>` | Compares with the baseline as that earlier run compared it (its `baseline-as-compared.json`): every draft is checked again, and only the sections whose judge changed are judged again. Use it to measure a rules fix against the same dev arm without paying for every baseline judgement again |
 | `pnpm eval --accept <name>` | Also saves the run as `eval/baselines/<name>/`, with every path stripped (commit it). Refused for an invalid run, a rehearsal, a checkout with uncommitted changes in `rules/`, `src/` or `eval/`, and a run with a failed draft, a judge error or an unscored item in any run (fill it with `--from-run`, or run again for a failed draft) |
 | `pnpm eval --label <text>`, `--no-build` | Names the run folder; uses the apps as already built |
 

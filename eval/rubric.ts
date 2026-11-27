@@ -324,8 +324,8 @@ export const SECTION_EXPECTATIONS: Record<ReportSectionId, readonly string[]> = 
     "Supports for the changes as her plan, her standing instructions, her notes or a source give them. When her standing instructions give her standard supports, writing them is her structure; otherwise a support none of them names is marked missing, not proposed. (Her standard supports are pending her confirmation.)",
   ],
   "family-caregiver-involvement": [
-    "The narrative part only (ABA Matrix holds the caregiver goals, one set for all caregivers): one to four paragraphs on the caregivers' involvement and priorities, who takes part and when, training through Behavioral Skills Training in person (never by telehealth) in the home language, what it covers and why, the family's current everyday responses described without blame, and that training increases as fading nears; limited participation, its impact and the mitigation.",
-    "\"The caregiver\" or the relation, never a name. The BASC-3 PRQ only when it bears directly on training, without scores. Procedures named, not described.",
+    "The narrative part only (ABA Matrix holds the caregiver goals, one set for all caregivers): one to four paragraphs on the caregivers' involvement and priorities, who takes part and when, training through Behavioral Skills Training in person (never by telehealth) in the home language, what it covers and why, the family's current everyday responses described without blame; who is absent and the caregivers' stress or limits as the sources give them; limited participation, its impact and the mitigation.",
+    "\"The caregiver\" or the relation, never a name. The BASC-3 PRQ only when it bears directly on training, without scores. Procedures named, not described, and only those her plan, instructions, notes or a source name: no procedure, routine or starting point for training chosen by the draft. The family's priorities and household referred to in a clause, not restated.",
   ],
   "generalization-and-maintenance": [
     "Exactly two paragraphs, for the plan as a whole.",
@@ -338,7 +338,7 @@ export const SECTION_EXPECTATIONS: Record<ReportSectionId, readonly string[]> = 
   ],
   "risk-assessment": [
     "Three or four paragraphs, no risk rating: first the risks to carrying out the plan (cues that differ across people and settings, prompt dependence); then the behavior risks in prose, from the most dangerous to those that only interfere, each with its evidence and source, and the non-behavioral risks the sources report (pica, seizures, allergies, water, a very limited diet, medication side effects); then what the family does today in a crisis, as reported, in ABA terms, and that least-restrictive, function-based procedures answer the risks, pointing to the Crisis Plan by name; then training, fidelity checks and how the plan is adjusted.",
-    "The protocol from now on is the Crisis Plan's; the family's current crisis responses belong here.",
+    "The protocol from now on is the Crisis Plan's; the family's current crisis responses belong here. Saying that the plan keeps the family's own strategies wherever it can is her standard practice (her questionnaire answers of 2026-11-27): it is not a proposal and needs no marker.",
   ],
   "crisis-plan": [
     "Always a child-specific text: the behaviors that can be dangerous; the antecedent strategies staff follow at all times (named from her plan, or marked missing while there is none); an adult always present in the home during sessions, and who may be the designated caregiver (a parent, a grandparent, a sibling aged 21 or older, a listed home health aide or babysitter); the RBT or caregiver calls 911 when the situation gets out of control; incidents reported as soon as possible. A protocol for mouthing, physical aggression, property destruction, self-injury or elopement, even with no past crisis.",

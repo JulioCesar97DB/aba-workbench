@@ -320,3 +320,12 @@ test("runChecks runs her three new checks on every section", () => {
   const checks = new Set(runChecks({ "risk-assessment": 'Dr. Ejemplar said "no" — twice.' }, { key: testKey(), numbers: new Set(), shapes: {}, examples: [], loadedSources: new Set() }).map((f) => f.check));
   for (const check of ["wording", "quotes", "dates-names"] as const) assert.ok(checks.has(check), check);
 });
+
+test("payer readiness in Medical Necessity: the same criteria in other words (fix round 1 of T1)", () => {
+  const item = (id: string) => PAYER_ITEMS.find((p) => p.id === id)!;
+  const key = caseB.key;
+  for (const text of ["ABA will address functioning outside school rather than duplicate the IEP.", "ABA does not duplicate the IEP's services.", "ABA complements the IEP."]) assert.equal(item("mn-complements").test(text, key).ok, true, text);
+  assert.equal(item("mn-complements").test("The family repeats the routine.", key).ok, false);
+  for (const text of ["Progress will be judged by direct data on target behaviors.", "The BCBA will judge progress from direct data.", "Progress will be measured with direct data."]) assert.equal(item("mn-measurement").test(text, key).ok, true, text);
+  assert.equal(item("mn-measurement").test("Progress will be reviewed with the family.", key).ok, false);
+});

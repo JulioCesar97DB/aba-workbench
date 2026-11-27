@@ -1,6 +1,6 @@
 ---
 id: section-medical-necessity
-version: 7
+version: 8
 updated: 2026-11-27
 paragraphs: 7-10
 words: 900-1250
@@ -28,7 +28,7 @@ This structure is the BCBA's own and it is not optional. Follow it in this order
 
 4. Direct observation paragraph. What direct observation showed, as its own paragraph: the settings, what the child was observed doing, and what it shows that the reports alone do not (a behavior seen as the caregivers describe it, a skill seen in use, or a difference between settings). Write it from the observation ("During direct observation in the home, Nadia was observed ..."), never "the BCBA observed" or "the BCBA saw", and without dates. The areas' paragraphs may already use one observed example each; this paragraph gives the observation as evidence in its own right without retelling them.
 
-5. Closing paragraph. Conclude that these findings establish the medical necessity of an ABA program individualized to this child. Say what ABA will address (what the child needs to learn for each deficit, and the general approach: teaching skills matched to what each behavior gets the child, and caregiver training), in which settings and why there (where the impairment shows up), the role of caregiver training (tied to what the caregivers reported and what the BASC-3 PRQ shows), and how progress will be judged (direct data on target behaviors and skills, such as fewer prompts, more independent responses and more access to settings and activities, and the Vineland-3 and BASC-3 PRQ at reassessment). Always say how ABA complements, and does not duplicate, the other services the child receives (named in Background Information): school services, speech or occupational therapy, psychiatry. Do not promise outcomes. Do not state hours or units; they belong to the Summary and Recommendations section.
+5. Closing paragraph. Conclude that these findings establish the medical necessity of an ABA program individualized to this child. Say what ABA will address (what the child needs to learn for each deficit, and the general approach: teaching skills matched to what each behavior gets the child, and caregiver training), in which settings and why there (where the impairment shows up), the role of caregiver training (tied to what the caregivers reported and what the BASC-3 PRQ shows), and how progress will be measured: say that it is measured, and with what (direct data on target behaviors and skills, such as fewer prompts, more independent responses and more access to settings and activities, and the Vineland-3 and BASC-3 PRQ at reassessment). Always say how ABA complements, and does not duplicate, the other services the child receives (named in Background Information): school services, speech or occupational therapy, psychiatry. Do not promise outcomes. Do not state hours or units; they belong to the Summary and Recommendations section.
 
 Be very specific throughout. Each deficit paragraph should be impossible to reuse for another child.
 
@@ -38,7 +38,14 @@ Impairment must show in more than one setting. When the sources give school data
 
 ## The Florida definition, as an internal checklist
 
-The section must meet Florida Medicaid's definition of medical necessity (Rule 59G-1.010), but she never cites it, quotes it or names it in the text. Use it only to check the argument is complete, in our words: the services are needed to prevent a significant disability or to restore function; they are individualized and specific to this child's diagnosis and documented deficits, and not more than the child needs; they follow accepted professional standards; no equally effective, less intensive option would do; and they are not mainly for the convenience of the family or the provider. If a point is not supported by the evidence, the argument is incomplete: strengthen it with the sources' facts, never with the definition's words.
+The section must meet Florida Medicaid's definition of medical necessity (Rule 59G-1.010, F.A.C., through the Florida Medicaid Definitions Policy it incorporates), but she never cites it, quotes it or names it in the text. Use it only to check that the argument is complete. In our words, the services must:
+
+- be individualized and specific to this child, consistent with the symptoms and the confirmed diagnosis, and no more than the child needs;
+- follow generally accepted professional standards, and not be experimental;
+- be the level of service that can be given safely, with no equally effective, more conservative or less costly treatment available;
+- not be mainly for the convenience of the child, the caregivers or the provider.
+
+A provider's prescription or recommendation does not by itself make a service necessary, so the argument rests on this child's evidence. (The definition's first condition, protecting life, preventing significant illness or disability or relieving severe pain, applies only to recipients aged 21 or older, so it is not part of this check for her clients.) If a point is not supported by the evidence, the argument is incomplete: strengthen it with the sources' facts, never with the definition's words.
 
 ## Arguing the behaviors
 

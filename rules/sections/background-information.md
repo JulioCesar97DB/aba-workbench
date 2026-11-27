@@ -1,6 +1,6 @@
 ---
 id: section-background-information
-version: 4
+version: 5
 updated: 2026-11-27
 paragraphs: 5-7
 words: 600-900
@@ -20,7 +20,7 @@ Weak versions read like a form filled in sentence by sentence, could describe an
 
 Her assessments give this section about 6 paragraphs, in this order, as far as the sources give each topic:
 
-1. The household: who lives in the home, who cares for the child day to day, who works and supports the household, siblings, the family's culture and background (for example a Latino family, a Haitian family), the languages spoken at home and the child's own, how the caregivers are involved, and the goals the family wants the child to reach (its priorities). When the family asks for therapy in another language, say so here, in this first paragraph; the rest of the assessment is in English. The priorities set here are the ones Medical Necessity, Strengths and Weaknesses and Family/Caregiver Involvement come back to.
+1. The household: who lives in the home, who cares for the child day to day, who works and supports the household (that they work, not their hours: the hours and availability belong to Family/Caregiver Involvement), siblings, the family's culture and background (for example a Latino family, a Haitian family), the languages spoken at home and the child's own, how the caregivers are involved, and the goals the family wants the child to reach (its priorities). When the family asks for therapy in another language, say so here, in this first paragraph; the rest of the assessment is in English. The priorities set here are the ones Medical Necessity, Strengths and Weaknesses and Family/Caregiver Involvement come back to.
 2. The diagnosis by its name as the CDE writes it, and that the CDE made it, never with a severity level; current medications as reported; pregnancy and birth when reported; medical history and the specialists who follow the child, each by role.
 3. Developmental milestones (usually from the CDE) and how the child's communication developed.
 4. School: the program or grade, the schedule and the school's plan (IEP or ESE plan); earlier therapies and services, and any earlier ABA and why it ended. Speech or occupational therapy the school gives under the child's ESE plan is described as part of the school's plan, not as a separate service the family receives, because it is not a paid service. Other therapies belong here, not in another section.

@@ -20,6 +20,7 @@
  *   pnpm eval --cases case-b-sofia      only these cases (comma-separated)
  *   pnpm eval --mode independent        draft without approving (default: chained, each draft approved before the next)
  *   pnpm eval --baseline <name>         compare with eval/baselines/<name>/ (default: the newest)
+ *   pnpm eval --baseline-run <run folder>  compare with the baseline as that run compared it (its baseline-as-compared.json): checked again, and judged again only where its judge differs
  *   pnpm eval --accept <name>           also save this run as eval/baselines/<name>/ (paths stripped; refused if dirty or invalid)
  *   pnpm eval --label <text>            names the run's folder
  *   pnpm eval --no-build                use the apps as they are built (default: pnpm build in each checkout first)
@@ -102,6 +103,7 @@ const { values: args } = parseArgs({
     cases: { type: "string" },
     mode: { type: "string", default: "chained" },
     baseline: { type: "string" },
+    "baseline-run": { type: "string" },
     accept: { type: "string" },
     label: { type: "string" },
     "no-build": { type: "boolean", default: false },
@@ -709,6 +711,23 @@ function checkCase(loaded: LoadedCase, plan: LoadPlan[], loadedSources: Readonly
 /* ---------------------------------------------------------------------------------- */
 /* The run                                                                             */
 
+/**
+ * The baseline as an earlier run compared it (its baseline-as-compared.json): the accepted
+ * baseline's stored drafts with that run's checks and judge records. Its judge records are
+ * reused only where their fingerprint is this judge's; every other section is judged again and
+ * every draft is checked again, as for any baseline. It is named after the accepted baseline
+ * and the run, so the summary says which drafts the baseline arm is.
+ */
+function baselineAsCompared(runDir: string, rehearsal: boolean): { name: string; run: RunResult } {
+  const dir = path.resolve(runDir);
+  const file = path.join(dir, "baseline-as-compared.json");
+  if (!existsSync(file)) fail(`no ${file}: --baseline-run takes a run folder that was compared with a baseline.`);
+  const comparison = JSON.parse(readFileSync(path.join(dir, "comparison.json"), "utf8")) as { baseline?: string };
+  const run = normalizeRun(JSON.parse(readFileSync(file, "utf8")));
+  if (run.provider.startsWith("rehearsal") !== rehearsal) fail("--baseline-run takes a run of the same kind (real or rehearsal).");
+  return { name: `${comparison.baseline ?? "unknown"} as compared in run ${path.basename(dir)}`, run };
+}
+
 /** The baseline named, or the newest accepted one of the same kind (real or rehearsal), read as this version reads results. */
 function findBaseline(name: string | null, rehearsal: boolean): { name: string; run: RunResult } | null {
   if (!existsSync(BASELINES_DIR)) return null;
@@ -729,7 +748,8 @@ async function main(options: Options, home: string, profile: string): Promise<nu
   const { prior } = options;
   const cases = selectedCases(prior);
   const startedAt = new Date().toISOString();
-  const baseline = findBaseline(args.baseline ?? null, options.rehearse);
+  if (args.baseline && args["baseline-run"]) fail("--baseline and --baseline-run name two baselines: give one.");
+  const baseline = args["baseline-run"] ? baselineAsCompared(args["baseline-run"], options.rehearse) : findBaseline(args.baseline ?? null, options.rehearse);
   console.log(
     `Evaluation run ${options.label}: ${cases.map((c) => c.key.caseId).join(", ")}; ${options.runs} run(s) per case; ${options.mode} drafting; ${options.samples} judge sample(s) per run; ${options.rehearse ? "REHEARSAL with a fake provider (no request leaves the computer)" : "ChatGPT sign-in of the eval profile"}${prior ? `; drafts from run ${prior.label} (${options.rejudgeAll ? "every section judged again" : "judged where this judge has no answer"})` : ""}${baseline ? `; baseline ${baseline.name}` : ""}.`,
   );

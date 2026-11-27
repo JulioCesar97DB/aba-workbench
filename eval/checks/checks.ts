@@ -14,7 +14,7 @@ import { lookupKey, normalize, numberIndex, sentences, splitParagraphs, statedNu
  * current checks again on the baseline's stored texts anyway (review B3), so it is
  * recorded to read old results, not to gate the comparison.
  */
-export const CHECKS_VERSION = "3";
+export const CHECKS_VERSION = "4";
 
 export const CHECK_IDS = ["markers", "shape", "numbers", "names", "repetition", "data-density", "banned-patterns", "examples", "payer-readiness", "wording", "quotes", "dates-names"] as const;
 export type CheckId = (typeof CHECK_IDS)[number];
@@ -450,10 +450,10 @@ export const PAYER_ITEMS: PayerItem[] = [
     id: "mn-complements",
     section: "medical-necessity",
     what: "ABA complements, and does not duplicate, the other services",
-    test: (text, key) => ({ ok: key.payer.otherServices.length === 0 || /\b(?:complement\w*|not duplicat\w*|does not duplicate|without duplicating|in addition to|coordinat\w*)\b/iu.test(text) }),
+    test: (text, key) => ({ ok: key.payer.otherServices.length === 0 || /\b(?:complement\w*|(?:not|never|rather than|instead of|without) (?:\w+ ){0,2}duplicat\w*|in addition to|coordinat\w*)\b/iu.test(text) }),
   },
   { id: "mn-caregiver-training", section: "medical-necessity", what: "Caregiver training as part of the treatment", test: has(/\b(?:caregiver|parent|family)\s+training\b|\b(?:train\w*|coach\w*)\b[^.]{0,80}\b(?:mother|father|grandmother|parents?|caregivers?)\b|\b(?:mother|father|grandmother|parents?|caregivers?)\b[^.]{0,80}\b(?:train\w*|coach\w*|rehears\w*)\b/iu) },
-  { id: "mn-measurement", section: "medical-necessity", what: "How progress will be measured", test: has(/\b(?:measur\w*|monitor\w*|track\w*|data collection|collect\w* data|record\w* (?:data|each|every|the number|counts?|frequency|duration))\b/iu) },
+  { id: "mn-measurement", section: "medical-necessity", what: "How progress will be measured", test: has(/\b(?:measur\w*|monitor\w*|track\w*|data collection|collect\w* data|record\w* (?:data|each|every|the number|counts?|frequency|duration))\b|\b(?:judg|evaluat|assess)\w*\b[^.]{0,60}\b(?:from|by|with|through|using|on) (?:the )?(?:direct )?data\b/iu) },
   { id: "sw-strengths", section: "strengths-and-weaknesses", what: "Strengths documented from the sources", test: has(/\bstrength\w*|\b(?:enjoys|likes|loves|interest\w*)\b/iu) },
   { id: "ec-supports", section: "environmental-changes", what: "Supports planned for the changes, or a marker where none is named", test: hasMarkerOr(/\bsupport\w*\b/iu, /\bsupport/iu) },
   { id: "fci-caregivers", section: "family-caregiver-involvement", what: "Each caregiver who takes part, named by role", test: (text, key) => allOf(key.payer.caregivers, text) },

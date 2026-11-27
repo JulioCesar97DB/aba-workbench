@@ -151,3 +151,16 @@ test("the points of her answers that bear on sections drafted today are in those
   const style = read("style.md");
   for (const rule of [/No dates in narrative text/, /Never quote anyone/, /by their role only/, /Never "the BCBA observed"/, /"utilize", "facilitate", "leverage"/, /Never "hypothesized"/]) assert.match(style, rule);
 });
+
+test("fix round 1 of T1: the family's safety measures stay in the Crisis Plan, her practice in Risk Assessment, the Florida checklist from the official text", () => {
+  const read = (file: string) => readFileSync(`rules/${file}`, "utf8");
+  assert.match(read("sections/crisis-plan.md"), /## The family's safety measures[\s\S]*no firearms in the home/);
+  assert.match(read("sections/risk-assessment.md"), /her standard practice, confirmed by her questionnaire answers of 2026-11-27, so write it as hers, not as a proposal/);
+  const mn = read("sections/medical-necessity.md");
+  assert.match(mn, /applies only to recipients aged 21 or older/);
+  assert.match(mn, /how progress will be measured/);
+  const fci = read("sections/family-caregiver-involvement.md");
+  assert.match(fci, /Name no procedure, routine or starting point for training/);
+  assert.match(fci, /a caregiver who is absent/);
+  assert.match(read("sections/discharge-and-service-fading-plan.md"), /releases as the basis for the coordination, without their date/);
+});

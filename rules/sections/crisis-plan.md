@@ -1,6 +1,6 @@
 ---
 id: section-crisis-plan
-version: 10
+version: 11
 updated: 2026-11-27
 sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 20, read 2026-11-21), the payer facts (Florida Medicaid policy 5.2), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the owner's decision that clinical proposals live only in the case formulation (2026-11-23).
 confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
@@ -26,7 +26,9 @@ These points are her confirmed practice and the agency's requirements: write the
 
 When the child engages in mouthing, physical aggression, property destruction, self-injury or elopement, the text also gives a protocol for each of those behaviors, whether or not a crisis has happened before. Each protocol says what makes the behavior dangerous for this child and what the adult does, in order, as sentences (the format for pasting into ABA Matrix allows no numbered list). Its steps, distances and thresholds are her choice (see the four kinds of content): give them only as her standing instructions, her sections or the sources give them; where the protocol needs one that they do not give, keep the sentence and mark it [MISSING: ...]. Do not supply de-escalation techniques of your own.
 
-What the family does today during a crisis belongs to Risk Assessment, not here.
+## The family's safety measures
+
+The environmental safety measures the family has already taken always stay in this section, stated as the sources give them: knives or medicines kept out of reach, no firearms in the home (or how they are stored), locks, door alarms, a gate, a car seat lock. They are part of keeping the child safe now. What the family does during a crisis (its responses) belongs to Risk Assessment; its measures do not move with them.
 
 ## Early signs
 

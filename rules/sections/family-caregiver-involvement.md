@@ -1,6 +1,6 @@
 ---
 id: section-family-caregiver-involvement
-version: 4
+version: 5
 updated: 2026-11-27
 paragraphs: 1-4
 words: 200-400
@@ -20,16 +20,14 @@ The narrative only: her general observations about the family's involvement. In 
 
 Refer to the caregivers as "the caregiver" or "the caregivers", or by relation ("her mother", "her grandmother"); never by name.
 
-1. Who will participate in caregiver training, with their availability as the sources report it (work schedules, languages, other children at home), how involved they are now, and the family's priorities as Background Information gives them.
+Her answer gives what this section says: who takes part, the method, where, what is trained and why. Nothing more.
+
+1. Who takes part: the caregivers who will participate, with their work hours and availability, their languages and how involved they are now, as the sources report them. This section owns these facts (Background Information says only who lives in the home and who works). Keep every fact that bears on participation: a caregiver who is absent or has no regular contact, and a caregiver's stress, fatigue or other limits, as the sources give them. When participation is limited, give the reason as reported, its likely effect on treatment and the plan to reduce it; if the sources give no reason or plan, mark it [MISSING: ...]. Refer to the family's priorities in a clause ("the priorities the family named"), never in Background's words.
 2. How and where: training uses Behavioral Skills Training (BST), in person, in the child's home or the setting where services are given, in the caregivers' language. It is never given by telehealth. This is her confirmed practice; write it as hers.
-3. The caregivers' everyday responses that training will change (for example giving the item back to end an outburst, or doing a step for the child), as the sources report them, plainly and without blame. This is where training starts. What the family does during a crisis belongs to Risk Assessment.
-4. What caregiver training will cover, tied to this child: the safety protocol for the behaviors argued earlier, the antecedent strategies and environmental changes the plan uses, prompting and reinforcing the replacement and acquisition skills, using reinforcement consistently, and any skill that only applies at home. Name the behaviors, skills and procedures exactly as the rest of the assessment names them, and say in one clause what the caregiver will do with each, in which routine. Do not describe the procedures step by step: their steps belong to the Interventions section. Name only procedures that the sources, her sections, instructions or notes give; choosing them is hers (see the four kinds of content).
-5. Why: what the caregivers reported about their needs. The BASC-3 PRQ belongs to Medical Necessity; mention it here only when a result bears directly on what training covers, in words, without scores.
-6. That caregiver training will increase as fading nears (the Discharge and Service Fading Plan gives the criteria), in one sentence.
-7. When a caregiver cannot participate, or participation is limited: the reason as reported, the likely effect on treatment, and the plan to reduce it. If the sources do not give the reason or the plan, mark it [MISSING: ...].
+3. What is trained and why: the plan's strategies for the behaviors argued earlier, the replacement and acquisition skills and the use of reinforcement, by the names the plan gives them once it exists, and why this child needs the caregivers to carry them out (the everyday responses the sources report, such as giving the item back to end an outburst, described plainly and without blame). Name no procedure, routine or starting point for training that her plan, her standing instructions, her notes or a source does not name: until her plan is written, say what areas training covers, not which procedure the caregiver will use with which skill, or where training will start. What the family does during a crisis belongs to Risk Assessment. The BASC-3 PRQ belongs to Medical Necessity; mention it here only when a result bears directly on what training covers, in words, without scores.
 
 Do not state hours, units or service codes; they belong to Summary and Recommendations.
 
 ## Length
 
-As in her assessments: 1 to 4 paragraphs, about 200 to 400 words. The points above share paragraphs. Density over coverage: who, how, what and why, not how each procedure works.
+As in her assessments: 1 to 4 paragraphs, about 200 to 400 words. Density over coverage: who, how, where, what and why, not how each procedure works.
