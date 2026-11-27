@@ -768,6 +768,54 @@ async function main(options: Options, home: string, profile: string): Promise<nu
   let judgeModel: string | null = null;
   let rulesVersions: Record<string, string> | null = prior?.drafting.rulesVersions ?? null;
 
+  /** The run as recorded: the final one, or a partial one saved as the run goes (results.json, resumable with --from-run). */
+  const buildRun = (caseList: CaseResult[], versions: Record<string, string> | null): RunResult => {
+    const judging = checkoutRecord(ROOT);
+    return {
+    resultsVersion: RESULTS_VERSION,
+    label: options.label,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    rubricVersion: RUBRIC_VERSION,
+    judgePromptVersion: JUDGE_PROMPT_VERSION,
+    checksVersion: CHECKS_VERSION,
+    runs: options.runs,
+    judgeSamples: options.samples,
+    drafting: prior ? prior.drafting : { ...checkoutRecord(options.draftCheckout), rulesVersions: versions ?? {} },
+    judging: { ...judging, model: judgeModel },
+    provider: prior ? prior.provider : options.rehearse ? "rehearsal (fake provider)" : "openai (ChatGPT sign-in)",
+    model,
+    mode: options.mode,
+    judgeFormat: judgeFormat ?? prior?.judgeFormat ?? null,
+    requests: prior
+      ? {
+          drafts: prior.requests.drafts + requests.drafts,
+          checks: prior.requests.checks + requests.checks,
+          judges: prior.requests.judges + requests.judges,
+          repairs: prior.requests.repairs + requests.repairs,
+          baselineJudges: prior.requests.baselineJudges + requests.baselineJudges,
+          total: prior.requests.total + requests.total,
+        }
+      : requests,
+    launches: [...(prior?.launches ?? []), ...launches],
+    windowChecksDuring,
+    valid: invalidReason === null && (prior?.valid ?? true),
+    invalidReason: invalidReason ?? prior?.invalidReason ?? null,
+    ...(prior ? { fromRun: prior.label, rejudged: options.rejudgeAll } : {}),
+    cases: caseList,
+    };
+  };
+  /** Writes results.json as the run goes, so a run that fails late keeps every draft and judge answer already paid for. */
+  const savePartialRun = (caseList: CaseResult[], madeNow: ReadonlyArray<{ texts: Map<ReportSectionId, { detail: unknown }> }>) => {
+    let versions = rulesVersions;
+    if (!versions) {
+      versions = {};
+      for (const { texts } of madeNow) for (const { detail } of texts.values()) Object.assign(versions, (detail as { generation?: { rulesVersions?: Record<string, string> } } | undefined)?.generation?.rulesVersions ?? {});
+    }
+    mkdirSync(options.runDir, { recursive: true });
+    writeFileSync(path.join(options.runDir, "results.json"), JSON.stringify(buildRun(caseList, versions), null, 2));
+  };
+
   for (const loaded of cases) {
     console.log(`\n${loaded.key.caseId}`);
     const plan = sourcePlan(loaded);
@@ -803,6 +851,45 @@ async function main(options: Options, home: string, profile: string): Promise<nu
       if (!priorCase && options.draftCheckout !== ROOT) await closeApp(current.app, "draft", current.stopWatching);
     }
 
+    /** This case's record from what is drafted and judged so far (the final one, or a partial one saved as it goes). */
+    const recordCase = (madeNow: typeof made, judgedNow: ReadonlyArray<Map<ReportSectionId, JudgeRecord>>): CaseResult => {
+      const caseRuns: CaseRun[] = madeNow.map(({ texts, drafted }, r): CaseRun => {
+        const sectionTexts = Object.fromEntries([...texts].map(([id, entry]) => [id, entry.text])) as Partial<Record<ReportSectionId, string>>;
+        const findings = checkCase(loaded, plan, loadedSources, sectionTexts, examples);
+        const sections: SectionResult[] = REPORT_SECTIONS.map(({ id }): SectionResult => {
+          const entry = texts.get(id) ?? null;
+          const detail = entry?.detail as { generation?: { usage?: Usage; servedModel?: string; rulesVersions?: Record<string, string> }; consistency?: { status: string; items: string[] } | null } | undefined;
+          const mine = findings.filter((finding) => finding.section === id);
+          const judge = judgedNow[r]?.get(id) ?? null;
+          const before = priorCase?.runs[r].sections.find((section) => section.id === id) ?? null;
+          if (before) return { ...before, findings: mine, scores: scoreSection(id, mine, judge?.answers ?? [], before.text !== null), judge };
+          return {
+            id,
+            version: entry?.version ?? null,
+            text: entry?.text ?? null,
+            words: entry ? countWords(entry.text) : 0,
+            paragraphs: entry ? splitParagraphs(entry.text).length : 0,
+            markers: entry ? findMarkers(entry.text).map(({ kind, note }) => ({ kind, note })) : [],
+            generation: detail?.generation ? { seconds: drafted.get(id)?.seconds ?? 0, usage: detail.generation.usage ?? null, servedModel: detail.generation.servedModel ?? null, rulesVersions: detail.generation.rulesVersions ?? {} } : null,
+            consistency: detail?.consistency ? { status: detail.consistency.status, items: detail.consistency.items } : null,
+            draftError: drafted.get(id)?.error ?? null,
+            findings: mine,
+            scores: scoreSection(id, mine, judge?.answers ?? [], entry !== null),
+            judge,
+          };
+        });
+        return { run: r + 1, sections };
+      });
+      const keyNotes = [
+        ...loaded.key.incidents.filter((incident) => incident.provisional && incident.from.every((id) => loadedSources.has(id))).map((incident) => `"${incident.description}" belongs to ${incident.home} (step 0's section map)`),
+        ...Object.entries(loaded.key.sectionFacts).flatMap(([section, facts]) => (facts ?? []).filter((fact) => fact.provisional).map((fact) => `fact ${fact.id} (${section}) is not scored: it rests on her standard practice`)),
+      ];
+      return { caseId: loaded.key.caseId, keyVersion: loaded.key.keyVersion, sourcesLoaded: [...loadedSources], inputs: { notes: loaded.key.inputs.notes ?? "", instructions: instructionsFor(loaded) }, keyNotes, runs: caseRuns, medians: caseMedians(caseRuns) };
+    };
+    /** Saves results.json with every case so far, so a failure later in the run loses no request already spent (resume with --from-run). */
+    const savePartial = (judgedNow: ReadonlyArray<Map<ReportSectionId, JudgeRecord>>) => savePartialRun([...caseResults, recordCase(made, judgedNow)], made);
+    savePartial([]);
+
     // Judge with this branch's app (the same one when no --draft-app was given).
     if (!priorCase && options.draftCheckout !== ROOT) {
       current = await launch(ROOT, "judge", profile, home);
@@ -832,6 +919,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
           console.log(record.error ? `FAILED (${record.error})` : `${record.format}${record.repaired ? ", repaired" : ""}, ${record.seconds.toFixed(1)} s`);
         }
         judgedRuns.push(judged);
+        savePartial(judgedRuns);
       }
 
       // Review B3: every run of the baseline is checked again with the current checks, and its
@@ -869,78 +957,14 @@ async function main(options: Options, home: string, profile: string): Promise<nu
     }
 
     // The checks, the scores, the record of every run.
-    const caseRuns: CaseRun[] = made.map(({ texts, drafted }, r): CaseRun => {
-      const sectionTexts = Object.fromEntries([...texts].map(([id, entry]) => [id, entry.text])) as Partial<Record<ReportSectionId, string>>;
-      const findings = checkCase(loaded, plan, loadedSources, sectionTexts, examples);
-      const sections: SectionResult[] = REPORT_SECTIONS.map(({ id }): SectionResult => {
-        const entry = texts.get(id) ?? null;
-        const detail = entry?.detail as { generation?: { usage?: Usage; servedModel?: string; rulesVersions?: Record<string, string> }; consistency?: { status: string; items: string[] } | null } | undefined;
-        const mine = findings.filter((finding) => finding.section === id);
-        const judge = judgedRuns[r]?.get(id) ?? null;
-        const before = priorCase?.runs[r].sections.find((section) => section.id === id) ?? null;
-        if (before) return { ...before, findings: mine, scores: scoreSection(id, mine, judge?.answers ?? [], before.text !== null), judge };
-        return {
-          id,
-          version: entry?.version ?? null,
-          text: entry?.text ?? null,
-          words: entry ? countWords(entry.text) : 0,
-          paragraphs: entry ? splitParagraphs(entry.text).length : 0,
-          markers: entry ? findMarkers(entry.text).map(({ kind, note }) => ({ kind, note })) : [],
-          generation: detail?.generation ? { seconds: drafted.get(id)?.seconds ?? 0, usage: detail.generation.usage ?? null, servedModel: detail.generation.servedModel ?? null, rulesVersions: detail.generation.rulesVersions ?? {} } : null,
-          consistency: detail?.consistency ? { status: detail.consistency.status, items: detail.consistency.items } : null,
-          draftError: drafted.get(id)?.error ?? null,
-          findings: mine,
-          scores: scoreSection(id, mine, judge?.answers ?? [], entry !== null),
-          judge,
-        };
-      });
-      return { run: r + 1, sections };
-    });
-    const keyNotes = [
-      ...loaded.key.incidents.filter((incident) => incident.provisional && incident.from.every((id) => loadedSources.has(id))).map((incident) => `"${incident.description}" belongs to ${incident.home} (step 0's section map)`),
-      ...Object.entries(loaded.key.sectionFacts).flatMap(([section, facts]) => (facts ?? []).filter((fact) => fact.provisional).map((fact) => `fact ${fact.id} (${section}) is not scored: it rests on her standard practice`)),
-    ];
-    caseResults.push({ caseId: loaded.key.caseId, keyVersion: loaded.key.keyVersion, sourcesLoaded: [...loadedSources], inputs: { notes: loaded.key.inputs.notes ?? "", instructions: instructionsFor(loaded) }, keyNotes, runs: caseRuns, medians: caseMedians(caseRuns) });
+    caseResults.push(recordCase(made, judgedRuns));
     if (!rulesVersions) {
       rulesVersions = {};
       for (const { texts } of made) for (const { detail } of texts.values()) Object.assign(rulesVersions, (detail as { generation?: { rulesVersions?: Record<string, string> } }).generation?.rulesVersions ?? {});
     }
   }
 
-  const judging = checkoutRecord(ROOT);
-  const run: RunResult = {
-    resultsVersion: RESULTS_VERSION,
-    label: options.label,
-    startedAt,
-    finishedAt: new Date().toISOString(),
-    rubricVersion: RUBRIC_VERSION,
-    judgePromptVersion: JUDGE_PROMPT_VERSION,
-    checksVersion: CHECKS_VERSION,
-    runs: options.runs,
-    judgeSamples: options.samples,
-    drafting: prior ? prior.drafting : { ...checkoutRecord(options.draftCheckout), rulesVersions: rulesVersions ?? {} },
-    judging: { ...judging, model: judgeModel },
-    provider: prior ? prior.provider : options.rehearse ? "rehearsal (fake provider)" : "openai (ChatGPT sign-in)",
-    model,
-    mode: options.mode,
-    judgeFormat: judgeFormat ?? prior?.judgeFormat ?? null,
-    requests: prior
-      ? {
-          drafts: prior.requests.drafts + requests.drafts,
-          checks: prior.requests.checks + requests.checks,
-          judges: prior.requests.judges + requests.judges,
-          repairs: prior.requests.repairs + requests.repairs,
-          baselineJudges: prior.requests.baselineJudges + requests.baselineJudges,
-          total: prior.requests.total + requests.total,
-        }
-      : requests,
-    launches: [...(prior?.launches ?? []), ...launches],
-    windowChecksDuring,
-    valid: invalidReason === null && (prior?.valid ?? true),
-    invalidReason: invalidReason ?? prior?.invalidReason ?? null,
-    ...(prior ? { fromRun: prior.label, rejudged: options.rejudgeAll } : {}),
-    cases: caseResults,
-  };
+  const run = buildRun(caseResults, rulesVersions);
 
   // The baseline as this run's checks and judge see it (review B3), then the comparison.
   let comparedBaseline: RunResult | null = null;

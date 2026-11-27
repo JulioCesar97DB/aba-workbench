@@ -90,6 +90,8 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 
 `--rejudge` costs 9 judge requests per case and run (27 with 3 runs) and drafts nothing. `--from-run` costs only the missing judge answers. The writing and the judge both spend the owner's ChatGPT Pro plan (no money).
 
+**Saved as it goes:** the run writes `results.json` after drafting each case and again after judging each of its runs, so a run that fails late (for example while judging the baseline's drafts again) keeps every draft and judge answer already paid for. Resume it with `pnpm eval --from-run <that run folder>`: it drafts nothing and judges only what has no answer from this judge yet. A partial `results.json` has no `summary.md` next to it.
+
 **Reproducible from the stored drafts:** `results.json` keeps every run's texts, so `--from-run` and `--rejudge` check and judge them again run by run without drafting, and the compare checks every stored run of the baseline again.
 
 **Comparing a rules branch with `dev` on case B:**
