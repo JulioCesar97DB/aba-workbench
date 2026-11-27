@@ -4,6 +4,9 @@ import path from "node:path";
 import { test } from "node:test";
 import {
   checkBannedPatterns,
+  checkDatesNames,
+  checkQuotes,
+  checkWording,
   checkDataDensity,
   checkExamples,
   checkMarkers,
@@ -76,11 +79,11 @@ test("numbers: a number in no source is found; dates, times and values in the so
 
 test("markers: a planted gap unmarked or filled is major; a malformed marker is minor", () => {
   const gap = caseB.key;
-  const marked = "Autism Spectrum Disorder [MISSING: DSM-5 autism severity level from the CDE.] was diagnosed.";
-  assert.deepEqual(checkMarkers("medical-necessity", marked, gap), []);
-  const unmarked = checkMarkers("medical-necessity", "She was diagnosed with Autism Spectrum Disorder.", gap);
-  assert.equal(unmarked.length, 1);
-  assert.equal(unmarked[0].severity, "major");
+  // Since her answers of 2026-11-27 no section marks the severity level: she never states it.
+  assert.deepEqual(checkMarkers("medical-necessity", "She was diagnosed with Autism Spectrum Disorder.", gap), []);
+  const percentile = checkMarkers("medical-necessity", "Her Socialization standard score was 64.", caseA.key);
+  assert.equal(percentile.length, 1, "a planted gap a section must mark is still found unmarked (case A's percentile)");
+  assert.equal(percentile[0].severity, "major");
   const filled = checkMarkers("background-information", "She has Autism Spectrum Disorder, Level 1, requiring support.", gap);
   assert.match(filled[0].message, /severity-level.*filled/);
   assert.deepEqual(checkMarkers("background-information", "The CDE does not state a severity level 1 or otherwise.", gap), [], "a negated mention is not filling the gap");
@@ -108,7 +111,7 @@ test("names: drift names and a caregiver's given name are found; quoted speech i
   const findings = checkNames("risk-assessment", 'Rosa said the leaving the area happened twice. She said "Rosa is mean."', key);
   assert.deepEqual(findings.map((f) => [f.message, f.provisional ?? false]), [
     ['Behavior "elopement" called "leaving the area".', false],
-    ["The mother is called by her or his given name (1 times): provisional, pending her answer, not scored.", true],
+    ["The mother is called by her or his given name (1 times); she never names a caregiver (her answers of 2026-11-27).", false],
   ]);
   assert.deepEqual(checkNames("risk-assessment", "Her mother reported elopement.", key), []);
 });
@@ -264,4 +267,55 @@ test("case keys: the numbers in each key's facts are in that case's sources", ()
       }
     }
   }
+});
+
+/* Her answers of 2026-11-27 ------------------------------------------------------------ */
+
+const ids = (findings: ReadonlyArray<{ message: string }>) => findings.map((f) => /^(?:Her wording \()?([a-z-]+)/.exec(f.message)?.[1]);
+
+test("wording: long dashes, her banned words, the BCBA as observer, hypothesized, a severity level (markers included)", () => {
+  assert.deepEqual(ids(checkWording("medical-necessity", "She ran — fast. Staff will utilize prompts. The BCBA observed her twice. Elopement is hypothesized to be maintained by escape.")), ["long-dash", "banned-word", "bcba-observed", "hypothesized"]);
+  assert.deepEqual(ids(checkWording("risk-assessment", "The plan will facilitate access. Tasks leveraging her interest. She was observed by the BCBA.")), ["banned-word", "banned-word", "bcba-observed"]);
+  assert.deepEqual(ids(checkWording("medical-necessity", "Autism Spectrum Disorder [MISSING: severity level, not in the CDE].")), ["severity-level"], "a marker asking for the level counts too");
+  assert.deepEqual(ids(checkWording("background-information", "ASD, Level 2, requiring substantial support.")), ["severity-level"]);
+  const clean = "During direct observation, Nadia was observed leaving the table 3 times in 3–5 minutes. Elopement is maintained by escape from demands. The BCBA will review the data weekly.";
+  assert.deepEqual(checkWording("medical-necessity", clean), [], "an unspaced en dash in a range, 'is maintained by' and the BCBA's plan are fine");
+  assert.deepEqual(checkWording("medical-necessity", 'Her mother said "they utilize a chart".'), [], "words inside a quote are the quote check's");
+});
+
+test("quotes: every quoted span outside a marker, straight or curly", () => {
+  assert.equal(checkQuotes("risk-assessment", 'She said "I will hurt you" and then “no more”.').length, 2);
+  assert.deepEqual(checkQuotes("risk-assessment", "She threatened to hurt her brother."), []);
+  assert.deepEqual(checkQuotes("risk-assessment", 'Her mother reported threats [CHECK: the notes give "kill" in Spanish; keep it?].'), [], "a marker may quote its source");
+  assert.deepEqual(checkQuotes("risk-assessment", 'A count of "3" is not speech: "12".'), [], "digits alone are not quoted speech");
+});
+
+test("dates and names: numeric dates, dates outside a coming change, professionals and caregivers by name", () => {
+  const found = (text: string) => ids(checkDatesNames("medical-necessity", text));
+  assert.deepEqual(found("During the observation on 10/05/2026, she ran."), ["numeric-date"]);
+  assert.deepEqual(found("On October 10, 2026, she ran across the street."), ["full-date"]);
+  assert.deepEqual(found("Her grandmother will travel from December 15, 2026 to January 20, 2027."), [], "the day a coming change starts may be given");
+  assert.deepEqual(found("She has taken it since March 2026, and in September 2026 she needed urgent care."), [], "a month and year is not a date");
+  assert.deepEqual(found("Dr. Supuesta completed the CDE."), ["doctor-name"]);
+  assert.deepEqual(found("The CDE by Marta Supuesta, Ph.D., gives the diagnosis."), ["credentials"]);
+  assert.deepEqual(found("Ms. Inventada reported it."), ["honorific-name"]);
+  assert.deepEqual(found("According to the CDE, completed by the evaluating psychologist, her psychiatrist prescribes it."), []);
+});
+
+test("numbers: a sibling aged 21 or older is her rule, not a number in need of a source", () => {
+  const index = numberIndex(["Nothing with that number."]);
+  assert.deepEqual(checkNumbers("crisis-plan", "A sibling aged 21 or older may be the designated caregiver.", index), []);
+  assert.equal(checkNumbers("crisis-plan", "She hit 21 times.", index).length, 1);
+});
+
+test("payer readiness in the Crisis Plan: the dangerous behaviors, not early signs (her answers of 2026-11-27)", () => {
+  const item = PAYER_ITEMS.find((p) => p.id === "cp-dangerous");
+  assert.ok(item);
+  assert.equal(PAYER_ITEMS.some((p) => p.id === "cp-signs"), false);
+  assert.deepEqual(checkPayerReadiness("crisis-plan", "Physical aggression can be dangerous to her brother. The RBT or caregiver calls 911 when the situation gets out of control.", caseB.key), []);
+});
+
+test("runChecks runs her three new checks on every section", () => {
+  const checks = new Set(runChecks({ "risk-assessment": 'Dr. Ejemplar said "no" — twice.' }, { key: testKey(), numbers: new Set(), shapes: {}, examples: [], loadedSources: new Set() }).map((f) => f.check));
+  for (const check of ["wording", "quotes", "dates-names"] as const) assert.ok(checks.has(check), check);
 });

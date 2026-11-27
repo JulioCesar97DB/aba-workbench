@@ -43,6 +43,7 @@ import { CHECKS_VERSION, extractExamples, numberIndex, runChecks, type Finding }
 import { loadCase, type LoadedCase } from "./key.ts";
 import {
   addUsage,
+  adoptRubricWhenRescored,
   baselineCopy,
   compareRuns,
   caseMedians,
@@ -937,6 +938,8 @@ async function main(options: Options, home: string, profile: string): Promise<nu
       });
       c.medians = caseMedians(c.runs);
     }
+    // A baseline of another rubric version is compared only when this run checked and judged every one of its drafts again.
+    comparedBaseline = adoptRubricWhenRescored(comparedBaseline, run, baselineJudged);
   }
   const comparison = comparedBaseline ? compareRuns(run, comparedBaseline) : null;
   const summary = summaryMarkdown(run, comparison, baseline?.name ?? null, comparedBaseline);

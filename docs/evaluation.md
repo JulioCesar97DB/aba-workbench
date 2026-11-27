@@ -49,14 +49,16 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 - **Not compared, and said so:** an item the baseline could not score is listed under "Not compared: the baseline could not score these", never skipped in silence. The checks of a section that some baseline run has no draft of are not compared either (the failing count would be read against runs that never had a text) and are listed under "Checks not compared". The verdict line names both.
 - **Run counts:** `--runs` takes 1, 3 or 5, an odd count, so a median and a majority never tie (owner's choice). A baseline with another run count is still compared, each side on its own medians, with a note; results from before runs (such as `dev-2026-11-23`) are read as a single run.
   - **Fewer runs than the baseline:** a 1-run comparison with a 3-run baseline carries one run's drafting and judging noise, which the medians were brought in to absorb. Its hard verdict is not reliable, and the note says so: each single run of `dev-step0-2026-11-23`, compared with that baseline's own medians, reads REGRESSION. Run as many runs as the baseline to decide.
-- **NOT COMPARED** (exit code 3): another rubric version, another provider (a rehearsal against a real run) or another drafting mode.
+- **NOT COMPARED** (exit code 3): another rubric version, another provider (a rehearsal against a real run) or another drafting mode. A baseline of another rubric version is compared after all when this run checked and judged every one of its stored drafts again (below).
 - **INVALID** (exit code 1): a window, the Dock icon or the focus showed, or the app asked for a dialog.
 
 **The same judge.** A judge record carries a fingerprint: the judge's prompt version and code, its inputs for the section (rubric, expectations, payer facts, key facts and notes, her notes and instructions), the model and the number of samples. The drafts it judges are not part of it.
 - Judge items are compared only between sections whose runs all carry the same fingerprint, on both sides.
 - When the baseline's fingerprint differs, the run first judges the baseline's drafts again with this judge, which costs 9 requests per case for each of the baseline's runs.
 
-**Findings under a rule pending her answer** (a caregiver called by her given name) are listed as provisional and never scored. Key facts that rest on her unconfirmed standard practice are left out of the judge's list.
+**A baseline of another rubric version** (owner's approval, 2026-11-27). When the rubric version goes up, a baseline accepted under the old one counts as scored by the new one only when every stored draft of every case this run compares was checked again and judged again in this same run, with a valid answer for every sample (`adoptRubricWhenRescored` in `eval/results.ts`). Then its arm is its stored drafts, re-judged, not drafted again, and the summary's notes say so. A baseline judged again only in part (a case, a run or a section left out, or a judge error) is still not compared. The rubric's fingerprint is part of the judge's, so a new rubric always judges the baseline's drafts again: 9 requests per case and baseline run.
+
+**Findings under a rule pending her answer** are listed as provisional and never scored (a caregiver called by her given name was one until her answers of 2026-11-27; it is scored now). Key facts that rest on her unconfirmed standard practice are left out of the judge's list.
 
 ## Commands
 

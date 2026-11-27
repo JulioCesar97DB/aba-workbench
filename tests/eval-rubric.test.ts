@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { checkBannedPatterns, checkShape, CHECK_IDS, type Finding } from "../eval/checks/checks.ts";
-import { baselineCopy, caseMedians, compareRuns, exitCodeFor, failsInMost, incompleteParts, keepsEarlierJudge, localPathsIn, medianAnswer, medianScore, noiseOf, normalizeRun, rescoreRun, scoreSection, summaryMarkdown, verdictLine, type CaseRun, type JudgeRecord, type RunResult, type SectionResult } from "../eval/results.ts";
+import { adoptRubricWhenRescored, baselineCopy, caseMedians, compareRuns, exitCodeFor, failsInMost, incompleteParts, keepsEarlierJudge, localPathsIn, medianAnswer, medianScore, noiseOf, normalizeRun, rescoreRun, scoreSection, summaryMarkdown, verdictLine, type CaseRun, type JudgeRecord, type RunResult, type SectionResult } from "../eval/results.ts";
 import { codeScore, keyFactsScore, RUBRIC, RUBRIC_VERSION, SECTION_EXPECTATIONS, SECTION_PAYER_FACTS, SECTION_SHAPES, STYLE_EXPECTATIONS, type CodeItem } from "../eval/rubric.ts";
 import { buildJudgePrompt, JudgeInputSchema, judgeAnswerSchema, parseJudgeAnswer, type JudgeInput } from "../src/lib/judge.ts";
-import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
+import { REPORT_SECTIONS, type ReportSectionId } from "../src/shared/report-sections.ts";
 
 const finding = (check: Finding["check"], severity: Finding["severity"] = "major"): Finding => ({ check, section: "medical-necessity", message: "x", severity });
 
@@ -67,7 +67,7 @@ test("her shapes and habits: numbered protocol allowed in the Crisis Plan only; 
   assert.deepEqual(banned("medical-necessity", "ABA will eliminate her aggression."), ["promise"]);
   assert.deepEqual(banned("background-information", "Her Socialization standard score was 66."), ["scores-in-background"]);
   assert.deepEqual(banned("medical-necessity", "Her Socialization standard score was 66."), []);
-  assert.deepEqual(banned("background-information", "Autism Spectrum Disorder, Level 2."), ["severity-in-background"]);
+  assert.deepEqual(banned("background-information", "Autism Spectrum Disorder, Level 2."), [], "the severity level is her wording check's now, in every section");
 });
 
 const input = (overrides: Partial<JudgeInput> = {}): JudgeInput =>
@@ -473,4 +473,27 @@ test("m2: one run against a 3-run baseline says its hard verdict is not reliable
   const note = compareRuns(run([mn(false)]), baseline).notes.find((n) => n.startsWith("Runs per case differ"));
   assert.match(note ?? "", /3 runs in the baseline, 1 now; .*this run's hard verdict is not reliable.*Run 3 to decide\./);
   assert.doesNotMatch(compareRuns(baseline, run([mn(false)])).notes.join(" "), /not reliable/, "more runs than the baseline: no warning");
+});
+
+type Rejudged = ReadonlyMap<string, ReadonlyArray<ReadonlyMap<ReportSectionId, JudgeRecord>>>;
+const rejudgedOf = (perRun: Array<Array<[ReportSectionId, JudgeRecord]>>): Rejudged => new Map([["case-b-sofia", perRun.map((entries) => new Map(entries))]]);
+
+test("rubric v3: a baseline of another rubric version is compared only when every stored draft was judged again in this run", () => {
+  const judged = (error: string | null = null): JudgeRecord => ({ format: "json-schema", repaired: false, answers: error ? [] : ([{ section: "medical-necessity", items: [], keyFacts: [] }] as never), error, requests: 1, seconds: 1, usage: null, fingerprint: "new" });
+  const both = (): Array<[ReportSectionId, JudgeRecord]> => [["medical-necessity", judged()], ["risk-assessment", judged()]];
+  const old = runs([[section("medical-necessity", [], { thread: 2 }), section("risk-assessment", [], { thread: 2 })], [section("medical-necessity", [], { thread: 2 }), section("risk-assessment", [], { thread: 2 })]], { rubricVersion: "2" });
+  const current = runs([[section("medical-necessity", [], { thread: 2 })]]);
+  assert.equal(compareRuns(current, old).status, "not-compared", "another rubric version is refused as it is");
+  const adopted = adoptRubricWhenRescored(old, current, rejudgedOf([both(), both()]));
+  assert.equal(adopted.rubricVersion, RUBRIC_VERSION);
+  assert.equal(adopted.rescoredFromRubric, "2");
+  const comparison = compareRuns(current, adopted);
+  assert.notEqual(comparison.status, "not-compared");
+  assert.ok(comparison.notes.some((note) => /stored drafts, re-judged, not drafted again/.test(note)), "the comparison says what the baseline arm is");
+  assert.match(summaryMarkdown(current, comparison, "dev", adopted), /stored drafts, re-judged/);
+  // Partly judged again: still refused.
+  assert.equal(compareRuns(current, adoptRubricWhenRescored(old, current, rejudgedOf([both(), [["medical-necessity", judged()]]]))).status, "not-compared", "a section left unjudged keeps it refused");
+  assert.equal(adoptRubricWhenRescored(old, current, rejudgedOf([both()])).rubricVersion, "2", "a run left unjudged keeps it refused");
+  assert.equal(adoptRubricWhenRescored(old, current, rejudgedOf([both(), [["medical-necessity", judged()], ["risk-assessment", judged("timeout")]]])).rubricVersion, "2", "a judge error keeps it refused");
+  assert.equal(adoptRubricWhenRescored(old, current, new Map()).rubricVersion, "2", "nothing judged again: refused");
 });

@@ -14,9 +14,9 @@ import { lookupKey, normalize, numberIndex, sentences, splitParagraphs, statedNu
  * current checks again on the baseline's stored texts anyway (review B3), so it is
  * recorded to read old results, not to gate the comparison.
  */
-export const CHECKS_VERSION = "2";
+export const CHECKS_VERSION = "3";
 
-export const CHECK_IDS = ["markers", "shape", "numbers", "names", "repetition", "data-density", "banned-patterns", "examples", "payer-readiness"] as const;
+export const CHECK_IDS = ["markers", "shape", "numbers", "names", "repetition", "data-density", "banned-patterns", "examples", "payer-readiness", "wording", "quotes", "dates-names"] as const;
 export type CheckId = (typeof CHECK_IDS)[number];
 
 export interface Finding {
@@ -111,6 +111,9 @@ export function checkShape(section: ReportSectionId, text: string, shape: Sectio
 /** Numbers that need no source: emergency services and the ABA billing codes. */
 export const ALWAYS_ALLOWED_NUMBERS = ["911", "97151", "97152", "97153", "97154", "97155", "97156", "97157", "97158"];
 
+/** The one number her rules give a section: the designated caregiver's minimum age. */
+const SIBLING_AGE = /\b(?:aged |age )?21(?: years)?(?: of age)? or older\b|\bover (?:the age of )?21\b/iu;
+
 /**
  * Every number in the text exists in a source or in her inputs (notes, instructions,
  * her sections). Numbers inside a [MISSING: ...] or [CHECK: ...] marker are checked too: a
@@ -123,6 +126,8 @@ export function checkNumbers(section: ReportSectionId, text: string, index: Read
     for (const number of statedNumbers(sentence.text)) {
       const lookup = lookupKey(number);
       if (number.kind === "value" && ALWAYS_ALLOWED_NUMBERS.includes(number.value)) continue;
+      // Her confirmed practice in the Crisis Plan's rules (2026-11-27): a sibling aged 21 or older may be the designated caregiver.
+      if (number.kind === "value" && number.value === "21" && SIBLING_AGE.test(sentence.text)) continue;
       if (index.has(lookup) || seen.has(lookup)) continue;
       // A date written without its year is found by month and day; a dated one needs its year to match too.
       seen.add(lookup);
@@ -171,8 +176,7 @@ export function checkNames(section: ReportSectionId, text: string, key: CaseKey)
         check: "names",
         section,
         severity: "major",
-        provisional: true,
-        message: `The ${person.role} is called by her or his given name (${count} times): provisional, pending her answer, not scored.`,
+        message: `The ${person.role} is called by her or his given name (${count} times); she never names a caregiver (her answers of 2026-11-27).`,
       });
     }
   }
@@ -336,13 +340,6 @@ export const BANNED_PATTERNS: Array<{
     sections: ["background-information"],
   },
   {
-    id: "severity-in-background",
-    pattern: /\blevel\s*[123]\b|\brequiring (?:very substantial |substantial )?support\b/iu,
-    unless: /\[(?:MISSING|CHECK)/u,
-    what: "a severity level in Background Information (hers gives none)",
-    sections: ["background-information"],
-  },
-  {
     id: "restraint",
     pattern: /\b(?:restrain\w*|restraint|seclusion|secluded|physical hold\w*|prone hold|basket hold)\b/iu,
     // The negation must govern the restraint itself (review S5), within a few words; "not hesitate
@@ -483,7 +480,8 @@ export const PAYER_ITEMS: PayerItem[] = [
   { id: "ra-behaviors", section: "risk-assessment", what: "Every target behavior's risk", test: (text, key) => allOf(key.behaviors.map((b) => ({ name: b.name, pattern: [escape(b.name), ...b.accepted].join("|") })), text) },
   { id: "ra-injury", section: "risk-assessment", what: "Injuries and near misses as the sources give them", test: has(/\b(?:injur\w*|urgent care|bruis\w*|marks?|near miss|cut)\b/iu) },
   { id: "cp-emergency", section: "crisis-plan", what: "When emergency services are called (or a marker)", test: hasMarkerOr(/\b(?:911|emergency services|emergency)\b/iu, /\b(?:911|emergency)\b/iu) },
-  { id: "cp-signs", section: "crisis-plan", what: "Early signs of escalation", test: has(/\b(?:early|warning|precursor\w*|signs?|escalat\w*)\b/iu) },
+  // Early signs only when the caregivers report them (her answers of 2026-11-27), so the item is the dangerous behaviors themselves.
+  { id: "cp-dangerous", section: "crisis-plan", what: "The behaviors that can be dangerous, named", test: has(/\b(?:dangerous|danger|unsafe|harm|injur\w*)\b/iu) },
 ];
 
 function escape(text: string): string {
@@ -497,6 +495,82 @@ export function checkPayerReadiness(section: ReportSectionId, text: string, key:
     const result = item.test(prose, key);
     return result.ok ? [] : [{ check: "payer-readiness", section, severity: "major", message: `Missing payer item (${item.id}): ${item.what}${result.detail ? `; ${result.detail}` : ""}.` }];
   });
+}
+
+
+/* 10. Her wording (her answers of 2026-11-27) ------------------------------------------ */
+
+/** Wording she never uses, checked outside markers and quotes (the severity level inside markers too). */
+export const WORDING_PATTERNS: Array<{ id: string; pattern: RegExp; what: string; inMarkers?: boolean }> = [
+  { id: "long-dash", pattern: /—|\s–\s/u, what: "a long dash inside a sentence" },
+  { id: "banned-word", pattern: /\b(?:utiliz\w*|facilitat\w*|leverag\w*)\b/iu, what: "a word she does not use (utilize, facilitate, leverage)" },
+  {
+    id: "bcba-observed",
+    pattern: /\bBCBA(?:'s)?\s+(?:\w+\s+){0,2}?(?:observed|saw|noticed|watched|noted)\b|\b(?:observed|seen|noted) by the BCBA\b/iu,
+    what: "\"the BCBA observed\" or \"saw\" (she writes \"During direct observation, ... was observed\")",
+  },
+  { id: "hypothesized", pattern: /\bhypothes(?:i[sz]ed|is|es|i[sz]e)\b|\bhypothetical(?:ly)?\b/iu, what: "\"hypothesized\" (she writes \"is maintained by\")" },
+  {
+    id: "severity-level",
+    pattern: /\bseverity\b|\blevel\s*[123]\b|\brequiring (?:very substantial |substantial )?support\b/iu,
+    what: "a DSM-5 severity level, or a mention of one (she never states it, in any section)",
+    inMarkers: true,
+  },
+];
+
+/** Her wording: long dashes, her banned words, "the BCBA observed", "hypothesized", a severity level. */
+export function checkWording(section: ReportSectionId, text: string): Finding[] {
+  const findings: Finding[] = [];
+  const prose = sentences(withoutQuotes(withoutMarkers(text)));
+  const whole = sentences(withoutQuotes(text));
+  for (const wording of WORDING_PATTERNS) {
+    for (const sentence of wording.inMarkers ? whole : prose) {
+      if (!wording.pattern.test(sentence.text)) continue;
+      findings.push({ check: "wording", section, severity: "major", message: `Her wording (${wording.id}): ${wording.what}.`, excerpt: clip(sentence.text) });
+    }
+  }
+  return findings;
+}
+
+/* 11. Quoted speech --------------------------------------------------------------------- */
+
+/** Never quotes (her answers of 2026-11-27): every quoted span outside a marker, straight or curly. */
+export function checkQuotes(section: ReportSectionId, text: string): Finding[] {
+  const findings: Finding[] = [];
+  for (const match of withoutMarkers(text).matchAll(/"([^"\n]{1,300})"|“([^”\n]{1,300})”/gu)) {
+    const quoted = match[1] ?? match[2] ?? "";
+    if (!/\p{L}/u.test(quoted)) continue;
+    findings.push({ check: "quotes", section, severity: "major", message: "Quoted speech (she always paraphrases).", excerpt: clip(match[0]) });
+  }
+  return findings;
+}
+
+/* 12. Dates and names in narrative ------------------------------------------------------- */
+
+const MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December";
+/** A sentence about something coming may give the day it starts ("from December 15, 2026"). */
+const COMING = /\b(?:will|plans?|planned|scheduled|starting|starts|begins?|until|upcoming|coming|expected)\b/iu;
+const CREDENTIALS = "Ph\\.?\\s?D|Psy\\.?\\s?D|M\\.?\\s?D|Ed\\.?\\s?D|D\\.?\\s?O|BCBA(?:-D)?|BCaBA|LMHC|LCSW|CCC-SLP|OTR/L|ARNP|APRN";
+
+export const DATE_NAME_PATTERNS: Array<{ id: string; pattern: RegExp; what: string; unless?: RegExp }> = [
+  { id: "numeric-date", pattern: /\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/u, what: "a numeric date (she gives the source, not the date; a needed date reads \"October 5, 2026\")" },
+  { id: "full-date", pattern: new RegExp(`\\b(?:${MONTHS})\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`, "u"), what: "a date in narrative (only a coming change may give its day)", unless: COMING },
+  { id: "doctor-name", pattern: /\bDr\.?\s+\p{Lu}/u, what: "a professional named by name (she names the role)" },
+  { id: "credentials", pattern: new RegExp(`\\b\\p{Lu}[\\p{L}'’-]+,?\\s+(?:${CREDENTIALS})\\b`, "u"), what: "a person named with credentials (she names the role)" },
+  { id: "honorific-name", pattern: /\b(?:Mr|Mrs|Ms|Miss)\.?\s+\p{Lu}/u, what: "a person named by title and surname (caregivers by relation, professionals by role)" },
+];
+
+/** Dates in narrative sections, and people named by name, where code can tell. */
+export function checkDatesNames(section: ReportSectionId, text: string): Finding[] {
+  const findings: Finding[] = [];
+  for (const sentence of sentences(withoutQuotes(withoutMarkers(text)))) {
+    for (const rule of DATE_NAME_PATTERNS) {
+      if (!rule.pattern.test(sentence.text)) continue;
+      if (rule.unless?.test(sentence.text)) continue;
+      findings.push({ check: "dates-names", section, severity: "major", message: `${rule.id}: ${rule.what}.`, excerpt: clip(sentence.text) });
+    }
+  }
+  return findings;
 }
 
 /* All of them ------------------------------------------------------------------------- */
@@ -528,6 +602,9 @@ export function runChecks(texts: Partial<Record<ReportSectionId, string>>, conte
       ...checkBannedPatterns(id, text),
       ...checkExamples(id, text, context.examples),
       ...checkPayerReadiness(id, text, context.key),
+      ...checkWording(id, text),
+      ...checkQuotes(id, text),
+      ...checkDatesNames(id, text),
     );
   }
   findings.push(...checkRepetition(texts, context.key, context.loadedSources));
