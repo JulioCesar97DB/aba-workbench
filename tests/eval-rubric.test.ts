@@ -16,6 +16,8 @@ test("rubric: ids unique, every check scored by one code item, every section has
   const checks = RUBRIC.filter((item): item is CodeItem => item.scoredBy === "code").map((item) => item.check);
   assert.deepEqual([...checks].sort(), [...CHECK_IDS].sort());
   for (const section of REPORT_SECTIONS) assert.ok(SECTION_EXPECTATIONS[section.id].length > 0, section.id);
+  // The judge input takes at most 10 expectations per section (JudgeInputSchema): hers plus her habits.
+  for (const section of REPORT_SECTIONS) assert.ok(SECTION_EXPECTATIONS[section.id].length + STYLE_EXPECTATIONS.length <= 10, `${section.id}: too many expectations for the judge input`);
   const doc = readFileSync(path.join(import.meta.dirname, "..", "eval", "RUBRIC.md"), "utf8");
   assert.match(doc, new RegExp(`^version: ${RUBRIC_VERSION}$`, "m"));
   for (const id of ids) assert.match(doc, new RegExp("`" + id + "`"), id);

@@ -373,14 +373,11 @@ export const SECTION_PAYER_FACTS: Record<ReportSectionId, readonly string[]> = {
 /** Habits across every section (her assessments), for the judge's "style" item. */
 export const STYLE_EXPECTATIONS: readonly string[] = [
   "The child by first name; caregivers by relation or as \"the caregiver\", never by name; other professionals by role, never by name; the BCBA as \"the BCBA\", never as the one who observed (\"During direct observation, ... was observed\").",
-  "Written for a technical reviewer: no term explained in parentheses. Short sentences; nothing generic, sales-like or translated-sounding; no long dashes; never utilize, facilitate or leverage. Data in digits.",
+  "Third person, active voice, plain clinical English for a technical reviewer, no term explained in parentheses: present tense for current functioning, past for history and observations, \"will\" for the plan. Short sentences; nothing generic, sales-like or translated-sounding; no long dashes; never utilize, facilitate or leverage. Data in digits.",
   "No dates in narrative: the source instead (\"During the parent interview\"). No quotes: paraphrase. Functions as \"is maintained by\", never \"hypothesized\". No severity level anywhere. An abbreviation spelled out the first time in each section, except BCBA, FAST, MAS, STO, LTO, BASC-3 and ABLLS-R.",
-  "Outside Background Information, two sources that disagree are not set side by side: a [CHECK] asks her which to keep.",
-  "Third person, active voice, plain clinical English: present tense for current functioning, past for history and observations, \"will\" for the plan.",
-  "Programs and strategies by the same exact names wherever they appear.",
-  "Repeated on purpose only: the family's priorities and the safety response. Never a score table again.",
+  "Programs and strategies by the same exact names wherever they appear. Repeated on purpose only: the family's priorities and the safety response. Never a score table again.",
   "No bullets in narrative sections; no blame of the family; no promised outcomes; harmless movement is not a target; speech or eye contact never required.",
-  "Missing or conflicting information is stated, never guessed.",
+  "Missing information is stated, never guessed. Outside Background Information, two sources that disagree are not set side by side: a [CHECK] asks her which to keep.",
 ];
 
 /**
