@@ -37,7 +37,7 @@ import { homedir, tmpdir, userInfo } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { JUDGE_PROMPT_VERSION, parseJudgeAnswer, type JudgeAnswer, type JudgeFormat, type JudgeInput } from "../src/lib/judge.ts";
-import type { AbaApi, GenerationUpdateEvent } from "../src/shared/api.ts";
+import { MAX_CASE_LABEL_LENGTH, type AbaApi, type GenerationUpdateEvent } from "../src/shared/api.ts";
 import { REPORT_SECTIONS, type ReportSectionId } from "../src/shared/report-sections.ts";
 import { countWords, findMarkers, splitParagraphs } from "../src/shared/section-text.ts";
 import { CHECKS_VERSION, extractExamples, numberIndex, runChecks, type Finding } from "./checks/checks.ts";
@@ -725,7 +725,8 @@ function baselineAsCompared(runDir: string, rehearsal: boolean): { name: string;
   const comparison = JSON.parse(readFileSync(path.join(dir, "comparison.json"), "utf8")) as { baseline?: string };
   const run = normalizeRun(JSON.parse(readFileSync(file, "utf8")));
   if (run.provider.startsWith("rehearsal") !== rehearsal) fail("--baseline-run takes a run of the same kind (real or rehearsal).");
-  return { name: `${comparison.baseline ?? "unknown"} as compared in run ${path.basename(dir)}`, run };
+  // Short: the name goes into a case label in the judge app, which takes a limited length.
+  return { name: `${comparison.baseline ?? "unknown"} re-judged`, run };
 }
 
 /** The baseline named, or the newest accepted one of the same kind (real or rehearsal), read as this version reads results. */
@@ -847,7 +848,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
           const rejudged = new Map<ReportSectionId, JudgeRecord>();
           if (stale.length > 0) {
             console.log(`  the baseline's run ${baseRun.run} was judged by another judge: judging ${stale.length} of its drafts again with this one`);
-            const baseCaseId = await loadIntoApp(current.page, loaded, plan, `${loaded.key.child.fullName} (baseline ${baseline!.name}, run ${baseRun.run})`);
+            const baseCaseId = await loadIntoApp(current.page, loaded, plan, `${loaded.key.child.fullName} (baseline ${baseline!.name}, run ${baseRun.run})`.slice(0, MAX_CASE_LABEL_LENGTH));
             await putDrafts(current.page, baseCaseId, baseRun.sections);
             for (const section of stale) {
               process.stdout.write(`  judge baseline run ${baseRun.run} ${section.id} ... `);
