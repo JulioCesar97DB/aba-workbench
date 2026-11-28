@@ -56,6 +56,8 @@ export async function installRehearsalProvider(app: ElectronApplication): Promis
       // with one item each that cites nothing and holds no number, so it passes the checks and
       // shows as it arrives (case map speed).
       const rehearsalClaim = (value: string) => ({ value, refs: [], origin: "ai-drafted", check: "" });
+      // The review of the definitions (T3): nothing found.
+      if (task.includes("Review request:")) return JSON.stringify({ deadMan: [], overlaps: [] });
       if (task.includes("Map request: case facts")) {
         return JSON.stringify({
           client: null,

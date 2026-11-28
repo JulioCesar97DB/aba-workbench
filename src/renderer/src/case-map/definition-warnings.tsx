@@ -54,6 +54,9 @@ export function ReviewStatus({ caseId, map }: { caseId: string; map: CaseMapView
   if (!hasBehaviors && !review) return null;
   const running = run?.phase === "running";
   const drafting = isDrafting(draft);
+  const offered = hasBehaviors && providers.provider !== null && !drafting;
+  // Nothing to say and nothing to offer: no line at all.
+  if (review === null && !running && !offered) return null;
   const when = review ? new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(new Date(review.at)) : "";
   async function start() {
     if (!providers.provider) return;
@@ -64,16 +67,18 @@ export function ReviewStatus({ caseId, map }: { caseId: string; map: CaseMapView
   return (
     <section aria-live="polite" data-testid="map-review-status" className="flex flex-col gap-2">
       <Eyebrow className="text-fg-muted">{t("caseMap.qa.heading")}</Eyebrow>
-      <p className={review?.status === "failed" && !running ? "text-sm text-warning" : "text-sm"}>
-        {running ? t("caseMap.qa.reviewing") : review === null ? null : review.status === "failed" ? t("caseMap.qa.reviewFailed") : t("caseMap.qa.reviewed", { count: review.findings.length, when })}
-      </p>
+      {running || review !== null ? (
+        <p className={review?.status === "failed" && !running ? "text-sm text-warning" : "text-sm"}>
+          {running ? t("caseMap.qa.reviewing") : review?.status === "failed" ? t("caseMap.qa.reviewFailed") : t("caseMap.qa.reviewed", { count: review?.findings.length ?? 0, when })}
+        </p>
+      ) : null}
       {run?.phase === "done" && run.outcome === "stopped" ? <p className="text-sm text-fg-muted">{t("caseMap.qa.reviewStopped")}</p> : null}
       {refused || (run?.phase === "done" && run.outcome === "not-run") ? (
         <p role="alert" className="text-sm font-medium text-danger">
           {t("caseMap.qa.reviewNotStarted")}
         </p>
       ) : null}
-      {hasBehaviors && providers.provider !== null && !drafting ? (
+      {offered ? (
         <div>
           {running && run ? (
             <Button size="sm" onClick={() => stopMapDraft({ id: run.id })}>
