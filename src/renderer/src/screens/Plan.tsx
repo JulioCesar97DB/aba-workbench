@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router";
 import { FUNCTION_NAMES, type ClientItem, type FunctionName } from "../../../shared/case-map.ts";
 import { FINDING_GROUPS, findingGroup, findingItems, planChecks, type PlanFinding, type PlanViewId } from "../../../shared/plan-checks.ts";
-import { ageInYears, byName, CAREGIVER_MASTERY, caregiverBaseline, masteryPercent, programTarget, skillBaseline } from "../../../shared/plan-compute.ts";
+import { ageInYears, byName, caregiverBaseline, caregiverMastery, masteryPercent, programTarget, skillBaseline } from "../../../shared/plan-compute.ts";
 import { baselineSentence, FUNCTION_TITLES, isCopied, planCopy, undecidedCount } from "../../../shared/plan-copy.ts";
 import {
   DECIDED_PARTS,
@@ -13,14 +13,17 @@ import {
   decisionOf,
   entryCovers,
   functionBlocks,
+  inNoBlock,
   isRejected,
+  viewItems,
   planMapInputOf,
   type DecidedPart,
   type FunctionBlock,
   type PlanItemByPart,
   type PlanView,
 } from "../../../shared/plan.ts";
-import { useAutosave } from "../autosave.tsx";
+import type { FailedSave } from "../../../shared/sources.ts";
+import { useAutosave, useKeptText } from "../autosave.tsx";
 import { CASE_STEPS, casePath, stepTitle } from "../case-steps.tsx";
 import { Button } from "../components/Button.tsx";
 import { cn } from "../components/cn.ts";
@@ -60,23 +63,10 @@ function isView(value: string | null): value is Exclude<View, "start"> {
   return ["programs", "glossary", "goals", "checks", "copy"].includes(value);
 }
 
-type Entry = { part: DecidedPart; item: PlanItemByPart[DecidedPart] };
+type Entry = ReturnType<typeof viewItems>[number];
 
-/** The items a view decides: a block's strategies, replacements and entries; the programs; the glossary; the goals. */
-function viewEntries(plan: PlanView, view: View): Entry[] {
-  if (view.startsWith("fn:")) {
-    const fn = view.slice(3);
-    return [
-      ...plan.parts.strategies.items.filter((item) => item.kind === "antecedent" && item.functions.includes(fn)).map((item) => ({ part: "strategies" as const, item })),
-      ...plan.parts.programs.items.filter((item) => item.kind === "replacement" && item.function === fn).map((item) => ({ part: "programs" as const, item })),
-      ...plan.parts.interventions.items.filter((item) => item.function === fn).map((item) => ({ part: "interventions" as const, item })),
-    ];
-  }
-  if (view === "programs") return plan.parts.programs.items.map((item) => ({ part: "programs" as const, item }));
-  if (view === "glossary") return plan.parts.glossary.items.map((item) => ({ part: "glossary" as const, item }));
-  if (view === "goals") return plan.parts.caregiverGoals.items.map((item) => ({ part: "caregiverGoals" as const, item }));
-  return [];
-}
+/** The items a view decides (src/shared/plan.ts). */
+const viewEntries = (plan: PlanView, view: View): Entry[] => viewItems(plan, view);
 
 function counts(entries: readonly Entry[]) {
   const live = entries.filter((entry) => !isRejected(entry.item));
@@ -281,7 +271,9 @@ function ViewTabs({ t, plan, blocks, view, findings, copied, fields, onGo }: { t
   const present = new Set(blocks.map((block) => block.function));
   // A function the plan has items for but the map no longer has: shown dashed, "sin conductas".
   const withItems = new Set([...plan.parts.strategies.items.flatMap((item) => item.functions), ...plan.parts.interventions.items.map((item) => item.function), ...plan.parts.programs.items.map((item) => item.function ?? "")]);
-  const functions = FUNCTION_NAMES.filter((fn) => present.has(fn) || withItems.has(fn));
+  // Every function has its tab; one with no behavior of the map is dashed, "sin conductas" (proposal §2.1; review nit 13).
+  const functions = FUNCTION_NAMES;
+  void withItems;
   const tab = (id: View, label: ReactNode, detail: string | null, lang?: string, dashed = false) => (
     <li key={id}>
       <button
@@ -672,7 +664,8 @@ function GlossaryView(props: ViewProps) {
   const rejected = plan.parts.glossary.items.filter(isRejected);
   const covered = new Set(plan.parts.glossary.items.filter((item) => !isRejected(item)).map((item) => item.strategyId));
   const missing = strategies.filter((item) => !isRejected(item) && !covered.has(item.id));
-  const teaching = strategies.filter((item) => item.kind !== "antecedent");
+  // Teaching and consequence procedures, and any antecedent strategy no block shows (finding 8).
+  const teaching = strategies.filter(inNoBlock);
   return (
     <>
       <p className="max-w-reading text-sm text-fg-muted">{t("planStep.glossaryNote")}</p>
@@ -681,7 +674,7 @@ function GlossaryView(props: ViewProps) {
           <Eyebrow className="text-fg-muted">{t("planStep.glossaryMissing", { count: missing.length })}</Eyebrow>
           <ul className="flex flex-col gap-1">
             {missing.map((strategy) => (
-              <li key={strategy.id} className="flex flex-wrap items-center gap-2 text-sm">
+              <li key={strategy.id} data-item={strategy.id} className="flex flex-wrap items-center gap-2 text-sm">
                 <span lang="en" className="flex-1">
                   {strategyName(strategy)}
                 </span>
@@ -742,7 +735,7 @@ function GoalsView(props: ViewProps) {
           .filter((goal) => !isRejected(goal))
           .map((goal) => {
             const baseline = caregiverBaseline(goal.baselinePercent?.value);
-            const mastery = goal.masteryOverride?.value ? masteryPercent("general", goal.masteryOverride.value).percent : CAREGIVER_MASTERY;
+            const mastery = caregiverMastery(goal.masteryOverride?.value);
             return (
               <ItemCard key={goal.id} caseId={caseId} part="caregiverGoals" item={goal} title={goal.title?.value || t("planStep.untitled")} findings={findingsOf(goal.id)} data={data} context={context} startEditing={fresh === goal.id}>
                 <p lang="en" className="text-sm whitespace-pre-wrap">
@@ -756,8 +749,9 @@ function GoalsView(props: ViewProps) {
           })}
         {goals.length === 0 ? <p className="text-md text-fg-muted">{t("planStep.goalsEmpty")}</p> : null}
       </div>
+      {goals.length >= 6 ? <p className="text-sm text-fg-muted">{t("planStep.goalsFull")}</p> : null}
       <div>
-        <Button size="sm" onClick={() => void onAdd("caregiverGoals", { kind: "interventions" })} disabled={goals.filter((goal) => !isRejected(goal)).length >= 6}>
+        <Button size="sm" onClick={() => void onAdd("caregiverGoals", { kind: "interventions" })} disabled={goals.length >= 6}>
           {t("planStep.addGoal")}
         </Button>
       </div>
@@ -972,12 +966,14 @@ function InputsForm({ caseId, data, item }: { caseId: string; data: PlanData; it
     [caseId, data],
   );
   const box = useAutosave({ caseId, initial, save });
+  // Hours she typed that could not be saved come back in the box (review of PR 1, finding 7).
+  const ready = useKeptText(box, useCallback((failed: FailedSave) => failed.about === "map" && failed.caseId === caseId && failed.mapItem === "planInputs/items/plan", [caseId]));
   const value = JSON.parse(box.value) as { weeklyHours: { value: string } | null; targetOverride: { value: string } | null };
   const hoursId = useId();
   const overrideId = useId();
   const set = (key: "weeklyHours" | "targetOverride", text: string) => box.setValue(JSON.stringify({ ...value, [key]: text === "" ? null : { value: text, check: null } }));
   return (
-    <div className="flex flex-col gap-2" onBlur={() => void box.flush()}>
+    <fieldset disabled={!ready} className="flex flex-col gap-2" onBlur={() => void box.flush()}>
       <label htmlFor={hoursId} className="text-sm font-semibold">
         {t("planStep.count.hoursLabel")}
       </label>
@@ -989,7 +985,7 @@ function InputsForm({ caseId, data, item }: { caseId: string; data: PlanData; it
       <span aria-live="polite" className="text-xs text-fg-muted">
         {box.status === "saving" ? t("sources.saving") : box.status === "saved" ? t("caseMap.saved") : box.status === "failed" ? t("caseMap.actionFailed") : ""}
       </span>
-    </div>
+    </fieldset>
   );
 }
 

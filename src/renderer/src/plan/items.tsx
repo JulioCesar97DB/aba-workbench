@@ -1,9 +1,10 @@
 import type { TFunction } from "i18next";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { PlanFinding } from "../../../shared/plan-checks.ts";
 import { FUNCTION_TITLES } from "../../../shared/plan-copy.ts";
 import { decisionOf, type DecidedPart, type PlanDecisionFields, type PlanItemByPart, type PlanParameter } from "../../../shared/plan.ts";
+import { useFailedSaveList } from "../case-saves.tsx";
 import { Button } from "../components/Button.tsx";
 import { cn } from "../components/cn.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -116,6 +117,13 @@ export function FindingLines({ findings }: { findings: readonly PlanFinding[] })
   );
 }
 
+/** Focuses what the selector names once the screen shows it (the answer re-renders the plan a moment later), for a few frames at most. */
+function focusWhenShown(selector: string, frames = 30): void {
+  const target = document.querySelector<HTMLElement>(selector);
+  if (target) target.focus();
+  else if (frames > 0) requestAnimationFrame(() => focusWhenShown(selector, frames - 1));
+}
+
 /** One item: its card, and its form in place while she edits it. */
 export function ItemCard<P extends DecidedPart>({
   caseId,
@@ -143,10 +151,29 @@ export function ItemCard<P extends DecidedPart>({
   extraActions?: ReactNode;
 }) {
   const { t } = useTranslation();
-  const [editing, setEditing] = useState(startEditing);
+  // What she typed in this item and could not save is kept by the main process: the form opens
+  // again with it, wherever the card is shown (review of PR 1, finding 7).
+  const kept = useFailedSaveList().some((failed) => failed.about === "map" && failed.caseId === caseId && failed.mapItem === `${part}/items/${item.id}`);
+  const [editing, setEditing] = useState(startEditing || kept);
+  const [sawKept, setSawKept] = useState(kept);
+  if (kept && !sawKept) {
+    setSawKept(true);
+    setEditing(true);
+  }
   const titleId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const look = decisionLook(item);
-  const decide = (decision: "accepted" | "rejected" | "proposed") => void data.decide([{ part, itemId: item.id, decision }]);
+  // The button she pressed goes away with the decision: the focus moves to the item's heading,
+  // or to "Rechazadas" when the item went there, never back to the top (review of PR 1, finding 6).
+  const decide = async (decision: "accepted" | "rejected" | "proposed") => {
+    const result = await data.decide([{ part, itemId: item.id, decision }]);
+    if (result?.outcome !== "saved") return;
+    focusWhenShown(decision === "rejected" ? '[data-testid="plan-rejected"] summary' : `[data-testid="plan-item"][data-item="${CSS.escape(item.id)}"][data-decision="${decision === "accepted" ? (item.by === "her" ? "hers" : item.editedAt ? "corrected" : "accepted") : "proposed"}"] h3`);
+  };
+  const closeForm = () => {
+    setEditing(false);
+    requestAnimationFrame(() => headingRef.current?.focus());
+  };
   return (
     <article
       aria-labelledby={titleId}
@@ -159,23 +186,23 @@ export function ItemCard<P extends DecidedPart>({
       )}
     >
       <div className="flex flex-wrap items-start gap-2">
-        <h3 id={titleId} lang={titleLang} className="min-w-0 flex-1 text-base font-semibold break-words">
+        <h3 id={titleId} ref={headingRef} tabIndex={-1} lang={titleLang} className="min-w-0 flex-1 text-base font-semibold break-words">
           {title}
         </h3>
         <DecisionChip item={item} />
       </div>
       {children}
       <FindingLines findings={findings} />
-      {editing ? <PlanItemForm caseId={caseId} part={part} item={item} data={data} context={context} title={title} onDone={() => setEditing(false)} /> : null}
+      {editing ? <PlanItemForm caseId={caseId} part={part} item={item} data={data} context={context} title={title} onDone={closeForm} autoFocus /> : null}
       <div className="flex flex-wrap gap-1.5">
         {look === "rejected" ? (
-          <Button size="sm" onClick={() => decide("proposed")}>
+          <Button size="sm" onClick={() => void decide("proposed")}>
             {t("planStep.recover")}
           </Button>
         ) : (
           <>
             {look === "proposed" ? (
-              <Button size="sm" aria-describedby={titleId} onClick={() => decide("accepted")}>
+              <Button size="sm" aria-describedby={titleId} onClick={() => void decide("accepted")}>
                 <Icon name="check" />
                 {t("planStep.accept")}
               </Button>
@@ -186,7 +213,7 @@ export function ItemCard<P extends DecidedPart>({
                 {t("planStep.edit")}
               </Button>
             )}
-            <Button size="sm" aria-describedby={titleId} onClick={() => decide("rejected")}>
+            <Button size="sm" aria-describedby={titleId} onClick={() => void decide("rejected")}>
               {t("planStep.reject")}
             </Button>
             {extraActions}

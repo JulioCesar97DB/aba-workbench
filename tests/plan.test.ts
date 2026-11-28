@@ -7,8 +7,10 @@ import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, newCaseData, readCaseFile, readabl
 import { addMapItem, caseMapView, decidePlanItems, markPlanCopied, planSummaryOf, planView, saveMapItem, type StoredCaseMap } from "../src/main/case-map.ts";
 import { CaseMapService } from "../src/main/case-map-service.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
+import { writeFileDurably } from "../src/main/durable-write.ts";
+import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
 import { confirmHbiIntro, planInstructionsOf, readInstructionsFile } from "../src/main/instructions.ts";
-import { acceptedPlan, fingerprint, functionBlocks, HBI_INTRO_DRAFT, planMapInputOf, type PlanView } from "../src/shared/plan.ts";
+import { acceptedPlan, DECIDING_VIEWS, fingerprint, functionBlocks, HBI_INTRO_DRAFT, planMapInputOf, viewItems, type PlanView } from "../src/shared/plan.ts";
 import { aversiveTerm, elopementFeet, latencySeconds, offsetSeconds, planChecks, type PlanFinding } from "../src/shared/plan-checks.ts";
 import { ageInYears, caregiverBaseline, masteryPercent, parameterSeconds, programTarget, roundToTen, sessionPercent, skillBaseline } from "../src/shared/plan-compute.ts";
 import { baselineSentence, isCopied, planCopy } from "../src/shared/plan-copy.ts";
@@ -474,6 +476,26 @@ test("checks: task analyses of 4 to 6 steps, baselines in multiples of 10", () =
   );
 });
 
+test("views: every plan item is in a view, so the views' counts, Accept what is left and the sidebar agree (review of PR 1, finding 8)", () => {
+  let data = withProposals();
+  [data] = add(data, "strategies", { name: claim("Discrete trial teaching"), kind: "teaching" });
+  [data] = add(data, "strategies", { name: claim("Reprimand-free redirection"), kind: "consequence" });
+  [data] = add(data, "programs", { kind: "skill", title: claim("Tacting") });
+  [data] = add(data, "glossary", { strategyId: "stg-4", definition: claim("A teaching format.") });
+  [data] = add(data, "caregiverGoals", { kind: "extra", title: claim("A safety plan") });
+  [data] = add(data, "interventions", { function: "escape", kind: "positive", text: claim("Praise.") });
+  // An antecedent strategy with no block (as an AI answer might write it).
+  const map = data.caseMap!;
+  const strategies = map.parts.strategies;
+  const last = strategies.versions.at(-1)!;
+  data = { ...data, caseMap: { ...map, parts: { ...map.parts, strategies: { ...strategies, versions: [...strategies.versions.slice(0, -1), { ...last, content: { items: [...last.content.items, { id: "stg-9", name: { value: "Orphan", refs: [], origin: "proposed", check: null }, kind: "antecedent", functions: [], decision: "proposed", decidedAt: null, by: "ai" }] } }] } } } };
+  const plan = planView(data);
+  const seen = new Set(DECIDING_VIEWS.flatMap((view) => viewItems(plan, view).map((entry) => `${entry.part}/${entry.item.id}`)));
+  const all = (["strategies", "interventions", "programs", "glossary", "caregiverGoals"] as const).flatMap((part) => plan.parts[part].items.map((item) => `${part}/${item.id}`));
+  assert.equal(all.length, planSummaryOf(data).total);
+  assert.deepEqual(all.filter((id) => !seen.has(id)), []);
+});
+
 /* Copy for ABA Matrix (D22, D23) */
 
 function planForCopy(): CaseData {
@@ -653,6 +675,46 @@ test("plan service: add by hand, decide, copy a field and the whole block; the s
   assert.ok(opened.outcome === "opened");
   assert.deepEqual(opened.case.plan, { decided: 1, total: 1 });
   assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion, 6);
+});
+
+test("plan service: what she typed in a plan item is kept when the disk refuses it, listed for its form, and saved by Try again (review of PR 1, finding 7)", async () => {
+  const folder = mkdtempSync(path.join(tmpdir(), "aba-plan-test-"));
+  folders.push(folder);
+  let refuse = false;
+  let ids = 0;
+  const cases = new CaseLibrary({
+    location: async () => ({ folder, isDefault: false }),
+    newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
+    log: () => undefined,
+    writeFile: async (file: string, text: string) => {
+      if (refuse) throw new Error("EACCES: the disk refused (test)");
+      await writeFileDurably(file, text);
+    },
+  });
+  const created = await cases.create({ label: "Invented plan case" });
+  assert.ok(created.outcome === "created");
+  const caseId = created.case.id;
+  const service = new CaseMapService({ cases });
+  const failedSaves = new FailedSaves({ run: runSaves(cases, () => ({}) as never, () => service), labelOf: () => "Invented plan case" });
+  const added = await service.addItem(caseId, "strategies", "items", json({ name: claim("Visual schedule") }), null);
+  assert.ok(added.outcome === "saved");
+  refuse = true;
+  const typed = json({ name: claim("Visual schedule board") });
+  const failed = await failedSaves.save(caseId, { kind: "map-item", part: "strategies", collection: "items", itemId: "stg-1", text: typed, editing: added.version });
+  assert.equal(failed.outcome, "not-saved");
+  // Listed with what she typed, under the plan item's key: the card opens its form with it.
+  const kept = failedSaves.list();
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].mapItem, "strategies/items/stg-1");
+  assert.equal(kept[0].text, typed);
+  refuse = false;
+  const retried = await failedSaves.retry(kept[0].id);
+  assert.equal(retried.outcome, "saved");
+  assert.deepEqual(failedSaves.list(), []);
+  const read = await service.getPlan(caseId);
+  assert.ok(read.outcome === "read");
+  assert.equal(read.plan.parts.strategies.items[0].name?.value, "Visual schedule board");
+  assert.equal(read.plan.parts.strategies.items[0].decision, "accepted");
 });
 
 test("plan service: hostile input is refused before anything is written; the map's approval is not the plan's", async () => {

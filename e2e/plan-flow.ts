@@ -32,7 +32,8 @@ export async function proposalsFlow(page: Page, deps: PlanFlowDeps): Promise<voi
   await deps.goTo(`${PLAN}?view=fn:escape`);
   await expect(heading(page)).toHaveText("Escape");
   // The blocks come from the map's functions, in her order; a behavior is in every block of its functions.
-  await expect(tabs(page).getByRole("button")).toHaveText([/^Attention/, /^Escape/, /^Sensory/, /^Programs/, /^Interventions glossary/, /^Caregiver goals/, /^Before QA/, /^Copy for ABA Matrix/]);
+  // Every function has its tab; one with no behavior is dashed ("no behaviors").
+  await expect(tabs(page).getByRole("button")).toHaveText([/^Tangiblesno behaviors/, /^Attention/, /^Escape/, /^Sensory/, /^Automatic Reinforcementno behaviors/, /^Programs/, /^Interventions glossary/, /^Caregiver goals/, /^Before QA/, /^Copy for ABA Matrix/]);
   await expect(page.getByTestId("plan-block-behaviors")).toHaveText("Non-compliant behavior · Physical aggression · Elopement");
   await expect(page.getByTestId("plan-view-count")).toHaveText("0 of 6 decided");
   // The clash of her definition at 5 s with a prompt at 3 s, on the item itself.
@@ -41,14 +42,19 @@ export async function proposalsFlow(page: Page, deps: PlanFlowDeps): Promise<voi
   // Accept one: a decision is an edit, in a new version; the AI's version keeps the proposal.
   await card(page, "stg-2").getByRole("button", { name: "Accept", exact: true }).click();
   await expect(card(page, "stg-2")).toHaveAttribute("data-decision", "accepted");
+  // The button she pressed is gone: the focus is on the item, not back at the top.
+  await expect(card(page, "stg-2").getByRole("heading")).toBeFocused();
   await expect.poll(() => itemOf(deps, "strategies", "stg-2")?.decision).toBe("accepted");
   expect(deps.caseData().caseMap!.parts.strategies.versions[0].content.items[1].decision).toBe("proposed");
 
   // Edit one: it becomes hers and accepted, "Corrected by you"; the clash goes once her wait is 5 s.
   await card(page, "stg-1").getByRole("button", { name: "Edit", exact: true }).click();
   const form = card(page, "stg-1").getByTestId("plan-form");
+  // The form takes the focus on its first field.
+  await expect(form.getByRole("textbox", { name: "Name", exact: true })).toBeFocused();
   await form.getByRole("textbox", { name: "Value 1", exact: true }).fill("5");
   await form.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(card(page, "stg-1").getByRole("heading")).toBeFocused();
   await expect(card(page, "stg-1")).toHaveAttribute("data-decision", "corrected");
   await expect(card(page, "stg-1").getByTestId("plan-item-findings")).toHaveCount(0);
   await expect.poll(() => (itemOf(deps, "strategies", "stg-1")?.parameters as Array<{ value: { value: string; origin: string } }> | undefined)?.[0]?.value).toEqual({ value: "5", refs: [{ kind: "her" }], origin: "her", check: null });
@@ -57,9 +63,11 @@ export async function proposalsFlow(page: Page, deps: PlanFlowDeps): Promise<voi
   await card(page, "stg-3").getByRole("button", { name: "Reject", exact: true }).click();
   const rejected = page.getByTestId("plan-rejected");
   await expect(rejected).toContainText("Rejected (1)");
-  await rejected.locator("summary").click();
+  await expect(rejected.locator("summary")).toBeFocused();
+  await page.keyboard.press("Enter");
   await card(page, "stg-3").getByRole("button", { name: "Recover", exact: true }).click();
   await expect(page.getByTestId("plan-rejected")).toHaveCount(0);
+  await expect(card(page, "stg-3").getByRole("heading")).toBeFocused();
   await expect(card(page, "stg-3")).toHaveAttribute("data-decision", "proposed");
 
   // Reject it again, then "Accept what is left": it stays rejected.
@@ -84,6 +92,9 @@ export async function proposalsFlow(page: Page, deps: PlanFlowDeps): Promise<voi
   // Copy for ABA Matrix: only what she accepted, field by field, marked once copied.
   await tabs(page).getByRole("button", { name: /^Copy for ABA Matrix/ }).click();
   await expect(heading(page)).toHaveText("Copy for ABA Matrix");
+  // One row per program and block, as mockup 07; a block opens on its fields.
+  await expect(page.locator('[data-group="prg-1"]')).toContainText("Requesting a break4 fields");
+  await page.locator('[data-group="hbi:escape"]').click();
   const field = page.locator('[data-field="hbi:escape:preventive"]');
   await field.click();
   await expect(page.getByTestId("plan-copy-text")).toHaveText("Effective instruction delivery\nScheduled breaks");
@@ -101,6 +112,7 @@ export async function proposalsFlow(page: Page, deps: PlanFlowDeps): Promise<voi
   await card(page, "stg-2").getByRole("button", { name: "Done", exact: true }).click();
   await expect.poll(() => (itemOf(deps, "strategies", "stg-2")?.name as { value: string } | undefined)?.value).toBe("Scheduled breaks during table work");
   await tabs(page).getByRole("button", { name: /^Copy for ABA Matrix/ }).click();
+  await page.locator('[data-group="hbi:escape"]').click();
   await expect(page.locator('[data-field="hbi:escape:preventive"]').getByTestId("plan-copied")).toHaveCount(0);
   await expect(page.locator('[data-field="hbi:escape:behaviors"]').getByTestId("plan-copied")).toBeVisible();
 

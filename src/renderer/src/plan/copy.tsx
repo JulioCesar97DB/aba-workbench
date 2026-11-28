@@ -25,14 +25,14 @@ export function sectionTitle(section: number): string {
 
 /** Copies fields (one, or a block's), and gives the plan as saved with its marks. */
 export function useCopyFields(caseId: string, onSaved: (result: MapSaveResult) => void) {
-  const [last, setLast] = useState<{ ids: string[]; ok: boolean; markers: number; serial: number } | null>(null);
+  const [last, setLast] = useState<{ ids: string[]; ok: boolean; marked: boolean; markers: number; serial: number } | null>(null);
   const serial = useRef(0);
   const copy = async (ids: string[]) => {
     const result = await window.aba.copyPlanFields(caseId, ids).catch(() => null);
     if (result?.outcome === "copied") {
       if (result.result) onSaved(result.result);
-      setLast({ ids, ok: true, markers: result.markers, serial: ++serial.current });
-    } else setLast({ ids, ok: false, markers: 0, serial: ++serial.current });
+      setLast({ ids, ok: true, marked: result.result !== null, markers: result.markers, serial: ++serial.current });
+    } else setLast({ ids, ok: false, marked: false, markers: 0, serial: ++serial.current });
   };
   return { copy, last };
 }
@@ -47,10 +47,16 @@ function CopiedMark() {
   );
 }
 
-/** The list of fields, grouped by ABA Matrix section: in the Plan's copy view, each row selects its field. */
+/**
+ * The list of fields, by ABA Matrix section and then by program or block, as mockup 07 (review
+ * of PR 1, finding 10): one row per program, block or goal, with how many of its fields are
+ * copied; the group of the field chosen opens on its fields. A one-field group (the intro, the
+ * glossary) is its field's row.
+ */
 export function CopyList({ groups, plan, selected, onSelect }: { groups: readonly CopyGroup[]; plan: PlanView; selected: string | null; onSelect: (fieldId: string) => void }) {
   const { t } = useTranslation();
   const sections = [...new Set(groups.map((group) => group.section))];
+  const rowClass = (current: boolean) => cn("flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm", current ? "border-accent bg-ai-subtle" : "border-border bg-surface hover:bg-surface-muted");
   return (
     <nav aria-label={t("planStep.copy.listLabel")} className="flex flex-col gap-3">
       {sections.map((section) => (
@@ -61,28 +67,51 @@ export function CopyList({ groups, plan, selected, onSelect }: { groups: readonl
           <ul className="flex flex-col gap-1">
             {groups
               .filter((group) => group.section === section)
-              .flatMap((group) =>
-                group.fields.map((field) => (
-                  <li key={field.id}>
-                    <button
-                      type="button"
-                      data-field={field.id}
-                      aria-current={selected === field.id ? "true" : undefined}
-                      onClick={() => onSelect(field.id)}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm",
-                        selected === field.id ? "border-accent bg-ai-subtle" : "border-border bg-surface hover:bg-surface-muted",
-                      )}
-                    >
+              .map((group) => {
+                const copied = group.fields.filter((field) => isCopied(plan, field)).length;
+                const markers = group.fields.reduce((sum, field) => sum + field.markers, 0);
+                if (group.fields.length === 1) {
+                  const field = group.fields[0];
+                  return (
+                    <li key={group.id}>
+                      <button type="button" data-group={group.id} data-field={field.id} aria-current={selected === field.id ? "true" : undefined} onClick={() => onSelect(field.id)} className={rowClass(selected === field.id)}>
+                        <span lang="en" className="min-w-0 flex-1 break-words">
+                          {group.label}
+                        </span>
+                        {markers > 0 ? <span className="text-xs text-warning">{t("planStep.copy.markers", { count: markers })}</span> : null}
+                        {copied === 1 ? <CopiedMark /> : null}
+                      </button>
+                    </li>
+                  );
+                }
+                const open = group.fields.some((field) => field.id === selected);
+                return (
+                  <li key={group.id} className="flex flex-col gap-1">
+                    <button type="button" data-group={group.id} aria-expanded={open} onClick={() => onSelect(group.fields[0].id)} className={rowClass(false)}>
                       <span lang="en" className="min-w-0 flex-1 break-words">
-                        {group.fields.length > 1 ? `${group.label} · ${field.label}` : group.label}
+                        {group.label}
                       </span>
-                      {field.markers > 0 ? <span className="text-xs text-warning">{t("planStep.copy.markers", { count: field.markers })}</span> : null}
-                      {isCopied(plan, field) ? <CopiedMark /> : null}
+                      <span className="text-xs text-fg-muted">{t("planStep.copy.fields", { count: group.fields.length })}</span>
+                      {copied === group.fields.length ? <CopiedMark /> : copied > 0 ? <span className="text-xs text-fg-muted">{t("planStep.copy.groupCopied", { copied, total: group.fields.length })}</span> : null}
                     </button>
+                    {open ? (
+                      <ul className="ml-3 flex flex-col gap-1 border-l border-border pl-2">
+                        {group.fields.map((field) => (
+                          <li key={field.id}>
+                            <button type="button" data-field={field.id} aria-current={selected === field.id ? "true" : undefined} onClick={() => onSelect(field.id)} className={rowClass(selected === field.id)}>
+                              <span lang="en" className="min-w-0 flex-1 break-words">
+                                {field.label}
+                              </span>
+                              {field.markers > 0 ? <span className="text-xs text-warning">{t("planStep.copy.markers", { count: field.markers })}</span> : null}
+                              {isCopied(plan, field) ? <CopiedMark /> : null}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </li>
-                )),
-              )}
+                );
+              })}
           </ul>
         </section>
       ))}
@@ -134,9 +163,11 @@ export function CopyPreview({ group, field, plan, onCopy, last }: { group: CopyG
         ) : null}
         {isCopied(plan, field) ? <CopiedMark /> : null}
       </div>
-      <p className="text-sm text-fg-muted">{t("planStep.copy.where", { field: field.label, group: group.label })}</p>
+      <p className="text-sm text-fg-muted">{group.fields.length === 1 ? t("planStep.copy.whereOne", { field: field.label }) : t("planStep.copy.where", { field: field.label, group: group.label })}</p>
       <p role="status" className="text-sm">
         {lastHere ? (lastHere.ok ? (lastHere.markers > 0 ? t("planStep.copy.doneMarked", { count: lastHere.markers }) : t("planStep.copy.done")) : t("planStep.copy.failed")) : ""}
+        {/* The clipboard holds it, but the mark could not be saved: said, as T8 does (review nit 19). */}
+        {lastHere?.ok && !lastHere.marked ? ` ${t("planStep.copy.notMarked")}` : ""}
       </p>
     </section>
   );
@@ -189,7 +220,7 @@ export function CompactCopyList({ groups, plan, onCopy, last }: { groups: readon
         </section>
       ))}
       <p role="status" className="text-sm">
-        {last ? (last.ok ? t("planStep.copy.done") : t("planStep.copy.failed")) : ""}
+        {last ? (last.ok ? (last.marked ? t("planStep.copy.done") : `${t("planStep.copy.done")} ${t("planStep.copy.notMarked")}`) : t("planStep.copy.failed")) : ""}
       </p>
     </div>
   );

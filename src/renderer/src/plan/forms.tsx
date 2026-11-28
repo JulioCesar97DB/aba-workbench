@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ClaimInput } from "../../../shared/case-map.ts";
 import { FUNCTION_NAMES, MAP_TEXT_LIMITS } from "../../../shared/case-map.ts";
@@ -210,7 +210,7 @@ export function Lines({ label, value, onChange, max = T.text, limit, numbered = 
 }
 
 /** Ticks from a list (the blocks a strategy is preventive in; the strategies an entry names). */
-export function Ticks({ label, value, options, onChange, english = true }: { label: string; value: string[]; options: ReadonlyArray<{ id: string; label: string }>; onChange: (next: string[]) => void; english?: boolean }) {
+export function Ticks({ label, value, options, onChange, english = true, minOne = false }: { label: string; value: string[]; options: ReadonlyArray<{ id: string; label: string }>; onChange: (next: string[]) => void; english?: boolean; minOne?: boolean }) {
   const { t } = useTranslation();
   return (
     <Row label={label} group>
@@ -218,7 +218,7 @@ export function Ticks({ label, value, options, onChange, english = true }: { lab
       <div className="flex flex-wrap gap-x-4 gap-y-1.5">
         {options.map((option) => (
           <label key={option.id} className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={value.includes(option.id)} onChange={(event) => onChange(event.target.checked ? [...value, option.id] : value.filter((id) => id !== option.id))} />
+            <input type="checkbox" checked={value.includes(option.id)} disabled={minOne && value.length === 1 && value.includes(option.id)} onChange={(event) => onChange(event.target.checked ? [...value, option.id] : value.filter((id) => id !== option.id))} />
             <span lang={english ? "en" : undefined}>{option.label}</span>
           </label>
         ))}
@@ -332,7 +332,8 @@ function PlanFields({ part, value, set, context }: { part: PlanPartId; value: Va
         <>
           <TextBox label={field("name")} value={value.name as Claimish} max={T.name} onChange={(next) => set("name", next)} hint={t("planStep.form.nameHint")} />
           <Choice label={field("kind")} value={value.kind as string} options={STRATEGY_KINDS} labelOf={(option) => t(`planStep.strategyKind.${option}` as "planStep.strategyKind.antecedent")} onChange={(next) => set("kind", next ?? "antecedent")} />
-          {value.kind === "antecedent" ? <Ticks label={field("functions")} value={value.functions as string[]} options={functionOptions} onChange={(next) => set("functions", next)} /> : null}
+          {/* A preventive strategy keeps at least one block, so it never drops out of every view (finding 8). */}
+          {value.kind === "antecedent" ? <Ticks label={field("functions")} value={value.functions as string[]} options={functionOptions} onChange={(next) => set("functions", next)} minOne={(value.functions as string[]).length > 0} /> : null}
           <Parameters value={value.parameters as ParameterIn[]} onChange={(next) => set("parameters", next)} />
         </>
       );
@@ -413,6 +414,7 @@ export function PlanItemForm<P extends PlanPartId>({
   context,
   onDone,
   title,
+  autoFocus = false,
 }: {
   caseId: string;
   part: P;
@@ -421,6 +423,8 @@ export function PlanItemForm<P extends PlanPartId>({
   context: PlanFormContext;
   onDone?: () => void;
   title: string;
+  /** The form takes the focus when it opens, on its first field (review of PR 1, finding 6). */
+  autoFocus?: boolean;
 }) {
   const { t } = useTranslation();
   const [initial] = useState(() => JSON.stringify(planInput(part, item)));
@@ -443,8 +447,15 @@ export function PlanItemForm<P extends PlanPartId>({
     }
   }, [box.value, initial]);
   const set = (key: string, next: unknown) => box.setValue(JSON.stringify({ ...value, [key]: next }));
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!autoFocus || !ready || focused.current) return;
+    focused.current = true;
+    sectionRef.current?.querySelector<HTMLElement>("fieldset input, fieldset textarea, fieldset select")?.focus();
+  }, [autoFocus, ready]);
   return (
-    <section aria-label={t("planStep.form.editing", { name: title })} data-testid="plan-form" className="@container flex flex-col gap-3 rounded-md border border-accent bg-surface p-3">
+    <section ref={sectionRef} aria-label={t("planStep.form.editing", { name: title })} data-testid="plan-form" className="@container flex flex-col gap-3 rounded-md border border-accent bg-surface p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-semibold">{t("planStep.form.editing", { name: title })}</span>
         <span className="flex-1" />

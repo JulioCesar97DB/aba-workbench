@@ -385,6 +385,39 @@ export function blockContent(plan: PlanView, fn: string) {
   };
 }
 
+/** A strategy no function block shows: a teaching or consequence strategy, or an antecedent one with no block. The glossary view lists it. */
+export function inNoBlock(strategy: Pick<StrategyItem, "kind" | "functions">): boolean {
+  return strategy.kind !== "antecedent" || !strategy.functions.some((fn) => (FUNCTION_NAMES as readonly string[]).includes(fn));
+}
+
+/**
+ * The items a view decides (its counts, "Aceptar lo que queda", "Siguiente paso"): a block's
+ * preventive strategies, replacements and management entries; the programs; the glossary, with
+ * the strategies no block shows; the goals. Every plan item is in at least one view (review of
+ * PR 1, finding 8).
+ */
+export function viewItems(plan: PlanView, view: string): Array<{ part: DecidedPart; item: PlanItemByPart[DecidedPart] }> {
+  if (view.startsWith("fn:")) {
+    const fn = view.slice(3);
+    return [
+      ...plan.parts.strategies.items.filter((item) => item.kind === "antecedent" && item.functions.includes(fn)).map((item) => ({ part: "strategies" as const, item })),
+      ...plan.parts.programs.items.filter((item) => item.kind === "replacement" && item.function === fn).map((item) => ({ part: "programs" as const, item })),
+      ...plan.parts.interventions.items.filter((item) => item.function === fn).map((item) => ({ part: "interventions" as const, item })),
+    ];
+  }
+  if (view === "programs") return plan.parts.programs.items.map((item) => ({ part: "programs" as const, item }));
+  if (view === "glossary")
+    return [
+      ...plan.parts.glossary.items.map((item) => ({ part: "glossary" as const, item })),
+      ...plan.parts.strategies.items.filter(inNoBlock).map((item) => ({ part: "strategies" as const, item })),
+    ];
+  if (view === "goals") return plan.parts.caregiverGoals.items.map((item) => ({ part: "caregiverGoals" as const, item }));
+  return [];
+}
+
+/** Every view that decides items, in the screen's order. */
+export const DECIDING_VIEWS = [...FUNCTION_NAMES.map((fn) => `fn:${fn}`), "programs", "glossary", "goals"] as const;
+
 /**
  * What leaves the plan (proposal §3.2): the accepted items of the version shown, with the
  * references pruned. A management entry keeps only accepted strategies; a glossary entry goes
