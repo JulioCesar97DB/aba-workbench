@@ -388,8 +388,9 @@ test("review round 2 (finding 2): only a future verb exempts a date; a bare from
     "Prior to October 10, 2026, she had never left the home without an adult.",
     "Her grandmother traveled to Colombia from December 15, 2025 to January 20, 2026.",
     "Starting October 10, 2026, she refused school.",
-    "From December 15, 2026, her grandmother will travel.",
   ]) assert.deepEqual(found(past), ["full-date"], past);
+  // A coming change whose date nothing governs before it: still flagged, the known cost of never exempting a bare "from".
+  assert.deepEqual(found("From December 15, 2026, her grandmother will travel."), ["full-date"], "a sentence-initial from is not a governing verb, even before a coming change");
   for (const coming of [
     "Her grandmother will travel from December 15, 2026 to January 20, 2027.",
     "Services will start on December 15, 2026.",
