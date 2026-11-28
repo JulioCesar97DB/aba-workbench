@@ -12,12 +12,20 @@ import { copiedSections, readySections, stepCount, stepState, type StepInputs } 
 const sections = (...states: Array<SectionSummary["state"]>) => states.map((state) => ({ state, copied: false }));
 const none: StepInputs = { sources: 0, caseMap: { approved: 0, withContent: 0 }, sections: [] };
 
-test("step states: a new case has every built step not started and Plan not built yet", () => {
+test("step states: a new case has every step not started", () => {
   assert.equal(stepState("sources", none), "not-started");
   assert.equal(stepState("case-map", none), "not-started");
   assert.equal(stepState("report", none), "not-started");
-  assert.equal(stepState("interventions", none), "later");
+  assert.equal(stepState("interventions", none), "not-started");
   assert.equal(stepState("review", none), "not-started");
+});
+
+test("step states: the plan counts its items decided, and is done once none waits (the Plan step, PR 1)", () => {
+  assert.equal(stepState("interventions", { ...none, plan: { decided: 0, total: 0 } }), "not-started");
+  assert.equal(stepCount("interventions", { ...none, plan: { decided: 0, total: 0 } }), null);
+  assert.equal(stepState("interventions", { ...none, plan: { decided: 18, total: 102 } }), "in-progress");
+  assert.deepEqual(stepCount("interventions", { ...none, plan: { decided: 18, total: 102 } }), { shown: "18/102", spoken: { key: "plan", values: { decided: 18, total: 102 } } });
+  assert.equal(stepState("interventions", { ...none, plan: { decided: 4, total: 4 } }), "done");
 });
 
 test("step states: sources are done from the first one", () => {

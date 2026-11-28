@@ -50,6 +50,7 @@ export function AppShell() {
         sections={openCase.case.sections}
         notes={openCase.case.notes}
         caseMap={openCase.case.caseMap}
+        plan={openCase.case.plan}
         sourceCount={openCase.case.sources.sources.filter((source) => !source.removedAt).length}
         caseDetail={formatAge(t, language, openCase.case.clientAge) ?? t("case.ageNotGiven")}
       />
