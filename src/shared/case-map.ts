@@ -389,18 +389,31 @@ export function mapPartStatus(versions: ReadonlyArray<{ number: number; kind: st
 
 /**
  * The mean of a behavior's baseline observations, as section 8 gives it (D20): computed by
- * the app from the counts, decimals kept to two places. Null when any count is missing or
- * not a plain number, or there is none: the app never guesses.
+ * the app from the counts, decimals kept to two places. A count is the plain number its value
+ * starts with (owner's decision of 2026-11-28), so "3 contacts" is 3 and "2.5 incidents" is
+ * 2.5. Null when any count is missing or does not start with a plain number ("about 3", "3-4",
+ * "3 to 4", "3:30", an empty value), or there is none: the app never guesses.
  */
 export function baselineMean(observations: ReadonlyArray<Pick<BaselineObservation, "value">>): number | null {
   if (observations.length === 0) return null;
   let sum = 0;
   for (const observation of observations) {
-    const raw = observation.value?.value.trim() ?? "";
-    if (!/^\d+(\.\d+)?$/.test(raw)) return null;
-    sum += Number(raw);
+    const count = leadingCount(observation.value?.value ?? "");
+    if (count === null) return null;
+    sum += count;
   }
   return Math.round((sum / observations.length) * 100) / 100;
+}
+
+/**
+ * The plain number a count's value starts with, or null. The number must end the value or be
+ * followed by a space, and what follows must not make it a range ("3 - 4", "3 to 4", "3 or 4").
+ */
+function leadingCount(value: string): number | null {
+  const match = /^(\d+(?:\.\d+)?)(?:\s+(.*))?$/su.exec(value.trim());
+  if (!match) return null;
+  if (match[2] !== undefined && /^(?:[-–—/]|(?:to|or)\b)/iu.test(match[2])) return null;
+  return Number(match[1]);
 }
 
 /**

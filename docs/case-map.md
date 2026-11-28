@@ -57,7 +57,7 @@ Read and written with these limits (`src/shared/case-map.ts`): 30 behaviors and 
 
 - A behavior is in one group at most. Nothing about groups is ever refused (a refused save would lose what she typed): a behavior she ticks into a group leaves the group it was in (marked changed by her), an id the version has no behavior for or one named twice is dropped, and removing a behavior takes it out of its group. The group form says, beside a behavior that is in another group, that ticking it moves it.
 - An edit of an item the version shown does not hold (she showed an older version, or "Try again" of an edit kept from before) brings the item back, from the newest version that had it, with her edit, into a new version. Only an id no version ever had is "not found".
-- The section 8 baseline mean is the app's (D20): the mean of the dated counts, two decimals, or none when a count is missing or not a plain number (`baselineMean`).
+- The section 8 baseline mean is the app's (D20): the mean of the dated counts, two decimals, or none when a count is missing or does not start with a plain number (`baselineMean`). A count is the plain number its value starts with, so "3 contacts" counts as 3 and "2.5 incidents" as 2.5; "about 3", a range ("3-4", "3 to 4"), "3:30" and an empty value give none (owner's decision of 2026-11-28).
 - Intensity is hers only (D19); barrier tags come from her fixed list of nine (D18); the functions are her five, in her order (D17).
 
 ## What she does on the Case map step
@@ -66,7 +66,7 @@ Read and written with these limits (`src/shared/case-map.ts`): 30 behaviors and 
 - She adds an item (or a group, in the behaviors part), types it, and it is saved as she types, with no Save button: `window.aba.saveMapItem` goes through the failed saves (`"map-item"`), so an edit the disk refuses is kept by the main process, offered with Try again, and put back in its form after a reload, like a section's text.
 - Each value shows chips for where it came from and its `[CHECK]`, with Resolved to clear it.
 - She approves the part shown (in the header), or takes the approval back. For now approving only marks the part as checked by her; the sections start using approved parts in a later pull request, and the screen says so. An approval or a version shown never becomes her editing pass, so an edit after taking an approval back starts a new version and the content she approved stays recorded.
-- The rail lists what is still marked [CHECK] in the part (each opens its item) and the part's versions, newest first, to show another one. Behavior rows show their functions; the baseline shows its mean, computed by the app (D20), or a dash when a count is not a plain number, and, for a frequency behavior, the intensity her rule suggests.
+- The rail lists what is still marked [CHECK] in the part (each opens its item) and the part's versions, newest first, to show another one. Behavior rows show their functions; the baseline shows its mean, computed by the app (D20), or a dash when a count does not start with a plain number, and, for a frequency behavior, the intensity her rule suggests.
 - Lists, rows and evidence stop at 30, and the button says so.
 - After adding an item, its first field takes the focus once; after removing one, the Add button does. What she typed in an item is saved before the removal is asked; when it cannot be saved, the failure shows with Try again and the removal is not asked.
 - The report on her sections is shown empty until the AI reads her sections (a later pull request); she will only mark its items.

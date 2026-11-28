@@ -409,6 +409,19 @@ test("case map: the section 8 baseline mean is the app's, from the three counts,
   assert.equal(baselineMean([]), null);
 });
 
+test("case map: a count is the plain number its value starts with, or none (owner's decision, 2026-11-28)", () => {
+  const obs = (value: string) => ({ value: { value, refs: [], origin: "her" as const, check: null } });
+  assert.equal(baselineMean([obs("3 contacts"), obs("2 contacts"), obs("4")]), 3);
+  assert.equal(baselineMean([obs("2.5 incidents"), obs("3.5 incidents")]), 3);
+  assert.equal(baselineMean([obs("  12 hits ")]), 12, "spaces around are trimmed");
+  assert.equal(baselineMean([obs("0 incidents")]), 0);
+  for (const value of ["about 3", "3-4", "3 - 4", "3 to 4", "3 or 4", "3:30", "3/4", "3,5", "3x", "3.", "", "   ", "-3", "three"]) {
+    assert.equal(baselineMean([obs("3"), obs(value)]), null, `"${value}" gives no number`);
+  }
+  assert.equal(suggestedIntensity(baselineMean([obs("12 contacts"), obs("11 contacts"), obs("10 contacts")]), "frequency"), "3");
+  assert.equal(suggestedIntensity(baselineMean([obs("about 12"), obs("11"), obs("10")]), "frequency"), null);
+});
+
 /* The service, on a real case in a temporary folder: every change through the case's save queue, and a change she typed kept when the disk refuses it. */
 
 const folders: string[] = [];
