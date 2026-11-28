@@ -415,10 +415,19 @@ test("case map: a count is the plain number its value starts with, or none (owne
   assert.equal(baselineMean([obs("2.5 incidents"), obs("3.5 incidents")]), 3);
   assert.equal(baselineMean([obs("  12 hits ")]), 12, "spaces around are trimmed");
   assert.equal(baselineMean([obs("0 incidents")]), 0);
+  // Check 4: "a" and "an" are no rate unless a time word follows.
+  assert.equal(baselineMean([obs("3 aggressions toward a peer")]), 3);
+  assert.equal(baselineMean([obs("3 golpes a su madre")]), 3);
+  assert.equal(baselineMean([obs("3 a 4")]), null, "a range stays none: another digit follows");
   for (const value of ["about 3", "3-4", "3 - 4", "3 to 4", "3 or 4", "3:30", "3/4", "3,5", "3x", "3.", "", "   ", "-3", "three",
     // Check 3: a range, two numbers or a rate, in English or Spanish, is no count.
     "3 through 5", "3 up to 5", "3 until 4", "3 ~ 4", "3 ‒ 4", "3 and 4", "3 vs 4", "3 and a half", "3 per hour", "3 a day",
-    "3 a 4", "3 o 4", "3 ó 4", "3 y 4", "3 hasta 5", "3 por hora", "3 a la hora", "3\n4", "3 (2 at home, 1 at school)", "3 incidents in 2 hours"]) {
+    "3 a 4", "3 o 4", "3 ó 4", "3 y 4", "3 hasta 5", "3 por hora", "3 a la hora", "3\n4", "3 (2 at home, 1 at school)", "3 incidents in 2 hours",
+    // Check 4: a hedged count is an estimate, in English and Spanish.
+    "3 at least", "3 at most", "3 (estimated)", "3 estimated", "3 approximate", "3 approximately", "3 maybe", "3 maybe more", "3 times (est.)",
+    "3 nearly", "3 almost", "3 roughly", "3 around", "3 or so", "3 perhaps", "3 ?",
+    "3 como mínimo", "3 como máximo", "3 quizás", "3 casi", "3 alrededor de", "3 aproximadamente", "3 aproximados", "3 estimados", "3 cerca de",
+    "3 a la hora", "3 al día", "3 an hour", "3 a session"]) {
     assert.equal(baselineMean([obs("3"), obs(value)]), null, `"${value}" gives no number`);
   }
   assert.equal(suggestedIntensity(baselineMean([obs("12 contacts"), obs("11 contacts"), obs("10 contacts")]), "frequency"), "3");
@@ -462,6 +471,13 @@ test("case map: a duration behavior's mean is a duration in one unit, or none (o
     ["30 minutes total per incident"],
     ["12 minutes per hour"],
     ["12 minutos por hora"],
+    // Check 4: a hedged duration.
+    ["12 min at least"],
+    ["12 minutes (estimated)"],
+    ["12 min approximately"],
+    ["12 minutos como mínimo"],
+    ["12 minutos quizás"],
+    ["12 minutes a session"],
   ]) {
     assert.equal(mean(...values), null, JSON.stringify(values));
   }

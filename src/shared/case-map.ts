@@ -456,7 +456,19 @@ const PER_SESSION = new Set(["session", "sesión", "sesion"]);
  * Words that make the leading number a range, two numbers, an estimate or a rate rather than one
  * count (check 3), in English and in Spanish, since she types the counts on either screen.
  */
-const NOT_ONE_NUMBER = /(?<!\p{L})(?:through|thru|until|till|up|to|and|or|vs|versus|plus|half|a|an|each|every|about|around|approx|approximately|roughly|hasta|o|ó|u|y|e|entre|al|cada|unos|unas|aprox|aproximadamente|más|menos)(?!\p{L})|[-‐‑‒–—―−~+/&*≈±<>]/iu;
+const NOT_ONE_NUMBER = new RegExp(
+  [
+    // Ranges, two numbers, and rates.
+    "(?<!\\p{L})(?:through|thru|until|till|up|to|and|or|vs|versus|plus|half|each|every|hasta|o|ó|u|y|e|entre|cada|unos|unas",
+    // Hedges (check 4): an estimate is no count, however it is written.
+    "|about|around|approx|approximate|approximately|roughly|least|most|maybe|perhaps|estimate|estimated|est|nearly|almost|so",
+    "|aprox|aproximado|aproximada|aproximados|aproximadas|aproximadamente|alrededor|cerca|casi|quizás|quizas|quizá|quiza|mínimo|minimo|máximo|maximo|estimado|estimada|estimados|estimadas|más|menos)(?!\\p{L})",
+    // "a", "an" and "al" only as a rate, before a time word ("3 a day", "3 a la hora", "3 al día"): "3 aggressions toward a peer" is a count (check 4).
+    "|(?<!\\p{L})(?:an?|al)\\s+(?:la\\s+)?(?:day|hour|week|month|session|minute|día|dia|hora|semana|mes|sesión|sesion|minuto)(?!\\p{L})",
+    "|[-‐‑‒–—―−~+/&*≈±<>?]",
+  ].join(""),
+  "iu",
+);
 
 /** What follows the leading number leaves it one plain number: no other digit and no range or rate word. */
 function plainRest(rest: string): boolean {
