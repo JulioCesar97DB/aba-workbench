@@ -38,7 +38,7 @@ export function CaseSummaryScreen() {
   const unsaved = useFailedSaveList().some((item) => item.caseId === opened.id);
   useReadAgainAfterRetry(opened.id);
   const active = opened.sources.sources.filter((source) => !source.removedAt);
-  const inputs: NextInputs = { unsaved, sources: active.length, caseMap: map.caseMap, mapPartToApprove: map.mapPartToApprove, sections: opened.sections };
+  const inputs: NextInputs = { unsaved, sources: active.length, caseMap: map.caseMap, mapPartToApprove: map.mapPartToApprove, plan: opened.plan, sections: opened.sections };
   return (
     <WorkArea header={<PageHeader eyebrow={opened.label} title={t("summary.title")} />} contentClassName="max-w-list">
       <div className="flex flex-col gap-7">
@@ -217,8 +217,11 @@ function StepSentence({ step, inputs, types }: { step: CaseStep; inputs: NextInp
       if (withContent === 0) return <>{t("summary.mapNone")}</>;
       return <>{approved >= withContent ? t("summary.mapDone", { count: withContent }) : t("summary.mapSome", { approved, total: withContent })}</>;
     }
-    case "interventions":
-      return <>{t("summary.planLater")}</>;
+    case "interventions": {
+      const plan = inputs.plan ?? { decided: 0, total: 0 };
+      if (plan.total === 0) return <>{t("summary.planNone")}</>;
+      return <>{plan.decided >= plan.total ? t("summary.planDone", { count: plan.total }) : t("summary.planSome", { decided: plan.decided, total: plan.total })}</>;
+    }
     case "report": {
       const states = inputs.sections.map((section) => section.state);
       if (states.every((state) => state === "not-started")) return <>{t("summary.reportNone", { total })}</>;

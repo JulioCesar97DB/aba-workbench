@@ -7,7 +7,7 @@ import type { DraftingProvider, GenerationUpdateEvent } from "../shared/api.ts";
 import { minutesOfLength, type MapPartId, type MapRequestKind } from "../shared/case-map.ts";
 import { REPORT_SECTIONS } from "../shared/report-sections.ts";
 import type { CaseData } from "./case-file.ts";
-import { applyMapAnswer, caseMapSummary, caseMapView, herMapForPrompt, mapFactsForPrompt, partsWithVersions, type AnswerItem, type AnswerPart, type MapExtractionRecord } from "./case-map.ts";
+import { applyMapAnswer, caseMapSummary, caseMapView, herMapForPrompt, mapFactsForPrompt, partsWithVersions, type AnswerItem, type AnswerPart, type MapExtractionRecord, planSummaryOf, planView } from "./case-map.ts";
 import { finalVersion, sessionNotes } from "./case-sections.ts";
 import type { CaseLibrary } from "./cases.ts";
 import { caseCacheKey } from "./cache-key.ts";
@@ -156,7 +156,7 @@ export async function* runMapDraft(options: MapDraftOptions): AsyncGenerator<Run
       yield { type: "error", code: "case_unavailable", message: "The case could not be read.", status: null };
       return;
     }
-    const result = saved.kind === "failed" ? { outcome: saved.outcome } : { outcome: "saved" as const, map: caseMapView(saved.data), summary: caseMapSummary(saved.data), version: null, itemId: null };
+    const result = saved.kind === "failed" ? { outcome: saved.outcome } : { outcome: "saved" as const, map: caseMapView(saved.data), summary: caseMapSummary(saved.data), version: null, itemId: null, plan: planView(saved.data), planSummary: planSummaryOf(saved.data) };
     yield { type: "map-saved", step: kind, result, written, kept, problems: problemsLeft };
     if (saved.kind === "failed") return;
   }

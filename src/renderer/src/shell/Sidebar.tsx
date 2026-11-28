@@ -2,6 +2,7 @@ import { useId, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import type { SectionSummary } from "../../../shared/sections.ts";
 import type { CaseMapSummary } from "../../../shared/case-map.ts";
+import type { PlanSummary } from "../../../shared/plan.ts";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, useLocation } from "react-router";
 import type { Language } from "../../../shared/api.ts";
@@ -96,6 +97,7 @@ export function CaseSidebar({
   sections,
   notes,
   caseMap,
+  plan,
   sourceCount,
 }: {
   caseId: string;
@@ -104,13 +106,14 @@ export function CaseSidebar({
   sections: SectionSummary[];
   notes: string;
   caseMap: CaseMapSummary;
+  plan: PlanSummary;
   sourceCount: number;
 }) {
   const { t } = useTranslation();
   const sectionsHeadingId = useId();
   const location = useLocation();
   const states = new Map(sections.map((section) => [section.id, section]));
-  const inputs = { sources: sourceCount, caseMap, sections };
+  const inputs = { sources: sourceCount, caseMap, plan, sections };
   const ready = readySections(sections);
   // The report's sections are listed under its step only while she works on the report or
   // its review and copy; elsewhere the step's count says enough (owner's decision T18).
@@ -159,7 +162,9 @@ export function CaseSidebar({
                 ? null
                 : count.spoken.key === "caseMap"
                   ? t("caseMap.sidebarCount", count.spoken.values as { approved: number; total: number })
-                  : count.spoken.key === "sources"
+                  : count.spoken.key === "plan"
+                    ? t("nav.planCount", count.spoken.values as { decided: number; total: number })
+                    : count.spoken.key === "sources"
                     ? t("nav.sourcesCount", count.spoken.values as { count: number })
                     : count.spoken.key === "review"
                       ? t("nav.reviewCount", count.spoken.values as { copied: number; total: number })

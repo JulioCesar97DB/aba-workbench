@@ -89,8 +89,8 @@ export const MAP_ID_PREFIX: Readonly<Record<MapPartId, string>> = {
 };
 export const GROUP_ID_PREFIX = "grp";
 
-/** An item's id: "beh-1", "grp-3", or "client". */
-export const MAP_ITEM_ID = /^(client|[a-z]{1,8}-[1-9][0-9]{0,5})$/;
+/** An item's id: "beh-1", "grp-3", "client", or "plan" (the plan's inputs). */
+export const MAP_ITEM_ID = /^(client|plan|[a-z]{1,8}-[1-9][0-9]{0,5})$/;
 
 /** Her five functions, in the order of her Hypothesis Based Interventions blocks (D17). */
 export const FUNCTION_NAMES = ["tangibles", "attention", "escape", "sensory", "automatic"] as const;

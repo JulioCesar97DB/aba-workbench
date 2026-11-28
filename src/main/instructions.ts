@@ -1,6 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import type { PlanInstructionsView } from "../shared/plan.ts";
 import { REPORT_SECTIONS, type ReportSectionId } from "../shared/report-sections.ts";
 import { MAX_INSTRUCTIONS_LENGTH, normalizeLineEndings } from "../shared/section-text.ts";
 import { removeLeftoverAppDataTemporaryFiles, writeFileDurably } from "./durable-write.ts";
@@ -18,8 +19,12 @@ import { removeLeftoverAppDataTemporaryFiles, writeFileDurably } from "./durable
  */
 
 export const INSTRUCTIONS_FILE_NAME = "instructions.json";
-/** Whose standing instructions: a report section's, or the case map's (her definition thresholds, D16). */
-export type InstructionsId = ReportSectionId | "case-map";
+/**
+ * Whose standing instructions: a report section's, the case map's (her definition thresholds,
+ * D16), or the plan's (her usual parameters; the Plan step's D17). The plan's entry also
+ * keeps the HBI intro she confirmed once (D16 of the Plan step), as "hbiIntro".
+ */
+export type InstructionsId = ReportSectionId | "case-map" | "plan";
 export const INSTRUCTIONS_FILE_VERSION = 1;
 /** Typing pauses closer together than this are one editing pass: one entry in the history. */
 export const EDITING_PASS_MS = 10 * 60 * 1000;
@@ -64,6 +69,26 @@ export function readInstructionsFile(text: string | null): InstructionsRead {
 export function serializeInstructionsFile(file: InstructionsFile): string {
   const { version, sections, ...rest } = file;
   return `${JSON.stringify({ version, sections, ...rest }, null, 2)}\n`;
+}
+
+/** The file with the HBI intro she confirmed (or replaced), at the top of section 14's copy from now on. */
+export function confirmHbiIntro(file: InstructionsFile, raw: string, now: Date): InstructionsFile {
+  const text = normalizeLineEndings(raw).trim();
+  if (text === "" || text.length > MAX_INSTRUCTIONS_LENGTH) throw new Error("Refused: the intro must be text, and not that long.");
+  const current = file.sections.plan ?? { text: "", updatedAt: now.toISOString(), history: [] };
+  // The intro she confirmed before is kept, as every earlier text is (review of PR 1, finding 9).
+  const earlier: unknown = current.hbiIntro;
+  const history: unknown[] = Array.isArray(current.hbiIntroHistory) ? current.hbiIntroHistory : [];
+  const hbiIntroHistory = earlier && typeof earlier === "object" ? [...history, earlier].slice(-MAX_HISTORY) : history;
+  return { ...file, sections: { ...file.sections, plan: { ...current, hbiIntro: { text, confirmedAt: now.toISOString() }, ...(hbiIntroHistory.length > 0 ? { hbiIntroHistory } : {}) } } };
+}
+
+/** The plan's standing instructions and the intro she confirmed, as the interface shows them. */
+export function planInstructionsOf(file: InstructionsFile): PlanInstructionsView {
+  const entry = file.sections.plan;
+  const intro = (entry as { hbiIntro?: unknown } | undefined)?.hbiIntro as { text?: unknown; confirmedAt?: unknown } | undefined;
+  const confirmed = intro && typeof intro.text === "string" && intro.text.trim() !== "" && typeof intro.confirmedAt === "string" ? { text: intro.text, confirmedAt: intro.confirmedAt } : null;
+  return { text: entry?.text ?? "", hbiIntro: confirmed };
 }
 
 /** The file with one section's text changed; the earlier text joins the history when a new editing pass starts. Null when nothing changed. */
@@ -113,6 +138,18 @@ export class InstructionsStore {
     return read.ok ? (read.file.sections[id]?.text ?? "") : "";
   }
 
+  /** The plan's standing instructions and confirmed intro; empty when there are none or the file cannot be read. */
+  async plan(): Promise<PlanInstructionsView> {
+    await this.queue;
+    const read = await this.read();
+    return read.ok ? planInstructionsOf(read.file) : { text: "", hbiIntro: null };
+  }
+
+  /** Saves the HBI intro she confirmed; false when the file could not be written or cannot be read whole. */
+  saveHbiIntro(text: string): Promise<boolean> {
+    return this.write((file) => confirmHbiIntro(file, text, this.now()));
+  }
+
   /** Every section's instructions, by id. */
   async all(): Promise<Partial<Record<ReportSectionId, string>>> {
     const read = await this.read();
@@ -122,10 +159,15 @@ export class InstructionsStore {
 
   /** Saves a section's instructions; false when the file could not be written or cannot be read whole. */
   save(id: InstructionsId, text: string): Promise<boolean> {
+    return this.write((file) => changeInstructions(file, id, text, this.now()));
+  }
+
+  /** Writes the file changed by `change` (null: nothing to change), one write after another. */
+  private write(change: (file: InstructionsFile) => InstructionsFile | null): Promise<boolean> {
     const run = this.queue.then(async () => {
       const read = await this.read();
       if (!read.ok) return false;
-      const next = changeInstructions(read.file, id, text, this.now());
+      const next = change(read.file);
       if (!next) return true;
       const serialized = serializeInstructionsFile(next);
       // Never write what this version would not read back whole (review B1).

@@ -220,7 +220,7 @@ test("switching the language changes the screen and survives a restart", async (
   for (const subtitle of ["Lo que ya tienes del cliente", "Conductas y funciones", "Intervenciones", "Las 9 secciones", "Todo junto, a ABA Matrix"]) await expect(steps).toContainText(subtitle);
   await expect(steps.locator('[lang="en"]')).toHaveCount(0);
   // Clinical terms stay in English, marked as English: the sentence that names the Interventions.
-  await expect(page.getByRole("main").locator('[lang="en"]')).toHaveText(["Interventions", "Hypothesis Based Interventions"]);
+  await expect(page.getByRole("main").locator('p [lang="en"]')).toHaveText(["Hypothesis Based Interventions", "Interventions"]);
   await goTo(page, `/cases/${SAMPLE_CASE.id}/report`);
   const sections = page.getByRole("navigation", { name: "Secciones" });
   await expect(sections.locator('[lang="en"]')).toHaveText(REPORT_SECTIONS.map((section) => section.title));

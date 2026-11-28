@@ -475,6 +475,27 @@ export function registerIpc(options: {
     return sectionCall(() => options.caseMap.approve(caseId, part, version), "The approval could not be saved.");
   });
 
+  /* The plan (step 3), inside the case map: read, decided, copied. Her edits go through saveMapItem above. */
+  ipcMain.handle(IPC_CHANNELS.getPlan, (event, caseId: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.caseMap.getPlan(caseId), "The plan could not be read.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.decidePlanItems, (event, caseId: unknown, changes: unknown, editing: unknown, onlyUndecided: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.caseMap.decide(caseId, changes, editing, onlyUndecided), "The decision could not be saved.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.copyPlanFields, (event, caseId: unknown, fieldIds: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.caseMap.copyPlanFields(caseId, fieldIds), "The field could not be copied.");
+  });
+
+  ipcMain.handle(IPC_CHANNELS.confirmHbiIntro, (event, text: unknown) => {
+    assertTrusted(event);
+    return sectionCall(() => options.caseMap.confirmHbiIntro(text), "The intro could not be saved.");
+  });
+
   ipcMain.handle(IPC_CHANNELS.getAiPreferences, (event) => {
     assertTrusted(event);
     return sectionCall(aiPreferences, "The AI settings could not be read.");

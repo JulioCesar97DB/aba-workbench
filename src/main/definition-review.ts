@@ -6,7 +6,7 @@ import type { Effort, Provider, ProviderCredential, TokenUsage } from "../lib/pr
 import type { DraftingProvider, GenerationUpdateEvent } from "../shared/api.ts";
 import { reviewFingerprint, type DefinitionReviewFinding } from "../shared/definition-checks.ts";
 import type { CaseData } from "./case-file.ts";
-import { appendMapExtraction, caseMapSummary, caseMapView, type MapExtractionRecord } from "./case-map.ts";
+import { appendMapExtraction, caseMapSummary, caseMapView, type MapExtractionRecord, planSummaryOf, planView } from "./case-map.ts";
 import type { CaseLibrary } from "./cases.ts";
 import { caseCacheKey } from "./cache-key.ts";
 import { prepareDefinitionReviewRequest } from "./outgoing.ts";
@@ -170,6 +170,6 @@ export async function* runDefinitionReview(options: DefinitionReviewOptions): As
     yield { type: "error", code: "case_unavailable", message: "The case could not be read.", status: null };
     return;
   }
-  const result = saved.kind === "failed" ? { outcome: saved.outcome } : { outcome: "saved" as const, map: caseMapView(saved.data), summary: caseMapSummary(saved.data), version: null, itemId: null };
+  const result = saved.kind === "failed" ? { outcome: saved.outcome } : { outcome: "saved" as const, map: caseMapView(saved.data), summary: caseMapSummary(saved.data), version: null, itemId: null, plan: planView(saved.data), planSummary: planSummaryOf(saved.data) };
   yield { type: "map-review-saved", result, status: failure ? "failed" : "done", findings: findings.length };
 }

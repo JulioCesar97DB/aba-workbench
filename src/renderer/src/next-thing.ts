@@ -1,4 +1,5 @@
 import type { CaseMapSummary, MapPartId } from "../../shared/case-map.ts";
+import type { PlanSummary } from "../../shared/plan.ts";
 import { REPORT_SECTIONS, type ReportSectionId } from "../../shared/report-sections.ts";
 import type { SectionState } from "../../shared/sections.ts";
 import { stepState, type StepState } from "./step-states.ts";
@@ -36,6 +37,8 @@ export interface NextInputs {
    * then still says to approve the map, without naming the part.
    */
   mapPartToApprove: MapPartId | null;
+  /** The plan's items decided, out of its items (step 3); absent where it is not known. The plan never blocks the next thing: she can go on with it undecided. */
+  plan?: PlanSummary;
   /** The sections' states, and whether each is copied as it is now (T8); a section missing here is not started. */
   sections: ReadonlyArray<{ id: ReportSectionId; state: SectionState; copied: boolean }>;
 }
@@ -136,7 +139,7 @@ export function nextThingPath(caseId: string, thing: NextThing): string {
 }
 
 /** Each step's state, in order, for Home's five-segment bar (the sidebar's states, step-states.ts). */
-export function stepStates(inputs: Pick<NextInputs, "sources" | "caseMap" | "sections">): Array<{ step: CaseStep; state: StepState }> {
+export function stepStates(inputs: Pick<NextInputs, "sources" | "caseMap" | "sections" | "plan">): Array<{ step: CaseStep; state: StepState }> {
   return CASE_STEPS.map((step) => ({ step, state: stepState(step, inputs) }));
 }
 

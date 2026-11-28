@@ -20,6 +20,7 @@ import { StepHeader } from "../shell/PageHeader.tsx";
 import { Eyebrow, WorkArea } from "../shell/WorkArea.tsx";
 import { copiedSections } from "../step-states.ts";
 import { Highlighted, MarkNotSaved } from "./Section.tsx";
+import { ReviewPlanFields } from "../plan/review-fields.tsx";
 
 /*
  * Step 5, Revisión y copia (#/cases/<id>/review), owner's proposal §4 "5 · Revisión y copia"
@@ -152,6 +153,7 @@ export function ReviewScreen() {
             />
           ))}
         </ol>
+        <ReviewPlanFields caseId={opened.id} />
         <TwoWays
           layout="cards"
           hand={{

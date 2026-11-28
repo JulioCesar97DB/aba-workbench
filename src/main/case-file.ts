@@ -17,7 +17,11 @@ import { CaseMapSchema } from "./case-map.ts";
  * Version 4 adds the case map (src/main/case-map.ts), which a case has only once she
  * drafts or types one. Version 5 adds, on a section, when she last copied it for ABA
  * Matrix and which version (owner's decision T8, Revisión y copia); a section never copied
- * has neither. Later phases add their own keys and raise the version, with a migration.
+ * has neither. Version 6 adds the plan (the Plan step's D1 and D5, 2026-11-28): six parts
+ * inside the case map, and the plan's copied marks; a case has them only once she writes a
+ * plan. Older apps kept unknown parts losslessly, but they would let her change the map under
+ * a plan they cannot see, so the version is raised and "a newer file is never written to"
+ * stops them. Later phases add their own keys and raise the version, with a migration.
  *
  * Rules that keep a user's data safe:
  * - A key this version does not know is kept as it is when the file is saved.
@@ -28,7 +32,7 @@ import { CaseMapSchema } from "./case-map.ts";
 
 export const CASE_FILE_NAME = "aba-case.json";
 /** Raise it, and add a step to MIGRATIONS, when the shape changes. */
-export const CASE_SCHEMA_VERSION = 5;
+export const CASE_SCHEMA_VERSION = 6;
 /**
  * A data file larger than this is not one the app wrote, and a save that would make one
  * is refused. Pasted texts live in the file: a case with a dozen long reports is a few
@@ -257,7 +261,8 @@ export type Migration = (data: Record<string, unknown>) => Record<string, unknow
  * MIGRATIONS[n] upgrades a version-n file. A version 1 file is read as version 2 with no
  * sources, a version 2 file as version 3 with no sections, a version 3 file as version 4
  * with no case map (D7: no map until she drafts or types one), and a version 4 file as
- * version 5 with no section copied (T8: the marks start with the first copy); it is
+ * version 5 with no section copied (T8: the marks start with the first copy), and a version
+ * 5 file as version 6 with no plan (the Plan step's D5: the migration adds nothing); it is
  * written in the current version only when the case is next saved.
  */
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
@@ -269,6 +274,8 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   3: (data) => data,
   // Nothing to add: a section's copied mark is optional, so an older file reads as nothing copied (T8).
   4: (data) => data,
+  // Nothing to add: the plan's parts are optional parts of the case map (D5).
+  5: (data) => data,
 };
 
 export type CaseFileProblem = "damaged" | "newer-version";

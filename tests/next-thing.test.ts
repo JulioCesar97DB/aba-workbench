@@ -120,13 +120,13 @@ test("the order: unsaved, documents, drafts, map, new map, first section, copy, 
   assert.deepEqual(seen, ["unsaved", "add-documents", "review-draft", "approve-map", "build-map", "start-section", "copy-section", "all-ready"]);
 });
 
-test("Home's five segments are the sidebar's step states, Plan (not built yet) included", () => {
+test("Home's five segments are the sidebar's step states, the plan included", () => {
   assert.deepEqual(
     stepStates({ sources: 2, caseMap: { approved: 1, withContent: 3 }, sections: sections("not-started", { [S1]: "hers" }) }).map((entry) => `${entry.step}:${entry.state}`),
-    ["sources:done", "case-map:in-progress", "interventions:later", "report:in-progress", "review:not-started"],
+    ["sources:done", "case-map:in-progress", "interventions:not-started", "report:in-progress", "review:not-started"],
   );
   assert.deepEqual(
-    stepStates({ sources: 2, caseMap: { approved: 3, withContent: 3 }, sections: sections("approved", {}, [S1]) }).map((entry) => `${entry.step}:${entry.state}`),
-    ["sources:done", "case-map:done", "interventions:later", "report:done", "review:in-progress"],
+    stepStates({ sources: 2, caseMap: { approved: 3, withContent: 3 }, plan: { decided: 5, total: 5 }, sections: sections("approved", {}, [S1]) }).map((entry) => `${entry.step}:${entry.state}`),
+    ["sources:done", "case-map:done", "interventions:done", "report:done", "review:in-progress"],
   );
 });

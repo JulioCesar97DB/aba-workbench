@@ -89,7 +89,7 @@ test("Home: the last case saved to continue, each case's step and progress in wo
   await expect(row("Empty case")).toContainText("6 years · Documents · no documents yet");
   await expect(row("Map case")).toContainText("6 years · Case map · 1 of 2 parts approved");
   await expect(row("Done case")).toContainText("6 years · Ready · all 9 sections copied");
-  await expect(row("Map case").getByRole("img")).toHaveAccessibleName("The five steps: Documents, done; Case map, in progress; Plan, not in the app yet; Report, not started; Review and copy, not started");
+  await expect(row("Map case").getByRole("img")).toHaveAccessibleName("The five steps: Documents, done; Case map, in progress; Plan, not started; Report, not started; Review and copy, not started");
   await expect(row("Done case").getByRole("link", { name: "Open" })).toBeVisible();
   // The card's Continuar says which case it continues, and what comes next (review round 1, M3).
   await expect(card.getByRole("link", { name: "Continue" })).toHaveAccessibleDescription("Done case Next: The 9 sections are copied");
@@ -142,8 +142,9 @@ test("the case summary in Spanish: Lo siguiente, the five steps in sentences, th
   await expect(steps.nth(0)).toContainText("3 documentos: CDE, Direct observation (2).");
   await expect(steps.nth(0).locator('[lang="en"]')).toHaveText(["CDE", "Direct observation"]);
   await expect(steps.nth(1)).toContainText("Sin empezar. La IA puede armarlo con tus documentos, o lo escribes tú.");
-  await expect(steps.nth(2)).toContainText("Pronto");
-  await expect(steps.nth(2).getByRole("link")).toHaveCount(0);
+  // The plan is built (the Plan step, PR 1): its state in a sentence, and its button.
+  await expect(steps.nth(2)).toContainText("Sin empezar: escríbelo a mano, función por función.");
+  await expect(steps.nth(2).getByRole("link")).toHaveCount(1);
   await expect(steps.nth(3)).toContainText("1 de 9 secciones listas: 1 tuya.");
   // Revisión y copia is built (UX-7): its state in a sentence, and its button.
   await expect(steps.nth(4)).toContainText("Ninguna sección copiada todavía.");
@@ -156,7 +157,7 @@ test("the case summary in Spanish: Lo siguiente, the five steps in sentences, th
   await expect(page.getByRole("region", { name: "Con la IA" })).toContainText("Borrador de la IA");
 });
 
-test("Plan says it comes later and sends her on; the last section's Next step goes to Review and copy", async ({ launch }) => {
+test("Plan offers its two ways while empty, with no Soon left in the sidebar; the last section's Next step goes to Review and copy", async ({ launch }) => {
   const app = await launch();
   const page = await firstScreen(app);
   const id = await create(page, "Later steps case");
@@ -167,13 +168,15 @@ test("Plan says it comes later and sends her on; the last section's Next step go
   await goTo(page, `/cases/${id}/interventions`);
   await expect(heading(page)).toHaveText("Plan");
   await expect(page.getByTestId("header-eyebrow")).toHaveText("Step 3 of 5");
-  await expect(page.getByTestId("state-chip")).toHaveText("Coming later");
-  const card = page.getByRole("region", { name: "This step is not in the app yet" });
-  await card.getByRole("link", { name: "Continue with the report" }).click();
-  await expect(heading(page)).toHaveText("Report");
-  // Only Plan is "Soon" in the sidebar now.
+  await expect(page.getByRole("heading", { name: "Write it yourself, function by function" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Have the AI propose the whole plan" })).toBeVisible();
+  await expect(page.getByTestId("coming-later")).toHaveCount(0);
+  // No step is "Soon" in the sidebar any more.
   const steps = page.getByRole("navigation", { name: "Steps of the case" });
-  await expect(steps.getByText("Soon", { exact: true })).toHaveCount(1);
+  await expect(steps.getByText("Soon", { exact: true })).toHaveCount(0);
+  // After the plan, the report (mockup 01): nothing blocks her.
+  await page.getByTestId("next-step").getByRole("link", { name: "Go to the report" }).click();
+  await expect(heading(page)).toHaveText("Report");
 
   // Every section ready: the last one's "Next step" goes to Review and copy.
   for (const section of REPORT_SECTIONS) await writeSection(page, id, section.id);
@@ -330,9 +333,9 @@ test("Lo siguiente, rule 7: the first section ready and not copied, in Spanish, 
   await next.getByRole("link", { name: "Ir a Revisión y copia" }).click();
   await expect(heading(page)).toHaveText("Revisión y copia");
   await expect(page.getByTestId("review-list").getByRole("listitem").nth(1).getByTestId("review-copy")).toHaveClass(/bg-accent/);
-  // No "Pronto" on this step in the sidebar any more.
+  // No "Pronto" in the sidebar any more: the plan is built too.
   const steps = page.getByRole("navigation", { name: "Pasos del caso" });
-  await expect(steps.getByText("Pronto", { exact: true })).toHaveCount(1);
+  await expect(steps.getByText("Pronto", { exact: true })).toHaveCount(0);
 });
 
 test("Home with no case: what a case is and New case; Connect the AI while none is connected", async ({ launch }) => {

@@ -6,6 +6,8 @@ Pull request 1 built the map's storage, its history and status, and the **Case m
 
 ## Storage: `aba-case.json`, schema version 4
 
+Since schema version 6 the case map also holds the plan's parts and `planCopied` ([plan.md](plan.md)); they are listed apart from the map's parts below, and nothing here changes.
+
 `src/main/case-file.ts` (the file) and `src/main/case-map.ts` (the map). Version 4 adds one optional top-level key, `caseMap`. A version 3 file reads as version 4 **with no map** (`MIGRATIONS[3]` adds nothing, D7): a case has a map only once she types one, or (later) the AI drafts one. Every rule of the data file still holds: lossless reading, unknown keys kept everywhere (in the map too: unknown parts, kinds, origins, tags and fields), a newer file never written to, durable writes, the 50 MB cap.
 
 ```json
@@ -144,7 +146,7 @@ Its items are merged into the first answer's by key, field by field: a field the
 
 ## Checks before QA (T3, owner's decisions of 2026-11-28)
 
-Her agency's QA and the payers most often return an assessment for two problems in the behavior definitions (her questionnaire answers of 2026-11-27, p2q16): a definition that fails the **dead-man test** (it names only an absence, so a dead man could "do" it: "stops interacting", "does nothing to begin"), and two definitions that would **score the same response**, so one event is counted twice. The map looks for both: code flags only the most obvious cases, and one AI review per draft is there to catch the subtle ones. The other planned checks (a parameter that clashes with an intervention, a function with no equivalent replacement, extinction or punishment) need the Plan step and come with T4.
+Her agency's QA and the payers most often return an assessment for two problems in the behavior definitions (her questionnaire answers of 2026-11-27, p2q16): a definition that fails the **dead-man test** (it names only an absence, so a dead man could "do" it: "stops interacting", "does nothing to begin"), and two definitions that would **score the same response**, so one event is counted twice. The map looks for both: code flags only the most obvious cases, and one AI review per draft is there to catch the subtle ones. The other planned checks (a parameter that clashes with an intervention, a function with no equivalent replacement, extinction or punishment) are the Plan step's, in [plan.md](plan.md).
 
 **The rules.** `rules/behaviors.md` (version 5) asks every definition to name at least one observable, active response the child makes; an absence or a latency goes in only with the observable forms the sources record ("does not begin within 5 seconds and instead says no, walks away or keeps playing"), and with a `[MISSING: …]` marker and an open item when the sources record none. Definitions that could score the same response carry exclusions that name each other.
 
