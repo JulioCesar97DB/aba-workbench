@@ -422,7 +422,7 @@ test("S1: a value with no ref, a quote too short to prove anything, a number in 
   assert.ok(!withThresholds.problems.some((problem) => /offset/.test(problem)));
 });
 
-test("her default thresholds (owner's decision, 2026-11-28): an AI-drafted definition, onset or offset may state each one as the threshold it is, in its place", () => {
+test("her default thresholds (owner's decision, 2026-11-28): an AI-drafted definition, onset or offset may state each one as the threshold it is, in its place", async () => {
   const passes = (key: "definition" | "onset" | "offset", value: string, name = "Spitting", instructions?: string) => {
     const answer = behaviorsAnswer({ obs: "o", interview: "i" }, []);
     const [first] = answer.behaviors as Array<Record<string, unknown>>;
@@ -450,6 +450,18 @@ test("her default thresholds (owner's decision, 2026-11-28): an AI-drafted defin
   assert.ok(passes("onset", "The child is more than 10 feet from the supervising adult.", "Elopement", hers));
   assert.ok(!passes("onset", "The child is more than 6 feet from the supervising adult.", "Elopement", hers), "her 10 ft replaces the default 6 ft");
   assert.ok(passes("offset", "The child has not left for 10 seconds in a row.", "Elopement", hers), "the defaults she did not change stay");
+  // Review round 2, finding 1: once she saves the dialog, her end-of-episode line keeps 30 s (or her own number) for a tantrum only.
+  const { THRESHOLDS_DRAFT } = await import("../src/shared/case-map-thresholds.ts");
+  assert.ok(!passes("offset", "The child has not spat for 30 seconds.", "Spitting", THRESHOLDS_DRAFT), "the draft saved unchanged");
+  const offTaskChanged = THRESHOLDS_DRAFT.replace("Off task: 3 seconds", "Off task: 5 seconds");
+  assert.ok(!passes("offset", "The child has not spat for 30 seconds.", "Spitting", offTaskChanged), "only the Off task line changed");
+  assert.ok(passes("offset", "No crying or dropping for 30 seconds.", "Tantrum", offTaskChanged));
+  const sixty = "- End of an episode: the behavior has stopped for 10 seconds in a row; for a tantrum, 60 seconds.";
+  assert.ok(!passes("offset", "The child has not spat for 60 seconds.", "Spitting", sixty));
+  assert.ok(passes("offset", "No crying for 60 seconds.", "Tantrum", sixty));
+  assert.ok(passes("offset", "The child has not spat for 10 seconds in a row.", "Spitting", sixty));
+  // Review round 2, finding 2: her 6 ft also ends an elopement.
+  assert.ok(passes("offset", "The child is back within 6 feet of the supervising adult.", "Elopement"));
   // A line of hers that changes no default adds its thresholds in the three fields.
   assert.ok(passes("onset", "The child is more than 3 feet from the assigned spot.", "Leaving task area", "- Leaving the task area: more than 3 feet from the assigned spot."));
 });

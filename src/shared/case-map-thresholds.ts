@@ -38,7 +38,8 @@ export const DEFAULTS: readonly DefaultThreshold[] = [
   {
     label: "Leaving the supervising adult (elopement)",
     text: "more than 6 feet away from the supervising adult without permission.",
-    allows: [{ value: "6", unit: "ft", fields: START }],
+    // Also the offset: an elopement ends when the child is back within the same distance (review round 2, finding 2).
+    allows: [{ value: "6", unit: "ft", fields: ["definition", "onset", "offset"] }],
   },
   { label: "Off task", text: "3 seconds or more without attending to the task.", allows: [{ value: "3", unit: "s", fields: START }] },
   {
@@ -100,7 +101,9 @@ export function allowedThresholds(instructions: string, field: ThresholdField, t
     const threshold = label ? DEFAULTS.find((candidate) => candidate.label.toLowerCase() === label) : undefined;
     if (threshold) replaced.add(threshold.label);
     const fields = threshold ? new Set(threshold.allows.flatMap((allow) => allow.fields)) : new Set<ThresholdField>(["definition", "onset", "offset"]);
-    if (fields.has(field)) out.push(...thresholdPairs(line).map(({ value, unit }) => ({ value, unit })));
+    // A pair after the word "tantrum" is for a tantrum only, as her default's 30 s (review round 2, finding 1).
+    const tantrumAt = line.search(/tantrum/iu);
+    if (fields.has(field)) out.push(...thresholdPairs(line).filter((pair) => tantrum || tantrumAt < 0 || pair.index < tantrumAt).map(({ value, unit }) => ({ value, unit })));
   }
   for (const threshold of DEFAULTS) {
     if (replaced.has(threshold.label)) continue;
