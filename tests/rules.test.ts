@@ -194,7 +194,7 @@ test("owner's decision of 2026-11-27: her questionnaire-confirmed practice is ki
   const text = readFileSync("rules/assessment.md", "utf8");
   const kind3 = /3\. Her standard practice:[\s\S]*?(?=\n4\. Proposals:)/.exec(text)?.[0] ?? "";
   const kind4 = /4\. Proposals:[^\n]*/.exec(text)?.[0] ?? "";
-  for (const point of [/Behavioral Skills Training, in person, never by telehealth, in the family's language/, /an adult always present/, /calling 911/, /incidents reported as soon as possible/, /keeping the family's own strategies/, /caregiver training that increases as fading nears/]) assert.match(kind3, point);
+  for (const point of [/Behavioral Skills Training, in person, never by telehealth, in the family's language/, /an adult always present/, /who may be the designated caregiver \(a parent, a grandparent, a sibling aged 21 or older, or a home health aide or babysitter/, /calling 911/, /incidents reported as soon as possible/, /keeping the family's own strategies/, /caregiver training that increases as fading nears/]) assert.match(kind3, point);
   assert.doesNotMatch(kind4, /behavioral skills training|how caregiver training is delivered|in what language/i);
   assert.match(kind4, /differential reinforcement of alternative behavior, functional communication training/);
   assert.match(kind4, /named procedures for the child stay proposals until her plan exists/);
@@ -207,4 +207,8 @@ test("owner's decision of 2026-11-27: her questionnaire-confirmed practice is ki
     const bst = key.sectionFacts["family-caregiver-involvement"].find((fact) => fact.id === "fci-bst");
     assert.deepEqual(bst?.from, ["rules"], `${dir}: BST in person comes from the rules, not a case document`);
   }
+});
+
+test("review round 2 (nit 4): the case map's rules name both ways her practice reaches the model", () => {
+  assert.match(readFileSync("rules/case-map.md", "utf8"), /only from `<standing-instructions>`, or as the whole-assessment rules list it as confirmed/);
 });

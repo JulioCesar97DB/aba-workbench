@@ -1,6 +1,6 @@
 ---
 id: assessment
-version: 9
+version: 10
 updated: 2026-11-27
 confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27 (who reads it, attribution, quotes, dates, payers, privacy); the four kinds of content are the owner's decision of 2026-11-23
 ---
@@ -45,7 +45,7 @@ Every sentence you write is one of four kinds, and each has its own rule.
 3. Her standard practice: what she does the same way for every child. It reaches you in two ways (owner's decision, 2026-11-27):
    - **What her questionnaire answers of 2026-11-27 confirmed, stated in these rules as hers.** Write it as hers, with no marker:
      - caregiver training by Behavioral Skills Training, in person, never by telehealth, in the family's language;
-     - in the Crisis Plan: an adult always present during sessions in the home, the RBT or the caregiver calling 911 when the situation gets out of control, and incidents reported as soon as possible;
+     - in the Crisis Plan: an adult always present during sessions in the home, and who may be the designated caregiver (a parent, a grandparent, a sibling aged 21 or older, or a home health aide or babysitter reported and listed among the designated caregivers), the RBT or the caregiver calling 911 when the situation gets out of control, and incidents reported as soon as possible;
      - in Risk Assessment: the plan keeping the family's own strategies wherever it can;
      - in Discharge: caregiver training that increases as fading nears.
    - **Everything else she does the same way** (how she monitors a plan, her usual supports, her discharge periods and thresholds, how she checks fidelity) reaches you through her standing instructions for the section. When they give it, write it as her practice. When they do not and the section needs it, keep the sentence and mark it [MISSING: what she needs to give].

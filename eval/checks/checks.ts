@@ -14,7 +14,7 @@ import { lookupKey, normalize, numberIndex, sentences, splitParagraphs, statedNu
  * current checks again on the baseline's stored texts anyway (review B3), so it is
  * recorded to read old results, not to gate the comparison.
  */
-export const CHECKS_VERSION = "5";
+export const CHECKS_VERSION = "6";
 
 export const CHECK_IDS = ["markers", "shape", "numbers", "names", "repetition", "data-density", "banned-patterns", "examples", "payer-readiness", "wording", "quotes", "dates-names"] as const;
 export type CheckId = (typeof CHECK_IDS)[number];
@@ -525,7 +525,7 @@ export const WORDING_PATTERNS: Array<{ id: string; pattern: RegExp; what: string
   {
     id: "severity-level",
     // The DSM-5 forms only: a behavior's severity (the payer's discharge grounds) and a curriculum's Level 1 are not it (review round 1, finding 6).
-    pattern: /\bseverity\s+levels?\b|\b(?:autism|ASD|spectrum disorder)\b[^.]{0,40}\blevel\s*[123]\b|\blevel\s*[123]\b[^.]{0,40}\b(?:autism|ASD|support)\b|\brequiring (?:very substantial |substantial )?support\b/iu,
+    pattern: /\bseverity\s+levels?\b|\b(?:autism|ASD|spectrum disorder)\b[^.]{0,40}\blevel\s*[123]\b|\blevel\s*[123]\b[^.]{0,15}\b(?:autism|ASD|requiring|support)\b|\brequiring (?:very substantial |substantial )?support\b/iu,
     what: "a DSM-5 severity level, or a mention of one (she never states it, in any section)",
     inMarkers: true,
   },
@@ -555,7 +555,7 @@ export function checkQuotes(section: ReportSectionId, text: string): Finding[] {
     if (!/\p{L}/u.test(quoted)) continue;
     // A short phrase the plan teaches the child to say is not quoted speech (review round 1, finding 13).
     const before = withoutMarkers(text).slice(Math.max(0, (match.index ?? 0) - 40), match.index ?? 0);
-    if (/\b(?:to say|to request|to ask for|saying|requesting)\s*$/iu.test(before) && quoted.trim().split(/\s+/u).length <= 4) continue;
+    if (/\bto (?:say|request)\s*$/iu.test(before) && quoted.trim().split(/\s+/u).length <= 4) continue;
     findings.push({ check: "quotes", section, severity: "major", message: "Quoted speech (she always paraphrases).", excerpt: clip(match[0]) });
   }
   return findings;
@@ -566,10 +566,12 @@ export function checkQuotes(section: ReportSectionId, text: string): Finding[] {
 const MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December";
 /**
  * A coming change may give the day it starts ("will start on December 15, 2026"): the date is let
- * through only when a future verb or a span word governs it, not when the sentence has one anywhere
- * (review round 1, finding 7).
+ * through only when a future verb governs it ("will", "starts", "is scheduled", or "beginning" inside
+ * the sentence, as in "accepted her beginning December 15, 2026"), with the end of its span ("to
+ * January 20, 2027"). A bare "from", "until", "through" or "to" never does: "Prior to
+ * October 10, 2026" is a past date (review round 1, finding 7; review round 2, finding 2).
  */
-const COMING_DATE = new RegExp(`\\b(?:will\\s+(?:\\w+\\s+){0,4}?(?:on|from|by|in|starting|beginning|until)|(?:starting|beginning|starts|begins|scheduled|planned|expected|effective)(?:\\s+(?:on|for|by|from))?|from|until|through|to)\\s+(?:${MONTHS})\\s+\\d`, "iu");
+const COMING_DATE = new RegExp(`\\b(?:will\\s+(?:[\\w,]+\\s+){0,6}?(?:on|from|by|in|starting|beginning|until|through|to)|(?:starts|begins|is (?:scheduled|planned|expected)(?: to \\w+)?)(?:\\s+(?:on|for|by|from))?|(?<=\\S\\s+)(?:beginning|starting)(?:\\s+on)?)\\s+(?:${MONTHS})\\s+\\d{1,2}(?:,\\s*\\d{4})?(?:,?\\s+(?:to|until|through)\\s+(?:${MONTHS})\\s+\\d{1,2})?`, "iu");
 const CREDENTIALS = "Ph\\.?\\s?D|Psy\\.?\\s?D|M\\.?\\s?D|Ed\\.?\\s?D|D\\.?\\s?O|BCBA(?:-D)?|BCaBA|LMHC|LCSW|CCC-SLP|OTR/L|ARNP|APRN";
 
 export const DATE_NAME_PATTERNS: Array<{ id: string; pattern: RegExp; what: string; unless?: RegExp }> = [

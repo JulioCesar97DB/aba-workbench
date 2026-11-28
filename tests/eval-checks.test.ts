@@ -354,7 +354,7 @@ test("review round 1 (finding 7): dates and names leave fractions, 24/7 and cred
     "An adult supervises her 24/7 near the pool.",
     "Direct hours will be faded from the RBT, BCaBA, and BCBA levels as goals are met.",
     "Services will start on December 15, 2026.",
-    "From December 15, 2026, her grandmother will travel.",
+    "Her grandmother will travel from December 15, 2026.",
   ]) assert.deepEqual(found(ok), [], ok);
   assert.deepEqual(found("The CDE completed on March 3, 2026 found that ABA will be needed."), ["full-date"], "a past date is not exempt because the sentence also says will");
   assert.deepEqual(found("Services will start on December 15, 2026, after the evaluation of March 3, 2026."), ["full-date"], "the governed date is exempt, the other one is not");
@@ -370,4 +370,37 @@ test("review round 1 (findings 8 and 9): mn-measurement needs progress, cp-dange
   assert.equal(item("cp-dangerous").test("Physical aggression, property destruction and hand biting can be dangerous.", key).ok, true);
   assert.equal(item("cp-dangerous").test("Physical aggression and self-injury toward her hand can occur, and she may destroy property.", key).ok, true, "accepted forms count");
   assert.equal(item("cp-dangerous").test("Elopement, physical aggression and head hitting can put him at risk.", caseA.key).ok, true);
+});
+
+test("review round 2 (finding 1): a quote after saying or requesting is reported speech, flagged; a target phrase after to say or to request is not", () => {
+  for (const speech of [
+    'Her mother reported that Sofia screams, saying "leave me alone".',
+    'When asked to do homework, she kept saying "no way".',
+    'The teacher reported her requesting "my tablet now" during class.',
+  ]) assert.equal(checkQuotes("risk-assessment", speech).length, 1, speech);
+  assert.deepEqual(checkQuotes("medical-necessity", 'ABA will teach Sofia to say "break" when work is hard.'), []);
+  assert.deepEqual(checkQuotes("medical-necessity", 'She will learn to request "all done" at the end of a task.'), []);
+});
+
+test("review round 2 (finding 2): only a future verb exempts a date; a bare from, to, until or through never does", () => {
+  const found = (text: string) => checkDatesNames("risk-assessment", text).map((f) => f.message.split(":")[0]);
+  for (const past of [
+    "Prior to October 10, 2026, she had never left the home without an adult.",
+    "Her grandmother traveled to Colombia from December 15, 2025 to January 20, 2026.",
+    "Starting October 10, 2026, she refused school.",
+    "From December 15, 2026, her grandmother will travel.",
+  ]) assert.deepEqual(found(past), ["full-date"], past);
+  for (const coming of [
+    "Her grandmother will travel from December 15, 2026 to January 20, 2027.",
+    "Services will start on December 15, 2026.",
+    "The new school year starts on August 10, 2027.",
+    "Her grandmother will be away from December 15, 2026, to January 20, 2027.",
+    "Her mother confirmed that the program had accepted Sofía beginning December 15, 2026.",
+  ]) assert.deepEqual(found(coming), [], coming);
+});
+
+test("review round 2 (nit 5): a curriculum level with adult support is not a severity level", () => {
+  assert.deepEqual(checkWording("strengths-and-weaknesses", "Sofia completed Level 2 of the VB-MAPP with adult support."), []);
+  assert.equal(checkWording("background-information", "ASD, Level 2, requiring substantial support.").length, 1);
+  assert.equal(checkWording("background-information", "Autism Spectrum Disorder, Level 2.").length, 1);
 });

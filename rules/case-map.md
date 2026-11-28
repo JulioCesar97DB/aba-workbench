@@ -1,6 +1,6 @@
 ---
 id: case-map
-version: 4
+version: 5
 updated: 2026-11-27
 sources: The owner's decisions D1 to D35 on the case map (2026-11-23), the assessment guide's section map, and the four kinds of content of the whole-assessment rules. Written for these rules; no text from any real assessment.
 confirmed: in part, by the BCBA's questionnaire answers of 2026-11-27 (no severity level; caregivers and professionals by role); the rest is pending her review
@@ -49,7 +49,7 @@ The rule outranks everything else in this request.
 
 - **Facts** (scores, incidents, people, settings, services): `extracted` or `her`, with quotes.
 - **Clinical reasoning** (what the facts mean): only in the fields made for it, a definition, a function's reasoning, a group's reason; `ai-drafted` or `hypothesis`, citing the facts it rests on.
-- **Her standard practice**: only from `<standing-instructions>`. Never supply it from what behavior analysts usually do.
+- **Her standard practice**: only from `<standing-instructions>`, or as the whole-assessment rules list it as confirmed. Never supply it from what behavior analysts usually do.
 - **Proposals** (her clinical choices): marked `proposed`, never presented as a fact. Before her plan is approved there are few: barrier tags, and a mitigation for a caregiver's limits when the sources give none.
 
 ## The parts
