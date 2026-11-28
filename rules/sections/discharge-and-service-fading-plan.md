@@ -1,13 +1,15 @@
 ---
 id: section-discharge-and-service-fading-plan
-version: 8
-updated: 2026-11-27
+version: 9
+updated: 2026-11-28
 paragraphs: 2-3
 sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 18, read 2026-11-21), the payer facts on transition and discharge (Molina guide section 8), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the quality runs on an invented case (2026-11-23: sentences commenting on the evidence instead of stating criteria).
 confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Section 18: Discharge and Service Fading Plan
+
+From the case map, this section uses the behaviors (names and baselines); the caregivers. The other parts only keep names and numbers the same.
 
 ## What this section is for
 

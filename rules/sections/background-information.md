@@ -1,7 +1,7 @@
 ---
 id: section-background-information
-version: 6
-updated: 2026-11-27
+version: 7
+updated: 2026-11-28
 paragraphs: 5-7
 words: 600-900
 sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 3, read 2026-11-21), the BCBA's answers of 2026-11-21 on where other therapies go, the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the quality runs on an invented case (2026-11-23: a background that retold the behaviors and the environmental changes later sections give).
@@ -9,6 +9,8 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Section 3: Background Information
+
+From the case map, this section uses the client; the caregivers; the settings; the facts whose home is section 3; the behaviors by name only. The other parts only keep names and numbers the same.
 
 ## What this section is for
 

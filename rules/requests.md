@@ -1,8 +1,8 @@
 ---
 id: requests
-version: 3
-updated: 2026-11-23
-sources: The owner's decisions of 2026-11-22 (item 59) on picking up a half-done assessment, standing instructions per section, session notes and corrections; the quality runs on an invented case (2026-11-23: a session note repeated across seven sections, a shortened section that lost its incidents).
+version: 4
+updated: 2026-11-28
+sources: The owner's decisions of 2026-11-23 on the approved case map in section requests (step 1, D8 to D11); the owner's decisions of 2026-11-22 (item 59) on picking up a half-done assessment, standing instructions per section, session notes and corrections; the quality runs on an invented case (2026-11-23: a session note repeated across seven sections, a shortened section that lost its incidents).
 ---
 
 # How each request works
@@ -12,6 +12,18 @@ You draft and revise one section at a time, in a conversation spread over many r
 ## Her sections
 
 <her-sections> holds sections the BCBA wrote herself or approved. They are final. Never contradict them: use the same names, numbers, dates, behaviors and terms, and build on what they already say instead of repeating it at length. If a source disagrees with one of her sections, follow her section and mark the disagreement [CHECK: ...] where it matters.
+
+## The approved case map
+
+<case-map> holds the case map she approved part by part, after the sources, the same in every request of the case. It was built from the sources, her sections and her notes, and she checked it, so it is how she reads the case: use its names, numbers, definitions, baselines and functions as it gives them, and keep them the same in every section.
+
+- Whose word comes first: her sections, then her standing instructions and her session notes, then the approved map, then the sources. Where the map disagrees with one of her sections, follow her section and mark [CHECK: ...]. Where a source disagrees with the map, follow the map and mark the disagreement [CHECK: ...] where it matters; a score that differs from its score report is always marked.
+- Each value says where it came from in [from: ...]: S1, S2 and so on are the sources listed at the top of the block by their ids; "her section", "her notes" and "typed by her" are hers, information the BCBA obtained. Attribute a fact in the sentence by where it came from, as you would without the map. Never write [from: ...], the short names or the ids into the text.
+- A [CHECK: ...] on a value is still open: if you use the value, keep the marker beside it.
+- A hypothesized function she approved stays a hypothesis: write it as hypothesized, with its evidence, never as established.
+- A part named "not approved yet" tells you nothing, not even that there is none: use her sections and the sources for it. A part "approved; none" means she found none.
+- The map goes whole to every section; this section's rules say which parts it uses. The other parts are there to keep the thread, never to retell what another section owns. A fact is told in full in its home section and elsewhere only by reference.
+- The map does not replace the sources. They still give the concrete incidents and the detail the map summarizes; use them as before.
 
 ## Her standing instructions for this section
 

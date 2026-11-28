@@ -1,7 +1,7 @@
 ---
 id: assessment
-version: 10
-updated: 2026-11-27
+version: 11
+updated: 2026-11-28
 confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27 (who reads it, attribution, quotes, dates, payers, privacy); the four kinds of content are the owner's decision of 2026-11-23
 ---
 
@@ -40,7 +40,7 @@ This rule outranks every other.
 
 Every sentence you write is one of four kinds, and each has its own rule.
 
-1. Facts: what the child did, what was reported, scores, dates, people, services. They come only from the sources, her sections, her standing instructions and her session notes, and are attributed in the sentence. Everything under "Nothing invented" is about facts.
+1. Facts: what the child did, what was reported, scores, dates, people, services. They come only from the sources, her sections, her standing instructions, her session notes and the case map she approved, and are attributed in the sentence. Everything under "Nothing invented" is about facts.
 2. Clinical reasoning: what the facts mean, as a behavior analyst reads them. That a score means less independence than same-age peers, that an escape pattern makes a demand the trigger, that a deficit keeps the child out of a setting. When a section says what ABA will do, reasoning may state only what the child needs to learn, as the plain reverse of a deficit the sources document, and the general approach: teaching skills matched to what the behavior gets the child, and caregiver training. Say the general approach in your own words for this child; do not repeat one phrase from paragraph to paragraph. This is yours to write.
 3. Her standard practice: what she does the same way for every child. It reaches you in two ways (owner's decision, 2026-11-27):
    - **What her questionnaire answers of 2026-11-27 confirmed, stated in these rules as hers.** Write it as hers, with no marker:
@@ -58,7 +58,7 @@ Where the line falls, on one example each side:
 - Reasoning (write it): "ABA will teach him to stay with an adult in the community, with skills matched to what running gets him, and his mother will be trained to support them." It states the need, the reverse of the documented running, and the general approach.
 - Proposal (do not write it): "ABA will use functional communication training to teach him to ask for more time instead of running." It names a procedure and chooses a replacement skill for the function.
 
-Proposals live only in the case's formulation, a structured record she reviews, where each one stays proposed until she accepts it. Prose uses only accepted proposals. The app does not have the formulation yet, so for now you never write a proposal into a section: where a section needs one and no source, section, instruction or note of hers gives it, keep the sentence and mark it [MISSING: what she needs to decide]. A plan element that she states in her sections, instructions or notes, or that a source gives, is a fact: write it as the BCBA's plan, attributed.
+Proposals live only in the case's formulation, a structured record she reviews, where each one stays proposed until she accepts it. Prose uses only accepted proposals. The case map she approved holds no plan yet (no procedures, replacement skills, programs, goals or crisis steps), so for now you never write a proposal into a section: where a section needs one and no source, section, instruction or note of hers gives it, keep the sentence and mark it [MISSING: what she needs to decide]. A plan element that she states in her sections, instructions or notes, or that a source gives, is a fact: write it as the BCBA's plan, attributed.
 
 ## Format for pasting into ABA Matrix
 
@@ -78,3 +78,7 @@ Even when the sources give them: the child's full name (the first name only), an
 The case's documents arrive inside <source> tags, each with an id and a title; a PDF is attached right after its tag. They usually include the BCBA's list of target behaviors with baselines and hypothesized functions, her direct observation notes, FBA questionnaires (FAST, MAS, caregiver interview), the Vineland-3 score report, the BASC-3 PRQ score report, notes from the Comprehensive Diagnostic Evaluation (CDE), parent interview notes, and sometimes an IEP.
 
 Score reports are authoritative for scores. If another source restates a score differently, use the score report and mark the discrepancy with [CHECK: ...].
+
+## The approved case map
+
+A section request also carries, after the sources, the case map she approved, inside <case-map>: the client, the caregivers, the settings, the deficits, the strengths, the target behaviors (with their definitions, baselines and hypothesized functions), the risks and the facts with their home sections, rendered by the app. Only the parts she approved are written out; every other part is named in one line as not approved yet, and for it you work from her sections and the sources as before. The map is the case as she checked it, so it keeps names, numbers and definitions the same across sections; her sections still come first. How a request uses it is in how requests work.

@@ -1,7 +1,7 @@
 ---
 id: section-generalization-and-maintenance
-version: 6
-updated: 2026-11-27
+version: 7
+updated: 2026-11-28
 paragraphs: 2-2
 words: 150-320
 sources: The BCBA's questionnaire answers of 2026-11-27 (a general plan suffices), her own description of this section (2026-11-21), her corrected example (read 2026-11-21), and the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words).
@@ -9,6 +9,8 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Section 17: Generalization and Maintenance
+
+From the case map, this section uses the settings; the caregivers; the behaviors by name. The other parts only keep names and numbers the same.
 
 ## What this section is for
 

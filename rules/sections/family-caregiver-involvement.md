@@ -1,7 +1,7 @@
 ---
 id: section-family-caregiver-involvement
-version: 6
-updated: 2026-11-27
+version: 7
+updated: 2026-11-28
 paragraphs: 1-4
 words: 200-400
 sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 16, read 2026-11-21), the BCBA's answers of 2026-11-21 (ABA Matrix builds the goal ladders), the payer facts on caregiver participation (Florida Medicaid policy 4.2.2; Molina guide sections 2 and 4), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the quality runs on an invented case (2026-11-23: 835 words describing training procedure by procedure, and a delivery choice no source gave).
@@ -9,6 +9,8 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Section 16: Family/Caregiver Involvement
+
+From the case map, this section uses the caregivers; the facts whose home is section 16; the behaviors by name. The other parts only keep names and numbers the same.
 
 ## What this section is for
 

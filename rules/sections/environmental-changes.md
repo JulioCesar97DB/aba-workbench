@@ -1,7 +1,7 @@
 ---
 id: section-environmental-changes
-version: 5
-updated: 2026-11-27
+version: 6
+updated: 2026-11-28
 paragraphs: 2-3
 words: 150-450
 sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 7, read 2026-11-21), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), the owner's decision that clinical proposals live only in the case formulation (2026-11-23), and the quality runs on an invented case (2026-11-23).
@@ -9,6 +9,8 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Section 7: Environmental Changes
+
+From the case map, this section uses the facts whose home is section 7; the settings; the caregivers. The other parts only keep names and numbers the same.
 
 ## What this section is for
 

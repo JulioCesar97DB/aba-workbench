@@ -1,7 +1,7 @@
 ---
 id: section-strengths-and-weaknesses
-version: 5
-updated: 2026-11-27
+version: 6
+updated: 2026-11-28
 paragraphs: 2-3
 words: 300-450
 sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 6, read 2026-11-21), the pattern of stating strengths and then qualifying them seen in her corrected example (2026-11-21), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the quality runs on an invented case (2026-11-23: weaknesses that restated Medical Necessity's counts; a qualification inferred rather than sourced).
@@ -9,6 +9,8 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Section 6: Strengths and Weaknesses
+
+From the case map, this section uses the strengths; the deficits (names, in the order Medical Necessity gives them). The other parts only keep names and numbers the same.
 
 ## What this section is for
 

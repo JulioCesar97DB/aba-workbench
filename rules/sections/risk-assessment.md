@@ -1,7 +1,7 @@
 ---
 id: section-risk-assessment
-version: 6
-updated: 2026-11-27
+version: 7
+updated: 2026-11-28
 paragraphs: 3-4
 words: 250-450
 sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 19, read 2026-11-21), the payer facts on safety (Florida Medicaid policy 2.2 and 5.2), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the quality runs on an invented case (2026-11-23: 889 words, and a closing paragraph that described an upcoming change).
@@ -9,6 +9,8 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Section 19: Risk Assessment
+
+From the case map, this section uses the risks; the behaviors (names, incidents and intensity). The other parts only keep names and numbers the same.
 
 ## What this section is for
 

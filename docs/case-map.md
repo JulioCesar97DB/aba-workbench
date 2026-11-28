@@ -2,7 +2,7 @@
 
 Step 1 of the AI knowledge plan (owner's decisions D1 to D35, 2026-11-23; the proposal is in the coordinator's notes, `step1-proposal.md`). The case map is one structured record of the case: its client, caregivers, settings, deficit areas, strengths, behaviors and their groups, risks, facts, open items, and the report on her own sections. The AI will draft it, she corrects and approves it part by part, and every section will be written from it, with the whole sources still sent.
 
-Pull request 1 built the map's storage, its history and status, and the **Case map** step (step 2 of a case, `/case-map`, "Mapa del caso" in Spanish) where she types, corrects and approves it by hand. Pull request 2 adds the AI's draft ("The AI's draft", below). The next ones add the evaluation of the map, the code-rendered tables for ABA Matrix, "Read what I have" fully, session notes as facts, and the map in every section request.
+Pull request 1 built the map's storage, its history and status, and the **Case map** step (step 2 of a case, `/case-map`, "Mapa del caso" in Spanish) where she types, corrects and approves it by hand. Pull request 2 adds the AI's draft ("The AI's draft", below). The next ones add the evaluation of the map, the code-rendered tables for ABA Matrix, "Read what I have" fully, and session notes as facts. The Plan step's PR 0 sends the approved map in every section request ("In section requests", below).
 
 ## Storage: `aba-case.json`, schema version 4
 
@@ -184,3 +184,14 @@ Her agency's QA and the payers most often return an assessment for two problems 
 | `tests/definition-checks.test.ts`, `tests/map-draft-state.test.ts` | Every pattern on invented definitions, the review's answer, the warnings on screen; the draft's and the review's state on screen |
 | `tests/json-items.test.ts` | The items of an answer found as it arrives, however it is cut |
 | `e2e/case-map.e2e.ts` | The step in the app window (run by CI) |
+
+## In section requests
+
+Every section request (drafts, changes, paragraph changes, improvements and consistency checks) carries the map she approved, as the step 1 proposal decided (D8 to D11, owner's decisions of 2026-11-23):
+
+- **Approved parts only.** A part goes when the version shown is the one she approved (the screen says "approved"; `caseMapBlockInput` in `src/main/case-map.ts`). Any other part is one line: "Behaviors: not approved yet; use her sections and the sources." A part approved with nothing in it is "approved; none". The block goes even when the case has no map, so the layout never changes. The open items and the report on her sections are not sent: they are her to-do list and a check of her own sections, which travel first anyway.
+- **Rendered by code** (`src/lib/case-map-block.ts`), never the JSON: the parts in a fixed order (client, caregivers, settings, deficits, strengths, behaviors with their groups, risks, facts), each item as a tag with one line per field. Each value carries where it came from in `[from: ...]`, without its quote: sources by short names (S1, S2, ... in the order the request sends them, each defined once at the top by its id and title), "her section", "her notes", "typed by her", "computed by the app". A function or group she approved as a hypothesis says "hypothesized function, approved by the BCBA". Every value is quoted so it cannot open or close a tag. The same map gives the same bytes.
+- **The whole map to every section.** Each section's rules name the parts it uses ("From the case map, this section uses ..."); `rules/requests.md` says how the block ranks: her sections, her instructions and notes, the map, then the sources.
+- **Where it goes:** a third cached block after the sources (docs/sections.md, "Caching").
+- **What is recorded:** each version's generation record and each consistency check keep `mapUsed`, the part and approved version of every part sent (empty when none was approved), so a later pull request can mark sections drafted from an older map. No mark is shown yet.
+- **Size:** case B's real draft (T3's map-verify run, 2026-11-28), every part approved, renders to about 50,000 characters (roughly 12,000 tokens), mostly its ten behaviors. The Plan step's accepted items will join the same block in its PR 4.
