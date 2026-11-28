@@ -1,0 +1,5491 @@
+{
+  "about": "An invented approved case map for invented case B (no real client data). Built from the case map draft of map-verify on 2026-11-28 (T3), corrected as the BCBA would approve it: the five behaviors, definitions and functions of her target behavior list, the follow-up call's facts, and no open [CHECK]s. Refs name sources by their id in case.json and key.json; pnpm eval --map turns them into the case's own ids.",
+  "answers": {
+    "map-facts": {
+      "client": {
+        "age": {
+          "value": "9:4 at testing",
+          "refs": [
+            {
+              "kind": "source",
+              "id": "vineland-3",
+              "quote": "Age at testing                                             9:4"
+            }
+          ],
+          "origin": "extracted",
+          "check": ""
+        },
+        "diagnosis": {
+          "value": "Autism Spectrum Disorder (F84.0), without accompanying intellectual impairment, with accompanying language impairment in pragmatic language; Attention-Deficit/Hyperactivity Disorder, combined presentation (F90.2).",
+          "refs": [
+            {
+              "kind": "source",
+              "id": "cde",
+              "quote": "Autism Spectrum Disorder (F84.0), without accompanying intellectual impairment, with accompanying language impairment in pragmatic language; Attention-Deficit/Hyperactivity Disorder, combined presentation (F90.2)."
+            }
+          ],
+          "origin": "extracted",
+          "check": ""
+        },
+        "severityLevel": {
+          "value": "",
+          "refs": [],
+          "origin": "extracted",
+          "check": ""
+        },
+        "evaluator": {
+          "value": "Florida-licensed psychologist",
+          "refs": [
+            {
+              "kind": "source",
+              "id": "cde",
+              "quote": "licensed psychologist (Florida)."
+            }
+          ],
+          "origin": "extracted",
+          "check": ""
+        },
+        "evaluationDate": {
+          "value": "07/15/2026,07/22/2026; signed 07/30/2026",
+          "refs": [
+            {
+              "kind": "source",
+              "id": "cde",
+              "quote": "Evaluation dates: 07/15/2026 and 07/22/2026. Report signed 07/30/2026."
+            }
+          ],
+          "origin": "extracted",
+          "check": ""
+        },
+        "medications": [
+          {
+            "value": "Methylphenidate extended release, 18 mg every morning, prescribed by the psychiatrist; started 03/2026.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "methylphenidate extended release 18 mg every morning, started 03/2026, prescribed by the psychiatrist"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        ],
+        "school": {
+          "value": "Ejemplo Elementary School, general education classroom with ESE support",
+          "refs": [
+            {
+              "kind": "source",
+              "id": "parent-interview",
+              "quote": "Fourth grade at Ejemplo Elementary School, general education classroom with ESE support."
+            }
+          ],
+          "origin": "extracted",
+          "check": ""
+        },
+        "grade": {
+          "value": "Fourth grade",
+          "refs": [
+            {
+              "kind": "source",
+              "id": "parent-interview",
+              "quote": "Fourth grade at Ejemplo Elementary School"
+            }
+          ],
+          "origin": "extracted",
+          "check": ""
+        },
+        "schedule": {
+          "value": "School 8:30 a.m. to 3:00 p.m.; mother reported availability after 3:30 p.m. on weekdays and Saturday mornings.",
+          "refs": [
+            {
+              "kind": "source",
+              "id": "parent-interview",
+              "quote": "School 8:30 a.m. to 3:00 p.m."
+            },
+            {
+              "kind": "source",
+              "id": "parent-interview",
+              "quote": "Available for sessions after 3:30 p.m. on weekdays and Saturday mornings."
+            }
+          ],
+          "origin": "extracted",
+          "check": ""
+        },
+        "iep": {
+          "value": "IEP in effect 04/17/2026 to 04/16/2027. Primary exceptionality: Autism Spectrum Disorder. Secondary: Other Health Impairment (ADHD). A school-based Functional Behavior Assessment was requested and was pending in the IEP. The IEP does not include behavior analysis services.",
+          "refs": [
+            {
+              "kind": "source",
+              "id": "iep",
+              "quote": "plan in effect 04/17/2026 to 04/16/2027."
+            },
+            {
+              "kind": "source",
+              "id": "iep",
+              "quote": "Primary exceptionality: Autism Spectrum Disorder. Secondary: Other Health Impairment (ADHD)."
+            },
+            {
+              "kind": "source",
+              "id": "iep",
+              "quote": "A school-based Functional Behavior Assessment was requested on 04/17/2026 and is pending."
+            },
+            {
+              "kind": "source",
+              "id": "iep",
+              "quote": "The IEP does not include behavior analysis services."
+            }
+          ],
+          "origin": "extracted",
+          "check": ""
+        },
+        "otherServices": [
+          {
+            "name": {
+              "value": "Specialized instruction through support facilitation in general education, 300 minutes per week",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "Specialized instruction through support facilitation in general education: 300 minutes per week."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            "provider": {
+              "value": "School, under the IEP",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "Specialized instruction through support facilitation in general education"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            "paid": {
+              "value": "not-paid",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "Specialized instruction through support facilitation in general education"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          },
+          {
+            "name": {
+              "value": "Speech-language therapy for pragmatic language, 60 minutes per week",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "Speech-language therapy (pragmatic language): 60 minutes per week."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            "provider": {
+              "value": "School, under the IEP",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Speech at school (part of the IEP)."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            "paid": {
+              "value": "not-paid",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Speech at school (part of the IEP)."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          },
+          {
+            "name": {
+              "value": "School counseling, 30 minutes per week",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "School counseling: 30 minutes per week."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            "provider": {
+              "value": "School, under the IEP",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "School counseling: 30 minutes per week."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            "paid": {
+              "value": "not-paid",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "School counseling: 30 minutes per week."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          },
+          {
+            "name": {
+              "value": "Medication management; psychiatry follow-up every 6 weeks",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "cde",
+                  "quote": "continue medication management with psychiatry"
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Psychiatry follow-up every 6 weeks."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            "provider": {
+              "value": "Psychiatrist",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "cde",
+                  "quote": "prescribed by the psychiatrist"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            "paid": {
+              "value": "",
+              "refs": [],
+              "origin": "extracted",
+              "check": ""
+            }
+          }
+        ],
+        "languages": [
+          {
+            "value": "English was used for the mother’s interview.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "90 minutes, in English."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          {
+            "value": "The maternal grandmother speaks only Spanish.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "The grandmother is willing to learn the strategies but speaks only Spanish."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        ]
+      },
+      "caregivers": [
+        {
+          "key": "new-1",
+          "role": {
+            "value": "Mother; lives with Sofía and works during the day.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Sofía lives with her mother"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "while the mother works (8:00 a.m. to 5:00 p.m.)."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "language": {
+            "value": "English used in interview",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "90 minutes, in English."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "availability": {
+            "value": "Weekday evenings after 5:30 p.m. and Saturday mornings",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Can join parent training on weekday evenings after 5:30 p.m. and on Saturday mornings."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "participation": {
+            "value": "Provided interview and questionnaire information, identified priorities and can attend caregiver training.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Can join parent training on weekday evenings after 5:30 p.m. and on Saturday mornings."
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "That she stops hurting her brother."
+              },
+              {
+                "kind": "source",
+                "id": "fba-questionnaires",
+                "quote": "Informant: Carmen Inventada (mother)."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "limits": {
+            "value": "Works 8:00 a.m. to 5:00 p.m.; reports exhaustion and has begun avoiding outings.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "while the mother works (8:00 a.m. to 5:00 p.m.)."
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Says she feels \"exhausted and judged\" and has started avoiding outings."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "mitigation": {
+            "value": "Offer in-person training during the evening or Saturday window the mother identified.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Can join parent training on weekday evenings after 5:30 p.m. and on Saturday mornings."
+              }
+            ],
+            "origin": "proposed",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-2",
+          "role": {
+            "value": "Maternal grandmother; looks after the children while their mother works.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "her maternal grandmother (72), who looks after the children from 3:00 to 5:30 p.m. while the mother works"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "language": {
+            "value": "Spanish only",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "but speaks only Spanish."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "availability": {
+            "value": "Provides care from 3:00 to 5:30 p.m.; no training time confirmed.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "looks after the children from 3:00 to 5:30 p.m."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "participation": {
+            "value": "Willing to learn the strategies; participated in the observed homework routine.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "The grandmother is willing to learn the strategies"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Grandmother asked Sofía to start her math worksheet."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "limits": {
+            "value": "English-only training would not meet her language needs.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "but speaks only Spanish."
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "mitigation": {
+            "value": "Arrange in-person caregiver training in Spanish for the grandmother.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "The grandmother is willing to learn the strategies but speaks only Spanish."
+              }
+            ],
+            "origin": "proposed",
+            "check": ""
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "new-1",
+          "name": {
+            "value": "Home: homework, dinner, shower and bedtime",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "home (homework time)"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "home (dinner, shower, bedtime)"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "home",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "home (homework time)"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "evidence": {
+            "value": "observed",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Observation 1: 10/07/2026, 3:30 to 5:30 p.m., home (homework time)"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "by": {
+            "value": "BCBA",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Observer: Daniela Muestra, M.S., BCBA."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "dates": {
+            "value": "10/07/2026, 3:30 to 5:30 p.m.; 10/14/2026, 6:30 to 8:30 p.m.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "10/07/2026, 3:30 to 5:30 p.m., home (homework time)"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "10/14/2026, 6:30 to 8:30 p.m., home (dinner, shower, bedtime)"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-2",
+          "name": {
+            "value": "Public library, crossing to the neighborhood park, and park",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "public library and neighborhood park"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Crossing to the park: pulled her wrist out of her mother's hand"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "community",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "public library and neighborhood park"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "evidence": {
+            "value": "observed",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Observation 2: 10/10/2026, 10:00 a.m. to 12:00 p.m., public library and neighborhood park"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "by": {
+            "value": "BCBA",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Observer: Daniela Muestra, M.S., BCBA."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "dates": {
+            "value": "10/10/2026, 10:00 a.m. to 12:00 p.m.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "10/10/2026, 10:00 a.m. to 12:00 p.m., public library and neighborhood park"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-3",
+          "name": {
+            "value": "School: general education classroom, lunch and recess",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "general education classroom with ESE support"
+              },
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "mostly at lunch and recess."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "school",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Sofía leaves the classroom without permission"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "evidence": {
+            "value": "reported",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Teacher comment recorded in the IEP"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "No school observation was done."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "by": {
+            "value": "IEP, teacher comment in the IEP and mother; district approval for BCBA access was pending.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Teacher comment recorded in the IEP"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "The teacher sends notes home about her leaving the classroom and arguing with peers."
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "BCBA access requires district approval, which is pending."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "dates": {
+            "value": "IEP meeting 04/17/2026; teacher incident 03/12/2026",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Annual IEP meeting held 04/17/2026"
+              },
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "On 03/12/2026 Sofía threw a chair"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-4",
+          "name": {
+            "value": "School summer program",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "at the summer program (2 hours)."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "school",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "school observation by the evaluator on 07/22/2026 at the summer program"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "evidence": {
+            "value": "reported",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "Evaluator's observation at the summer program"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "by": {
+            "value": "Evaluating psychologist’s direct observation, documented in the CDE; not a BCBA school observation.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "school observation by the evaluator on 07/22/2026 at the summer program"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "No school observation was done."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "dates": {
+            "value": "07/22/2026, 2 hours",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "on 07/22/2026 at the summer program (2 hours)."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-5",
+          "name": {
+            "value": "Home and school-morning routines described in the parent interview",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Interview at home with"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "cried, locked herself in the bathroom, or would not get on the bus."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "home",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Behaviors at home."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "evidence": {
+            "value": "reported",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Parent interview: BCBA's notes"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "by": {
+            "value": "Mother",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "(mother) on 10/05/2026, 90 minutes, in English."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "dates": {
+            "value": "10/05/2026 interview",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "on 10/05/2026, 90 minutes, in English."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-6",
+          "name": {
+            "value": "Parking lots, stores and the route home",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "the mother holds her wrist in parking lots."
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Cannot order food or pay at a store"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "the route home changes, she screams and refuses to get out of the car."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "community",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Cannot order food or pay at a store"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "evidence": {
+            "value": "reported",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Parent interview: BCBA's notes"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "by": {
+            "value": "Mother",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "(mother) on 10/05/2026, 90 minutes, in English."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "dates": {
+            "value": "10/05/2026 interview",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "on 10/05/2026, 90 minutes, in English."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        }
+      ],
+      "deficits": [
+        {
+          "key": "new-1",
+          "area": {
+            "value": "Adaptive functioning",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "vineland-3",
+                "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "scores": [
+            {
+              "instrument": "Vineland-3",
+              "scale": "Adaptive Behavior Composite",
+              "score": "74",
+              "percentile": "4",
+              "level": "Moderately Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Moderately\n                                          110              74               70–78                 4\n Composite                                                                                      Low"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "evidence": [
+            {
+              "value": "Her mother described repeated help with showering and difficulty managing a store purchase.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Showers only with repeated reminders and arguments"
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Cannot order food or pay at a store"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "impact": {
+            "value": "Sofía relies on adult help for everyday activities at home and in the community more than most children her age.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "she will not wash her hair on her own."
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Cannot order food or pay at a store"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-2",
+          "area": {
+            "value": "Communication",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Communication: uses complete sentences"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "scores": [
+            {
+              "instrument": "Vineland-3",
+              "scale": "Communication",
+              "score": "81",
+              "percentile": "10",
+              "level": "Moderately Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Communication                            36               81               76–86                 10"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Receptive",
+              "score": "12",
+              "percentile": "",
+              "level": "Moderately Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Communication         Receptive                            68              12 7:2"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Expressive",
+              "score": "13",
+              "percentile": "",
+              "level": "Adequate",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Communication         Expressive                          121              13 8:1                     Adequate"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Written",
+              "score": "11",
+              "percentile": "",
+              "level": "Moderately Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Communication         Written                              58              11 7:6"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "evidence": [
+            {
+              "value": "The IEP describes complete sentences but difficulty taking conversational turns, staying on topic and understanding nonliteral language.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "uses complete sentences; difficulty with turn-taking in conversation, staying on topic and understanding nonliteral language."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "At home, Sofía talked about train schedules for 11 minutes and did not respond to attempts to change the topic.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "talked to the BCBA about train schedules for 11 minutes without stopping; did not respond to two attempts to change the topic."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "impact": {
+            "value": "Although Sofía speaks in sentences, she misses what her conversation partner is asking and does not repair misunderstandings. At the park this cost her an opportunity to join a game.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "does not ask questions back; does not repair misunderstandings."
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "two girls her age asked if she wanted to play tag. She answered by reciting the bus schedule; the girls walked away."
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-3",
+          "area": {
+            "value": "Daily Living Skills",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "vineland-3",
+                "quote": "Daily Living Skills                      27               72               67–77                 3"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "scores": [
+            {
+              "instrument": "Vineland-3",
+              "scale": "Daily Living Skills",
+              "score": "72",
+              "percentile": "3",
+              "level": "Moderately Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Daily Living Skills                      27               72               67–77                 3"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Personal",
+              "score": "10",
+              "percentile": "",
+              "level": "Moderately Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Personal                             82              10 6:4"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Domestic",
+              "score": "9",
+              "percentile": "",
+              "level": "Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Domestic                             24               9 5:8                     Low"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Community",
+              "score": "8",
+              "percentile": "",
+              "level": "Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Community                            41               8 5:10                    Low"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "evidence": [
+            {
+              "value": "During the evening home observation, Sofía needed 14 verbal prompts over 38 minutes to get into the shower and did not wash her hair.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "needed 14 verbal prompts over 38 minutes before getting in; did not wash her hair"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Her mother reported that Sofía dresses herself but chooses the same two outfits and becomes upset when they are in the wash. She cannot order food or pay at a store.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Can dress herself but chooses the same two outfits; melts down when they are in the wash."
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Cannot order food or pay at a store; becomes upset if a cashier talks to her."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "impact": {
+            "value": "Even with sustained adult prompting, Sofía does not complete personal hygiene independently. She also depends on an adult to complete purchases in the community.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "before getting in; did not wash her hair"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Cannot order food or pay at a store"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-4",
+          "area": {
+            "value": "Socialization and coping with change",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "vineland-3",
+                "quote": "Socialization         Coping                               21               5 3:6                     Low"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "scores": [
+            {
+              "instrument": "Vineland-3",
+              "scale": "Socialization",
+              "score": "66",
+              "percentile": "1",
+              "level": "Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Socialization                            21               66               61–71                 1 Low"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Interpersonal Relationships",
+              "score": "7",
+              "percentile": "",
+              "level": "Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Interpersonal\n Socialization                                              54               7 4:2                     Low\n                       Relationships"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Play and Leisure",
+              "score": "9",
+              "percentile": "",
+              "level": "Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Socialization         Play and Leisure                     47               9 5:1                     Low"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Coping",
+              "score": "5",
+              "percentile": "",
+              "level": "Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Socialization         Coping                               21               5 3:6                     Low"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "evidence": [
+            {
+              "value": "Her mother reported no friends at school or in the neighborhood. At the park, Sofía recited a bus schedule when invited to play tag and played alone after the girls walked away.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "No friends at school or in the neighborhood"
+                },
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "two girls her age asked if she wanted to play tag. She answered by reciting the bus schedule; the girls walked away. She played alone on the climbing structure afterwards."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "When asked to leave the library, Sofía sat on the floor and screamed for 9 minutes. Staff asked her mother to take her outside.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "When told it was time to leave, she refused, sat on the floor and screamed for 9 minutes; a staff member asked the mother to take her outside."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "impact": {
+            "value": "Sofía misses opportunities for reciprocal play even when peers approach her. Difficulty ending preferred activities disrupts family outings.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "the girls walked away. She played alone on the climbing structure afterwards."
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "a staff member asked the mother to take her outside."
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-5",
+          "area": {
+            "value": "Motor Skills",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "vineland-3",
+                "quote": "Motor Skills                             26               88               82–94                 21 Adequate"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "scores": [
+            {
+              "instrument": "Vineland-3",
+              "scale": "Motor Skills",
+              "score": "88",
+              "percentile": "21",
+              "level": "Adequate",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Motor Skills                             26               88               82–94                 21 Adequate"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Fine Motor",
+              "score": "12",
+              "percentile": "",
+              "level": "Moderately Low",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Motor Skills          Fine Motor                           71              12 7:9"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Gross Motor",
+              "score": "14",
+              "percentile": "",
+              "level": "Adequate",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Motor Skills            Gross Motor                                 84                 14 8:6                     Adequate"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "evidence": [
+            {
+              "value": "Sofía played on the climbing structure at the park.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "She played alone on the climbing structure afterwards."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "impact": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-6",
+          "area": {
+            "value": "Safety and behavioral regulation",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Does not cross streets safely"
+              },
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "focused on aggression, emotional regulation, flexibility and social skills"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "scores": [
+            {
+              "instrument": "Vineland-3",
+              "scale": "Internalizing",
+              "score": "19",
+              "percentile": "",
+              "level": "Elevated",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Internalizing                                                     16                         19 Elevated"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Externalizing",
+              "score": "22",
+              "percentile": "",
+              "level": "Clinically Significant",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Externalizing                                                     24                         22 Clinically Significant"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "Vineland-3",
+              "scale": "Maladaptive Behavior Index",
+              "score": "22",
+              "percentile": "",
+              "level": "Clinically Significant",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Maladaptive Behavior Index                                        47                         22 Clinically Significant"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Vineland Adaptive Behavior Scales, Third Edition (Vineland-3)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "evidence": [
+            {
+              "value": "Vineland critical items rated 2: Hits, kicks or pushes others; Destroys or damages own or others' property on purpose; Says or threatens to hurt others; Refuses to go to school. Bites self or bangs head was rated 1.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Hits, kicks or pushes others                                                                                                       2"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Destroys or damages own or others' property on purpose                                                                             2"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Says or threatens to hurt others                                                                                                   2"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Refuses to go to school                                                                                                            2"
+                },
+                {
+                  "kind": "source",
+                  "id": "vineland-3",
+                  "quote": "Bites self or bangs head                                                                                                           1"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Her mother reported daily hitting, kicking and pushing of her brother and a recent upper-arm bruise. During homework, Sofía pushed him down and kicked him after he picked up her train book.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Hits, kicks and pushes Diego \"every day, several times\", mostly over the tablet and the TV remote. Diego had a bruise on his upper arm last week."
+                },
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Diego picked up her train book. She pushed him to the floor and kicked his leg once."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "During the observed crossing to the park, Sofía pulled free and ran across the street without looking. No cars were present then.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "pulled her wrist out of her mother's hand and ran across the street without looking (no cars at that moment)."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "The IEP reports leaving the classroom 2 to 4 times per week and pushing or kicking peers about 2 times per week. The teacher reported that a chair thrown during a transition led to classroom evacuation for about 25 minutes.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "Sofía leaves the classroom without permission 2 to 4 times per week, usually during writing tasks or group work"
+                },
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "She has physical altercations with peers (pushing, kicking) about 2 times per week"
+                },
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "Sofía threw a chair when asked to move from the computer to her writing assignment; the class was evacuated to the hallway while she calmed down (about 25 minutes)."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Her mother reported school refusal on 6 of 20 school days in October. On those days her mother arrived late to work or her grandmother kept her home.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Refused to go to school on 6 of 20 school days in October: cried, locked herself in the bathroom, or would not get on the bus."
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "On those days the mother arrived late to work or the grandmother kept her home."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "impact": {
+            "value": "Aggression has injured her brother and interrupted instruction for the class. Running into the street places Sofía at risk of traffic injury even when her mother is beside her. School refusal disrupts attendance and her mother’s work.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Diego had a bruise on his upper arm last week."
+              },
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "the class was evacuated to the hallway while she calmed down"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "pulled her wrist out of her mother's hand and ran across the street without looking"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "the mother arrived late to work or the grandmother kept her home."
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-7",
+          "area": {
+            "value": "Caregiver-child relationship and caregiver support needs",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "basc-3-prq",
+                "quote": "BASC-3 Parenting Relationship Questionnaire (PRQ)"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "scores": [
+            {
+              "instrument": "BASC-3 Parenting Relationship Questionnaire (PRQ)",
+              "scale": "Attachment",
+              "score": "47",
+              "percentile": "38",
+              "level": "Average",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "Attachment                                  33           47                            42–52                38 Average"
+                },
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "BASC-3 Parenting Relationship Questionnaire (PRQ)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "BASC-3 Parenting Relationship Questionnaire (PRQ)",
+              "scale": "Communication",
+              "score": "41",
+              "percentile": "19",
+              "level": "Average",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "Communication                               24           41                            36–46                19 Average"
+                },
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "BASC-3 Parenting Relationship Questionnaire (PRQ)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "BASC-3 Parenting Relationship Questionnaire (PRQ)",
+              "scale": "Discipline Practices",
+              "score": "36",
+              "percentile": "8",
+              "level": "At-Risk",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "Discipline Practices                        14           36                            31–41                  8 At-Risk"
+                },
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "BASC-3 Parenting Relationship Questionnaire (PRQ)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "BASC-3 Parenting Relationship Questionnaire (PRQ)",
+              "scale": "Involvement",
+              "score": "43",
+              "percentile": "24",
+              "level": "Average",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "Involvement                                 25           43                            38–48                24 Average"
+                },
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "BASC-3 Parenting Relationship Questionnaire (PRQ)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "BASC-3 Parenting Relationship Questionnaire (PRQ)",
+              "scale": "Parenting Confidence",
+              "score": "34",
+              "percentile": "6",
+              "level": "At-Risk",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "Parenting Confidence                        15           34                            29–39                  6 At-Risk"
+                },
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "BASC-3 Parenting Relationship Questionnaire (PRQ)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "BASC-3 Parenting Relationship Questionnaire (PRQ)",
+              "scale": "Satisfaction with School",
+              "score": "31",
+              "percentile": "3",
+              "level": "At-Risk",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "Satisfaction with School                      9          31                            26–36                  3 At-Risk"
+                },
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "BASC-3 Parenting Relationship Questionnaire (PRQ)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "instrument": "BASC-3 Parenting Relationship Questionnaire (PRQ)",
+              "scale": "Relational Frustration",
+              "score": "68",
+              "percentile": "95",
+              "level": "At-Risk",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "Relational Frustration                      24           68                            63–73                95 At-Risk"
+                },
+                {
+                  "kind": "source",
+                  "id": "basc-3-prq",
+                  "quote": "BASC-3 Parenting Relationship Questionnaire (PRQ)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "evidence": [
+            {
+              "value": "Her mother described exhaustion and avoiding outings. The caregiver interview identifies homework, bedtime and school mornings as difficult routines.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Says she feels \"exhausted and judged\" and has started avoiding outings."
+                },
+                {
+                  "kind": "source",
+                  "id": "fba-questionnaires",
+                  "quote": "homework, bedtime, and school mornings."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "impact": {
+            "value": "Despite her involvement, Sofía’s mother reports strain that limits family outings. Her ratings identify confidence in managing behavior and frustration during interactions as needs for caregiver support.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "has started avoiding outings."
+              },
+              {
+                "kind": "source",
+                "id": "basc-3-prq",
+                "quote": "Parenting Confidence                        15           34                            29–39                  6 At-Risk"
+              },
+              {
+                "kind": "source",
+                "id": "basc-3-prq",
+                "quote": "Relational Frustration                      24           68                            63–73                95 At-Risk"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          }
+        }
+      ],
+      "strengths": [
+        {
+          "key": "new-1",
+          "text": {
+            "value": "Reads at grade level with strong decoding and vocabulary.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Reading: on grade level (4th grade); strong decoding and vocabulary."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "strength",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "strong decoding and vocabulary."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "setting": {
+            "value": "School",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Present levels of performance (from the IEP)."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-2",
+          "text": {
+            "value": "Enjoys books about trains, train schedules and drawing maps.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Reads well and loves books about trains"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "likes drawing maps."
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "talked to the BCBA about train schedules for 11 minutes without stopping"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "interest",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "loves books about trains"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "setting": {
+            "value": "Parent report; interest in trains also observed at home and at the public library.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "talked to the BCBA about train schedules for 11 minutes without stopping"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Library: stayed in the train section 40 minutes."
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Reads well and loves books about trains"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-3",
+          "text": {
+            "value": "Her mother describes a good memory; the CDE documents memorizing and reciting train and bus schedules.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "good memory; affectionate with her grandmother"
+              },
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "memorizes and recites train and bus schedules."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "strength",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "memorizes and recites train and bus schedules."
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "setting": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-4",
+          "text": {
+            "value": "Dresses herself and helps feed the family dog.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Can dress herself but chooses the same two outfits"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "helps feed the family dog"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "strength",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "helps feed the family dog"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "setting": {
+            "value": "Home, per mother",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "helps feed the family dog"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-5",
+          "text": {
+            "value": "Affectionate with her grandmother. Her mother’s relationship questionnaire shows Average Attachment and Involvement; both caregivers are willing to participate.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "affectionate with her grandmother"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Can join parent training on weekday evenings after 5:30 p.m. and on Saturday mornings. The grandmother is willing to learn the strategies"
+              },
+              {
+                "kind": "source",
+                "id": "basc-3-prq",
+                "quote": "Attachment                                  33           47                            42–52                38 Average"
+              },
+              {
+                "kind": "source",
+                "id": "basc-3-prq",
+                "quote": "Involvement                                 25           43                            38–48                24 Average"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "kind": {
+            "value": "strength",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "The grandmother is willing to learn the strategies"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "setting": {
+            "value": "Family care",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "affectionate with her grandmother"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-6",
+          "text": {
+            "value": "Plays on the tablet and prefers to continue using it at bedtime.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Plays alone on the tablet."
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Bedtime: when the tablet was taken, she bit her right wrist once and screamed for 15 minutes"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "kind": {
+            "value": "preference",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Plays alone on the tablet."
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "setting": {
+            "value": "Home",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "home (dinner, shower, bedtime)"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          }
+        }
+      ],
+      "facts": [
+        {
+          "key": "new-1",
+          "text": {
+            "value": "The BCBA obtained phone confirmation from the mother on 11/20/2026 that the YMCA after-school program accepted Sofía starting 12/15/2026. The mother gave the program a copy of the IEP accommodations.",
+            "refs": [
+              {
+                "kind": "note",
+                "id": "notes",
+                "quote": "The mother confirmed by phone on 11/20/2026 that the YMCA after-school program accepted Sofía from 12/15/2026, and that she gave the program a copy of the IEP accommodations."
+              }
+            ],
+            "origin": "her",
+            "check": ""
+          },
+          "homeSection": 7
+        },
+        {
+          "key": "new-2",
+          "text": {
+            "value": "Sofía lives with her mother, brother aged 6 and maternal grandmother aged 72. Her father lives in another state without regular contact.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Sofía lives with her mother, her brother Diego (6) and her maternal grandmother (72)"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "The father lives in another state and has no regular contact."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 3
+        },
+        {
+          "key": "new-3",
+          "text": {
+            "value": "Her mother prioritizes her brother’s safety, calming without damaging property, going to school without conflict, making a friend and showering independently.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "That she stops hurting her brother.\" \"That she can calm down without breaking things.\""
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "That she goes to school without a fight every morning.\" \"That she has at least one friend.\" \"That she showers on her own."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 3
+        },
+        {
+          "key": "new-4",
+          "text": {
+            "value": "Born at 39 weeks without complications. Her mother reported timely early milestones and sentences by age 2; teachers first raised concerns in kindergarten about outbursts and solitary play.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Born at 39 weeks, no complications. Early milestones on time; talked in sentences by age 2. Teachers raised concerns in kindergarten about outbursts and playing alone."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 3
+        },
+        {
+          "key": "new-5",
+          "text": {
+            "value": "Her mother reported six months of school counseling in 2024 without perceived change and no prior ABA.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Six months of school counseling in 2024, which the mother says \"did not change anything\". Never received ABA."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 3
+        },
+        {
+          "key": "new-6",
+          "text": {
+            "value": "Her mother reported better morning focus and worse afternoon outbursts since starting medication. The caregiver FBA interview identifies afternoon medication wear-off, poor sleep, a difficult school day and routine changes as reported setting events.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "the mother says she focuses better in the morning, but outbursts in the afternoon are \"worse than before\"."
+              },
+              {
+                "kind": "source",
+                "id": "fba-questionnaires",
+                "quote": "a bad day at school (the mother learns this from the teacher's notes), the medication wearing off in the afternoon, poor sleep, changes in routine."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 19
+        },
+        {
+          "key": "new-7",
+          "text": {
+            "value": "The pediatrician signed the physician’s order for behavior analysis services on 08/04/2026.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "pediatrician and primary care physician. Physician's order for behavior analysis services signed 08/04/2026."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 2
+        },
+        {
+          "key": "new-8",
+          "text": {
+            "value": "The CDE recommends home and community ABA for aggression, emotional regulation, flexibility and social skills, with parent training; continued school speech-language services, a social skills group, psychiatry and school coordination.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "Applied Behavior Analysis focused on aggression, emotional regulation, flexibility and social skills, at home and in community settings, with parent training"
+              },
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "continue school speech-language services for pragmatics; social skills group; continue medication management with psychiatry; coordinate with the school team."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 4
+        },
+        {
+          "key": "new-9",
+          "text": {
+            "value": "IEP accommodations include a visual schedule, break card for up to 3 breaks of 5 minutes per day, seating away from the door, extended assignment time, advance transition warnings and cafeteria headphones.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Visual schedule; break card (up to 3 breaks of 5 minutes per day); preferential seating away from the door; extended time on assignments; advance warning before transitions; access to headphones in the cafeteria."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 3
+        },
+        {
+          "key": "new-10",
+          "text": {
+            "value": "School goals address break-card use with a visual cue instead of leaving in 4 of 5 opportunities, at least 3 conversational turns on a peer’s topic in 4 of 5 opportunities, and a taught calming strategy within 2 minutes in 3 of 5 opportunities.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Given a visual cue, Sofía will use her break card instead of leaving the classroom in 4 of 5 opportunities."
+              },
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "During structured peer activities, Sofía will take at least 3 conversational turns on a topic chosen by a peer in 4 of 5 opportunities."
+              },
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "When frustrated, Sofía will use a taught calming strategy within 2 minutes in 3 of 5 observed opportunities."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 3
+        },
+        {
+          "key": "new-11",
+          "text": {
+            "value": "The IEP reports math about one year below grade level and unfinished independent work. Her mother reported a 1-day suspension in May 2026 after Sofía kicked a classmate at recess.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Math: about one year below grade level; does not finish independent work."
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Suspended for 1 day in May 2026 after kicking a classmate at recess."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 3
+        },
+        {
+          "key": "new-12",
+          "text": {
+            "value": "The CDE describes covering her ears and leaving noisy school activities. Her mother reported screaming and refusal to leave the car when the route home changes. At home, when dinner was 10 minutes late, Sofía screamed, kicked over a chair and hit her mother.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "cde",
+                "quote": "covers ears and leaves the room at the cafeteria and in assemblies."
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "if dinner is late or the route home changes, she screams and refuses to get out of the car."
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Dinner was 10 minutes later than usual. She screamed that \"everything is ruined\", kicked a chair over and hit her mother's arm twice."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 7
+        },
+        {
+          "key": "new-13",
+          "text": {
+            "value": "Per her mother, on 09/14/2026 Sofía hit her head against a bedroom wall and cut her eyebrow. Her grandmother took her to urgent care; the wound was cleaned and closed with skin glue. The mother did not have the urgent care paperwork.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "On 09/14/2026 she banged her head against the bedroom wall during an outburst and got a small cut above her eyebrow"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "the grandmother took her to urgent care, where it was cleaned and closed with skin glue. The mother does not have the urgent care paperwork."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 19
+        },
+        {
+          "key": "new-14",
+          "text": {
+            "value": "Her mother reported threats to kill her brother and to run away during outbursts. A threat to run away also occurred during the observed bedtime outburst after tablet removal.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "has said \"I'll kill you\" to her brother and \"I hate you, I'll run away\" to her mother."
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "when the tablet was taken, she bit her right wrist once and screamed for 15 minutes; said \"I'll run away\"."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 19
+        },
+        {
+          "key": "new-15",
+          "text": {
+            "value": "In the caregiver interview, the mother described homework being dropped, the grandmother giving the tablet, the brother being sent to another room and Sofía staying home on school mornings.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "fba-questionnaires",
+                "quote": "homework is dropped \"to keep the peace\"; the grandmother gives her the tablet to calm her; Diego is sent to another room; on school mornings, she is allowed to stay home."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 16
+        },
+        {
+          "key": "new-16",
+          "text": {
+            "value": "During the homework observation, Sofía tore the worksheet and threw her pencil case after her grandmother asked her to begin. Her grandmother gave her the tablet after 12 minutes of screaming and insults; Sofía calmed within 2 minutes. Neither homework attempt was completed.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Grandmother asked Sofía to start her math worksheet. She said \"No, I'm done with school\", tore the worksheet in half and threw her pencil case across the room."
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Screamed and yelled insults for 12 minutes. Grandmother gave her the tablet at 3:57 and she calmed within 2 minutes."
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "homework completed 0 of 2 attempts."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 13
+        },
+        {
+          "key": "new-17",
+          "text": {
+            "value": "During the second homework attempt, Sofía bit the back of her hand twice, leaving red marks without breaking the skin, and left the table.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Second homework attempt: she bit the back of her left hand twice (red marks, no broken skin) and left the table."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 13
+        },
+        {
+          "key": "new-18",
+          "text": {
+            "value": "The BCBA requested school observation on 10/01/2026. The school told the mother that district approval was pending; the BCBA did not conduct a school observation.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Requested from the school on 10/01/2026. The school informed the mother that BCBA access requires district approval, which is pending. No school observation was done."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 13
+        },
+        {
+          "key": "new-19",
+          "text": {
+            "value": "The maternal grandmother will be away from 12/15/2026 to 01/20/2027; while she is away, Sofía and Diego will go to the after-school program at Ejemplo Elementary School, run by the YMCA, 3:00 to 6:00 p.m.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "The maternal grandmother will travel to Colombia from 12/15/2026 to 01/20/2027 for a family matter."
+              },
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "run by the YMCA, 3:00 to 6:00 p.m."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 7
+        },
+        {
+          "key": "new-20",
+          "text": {
+            "value": "The family plans to move to another school zone in March 2027, and Sofía would change schools; her mother has not told her yet.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "The family plans to move to a two-bedroom apartment in another school zone in March 2027. Sofía would change schools. The mother has not told Sofía"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 7
+        },
+        {
+          "key": "new-21",
+          "text": {
+            "value": "In early September 2026 the school bus route changed (new driver, pickup 15 minutes earlier); her mother says the school refusal started around then.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "In early September 2026 the school bus route changed (new driver, pickup 15 minutes earlier). The mother says the school refusal started"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 7
+        },
+        {
+          "key": "new-22",
+          "text": {
+            "value": "When Sofía is out of control, the mother or the grandmother sends Diego to his room, stops talking to Sofía and moves breakable things out of reach until she is quiet; they have never called 911.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "The mother or the grandmother sends Diego to his room and closes the door, stops talking to Sofía, and moves breakable things out of reach. They wait until she is quiet. They have never called 911."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 20
+        },
+        {
+          "key": "new-23",
+          "text": {
+            "value": "Since August 2026 the kitchen knives are kept in a high cabinet, after Sofía picked up a butter knife and threatened Diego during an argument; she put it down when her grandmother told her to, and nobody was hurt.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "Since August 2026 the kitchen knives are kept in a high cabinet, after Sofía picked up a butter knife"
+              },
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "she put it down when the grandmother told her to; nobody was hurt"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 19
+        },
+        {
+          "key": "new-24",
+          "text": {
+            "value": "There are no firearms in the home, per her mother.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "There are no firearms in the home, per the mother."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 19
+        },
+        {
+          "key": "new-25",
+          "text": {
+            "value": "Since the head-banging episode on 09/14/2026 there have been no other injuries needing medical care.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "After the head-banging episode on 09/14/2026 (urgent care), there have been no other injuries needing medical care."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 19
+        },
+        {
+          "key": "new-26",
+          "text": {
+            "value": "The mother signed releases of information for the school and the psychiatrist; the school speech-language pathologist has not been contacted yet, and the school-based FBA requested in April 2026 is still pending.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "The mother signed releases of information for the school and the psychiatrist"
+              },
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "The school speech-language pathologist has not been contacted yet."
+              },
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "The school-based FBA requested in April 2026 is still pending."
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 16
+        },
+        {
+          "key": "new-27",
+          "text": {
+            "value": "Her mother would consider ABA a success if Sofía goes to school without a fight, stops hitting her brother and can calm down without breaking things.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "followup",
+                "quote": "goes to school without a fight, stops hitting Diego, and can calm down without breaking things"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "homeSection": 18
+        }
+      ],
+      "openItems": [],
+      "report": []
+    },
+    "map-behaviors": {
+      "behaviors": [
+        {
+          "key": "new-1",
+          "name": {
+            "value": "Physical aggression",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "fba-questionnaires",
+                "quote": "| Physical aggression | 3 | 4 | 0 | 0 |"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "topographies": [
+            {
+              "value": "Hits another person's arm.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "hit her mother's arm twice"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Pushes another person to the floor or off playground equipment.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "She pushed him to the floor and kicked his leg once."
+                },
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Pushed Diego off the swing when he did not get off immediately"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Kicks another person.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "after kicking a classmate at recess"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "measure": {
+            "value": "frequency",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "Totals: physical aggression 3; verbal outbursts 2"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "definition": {
+            "value": "Hitting, kicking, pushing or shoving another person with contact.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "behaviors",
+                "quote": "hitting, kicking, pushing or shoving another person with contact"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "onset": {
+            "value": "Her hand, foot or body makes contact with another person in a hit, kick or push.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "She pushed him to the floor and kicked his leg once."
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "offset": {
+            "value": "Contact from that hit, kick or push ends.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "hit her mother's arm twice"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "examples": [
+            {
+              "value": "Sofía pushed her brother to the floor and kicked his leg after he picked up her train book.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Diego picked up her train book. She pushed him to the floor and kicked his leg once."
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía shoved a peer who sat in the seat she used at the summer program.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "cde",
+                  "quote": "shoved a peer who sat in \"her\" seat"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía hit her mother's arm when dinner was late.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Dinner was 10 minutes later than usual. She screamed that \"everything is ruined\", kicked a chair over and hit her mother's arm twice."
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "nonExamples": [
+            {
+              "value": "Accidental contact in play.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "behaviors",
+                  "quote": "accidental contact in play"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "High fives.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "behaviors",
+                  "quote": "accidental contact in play; high fives"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "baseline": {
+            "observations": [
+              {
+                "date": {
+                  "value": "10/07/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 1: 10/07/2026, 3:30 to 5:30 p.m., home (homework time)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Home, homework",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "p.m., home (homework time)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "3:30 to 5:30 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "3:30 to 5:30 p.m., home"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "3 contacts",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Totals: physical aggression 3; verbal outbursts 2"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              },
+              {
+                "date": {
+                  "value": "10/10/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 2: 10/10/2026, 10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Public library and neighborhood park",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "public library and neighborhood park"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "10:00 a.m. to 12:00 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "1 contact",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Totals: physical aggression 1; verbal outbursts 1"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              },
+              {
+                "date": {
+                  "value": "10/14/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 3: 10/14/2026, 6:30 to 8:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Home, evening routines",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "home (dinner, shower, bedtime)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "6:30 to 8:30 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "6:30 to 8:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "2 contacts",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Totals: physical aggression 2; verbal outbursts 3"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              }
+            ],
+            "other": [
+              {
+                "value": "About 2 per week at school, as the IEP reports.",
+                "refs": [
+                  {
+                    "kind": "source",
+                    "id": "behaviors",
+                    "quote": "School: about 2 per week (IEP)"
+                  }
+                ],
+                "origin": "extracted",
+                "check": ""
+              },
+              {
+                "value": "Several per day at home, mostly toward Diego, by her mother's estimate.",
+                "refs": [
+                  {
+                    "kind": "source",
+                    "id": "behaviors",
+                    "quote": "Home, mother's estimate: several per day, mostly toward Diego"
+                  }
+                ],
+                "origin": "extracted",
+                "check": ""
+              }
+            ]
+          },
+          "settingIds": [
+            "set-1",
+            "set-2",
+            "set-3",
+            "set-4",
+            "set-5"
+          ],
+          "antecedents": [
+            {
+              "value": "Her brother picked up her train book or remained on the swing. Her mother also reported disputes over the tablet and remote.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Diego picked up her train book."
+                },
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "when he did not get off immediately"
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "mostly over the tablet and the TV remote"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Dinner was later than usual before Sofía hit her mother.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Dinner was 10 minutes later than usual."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "consequences": [
+            {
+              "value": "Her brother cried after the push and kick; no injury was visible during that observation.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Diego cried; no visible injury."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "barriers": [
+            "safety",
+            "social-interaction",
+            "community-participation"
+          ],
+          "risks": [
+            {
+              "value": "Injury to her brother or peers.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Diego had a bruise on his upper arm last week."
+                },
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "physical altercations with peers (pushing, kicking)"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "function": {
+            "primary": [
+              "escape"
+            ],
+            "secondary": [
+              "tangibles"
+            ],
+            "evidence": [
+              {
+                "tool": "fast",
+                "respondent": "Mother",
+                "result": {
+                  "value": "Attention/preferred items 3 of 4; escape 4 of 4; sensory stimulation 0 of 4; pain attenuation 0 of 4.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "fba-questionnaires",
+                      "quote": "| Physical aggression | 3 | 4 | 0 | 0 |"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape",
+                  "tangibles"
+                ]
+              },
+              {
+                "tool": "mas",
+                "respondent": "Mother",
+                "result": {
+                  "value": "Sensory 0.5, escape 4.5, attention 1.8, tangible 3.8.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "fba-questionnaires",
+                      "quote": "| Physical aggression | 0.5 | 4.5 | 1.8 | 3.8 |"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape",
+                  "tangibles"
+                ]
+              },
+              {
+                "tool": "interview",
+                "respondent": "Mother",
+                "result": {
+                  "value": "Aggression toward her brother occurs mostly over preferred items.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "parent-interview",
+                      "quote": "mostly over the tablet and the TV remote"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "tangibles"
+                ]
+              },
+              {
+                "tool": "observation",
+                "respondent": "BCBA",
+                "result": {
+                  "value": "Sofía pushed her brother off the swing when he did not get off.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Pushed Diego off the swing when he did not get off immediately"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "tangibles"
+                ]
+              }
+            ],
+            "reasoning": "Her target behavior list gives escape from demands as the primary function and access to preferred items as the secondary one.",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-2",
+          "name": {
+            "value": "Verbal outbursts",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Verbal outbursts (yelling, insults) occur almost daily"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "topographies": [
+            {
+              "value": "Screams.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "sat on the floor and screamed for 9 minutes"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Yells insults.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Screamed and yelled insults for 12 minutes."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Makes verbal threats to harm her brother or run away during an outburst.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "has said \"I'll kill you\" to her brother and \"I hate you, I'll run away\" to her mother"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "measure": {
+            "value": "duration",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "verbal outbursts 3 (6, 9 and 15 minutes)"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "definition": {
+            "value": "Yelling, screaming, insults or threats above conversational volume, for 30 seconds or more.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "behaviors",
+                "quote": "yelling, screaming, insults or threats above conversational volume, for 30 seconds or more"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "onset": {
+            "value": "The first scream, yelled insult or verbal threat begins.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "yells insults, screams, and has said \"I'll kill you\" to her brother"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "offset": {
+            "value": "The episode ends after 2 minutes of calm.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "behaviors",
+                "quote": "the episode ends after 2 minutes of calm"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "examples": [
+            {
+              "value": "Sofía screamed and yelled insults during the homework request.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Screamed and yelled insults for 12 minutes."
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía screamed from the library floor when it was time to leave.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "When told it was time to leave, she refused, sat on the floor and screamed for 9 minutes"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía screamed and threatened to run away after the tablet was removed at bedtime.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "when the tablet was taken, she bit her right wrist once and screamed for 15 minutes; said \"I'll run away\""
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "nonExamples": [
+            {
+              "value": "Raising her voice briefly when excited about a topic.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "behaviors",
+                  "quote": "raising her voice briefly when excited about a topic"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "baseline": {
+            "observations": [
+              {
+                "date": {
+                  "value": "10/07/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 1: 10/07/2026, 3:30 to 5:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Home, homework",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "p.m., home (homework time)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "3:30 to 5:30 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "3:30 to 5:30 p.m., home"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "2 episodes: 12 and 7 minutes",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "verbal outbursts 2 (12 and 7 minutes)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              },
+              {
+                "date": {
+                  "value": "10/10/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 2: 10/10/2026, 10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Library and park session; episode at library",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "public library and neighborhood park"
+                    },
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Library: stayed in the train section 40 minutes."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "10:00 a.m. to 12:00 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "1 episode: 9 minutes per incident",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "verbal outbursts 1 (9 minutes)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              },
+              {
+                "date": {
+                  "value": "10/14/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 3: 10/14/2026, 6:30 to 8:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Home, dinner, shower and bedtime",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "home (dinner, shower, bedtime)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "6:30 to 8:30 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "6:30 to 8:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "3 episodes: 6, 9 and 15 minutes",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "verbal outbursts 3 (6, 9 and 15 minutes)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              }
+            ],
+            "other": [
+              {
+                "value": "Almost daily at school, as the IEP reports.",
+                "refs": [
+                  {
+                    "kind": "source",
+                    "id": "behaviors",
+                    "quote": "School: almost daily (IEP)"
+                  }
+                ],
+                "origin": "extracted",
+                "check": ""
+              }
+            ]
+          },
+          "settingIds": [
+            "set-1",
+            "set-2",
+            "set-3",
+            "set-5",
+            "set-6"
+          ],
+          "antecedents": [
+            {
+              "value": "A homework instruction, the cue to leave the library and removal of the tablet preceded observed outbursts.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Grandmother asked Sofía to start her math worksheet."
+                },
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "When told it was time to leave, she refused"
+                },
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "when the tablet was taken, she bit her right wrist once and screamed"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Her mother reported screaming when dinner was late or the route home changed.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "if dinner is late or the route home changes, she screams and refuses to get out of the car"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "consequences": [
+            {
+              "value": "Her grandmother handed her the tablet during the homework episode; Sofía calmed within 2 minutes.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Grandmother gave her the tablet at 3:57 and she calmed within 2 minutes."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "A library staff member asked her mother to take Sofía outside.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "a staff member asked the mother to take her outside"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "barriers": [
+            "emotional-regulation",
+            "transitions-and-flexibility",
+            "daily-living-skills",
+            "community-participation"
+          ],
+          "risks": [
+            {
+              "value": "Threats toward her brother during outbursts require safety assessment; the statements alone do not establish intent.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "has said \"I'll kill you\" to her brother"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "function": {
+            "primary": [
+              "escape"
+            ],
+            "secondary": [],
+            "evidence": [
+              {
+                "tool": "fast",
+                "respondent": "Mother",
+                "result": {
+                  "value": "Attention/preferred items 2 of 4; escape 4 of 4; sensory stimulation 0 of 4; pain attenuation 0 of 4.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "fba-questionnaires",
+                      "quote": "| Verbal outbursts | 2 | 4 | 0 | 0 |"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape"
+                ]
+              },
+              {
+                "tool": "interview",
+                "respondent": "Mother",
+                "result": {
+                  "value": "Homework is dropped and her grandmother gives her the tablet to calm her.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "fba-questionnaires",
+                      "quote": "homework is dropped \"to keep the peace\"; the grandmother gives her the tablet to calm her"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape"
+                ]
+              },
+              {
+                "tool": "observation",
+                "respondent": "BCBA",
+                "result": {
+                  "value": "The worksheet was torn, homework was interrupted, and her grandmother provided the tablet after screaming and insults.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "tore the worksheet in half and threw her pencil case across the room. Screamed and yelled insults for 12 minutes. Grandmother gave her the tablet at 3:57"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape"
+                ]
+              }
+            ],
+            "reasoning": "Her target behavior list gives escape from demands and transitions as the function.",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-3",
+          "name": {
+            "value": "Property destruction",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "fba-questionnaires",
+                "quote": "| Property destruction | 2 | 4 | 0 | 0 |"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "topographies": [
+            {
+              "value": "Tears worksheets or books.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "tore the worksheet in half"
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "tore a school library book in September"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Throws a pencil case or chair.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "threw her pencil case across the room"
+                },
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "Sofía threw a chair when asked to move from the computer to her writing assignment"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Kicks a chair over.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "kicked a chair over"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Breaks the television remote.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "broke the TV remote on 10/01"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "measure": {
+            "value": "frequency",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "property destruction 2; hand biting 2"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "definition": {
+            "value": "Tearing, breaking, throwing or kicking objects so that they are damaged or could be.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "behaviors",
+                "quote": "tearing, breaking, throwing or kicking objects so that they are damaged or could be"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "onset": {
+            "value": "The tear, throw, kick that overturns the chair, or act that breaks the object begins.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "tore the worksheet in half and threw her pencil case across the room"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "offset": {
+            "value": "The tearing or breaking action stops, the thrown object leaves her hand, or the chair falls over.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "kicked a chair over"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "tore the worksheet in half and threw her pencil case across the room"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "examples": [
+            {
+              "value": "Sofía tore the math worksheet in half and threw her pencil case across the room when asked to start homework.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "tore the worksheet in half and threw her pencil case across the room"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía threw a classroom chair when asked to switch from the computer to writing.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "Sofía threw a chair when asked to move from the computer to her writing assignment"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "nonExamples": [
+            {
+              "value": "Crumpling scrap paper to throw it away.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "behaviors",
+                  "quote": "crumpling scrap paper to throw it away"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "baseline": {
+            "observations": [
+              {
+                "date": {
+                  "value": "10/07/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 1: 10/07/2026, 3:30 to 5:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Home, homework",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "p.m., home (homework time)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "3:30 to 5:30 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "3:30 to 5:30 p.m., home"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "2 acts",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "property destruction 2; hand biting 2"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              },
+              {
+                "date": {
+                  "value": "10/10/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 2: 10/10/2026, 10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Public library and neighborhood park",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "public library and neighborhood park"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "10:00 a.m. to 12:00 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "0 acts",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "property destruction 0; hand biting 0"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              },
+              {
+                "date": {
+                  "value": "10/14/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 3: 10/14/2026, 6:30 to 8:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Home, evening routines",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "home (dinner, shower, bedtime)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "6:30 to 8:30 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "6:30 to 8:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "1 act involving a chair",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "property destruction 1 (chair)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              }
+            ],
+            "other": [
+              {
+                "value": "Tears homework about half the times it is assigned, by her mother's report.",
+                "refs": [
+                  {
+                    "kind": "source",
+                    "id": "behaviors",
+                    "quote": "Mother: tears homework about half the times it is assigned"
+                  }
+                ],
+                "origin": "extracted",
+                "check": ""
+              },
+              {
+                "value": "Broke the TV remote on 10/01 and tore a library book in September, by her mother's report.",
+                "refs": [
+                  {
+                    "kind": "source",
+                    "id": "behaviors",
+                    "quote": "broke the TV remote on 10/01; tore a library book in September"
+                  }
+                ],
+                "origin": "extracted",
+                "check": ""
+              },
+              {
+                "value": "Threw a chair on 03/12/2026, as the IEP reports.",
+                "refs": [
+                  {
+                    "kind": "source",
+                    "id": "behaviors",
+                    "quote": "IEP: threw a chair on 03/12/2026"
+                  }
+                ],
+                "origin": "extracted",
+                "check": ""
+              }
+            ]
+          },
+          "settingIds": [
+            "set-1",
+            "set-3",
+            "set-5"
+          ],
+          "antecedents": [
+            {
+              "value": "A request to start math or move from the computer to writing preceded destruction of materials or throwing a chair.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Grandmother asked Sofía to start her math worksheet."
+                },
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "when asked to move from the computer to her writing assignment"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "consequences": [
+            {
+              "value": "At home the worksheet could no longer be used intact; after the subsequent screaming, her grandmother gave her the tablet. At school the class was evacuated.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "tore the worksheet in half and threw her pencil case across the room. Screamed and yelled insults for 12 minutes. Grandmother gave her the tablet at 3:57"
+                },
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "the class was evacuated to the hallway while she calmed down"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "barriers": [
+            "safety",
+            "learning-and-task-engagement",
+            "transitions-and-flexibility"
+          ],
+          "risks": [
+            {
+              "value": "A thrown chair puts others nearby at risk; tearing borrowed materials also imposes replacement costs.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "the class was evacuated to the hallway"
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "tore a school library book in September (the mother paid for it)"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "function": {
+            "primary": [
+              "escape"
+            ],
+            "secondary": [],
+            "evidence": [
+              {
+                "tool": "fast",
+                "respondent": "Mother",
+                "result": {
+                  "value": "Attention/preferred items 2 of 4; escape 4 of 4; sensory stimulation 0 of 4; pain attenuation 0 of 4.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "fba-questionnaires",
+                      "quote": "| Property destruction | 2 | 4 | 0 | 0 |"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape"
+                ]
+              },
+              {
+                "tool": "observation",
+                "respondent": "BCBA",
+                "result": {
+                  "value": "Sofía tore the assigned worksheet. The tablet followed the ensuing outburst, not the tearing alone.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "tore the worksheet in half and threw her pencil case across the room. Screamed and yelled insults for 12 minutes. Grandmother gave her the tablet at 3:57"
+                    }
+                  ],
+                  "origin": "ai-drafted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape"
+                ]
+              },
+              {
+                "tool": "interview",
+                "respondent": "Mother",
+                "result": {
+                  "value": "Homework is dropped during these routines.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "fba-questionnaires",
+                      "quote": "homework is dropped \"to keep the peace\""
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape"
+                ]
+              }
+            ],
+            "reasoning": "Her target behavior list gives escape from demands as the function.",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-4",
+          "name": {
+            "value": "Leaving the area and school refusal",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "behaviors",
+                "quote": "Leaving the area and school refusal"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "topographies": [
+            {
+              "value": "Pulls free of her mother's hand and runs across the street without looking.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "pulled her wrist out of her mother's hand and ran across the street without looking"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Leaves the assigned classroom or group activity and goes to the hallway or media center.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "is found in the hallway or the media center"
+                },
+                {
+                  "kind": "source",
+                  "id": "cde",
+                  "quote": "She left the group activity twice and was found in the hallway."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Cries during the school departure routine.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "cried, locked herself in the bathroom, or would not get on the bus"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Locks herself in the bathroom rather than departing for school.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "locked herself in the bathroom, or would not get on the bus"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "measure": {
+            "value": "frequency",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "leaving the area 1 (street crossing)"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "definition": {
+            "value": "Leaving the assigned area without permission (the classroom, a group, an adult's side in the community), or refusing to leave for school (crying, locking herself in, refusing to board the bus) so that she misses school or arrives late.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "behaviors",
+                "quote": "leaving the assigned area without permission (classroom, group, adult's side in the community), or refusing to leave for school (crying, locking herself in, refusing to board the bus) so that she misses or arrives late"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "onset": {
+            "value": "She runs beyond 6 feet from the supervising adult without permission.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "ran across the street without looking"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "offset": {
+            "value": "She is back within 6 feet of the adult and remains there for 10 consecutive seconds.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "pulled her wrist out of her mother's hand and ran across the street"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "examples": [
+            {
+              "value": "Sofía pulled free of her mother's hand and ran across the street on the way to the park without looking for traffic.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Crossing to the park: pulled her wrist out of her mother's hand and ran across the street without looking"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía left the summer group activity and was found in the hallway during the evaluating psychologist's observation.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "cde",
+                  "quote": "She left the group activity twice and was found in the hallway."
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía leaves class during writing or group work and is found in the hall or media center, according to the IEP.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "usually during writing tasks or group work, and is found in the hallway or the media center"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía locked herself in the bathroom on a school morning instead of leaving for school, according to her mother.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "cried, locked herself in the bathroom, or would not get on the bus"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "nonExamples": [
+            {
+              "value": "Sofía crosses with her supervising adult rather than running ahead.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "the mother holds her wrist in parking lots"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía leaves with permission during an authorized break.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "Sofía will use her break card instead of leaving the classroom"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía boards the bus with the morning departure routine.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "would not get on the bus"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "baseline": {
+            "observations": [
+              {
+                "date": {
+                  "value": "10/10/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 2: 10/10/2026, 10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Street crossing on the way to the park",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Crossing to the park: pulled her wrist"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "10:00 a.m. to 12:00 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "1 street crossing",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "leaving the area 1 (street crossing)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              }
+            ],
+            "other": [
+              {
+                "value": "Leaves the classroom 2 to 4 times per week, as the IEP reports.",
+                "refs": [
+                  {
+                    "kind": "source",
+                    "id": "behaviors",
+                    "quote": "IEP: leaves the classroom 2 to 4 times per week"
+                  }
+                ],
+                "origin": "extracted",
+                "check": ""
+              },
+              {
+                "value": "Refused school on 6 of 20 school days in October, by her mother's report.",
+                "refs": [
+                  {
+                    "kind": "source",
+                    "id": "behaviors",
+                    "quote": "Mother: refused school on 6 of 20 school days in October"
+                  }
+                ],
+                "origin": "extracted",
+                "check": ""
+              }
+            ]
+          },
+          "settingIds": [
+            "set-2",
+            "set-3",
+            "set-4",
+            "set-5",
+            "set-6"
+          ],
+          "antecedents": [
+            {
+              "value": "Sofía and her mother were crossing to the park while her mother held her wrist.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Crossing to the park: pulled her wrist out of her mother's hand"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Writing tasks and group work usually preceded classroom departures, according to the IEP.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "usually during writing tasks or group work"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Morning departure for school, including boarding the bus.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "would not get on the bus"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "consequences": [
+            {
+              "value": "She crossed the street without her mother holding her wrist; no cars were present at that moment.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "ran across the street without looking (no cars at that moment)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "She was outside the instructional activity when found in the hallway or media center.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "is found in the hallway or the media center"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Her mother reported arriving late to work or her grandmother keeping Sofía home.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "On those days the mother arrived late to work or the grandmother kept her home."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "barriers": [
+            "safety",
+            "community-participation",
+            "learning-and-task-engagement",
+            "following-instructions",
+            "transitions-and-flexibility",
+            "daily-living-skills"
+          ],
+          "risks": [
+            {
+              "value": "Running into the roadway without looking exposes Sofía to moving vehicles.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "ran across the street without looking (no cars at that moment)"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Separation from classroom supervision and interruption of instruction.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "usually during writing tasks or group work, and is found in the hallway or the media center"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Missed school and disruption of her mother's work routine.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "the mother arrived late to work or the grandmother kept her home"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "function": {
+            "primary": [
+              "escape"
+            ],
+            "secondary": [],
+            "evidence": [
+              {
+                "tool": "mas",
+                "respondent": "Mother",
+                "result": {
+                  "value": "Escape 5.0",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "behaviors",
+                      "quote": "MAS escape 5.0"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape"
+                ]
+              }
+            ],
+            "reasoning": "Her target behavior list gives escape from academic and social demands as the function.",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-5",
+          "name": {
+            "value": "Hand biting",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "fba-questionnaires",
+                "quote": "| Hand biting | 0 | 3 | 2 | 0 |"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "topographies": [
+            {
+              "value": "Bites the back of her hand.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "she bit the back of her left hand twice"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Bites her wrist.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "she bit her right wrist once"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "measure": {
+            "value": "frequency",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "property destruction 2; hand biting 2"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "definition": {
+            "value": "Biting her own hand or wrist with enough force to leave a mark.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "behaviors",
+                "quote": "biting her own hand or wrist with enough force to leave a mark"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "onset": {
+            "value": "Her teeth close on the skin of her hand or wrist.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "she bit the back of her left hand twice"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "offset": {
+            "value": "Her teeth release her hand or wrist.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "she bit her right wrist once"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "examples": [
+            {
+              "value": "Sofía bit the back of her hand during another attempt at homework.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Second homework attempt: she bit the back of her left hand twice"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            },
+            {
+              "value": "Sofía bit her wrist when the tablet was taken at bedtime.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Bedtime: when the tablet was taken, she bit her right wrist once"
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "nonExamples": [
+            {
+              "value": "Nail biting.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "behaviors",
+                  "quote": "Non-example: nail biting"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "baseline": {
+            "observations": [
+              {
+                "date": {
+                  "value": "10/07/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 1: 10/07/2026, 3:30 to 5:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Home, homework",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "p.m., home (homework time)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "3:30 to 5:30 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "3:30 to 5:30 p.m., home"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "2 bites",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "property destruction 2; hand biting 2"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              },
+              {
+                "date": {
+                  "value": "10/10/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 2: 10/10/2026, 10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Public library and neighborhood park",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "public library and neighborhood park"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "10:00 a.m. to 12:00 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "10:00 a.m. to 12:00 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "0 bites",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "property destruction 0; hand biting 0"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              },
+              {
+                "date": {
+                  "value": "10/14/2026",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "Observation 3: 10/14/2026, 6:30 to 8:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "setting": {
+                  "value": "Home, evening routines",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "home (dinner, shower, bedtime)"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "length": {
+                  "value": "6:30 to 8:30 p.m.",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "6:30 to 8:30 p.m."
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "value": {
+                  "value": "1 bite",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "observations",
+                      "quote": "property destruction 1 (chair); hand biting 1"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                }
+              }
+            ],
+            "other": [
+              {
+                "value": "Her mother reports a head-banging episode on 09/14/2026 that needed urgent care.",
+                "refs": [
+                  {
+                    "kind": "source",
+                    "id": "behaviors",
+                    "quote": "Mother reports a head-banging episode on 09/14/2026 that needed urgent care"
+                  }
+                ],
+                "origin": "extracted",
+                "check": ""
+              }
+            ]
+          },
+          "settingIds": [
+            "set-1",
+            "set-5"
+          ],
+          "antecedents": [
+            {
+              "value": "Homework was presented again; in the evening the tablet was removed.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Second homework attempt: she bit the back of her left hand twice"
+                },
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "when the tablet was taken, she bit her right wrist once"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "consequences": [
+            {
+              "value": "She left the homework table. Red marks were visible, without broken skin.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "twice (red marks, no broken skin) and left the table"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "barriers": [
+            "safety",
+            "learning-and-task-engagement",
+            "emotional-regulation"
+          ],
+          "risks": [
+            {
+              "value": "Bites leave visible skin marks.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "red marks, no broken skin"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            },
+            {
+              "value": "Head injury requiring urgent medical care, by maternal report.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "the grandmother took her to urgent care, where it was cleaned and closed with skin glue"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "function": {
+            "primary": [
+              "escape"
+            ],
+            "secondary": [
+              "automatic"
+            ],
+            "evidence": [
+              {
+                "tool": "fast",
+                "respondent": "Mother",
+                "result": {
+                  "value": "Escape 3 of 4, sensory 2 of 4",
+                  "refs": [
+                    {
+                      "kind": "source",
+                      "id": "behaviors",
+                      "quote": "FAST escape 3 of 4, sensory 2 of 4"
+                    }
+                  ],
+                  "origin": "extracted",
+                  "check": ""
+                },
+                "supports": [
+                  "escape",
+                  "automatic"
+                ]
+              }
+            ],
+            "reasoning": "Her target behavior list gives escape as the primary function and automatic reinforcement as the secondary one.",
+            "check": ""
+          }
+        }
+      ],
+      "groups": [],
+      "risks": [
+        {
+          "key": "new-1",
+          "behaviorKeys": [
+            "new-4"
+          ],
+          "what": {
+            "value": "Roadway injury during separation from the supervising adult.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "ran across the street without looking (no cars at that moment)"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "evidence": [
+            {
+              "value": "Sofía pulled free and crossed without looking during community observation. Her mother reported holding her wrist in parking lots.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "pulled her wrist out of her mother's hand and ran across the street without looking"
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "the mother holds her wrist in parking lots"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "level": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-2",
+          "behaviorKeys": [
+            "new-5"
+          ],
+          "what": {
+            "value": "Head impact causing a wound requiring urgent care.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "a small cut above her eyebrow; the grandmother took her to urgent care"
+              }
+            ],
+            "origin": "extracted",
+            "check": ""
+          },
+          "evidence": [
+            {
+              "value": "Her mother reported that the wound was cleaned and closed with skin glue after Sofía struck the bedroom wall. The urgent care record was not available from her mother.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "the grandmother took her to urgent care, where it was cleaned and closed with skin glue. The mother does not have the urgent care paperwork."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "level": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-3",
+          "behaviorKeys": [
+            "new-1",
+            "new-2"
+          ],
+          "what": {
+            "value": "Risk to family members and peers from physical contact; threats toward her brother also occur during outbursts.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Diego had a bruise on his upper arm last week."
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "has said \"I'll kill you\" to her brother"
+              },
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "physical altercations with peers (pushing, kicking)"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "evidence": [
+            {
+              "value": "Her mother reported bruising on her brother's upper arm and a 1-day suspension for kicking a classmate. During community observation Sofía pushed her brother off a swing.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Diego had a bruise on his upper arm last week."
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "Suspended for 1 day in May 2026 after kicking a classmate at recess."
+                },
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "Pushed Diego off the swing when he did not get off immediately"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "level": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-4",
+          "behaviorKeys": [
+            "new-3"
+          ],
+          "what": {
+            "value": "Thrown furniture can injure bystanders and interrupt instruction; damaged materials require replacement.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Sofía threw a chair when asked to move from the computer to her writing assignment; the class was evacuated to the hallway"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "tore a school library book in September (the mother paid for it)"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "evidence": [
+            {
+              "value": "The teacher reported classroom evacuation while Sofía calmed for about 25 minutes. No injury was described in that incident.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "iep",
+                  "quote": "the class was evacuated to the hallway while she calmed down (about 25 minutes)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "level": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-5",
+          "behaviorKeys": [
+            "new-5"
+          ],
+          "what": {
+            "value": "Skin injury from biting her hand or wrist.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "Bites her own hand and wrist when frustrated; sometimes leaves marks."
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "evidence": [
+            {
+              "value": "Red marks without broken skin followed biting during the home homework observation.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "she bit the back of her left hand twice (red marks, no broken skin)"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "level": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-6",
+          "behaviorKeys": [
+            "new-4"
+          ],
+          "what": {
+            "value": "Loss of classroom supervision during departures and loss of instruction when Sofía leaves class or stays home.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "iep",
+                "quote": "Sofía leaves the classroom without permission 2 to 4 times per week, usually during writing tasks or group work, and is found in the hallway or the media center"
+              },
+              {
+                "kind": "source",
+                "id": "parent-interview",
+                "quote": "or the grandmother kept her home"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "evidence": [
+            {
+              "value": "The evaluating psychologist found Sofía in the hallway after group departures; separately, her mother reported that refusal delayed school mornings or resulted in staying home.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "cde",
+                  "quote": "She left the group activity twice and was found in the hallway."
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "On those days the mother arrived late to work or the grandmother kept her home."
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "level": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-7",
+          "behaviorKeys": [
+            "new-2",
+            "new-3"
+          ],
+          "what": {
+            "value": "Afternoon homework routines may be difficult to sustain when demands are dropped and the tablet follows distress.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "fba-questionnaires",
+                "quote": "homework is dropped \"to keep the peace\"; the grandmother gives her the tablet to calm her"
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "evidence": [
+            {
+              "value": "Neither homework attempt was completed during direct observation. Her mother reported better focus in the morning but worse afternoon outbursts since medication began; a medication effect is not established.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "homework completed 0 of 2 attempts"
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "she focuses better in the morning, but outbursts in the afternoon are \"worse than before\""
+                }
+              ],
+              "origin": "ai-drafted",
+              "check": ""
+            }
+          ],
+          "level": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        },
+        {
+          "key": "new-8",
+          "behaviorKeys": [
+            "new-2"
+          ],
+          "what": {
+            "value": "Interrupted outings and missed opportunities for peer participation.",
+            "refs": [
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "a staff member asked the mother to take her outside"
+              },
+              {
+                "kind": "source",
+                "id": "observations",
+                "quote": "the girls walked away. She played alone on the climbing structure afterwards."
+              }
+            ],
+            "origin": "ai-drafted",
+            "check": ""
+          },
+          "evidence": [
+            {
+              "value": "Library staff asked her mother to take Sofía outside during screaming. At the park a peer invitation ended after Sofía responded with a schedule rather than joining the game. Her mother also reported avoiding outings.",
+              "refs": [
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "a staff member asked the mother to take her outside"
+                },
+                {
+                  "kind": "source",
+                  "id": "observations",
+                  "quote": "She answered by reciting the bus schedule; the girls walked away."
+                },
+                {
+                  "kind": "source",
+                  "id": "parent-interview",
+                  "quote": "and has started avoiding outings"
+                }
+              ],
+              "origin": "extracted",
+              "check": ""
+            }
+          ],
+          "level": {
+            "value": "",
+            "refs": [],
+            "origin": "extracted",
+            "check": ""
+          }
+        }
+      ],
+      "openItems": []
+    }
+  }
+}

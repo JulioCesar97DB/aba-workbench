@@ -77,6 +77,7 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 | `pnpm eval --baseline <name>` | Compares with `eval/baselines/<name>/` instead of the newest |
 | `pnpm eval --baseline-run <run folder>` | Compares with the baseline as that earlier run compared it (its `baseline-as-compared.json`): every draft is checked again, and only the sections whose judge changed are judged again. Use it to measure a rules fix against the same dev arm without paying for every baseline judgement again. Its note says in which run the baseline's drafts were all judged again, and that this run judged them again only where the judge changed |
 | `pnpm eval --accept <name>` | Also saves the run as `eval/baselines/<name>/`, with every path stripped (commit it). Refused for an invalid run, a rehearsal, a checkout with uncommitted changes in `rules/`, `src/` or `eval/`, and a run with a failed draft, a judge error or an unscored item in any run (fill it with `--from-run`, or run again for a failed draft) |
+| `pnpm eval --map <fixture>` | Gives each run's case an invented case map, approved part by part, before its sections are drafted (the Plan step's PR 0: section requests carry the approved map). See "The approved map" below |
 | `pnpm eval --label <text>`, `--no-build` | Names the run folder; uses the apps as already built |
 
 **The eval profile** is `~/.aba-workbench-eval/profile`. It is owner-only and kept signed in between runs (owner's decision), so the owner signs in once. A fresh temporary home folder is used for every run and deleted at the end, even when the run fails.
@@ -106,6 +107,15 @@ pnpm eval --cases case-b-sofia --draft-app <a checkout of the branch> --label br
 ```
 
 The judge is always this branch's app, so both runs are measured by the same judge.
+
+## The approved map (`--map`)
+
+Section requests carry the case map she approved (docs/case-map.md, "In section requests"), so a body run can be given one: `pnpm eval --cases case-b-sofia --map fixtures/cases/case-b-sofia/approved-map.json`.
+
+- **The fixture** holds invented data only: the two answers of the map's requests (`map-facts`, `map-behaviors`), each ref naming its source by its id in `case.json` or `key.json`. Case B's is built from the real draft of `pnpm map-verify` on 2026-11-28 and corrected as she would approve it: the five behaviors, definitions and functions of her target behavior list, the follow-up call's facts, and no open [CHECK]. `tests/eval-map-fixture.test.ts` runs the app's own checks on it and compares its behaviors with the key's.
+- **How it reaches the case** (`eval/map-fixture.ts`): through "Draft the map", as in the app. Its requests are answered inside the app's main process (its fetch wrapped, as the rehearsal does) from the fixture, on a fake Claude key saved for the draft and removed after it; each ref's source id becomes the case's own. The app's code checks every quote against the case's sources and saves the parts; the run stops if a problem is left. The [CHECK]s the app adds where it cannot check a value (numbers quoted from a PDF) are cleared item by item, as she would after checking them, and each part is approved through `window.aba`. Nothing of it leaves the computer, and none of it is in the app: it is installed only into the development build the harness starts hidden. A Claude key already in the eval profile is never written over: the run refuses.
+- **Recorded:** `drafting.map` names the fixture and a hash of it; `map-blocks/<case>-run-<n>.txt` keeps the block each run's sections were sent, rendered by the app's code. Each draft's own record in the case's data file has `mapUsed`.
+- **Requests:** none more on the real route.
 
 ## The judge
 

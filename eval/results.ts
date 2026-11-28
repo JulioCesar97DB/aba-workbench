@@ -158,7 +158,8 @@ export interface RunResult {
   runs: number;
   /** Judge requests per section in each run (pnpm eval --judge-samples); the runs themselves are the samples by default. */
   judgeSamples: number;
-  drafting: CheckoutRecord & { rulesVersions: Record<string, string> };
+  /** map: the approved case map fixture each run's case was given before drafting (pnpm eval --map), by file and hash; absent when none. */
+  drafting: CheckoutRecord & { rulesVersions: Record<string, string>; map?: string };
   judging: CheckoutRecord & { model: string | null };
   provider: string;
   model: string | null;
@@ -328,7 +329,7 @@ export function normalizeRun(raw: unknown): RunResult {
   run.invalidReason ??= null;
   run.requests.baselineJudges ??= 0;
   const drafting = run.drafting;
-  run.drafting = { label: drafting.label ?? neutralLabel(drafting.checkout, "unknown"), commit: drafting.commit, branch: drafting.branch ?? "unknown", dirty: drafting.dirty ?? false, rulesVersions: drafting.rulesVersions ?? {} };
+  run.drafting = { label: drafting.label ?? neutralLabel(drafting.checkout, "unknown"), commit: drafting.commit, branch: drafting.branch ?? "unknown", dirty: drafting.dirty ?? false, rulesVersions: drafting.rulesVersions ?? {}, ...(drafting.map ? { map: drafting.map } : {}) };
   const judging = run.judging;
   run.judging = { label: judging.label ?? neutralLabel(judging.checkout, "unknown"), commit: judging.commit, branch: judging.branch ?? "unknown", dirty: judging.dirty ?? false, model: judging.model ?? run.model ?? null };
   for (const c of run.cases) {
@@ -669,7 +670,7 @@ export function summaryMarkdown(run: RunResult, comparison: Comparison | null, b
   const judgeUsage = allSections.map((s) => s.judge?.usage ?? null).reduce<Usage | null>(addUsage, null);
   const judgeInput = judgeUsage ? judgeUsage.uncachedInputTokens + judgeUsage.cacheReadTokens + judgeUsage.cacheWriteTokens : 0;
   lines.push(
-    `- Drafted by ${run.drafting.label} (${run.drafting.branch} at ${run.drafting.commit.slice(0, 7)})${run.drafting.dirty ? " with UNCOMMITTED changes" : ""}; judged by ${run.judging.label} at ${run.judging.commit.slice(0, 7)}${run.judging.dirty ? " with UNCOMMITTED changes" : ""}.`,
+    `- Drafted by ${run.drafting.label} (${run.drafting.branch} at ${run.drafting.commit.slice(0, 7)})${run.drafting.dirty ? " with UNCOMMITTED changes" : ""}${run.drafting.map ? `, each run's case given the approved case map ${run.drafting.map}` : ""}; judged by ${run.judging.label} at ${run.judging.commit.slice(0, 7)}${run.judging.dirty ? " with UNCOMMITTED changes" : ""}.`,
     `- ${plural(run.runs, "run", "runs")} per case, each drafted and judged on its own. Every score below is the median of the runs; an item is unscored when any run could not score it, and a check fails when it fails in most runs.`,
     `- Rubric v${run.rubricVersion}, judge prompt v${run.judgePromptVersion}, checks v${run.checksVersion}, ${plural(run.judgeSamples, "judge sample", "judge samples")} per section in each run (median when more than one); judge format ${run.judgeFormat ?? "none"}; ${run.provider}, ${run.model ?? "model unknown"}; ${run.mode} drafting.`,
     ...(run.fromRun ? [`- ${run.rejudged ? "Every section of every run judged again" : "Judged again only where a run had no answer"} from run ${run.fromRun}'s drafts, checked again with the current checks. The request counts below are both runs together.`] : []),

@@ -72,6 +72,11 @@ import {
 } from "./results.ts";
 import { NUMBERED_LISTS_ALLOWED, RUBRIC, RUBRIC_VERSION, SECTION_EXPECTATIONS, SECTION_PAYER_FACTS, SECTION_SHAPES, STYLE_EXPECTATIONS } from "./rubric.ts";
 import { installRehearsalProvider, REHEARSAL_CLAUDE_KEY } from "./rehearsal.ts";
+import { approveMapFromFixture, installMapFixtureProvider, MAP_FIXTURE_CLAUDE_KEY, readMapFixture, type MapFixture } from "./map-fixture.ts";
+import { outgoingSourceTitle } from "../src/main/outgoing.ts";
+import { caseMapBlockInput } from "../src/main/case-map.ts";
+import { renderCaseMapBlock } from "../src/lib/case-map-block.ts";
+import { quoteForPrompt } from "../src/lib/rules.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const CASES_DIR = path.join(ROOT, "fixtures", "cases");
@@ -115,6 +120,7 @@ const { values: args } = parseArgs({
     rejudge: { type: "string" },
     runs: { type: "string" },
     "judge-samples": { type: "string", default: "1" },
+    map: { type: "string" },
   },
 });
 
@@ -136,6 +142,8 @@ interface Options {
   samples: number;
   label: string;
   runDir: string;
+  /** --map: the invented approved case map each run's case gets before its sections are drafted (eval/map-fixture.ts). */
+  map: MapFixture | null;
 }
 
 function readOptions(): Options {
@@ -149,6 +157,13 @@ function readOptions(): Options {
   if (!(RUN_COUNTS as readonly number[]).includes(runs)) fail("--runs takes 1, 3 or 5: an odd count, so a median and a majority never tie.");
   if (prior && runs !== prior.runs) fail(`--from-run and --rejudge take every run of that run (${prior.runs}); --runs cannot change it.`);
   if (prior && args["draft-app"]) fail("--from-run and --rejudge draft nothing, so they take no --draft-app.");
+  if (prior && args.map) fail("--from-run and --rejudge draft nothing, so they take no --map (the earlier run records its map).");
+  let map: MapFixture | null = null;
+  try {
+    map = args.map ? readMapFixture(ROOT, args.map) : null;
+  } catch (error) {
+    fail(`--map: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const rehearse = args.rehearse === true;
   if (prior && rehearse !== prior.provider.startsWith("rehearsal")) fail("--from-run and --rejudge take a run of the same kind (real or rehearsal).");
   const draftCheckout = args["draft-app"] ? path.resolve(args["draft-app"]) : ROOT;
@@ -172,6 +187,7 @@ function readOptions(): Options {
     samples,
     label,
     runDir: path.join(RESULTS_DIR, label),
+    map,
   };
 }
 
@@ -707,6 +723,24 @@ function recordedVersions(home: string, caseId: string): Map<ReportSectionId, Ma
   return found;
 }
 
+/**
+ * The approved map block as the case's section requests get it, rendered by the app's own
+ * code from the case's data file (--map): saved with the run for whoever reviews it.
+ */
+function mapBlockOf(home: string, caseId: string): string | null {
+  const folder = path.join(home, "ABA Workbench");
+  if (!existsSync(folder)) return null;
+  for (const entry of readdirSync(folder, { withFileTypes: true })) {
+    const file = path.join(folder, entry.name, "aba-case.json");
+    if (!entry.isDirectory() || !existsSync(file)) continue;
+    const data = JSON.parse(readFileSync(file, "utf8")) as Parameters<typeof caseMapBlockInput>[0] & { id?: string; sources?: Array<{ id: string; type: string; title?: string; date?: string; file?: string; removedAt?: string }> };
+    if (data.id !== caseId) continue;
+    const sources = (data.sources ?? []).filter((source) => !source.removedAt).map((source) => ({ id: source.id, title: outgoingSourceTitle(source) }));
+    return renderCaseMapBlock(caseMapBlockInput(data), quoteForPrompt, sources);
+  }
+  return null;
+}
+
 /** Every check on a case's section texts, with that case's sources and her inputs as the number index. */
 function checkCase(loaded: LoadedCase, plan: LoadPlan[], loadedSources: ReadonlySet<string>, texts: Partial<Record<ReportSectionId, string>>, examples: readonly string[]): Finding[] {
   const shapes = Object.fromEntries(REPORT_SECTIONS.map(({ id }) => [id, SECTION_SHAPES[id] ?? { paragraphs: null, words: null }]));
@@ -788,7 +822,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
     checksVersion: CHECKS_VERSION,
     runs: options.runs,
     judgeSamples: options.samples,
-    drafting: prior ? prior.drafting : { ...checkoutRecord(options.draftCheckout), rulesVersions: versions ?? {} },
+    drafting: prior ? prior.drafting : { ...checkoutRecord(options.draftCheckout), rulesVersions: versions ?? {}, ...(options.map ? { map: options.map.label } : {}) },
     judging: { ...judging, model: judgeModel },
     provider: prior ? prior.provider : options.rehearse ? "rehearsal (fake provider)" : "openai (ChatGPT sign-in)",
     model,
@@ -858,7 +892,25 @@ async function main(options: Options, home: string, profile: string): Promise<nu
         const caseId = await loadIntoApp(current.page, loaded, plan, `${loaded.key.child.fullName} (evaluation ${options.label.slice(0, 19)}, run ${r + 1})`);
         let drafted = new Map<ReportSectionId, Drafted>();
         if (priorCase) await putDrafts(current.page, caseId, priorCase.runs[r].sections);
-        else drafted = await draftSections(current.page, caseId, options);
+        else {
+          if (options.map) {
+            // The Plan step's PR 0: the case's map, drafted from the fixture by a fake inside the app and approved part by part, before any section.
+            const titles = Object.fromEntries(plan.map((source) => [source.id, outgoingSourceTitle({ type: source.type, title: source.title, ...(source.date ? { date: source.date } : {}) })]));
+            await installMapFixtureProvider(current.app, options.map, titles, options.rehearse ? REHEARSAL_CLAUDE_KEY : MAP_FIXTURE_CLAUDE_KEY);
+            try {
+              const { approved, cleared } = await approveMapFromFixture(current.page, caseId, !options.rehearse);
+              const block = mapBlockOf(home, caseId);
+              if (block !== null) {
+                mkdirSync(path.join(options.runDir, "map-blocks"), { recursive: true });
+                writeFileSync(path.join(options.runDir, "map-blocks", `${loaded.key.caseId}-run-${r + 1}.txt`), block);
+              }
+              console.log(`  map approved from the fixture: ${approved.map(({ part, version }) => `${part} v${version}`).join(", ")}${cleared > 0 ? ` (the app's [CHECK]s cleared on ${cleared} item(s) first)` : ""}`);
+            } catch (error) {
+              fail(`--map: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }
+          drafted = await draftSections(current.page, caseId, options);
+        }
         const texts = await currentTexts(current.page, caseId);
         const recorded = recordedVersions(home, caseId);
         for (const [id, entry] of texts) {
