@@ -726,7 +726,8 @@ function baselineAsCompared(runDir: string, rehearsal: boolean): { name: string;
   const run = normalizeRun(JSON.parse(readFileSync(file, "utf8")));
   if (run.provider.startsWith("rehearsal") !== rehearsal) fail("--baseline-run takes a run of the same kind (real or rehearsal).");
   // Short: the name goes into a case label in the judge app, which takes a limited length.
-  return { name: `${comparison.baseline ?? "unknown"} re-judged`, run };
+  const name = comparison.baseline ?? "unknown";
+  return { name: name.endsWith(" re-judged") ? name : `${name} re-judged`, run };
 }
 
 /** The baseline named, or the newest accepted one of the same kind (real or rehearsal), read as this version reads results. */
