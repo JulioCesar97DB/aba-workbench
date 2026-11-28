@@ -6,6 +6,12 @@
 > - v6 (7da80cb) only stops that section restating the caregiver training method and naming a procedure. Run 2's draft still names one ("reinforcement for requesting help or a break during demands"), which is why its nothing-invented score is 1.
 > - Every other section was drafted with the rules as they are at 7da80cb.
 > - **Re-scored offline with checks v5** (review round 1 of T1, findings 6 to 9 and 13, no request): the code items of both arms were checked again. The her-wording false positives ("support facilitation", the payer's "frequency and severity") are gone, which moves code from 205 to 207 of 216 (dev from 171 to 173), and nothing else changed. The judge answers are the stored ones. The baseline arm's name is written once ("dev-step0-2026-11-23 re-judged"), and its note says where its drafts were all judged again.
+> - **Judge expectations changed after it was judged** (no request was made for them):
+>   - Background Information and Family/Caregiver Involvement: review round 1 of T1, one owner per household fact;
+>   - Medical Necessity: the owner's decision of 2026-11-27, under which caregiver training by Behavioral Skills Training, in person, in the family's language, is her confirmed practice and not a proposal;
+>   - case B's key: `sw-family` and `fci-father` in version 3, `fci-bst` (now from the rules) and the new `fci-training-language` in version 4.
+>
+>   Its judge answers for those sections are the ones given under the earlier expectations. The next real run re-judges Background Information, Medical Necessity, Strengths and Weaknesses and Family/Caregiver Involvement in both arms, since their judge fingerprints changed.
 
 **No hard regression: no code item's median went down, no check that passed in the baseline fails in most runs now, and nothing went unscored. Judge item medians, apart from the verdict: 0 down, 22 up.** (baseline: dev-step0-2026-11-23 re-judged)
 

@@ -1,5 +1,5 @@
 {
-  "keyVersion": "3",
+  "keyVersion": "4",
   "caseId": "case-b-sofia",
   "child": {
     "firstName": "Sofía",
@@ -722,9 +722,17 @@
       },
       {
         "id": "fci-bst",
-        "fact": "Caregiver training by Behavioral Skills Training, in person, never by telehealth, in Spanish for the grandmother.",
+        "fact": "Caregiver training by Behavioral Skills Training, in person, never by telehealth (her confirmed practice, as the rules state it).",
         "from": [
-          "parent-interview"
+          "rules"
+        ]
+      },
+      {
+        "id": "fci-training-language",
+        "fact": "Training in Spanish for the grandmother, who speaks only Spanish (the language from the parent interview; training in the family's language is her practice, as the rules state it).",
+        "from": [
+          "parent-interview",
+          "rules"
         ]
       }
     ],

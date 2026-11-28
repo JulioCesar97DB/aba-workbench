@@ -189,3 +189,22 @@ test("review round 1 of T1: one owner per household fact, whole sentences, her o
   assert.match(read("payers/florida-medicaid-molina.md"), /1\. The diagnosis stated by a qualified clinician, and the physician's order for behavior analysis, which is one of her documents/);
   assert.doesNotMatch(read("guide.md"), /the monitoring part she writes/);
 });
+
+test("owner's decision of 2026-11-27: her questionnaire-confirmed practice is kind 3 in the rules, not a proposal; procedures for the child stay proposals", async () => {
+  const text = readFileSync("rules/assessment.md", "utf8");
+  const kind3 = /3\. Her standard practice:[\s\S]*?(?=\n4\. Proposals:)/.exec(text)?.[0] ?? "";
+  const kind4 = /4\. Proposals:[^\n]*/.exec(text)?.[0] ?? "";
+  for (const point of [/Behavioral Skills Training, in person, never by telehealth, in the family's language/, /an adult always present/, /calling 911/, /incidents reported as soon as possible/, /keeping the family's own strategies/, /caregiver training that increases as fading nears/]) assert.match(kind3, point);
+  assert.doesNotMatch(kind4, /behavioral skills training|how caregiver training is delivered|in what language/i);
+  assert.match(kind4, /differential reinforcement of alternative behavior, functional communication training/);
+  assert.match(kind4, /named procedures for the child stay proposals until her plan exists/);
+  const { SECTION_EXPECTATIONS } = await import("../eval/rubric.ts");
+  const mn = SECTION_EXPECTATIONS["medical-necessity"].join(" ");
+  assert.doesNotMatch(mn, /NCR, BST/);
+  assert.match(mn, /Behavioral Skills Training, in person, in the family's language, is her confirmed practice/);
+  for (const dir of ["case-a-mateo", "case-b-sofia"]) {
+    const key = JSON.parse(readFileSync(`fixtures/cases/${dir}/key.json`, "utf8")) as { sectionFacts: Record<string, Array<{ id: string; from: string[] }>> };
+    const bst = key.sectionFacts["family-caregiver-involvement"].find((fact) => fact.id === "fci-bst");
+    assert.deepEqual(bst?.from, ["rules"], `${dir}: BST in person comes from the rules, not a case document`);
+  }
+});

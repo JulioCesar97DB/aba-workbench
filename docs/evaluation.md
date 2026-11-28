@@ -58,7 +58,7 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 
 **A baseline of another rubric version** (owner's approval, 2026-11-27). When the rubric version goes up, a baseline accepted under the old one counts as scored by the new one only when every stored draft of every case this run compares was checked again and judged again in this same run, with a valid answer for every sample (`adoptRubricWhenRescored` in `eval/results.ts`). Then its arm is its stored drafts, re-judged, not drafted again, and the summary's notes say so. A baseline judged again only in part (a case, a run or a section left out, or a judge error) is still not compared. The rubric's fingerprint is part of the judge's, so a new rubric always judges the baseline's drafts again: 9 requests per case and baseline run.
 
-**Findings under a rule pending her answer** are listed as provisional and never scored (a caregiver called by her given name was one until her answers of 2026-11-27; it is scored now). Key facts that rest on her unconfirmed standard practice are left out of the judge's list.
+**Findings under a rule pending her answer** are listed as provisional and never scored (a caregiver called by her given name was one until her answers of 2026-11-27; it is scored now). Key facts that rest on her unconfirmed standard practice are left out of the judge's list. A key fact that rests on her confirmed practice as the rules state it (owner's decision, 2026-11-27: Behavioral Skills Training in person, in the family's language) names `rules` as its source, a reserved source that is always loaded (`RULES_SOURCE` in `eval/key.ts`).
 
 ## Commands
 

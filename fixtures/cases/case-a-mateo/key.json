@@ -1,5 +1,5 @@
 {
-  "keyVersion": "2",
+  "keyVersion": "3",
   "caseId": "case-a-mateo",
   "child": {
     "firstName": "Mateo",
@@ -600,9 +600,10 @@
       },
       {
         "id": "fci-language",
-        "fact": "Training in Spanish, the home language.",
+        "fact": "Training in Spanish, the home language (the language from the parent interview; training in the family's language is her practice, as the rules state it).",
         "from": [
-          "parent-interview"
+          "parent-interview",
+          "rules"
         ]
       },
       {
@@ -614,9 +615,9 @@
       },
       {
         "id": "fci-bst",
-        "fact": "Caregiver training by Behavioral Skills Training, in person, never by telehealth, in Spanish.",
+        "fact": "Caregiver training by Behavioral Skills Training, in person, never by telehealth (her confirmed practice, as the rules state it).",
         "from": [
-          "parent-interview"
+          "rules"
         ]
       }
     ],

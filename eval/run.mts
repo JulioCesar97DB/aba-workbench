@@ -41,7 +41,7 @@ import { MAX_CASE_LABEL_LENGTH, type AbaApi, type GenerationUpdateEvent } from "
 import { REPORT_SECTIONS, type ReportSectionId } from "../src/shared/report-sections.ts";
 import { countWords, findMarkers, splitParagraphs } from "../src/shared/section-text.ts";
 import { CHECKS_VERSION, extractExamples, numberIndex, runChecks, type Finding } from "./checks/checks.ts";
-import { loadCase, type LoadedCase } from "./key.ts";
+import { loadCase, RULES_SOURCE, type LoadedCase } from "./key.ts";
 import {
   addUsage,
   adoptRubricWhenRescored,
@@ -577,7 +577,7 @@ function judgeInputFor(loaded: LoadedCase, section: ReportSectionId, loadedSourc
     rubricVersion: RUBRIC_VERSION,
     items,
     expectations: [...SECTION_EXPECTATIONS[section], ...STYLE_EXPECTATIONS.map((habit) => `Habit: ${habit}`)],
-    keyFacts: (key.sectionFacts[section] ?? []).filter((fact) => !fact.provisional && fact.from.every((id) => loadedSources.has(id))).map(({ id, fact }) => ({ id, fact })),
+    keyFacts: (key.sectionFacts[section] ?? []).filter((fact) => !fact.provisional && fact.from.every((id) => id === RULES_SOURCE || loadedSources.has(id))).map(({ id, fact }) => ({ id, fact })),
     caseNotes: caseNotes.slice(0, 30),
     payerFacts: [...SECTION_PAYER_FACTS[section]],
     format,
