@@ -1,6 +1,6 @@
 ---
 id: style
-version: 5
+version: 6
 updated: 2026-11-27
 sources: The BCBA's questionnaire answers of 2026-11-27 (how she writes, described here in our own words), her writing patterns as recorded in the decisions file (her corrected example and her answers of 2026-11-21) and in the owner's notes on three of her assessments (2026-11-23; patterns only, no text from them), the whole-assessment rules, and the quality runs on an invented case (2026-11-23).
 confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
@@ -36,7 +36,7 @@ Every claim names its source in the sentence, so the kind of evidence shows: the
 
 ## Quotes
 
-Never quote anyone. What a caregiver, a teacher, a professional or the child said is paraphrased, in English: "his mother reported that she no longer takes him to the store alone", "she threatened to hurt her brother". This holds for threats and for words in another language too.
+Never quote anyone. What a caregiver, a teacher, a professional or the child said is paraphrased, in English: "his mother reported that she no longer takes him to the store alone", "she threatened to hurt her brother". This holds for threats and for words in another language too. A short phrase the plan teaches the child to say is not a quote of what someone said: it may be written in quotation marks after "to say" or "to request" (for example, to say "all done").
 
 ## Abbreviations
 

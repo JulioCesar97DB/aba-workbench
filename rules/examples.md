@@ -1,6 +1,6 @@
 ---
 id: examples
-version: 4
+version: 5
 updated: 2026-11-27
 sources: Written for these rules about an invented child, following the BCBA's questionnaire answers of 2026-11-27 and her patterns (the decisions file and the owner's notes on three of her assessments, 2026-11-23, in our own words). No text from any real assessment, and no facts shared with the invented evaluation cases.
 confirmed: the rules they follow, by the BCBA's questionnaire answers of 2026-11-27; the examples themselves are invented and not reviewed by her
@@ -24,7 +24,7 @@ A weak version lists instead: "Nadia engaged in 3 episodes of climbing, 2 tantru
 
 A whole Strengths and Weaknesses section for the same child:
 
-> Nadia has strengths that treatment can build on. During the parent interview, her father reported that she clears her plate after every meal and hangs up her coat when she comes home without being reminded; she already follows short routines on her own, which is a starting point for teaching the steps of getting ready in the morning. During direct observation in the home, Nadia named 14 insects in her picture book and pointed to each one when her father named it, so she learns and keeps new names quickly. Her aunt reported that insects are what Nadia talks about most and that she shows her insect stickers to every visitor; insect books and stickers can serve as reinforcers and give her something to share with other children. Her father and her aunt both want to take part in her treatment, which will help carry out the plan's strategies and keep them the same in both homes. Although Nadia follows one-step directions during play, her father reported that she does not yet follow a direction to put an activity away.
+> Nadia has strengths that treatment can build on. During the parent interview, her father reported that she clears her plate after every meal and hangs up her coat when she comes home without being reminded; she already follows short routines on her own, which is a starting point for teaching the steps of getting ready in the morning. During direct observation in the home, Nadia named 14 insects in her picture book and pointed to each one when her father named it, so she learns and keeps new names quickly. Her aunt reported that insects are what Nadia talks about most and that she shows her insect stickers to every visitor; insect books and stickers can serve as reinforcers and give her something to share with other children. Her father's and her aunt's involvement will help carry out the plan's strategies and keep them the same in both homes. Although Nadia follows one-step directions during play, her father reported that she does not yet follow a direction to put an activity away.
 >
 > Her needs are in the areas argued under Medical Necessity. In daily living, her father reported that she puts on her shoes only after an adult places them in front of her. In communication, she was observed speaking in short phrases, yet she cried instead of asking her father to open a jar of paint. In coping with change, her aunt reported that Nadia stays in the car and refuses to go inside when a planned visit to the park is changed. In safety, her aunt reported that she climbs onto the windowsill in her apartment. With other children, her preschool teacher reported that she plays beside her classmates but does not join their games.
 >

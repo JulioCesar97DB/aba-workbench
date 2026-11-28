@@ -1,6 +1,6 @@
 ---
 id: section-environmental-changes
-version: 4
+version: 5
 updated: 2026-11-27
 paragraphs: 2-3
 words: 150-450
@@ -14,7 +14,7 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 
 It tells the reviewer and the team how this child copes with change, which matters for every transition the plan asks of the child, what changes in the child's environment are happening or coming, and the supports that will be used.
 
-The changes that count: a change of school or grade, a change of who cares for the child, a new sibling, a change of medication, a change of RBT or BCBA, and a move or a change of the family's routine.
+The changes that count, as she chose them: a change of school or grade, a change of who cares for the child, a new sibling, a change of medication, a change of RBT or BCBA. A move or a change of the family's routine is written too when the sources report one.
 
 ## How to write it
 

@@ -45,6 +45,7 @@ import { loadCase, type LoadedCase } from "./key.ts";
 import {
   addUsage,
   adoptRubricWhenRescored,
+  baselineCaseLabel,
   baselineCopy,
   compareRuns,
   caseMedians,
@@ -54,7 +55,9 @@ import {
   normalizeRun,
   RESULTS_VERSION,
   RUN_COUNTS,
+  rejudgedBaselineName,
   rescoreRun,
+  reusableBaselineJudge,
   scoreSection,
   summaryMarkdown,
   type CaseResult,
@@ -63,6 +66,7 @@ import {
   type JudgeRecord,
   type LaunchCheck,
   type RunResult,
+  type SavedBaselineJudge,
   type SectionResult,
   type Usage,
 } from "./results.ts";
@@ -124,6 +128,8 @@ interface Options {
   draftCheckout: string;
   /** --from-run or --rejudge: an earlier run whose drafts are taken instead of drafting. */
   prior: RunResult | null;
+  /** That run's folder (its baseline-judged.json is reused with --from-run). */
+  priorDir: string | null;
   rejudgeAll: boolean;
   /** How many times each case is run (with --from-run or --rejudge: that run's count). */
   runs: number;
@@ -160,6 +166,7 @@ function readOptions(): Options {
     provider: rehearse ? "anthropic" : "openai",
     draftCheckout,
     prior,
+    priorDir: priorDir ? path.resolve(priorDir) : null,
     rejudgeAll: args.rejudge !== undefined,
     runs,
     samples,
@@ -726,8 +733,7 @@ function baselineAsCompared(runDir: string, rehearsal: boolean): { name: string;
   const run = normalizeRun(JSON.parse(readFileSync(file, "utf8")));
   if (run.provider.startsWith("rehearsal") !== rehearsal) fail("--baseline-run takes a run of the same kind (real or rehearsal).");
   // Short: the name goes into a case label in the judge app, which takes a limited length.
-  const name = comparison.baseline ?? "unknown";
-  return { name: name.endsWith(" re-judged") ? name : `${name} re-judged`, run };
+  return { name: rejudgedBaselineName(comparison.baseline), run };
 }
 
 /** The baseline named, or the newest accepted one of the same kind (real or rehearsal), read as this version reads results. */
@@ -770,7 +776,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
   let rulesVersions: Record<string, string> | null = prior?.drafting.rulesVersions ?? null;
 
   /** The run as recorded: the final one, or a partial one saved as the run goes (results.json, resumable with --from-run). */
-  const buildRun = (caseList: CaseResult[], versions: Record<string, string> | null): RunResult => {
+  const buildRun = (caseList: CaseResult[], versions: Record<string, string> | null, partial = false): RunResult => {
     const judging = checkoutRecord(ROOT);
     return {
     resultsVersion: RESULTS_VERSION,
@@ -803,6 +809,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
     valid: invalidReason === null && (prior?.valid ?? true),
     invalidReason: invalidReason ?? prior?.invalidReason ?? null,
     ...(prior ? { fromRun: prior.label, rejudged: options.rejudgeAll } : {}),
+    ...(partial ? { partial: true } : {}),
     cases: caseList,
     };
   };
@@ -814,8 +821,20 @@ async function main(options: Options, home: string, profile: string): Promise<nu
       for (const { texts } of madeNow) for (const { detail } of texts.values()) Object.assign(versions, (detail as { generation?: { rulesVersions?: Record<string, string> } } | undefined)?.generation?.rulesVersions ?? {});
     }
     mkdirSync(options.runDir, { recursive: true });
-    writeFileSync(path.join(options.runDir, "results.json"), JSON.stringify(buildRun(caseList, versions), null, 2));
+    writeFileSync(path.join(options.runDir, "results.json"), JSON.stringify(buildRun(caseList, versions, true), null, 2));
   };
+  /** Every judge answer on the baseline's drafts so far, saved as each one comes (baseline-judged.json), for a resumed run to reuse. */
+  const savedBaselineJudges: SavedBaselineJudge[] = [];
+  const priorBaselineJudges: SavedBaselineJudge[] =
+    options.priorDir && !options.rejudgeAll && existsSync(path.join(options.priorDir, "baseline-judged.json"))
+      ? (JSON.parse(readFileSync(path.join(options.priorDir, "baseline-judged.json"), "utf8")) as SavedBaselineJudge[])
+      : [];
+  const saveBaselineJudge = (entry: SavedBaselineJudge) => {
+    savedBaselineJudges.push(entry);
+    mkdirSync(options.runDir, { recursive: true });
+    writeFileSync(path.join(options.runDir, "baseline-judged.json"), JSON.stringify(savedBaselineJudges, null, 2));
+  };
+  const textHash = (text: string) => createHash("sha256").update(text).digest("hex").slice(0, 32);
 
   for (const loaded of cases) {
     console.log(`\n${loaded.key.caseId}`);
@@ -935,14 +954,26 @@ async function main(options: Options, home: string, profile: string): Promise<nu
             return section.judge?.fingerprint !== fingerprint || (section.judge?.answers.length ?? 0) < options.samples;
           });
           const rejudged = new Map<ReportSectionId, JudgeRecord>();
-          if (stale.length > 0) {
-            console.log(`  the baseline's run ${baseRun.run} was judged by another judge: judging ${stale.length} of its drafts again with this one`);
-            const baseCaseId = await loadIntoApp(current.page, loaded, plan, `${loaded.key.child.fullName} (baseline ${baseline!.name}, run ${baseRun.run})`.slice(0, MAX_CASE_LABEL_LENGTH));
+          // A resumed run (--from-run) reuses what the run it resumes already paid for on these same drafts (finding 11).
+          const toJudge = stale.filter((section) => {
+            const wanted = { baseline: baseline!.name, caseId: loaded.key.caseId, run: baseRun.run, section: section.id, textHash: textHash(section.text as string) };
+            const fingerprint = judgeFingerprint(judgeInputFor(loaded, section.id, loadedSources, "json-schema"), loaded, section.id, judgeModel, options.samples);
+            const reused = reusableBaselineJudge(priorBaselineJudges, { ...wanted, fingerprint, samples: options.samples });
+            if (!reused) return true;
+            rejudged.set(section.id, reused);
+            saveBaselineJudge({ ...wanted, record: reused });
+            return false;
+          });
+          if (stale.length > toJudge.length) console.log(`  the baseline's run ${baseRun.run}: ${stale.length - toJudge.length} answer(s) reused from run ${prior?.label ?? "unknown"}`);
+          if (toJudge.length > 0) {
+            console.log(`  the baseline's run ${baseRun.run} was judged by another judge: judging ${toJudge.length} of its drafts again with this one`);
+            const baseCaseId = await loadIntoApp(current.page, loaded, plan, baselineCaseLabel(loaded.key.child.fullName, baseline!.name, baseRun.run, MAX_CASE_LABEL_LENGTH));
             await putDrafts(current.page, baseCaseId, baseRun.sections);
-            for (const section of stale) {
+            for (const section of toJudge) {
               process.stdout.write(`  judge baseline run ${baseRun.run} ${section.id} ... `);
               const record = await judgeSection(current.page, baseCaseId, loaded, section.id, loadedSources, options, judgeModel, true);
               rejudged.set(section.id, record);
+              if (record.error === null) saveBaselineJudge({ baseline: baseline!.name, caseId: loaded.key.caseId, run: baseRun.run, section: section.id, textHash: textHash(section.text as string), record });
               console.log(record.error ? `FAILED (${record.error})` : `${record.format}, ${record.seconds.toFixed(1)} s`);
             }
           }
@@ -1013,6 +1044,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
 /** Saves a run as an accepted baseline: never an invalid or incomplete run or one from a dirty checkout, and never with a local path (review B4, S9, S10; 3-run review S1). */
 function accept(run: RunResult, name: string, summary: string): void {
   if (!run.valid) fail(`an invalid run is never accepted (${run.invalidReason}).`);
+  if (run.partial) fail("a partial run (saved while it was still going) is never accepted.");
   if (run.drafting.dirty || run.judging.dirty) fail("a run from a checkout with uncommitted changes in rules/, src/ or eval/ is never accepted: commit them and run again.");
   // Review S1 (3-run evaluation): a run with a failed draft, a judge error or an unscored item never becomes the bar.
   const incomplete = incompleteParts(run);

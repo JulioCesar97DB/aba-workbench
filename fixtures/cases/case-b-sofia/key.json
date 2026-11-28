@@ -1,5 +1,5 @@
 {
-  "keyVersion": "2",
+  "keyVersion": "3",
   "caseId": "case-b-sofia",
   "child": {
     "firstName": "Sofía",
@@ -633,7 +633,7 @@
       },
       {
         "id": "sw-family",
-        "fact": "The family's involvement as a strength (her mother and her grandmother willing to take part), which will help carry out and generalize the plan.",
+        "fact": "The family's involvement as a strength that will help carry out and generalize the plan.",
         "from": [
           "parent-interview"
         ]
@@ -701,7 +701,7 @@
       },
       {
         "id": "fci-father",
-        "fact": "The father lives in another state with no regular contact.",
+        "fact": "The father's absence, referred to in a clause as it bears on participation (Background Information states it).",
         "from": [
           "parent-interview"
         ]

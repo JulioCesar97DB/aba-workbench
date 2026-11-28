@@ -1,6 +1,6 @@
 ---
 id: section-generalization-and-maintenance
-version: 5
+version: 6
 updated: 2026-11-27
 paragraphs: 2-2
 words: 150-320
@@ -24,7 +24,7 @@ It is written for the whole plan, not goal by goal (her answer: the general plan
 
 2. Maintenance. After mastery, weekly probes check that each skill is still performed. The reinforcement schedule is thinned from continuous to intermittent, and prompts are faded. Close by saying that if performance drops, the reinforcement schedule and the prompts that were removed are reinstated, and removed again once the level is regained.
 
-This is her own description of the section. Anything more that she writes the same way in every case (for example how she programs for generalization beyond settings and people). Care coordination with other providers has its own field in ABA Matrix and is not written here. is her standard practice: add it only as her standing instructions for this section give it (see the four kinds of content).
+This is her own description of the section. Anything more that she writes the same way in every case (for example how she programs for generalization beyond settings and people) is her standard practice: add it only as her standing instructions for this section give it (see the four kinds of content). Care coordination with other providers has its own field in ABA Matrix and is not written here.
 
 ## Gaps in this section
 

@@ -75,7 +75,7 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 | `pnpm eval --cases case-b-sofia` | Only these cases |
 | `pnpm eval --mode independent` | Drafts without approving, so no consistency checks |
 | `pnpm eval --baseline <name>` | Compares with `eval/baselines/<name>/` instead of the newest |
-| `pnpm eval --baseline-run <run folder>` | Compares with the baseline as that earlier run compared it (its `baseline-as-compared.json`): every draft is checked again, and only the sections whose judge changed are judged again. Use it to measure a rules fix against the same dev arm without paying for every baseline judgement again |
+| `pnpm eval --baseline-run <run folder>` | Compares with the baseline as that earlier run compared it (its `baseline-as-compared.json`): every draft is checked again, and only the sections whose judge changed are judged again. Use it to measure a rules fix against the same dev arm without paying for every baseline judgement again. Its note says in which run the baseline's drafts were all judged again, and that this run judged them again only where the judge changed |
 | `pnpm eval --accept <name>` | Also saves the run as `eval/baselines/<name>/`, with every path stripped (commit it). Refused for an invalid run, a rehearsal, a checkout with uncommitted changes in `rules/`, `src/` or `eval/`, and a run with a failed draft, a judge error or an unscored item in any run (fill it with `--from-run`, or run again for a failed draft) |
 | `pnpm eval --label <text>`, `--no-build` | Names the run folder; uses the apps as already built |
 
@@ -90,7 +90,12 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 
 `--rejudge` costs 9 judge requests per case and run (27 with 3 runs) and drafts nothing. `--from-run` costs only the missing judge answers. The writing and the judge both spend the owner's ChatGPT Pro plan (no money).
 
-**Saved as it goes:** the run writes `results.json` after drafting each case and again after judging each of its runs, so a run that fails late (for example while judging the baseline's drafts again) keeps every draft and judge answer already paid for. Resume it with `pnpm eval --from-run <that run folder>`: it drafts nothing and judges only what has no answer from this judge yet. A partial `results.json` has no `summary.md` next to it.
+**Saved as it goes:**
+- The run writes `results.json` once every run of a case is drafted, and again after each of its runs is judged. Until the run ends, that file carries `partial: true`: a partial run is never compared or accepted.
+- Each answer on the baseline's drafts is written to `baseline-judged.json` as it comes.
+- So a run that fails while judging, its own drafts or the baseline's, keeps every judge answer already paid for. Resume it with `pnpm eval --from-run <that run folder>` and the same baseline option: it drafts nothing, judges only what has no answer from this judge yet, and reuses a saved baseline answer when it is for the same baseline, draft (by its text) and judge.
+- **What is not kept:** a case's drafts are saved only once all its runs are drafted, because `--from-run` cannot draft the missing runs. A failure while drafting loses that case's drafts so far, and the run is started again. A multi-case run that fails in a later case resumes only the cases its partial `results.json` holds.
+- A partial `results.json` has no `summary.md` next to it.
 
 **Reproducible from the stored drafts:** `results.json` keeps every run's texts, so `--from-run` and `--rejudge` check and judge them again run by run without drafting, and the compare checks every stored run of the baseline again.
 

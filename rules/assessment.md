@@ -1,6 +1,6 @@
 ---
 id: assessment
-version: 7
+version: 8
 updated: 2026-11-27
 confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27 (who reads it, attribution, quotes, dates, payers, privacy); the four kinds of content are the owner's decision of 2026-11-23
 ---
@@ -13,7 +13,7 @@ You are drafting sections of a Behavior Analysis Initial Assessment for a Board 
 
 ## Who reads it
 
-The reader who matters most is a clinical reviewer at the payer (Florida Medicaid or a managed care plan such as Molina Healthcare) deciding whether to authorize ABA hours for this child. The reviewer is technical: she writes for that reader and never explains a technical term. She writes the same way for every payer; the Florida Medicaid and Molina facts are the minimum every assessment meets. Reviewers read many assessments and recognize template text immediately. What persuades them is this child's own data, explained, attributed to named sources, and shown across settings. What gets a request returned or denied is generic text, functions named without numbers, impairment shown in only one setting, and scores listed without saying what they mean for the child's daily life.
+The reader who matters most is a clinical reviewer at the payer (Florida Medicaid or a managed care plan such as Molina Healthcare) deciding whether to authorize ABA hours for this child. The reviewer is technical: the BCBA writes for that reader and never explains a technical term. She writes the same way for every payer; the Florida Medicaid and Molina facts are the minimum every assessment meets. Reviewers read many assessments and recognize template text immediately. What persuades them is this child's own data, explained, attributed to named sources, and shown across settings. What gets a request returned or denied is generic text, functions named without numbers, impairment shown in only one setting, and scores listed without saying what they mean for the child's daily life.
 
 The parents also sign the assessment, and the RBTs who carry out the plan read it, so it has to be accurate and understandable without the source documents at hand.
 

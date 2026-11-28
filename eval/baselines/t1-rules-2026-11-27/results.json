@@ -5,7 +5,7 @@
   "finishedAt": "2026-11-28T00:58:23.104Z",
   "rubricVersion": "3",
   "judgePromptVersion": "2",
-  "checksVersion": "4",
+  "checksVersion": "5",
   "runs": 3,
   "judgeSamples": 1,
   "drafting": {
@@ -2067,13 +2067,6 @@
                   "message": "863 words; her range is 600 to 850."
                 },
                 {
-                  "check": "wording",
-                  "section": "background-information",
-                  "severity": "major",
-                  "message": "Her wording (banned-word): a word she does not use (utilize, facilitate, leverage).",
-                  "excerpt": "The IEP provides 300 minutes per week of specialized instruction through support facilitation in general education."
-                },
-                {
                   "check": "repetition",
                   "section": "background-information",
                   "severity": "major",
@@ -2103,7 +2096,7 @@
                 "repetition": 0,
                 "data-density": 2,
                 "banned-patterns": 2,
-                "her-wording": 1,
+                "her-wording": 2,
                 "no-quoted-speech": 2,
                 "no-dates-or-names": 2,
                 "examples-not-copied": 2,
@@ -3302,15 +3295,7 @@
                 "items": []
               },
               "draftError": null,
-              "findings": [
-                {
-                  "check": "wording",
-                  "section": "discharge-and-service-fading-plan",
-                  "severity": "major",
-                  "message": "Her wording (severity-level): a DSM-5 severity level, or a mention of one (she never states it, in any section).",
-                  "excerpt": "Applied behavior analysis (ABA) services will end if Sofía no longer meets medical necessity criteria, no longer engages in the target behaviors, or the freque…"
-                }
-              ],
+              "findings": [],
               "scores": {
                 "markers": 2,
                 "shape": 2,
@@ -3319,7 +3304,7 @@
                 "repetition": 2,
                 "data-density": 2,
                 "banned-patterns": 2,
-                "her-wording": 1,
+                "her-wording": 2,
                 "no-quoted-speech": 2,
                 "no-dates-or-names": 2,
                 "examples-not-copied": 2,
@@ -3883,13 +3868,6 @@
               "draftError": null,
               "findings": [
                 {
-                  "check": "wording",
-                  "section": "background-information",
-                  "severity": "major",
-                  "message": "Her wording (banned-word): a word she does not use (utilize, facilitate, leverage).",
-                  "excerpt": "Her mother reported that Sofía attends 4th grade at Ejemplo Elementary School from 8:30 a.m. to 3:00 p.m. According to her Individual Education Plan (IEP), Sof…"
-                },
-                {
                   "check": "repetition",
                   "section": "background-information",
                   "severity": "major",
@@ -3912,7 +3890,7 @@
                 "repetition": 1,
                 "data-density": 2,
                 "banned-patterns": 2,
-                "her-wording": 1,
+                "her-wording": 2,
                 "no-quoted-speech": 2,
                 "no-dates-or-names": 2,
                 "examples-not-copied": 2,
@@ -5107,15 +5085,7 @@
                 "items": []
               },
               "draftError": null,
-              "findings": [
-                {
-                  "check": "wording",
-                  "section": "discharge-and-service-fading-plan",
-                  "severity": "major",
-                  "message": "Her wording (severity-level): a DSM-5 severity level, or a mention of one (she never states it, in any section).",
-                  "excerpt": "Sofía may be discharged if she no longer meets medical necessity criteria, no longer engages in the target behaviors, or their frequency and severity no longer…"
-                }
-              ],
+              "findings": [],
               "scores": {
                 "markers": 2,
                 "shape": 2,
@@ -5124,7 +5094,7 @@
                 "repetition": 2,
                 "data-density": 2,
                 "banned-patterns": 2,
-                "her-wording": 1,
+                "her-wording": 2,
                 "no-quoted-speech": 2,
                 "no-dates-or-names": 2,
                 "examples-not-copied": 2,
@@ -5659,7 +5629,7 @@
             "repetition": 0,
             "data-density": 2,
             "banned-patterns": 2,
-            "her-wording": 1,
+            "her-wording": 2,
             "no-quoted-speech": 2,
             "no-dates-or-names": 2,
             "examples-not-copied": 2,
@@ -5711,8 +5681,8 @@
             ],
             "her-wording": [
               2,
-              1,
-              1
+              2,
+              2
             ],
             "no-quoted-speech": [
               2,
@@ -5778,8 +5748,7 @@
           "failing": {
             "shape": 1,
             "repetition": 3,
-            "data-density": 1,
-            "wording": 2
+            "data-density": 1
           },
           "drafted": 3,
           "words": [
@@ -6478,7 +6447,7 @@
             "repetition": 2,
             "data-density": 2,
             "banned-patterns": 2,
-            "her-wording": 1,
+            "her-wording": 2,
             "no-quoted-speech": 2,
             "no-dates-or-names": 2,
             "examples-not-copied": 2,
@@ -6530,8 +6499,8 @@
             ],
             "her-wording": [
               2,
-              1,
-              1
+              2,
+              2
             ],
             "no-quoted-speech": [
               2,
@@ -6594,9 +6563,7 @@
               1
             ]
           },
-          "failing": {
-            "wording": 2
-          },
+          "failing": {},
           "drafted": 3,
           "words": [
             598,

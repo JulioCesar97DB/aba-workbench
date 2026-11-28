@@ -313,7 +313,7 @@ test("payer readiness in the Crisis Plan: the dangerous behaviors, not early sig
   const item = PAYER_ITEMS.find((p) => p.id === "cp-dangerous");
   assert.ok(item);
   assert.equal(PAYER_ITEMS.some((p) => p.id === "cp-signs"), false);
-  assert.deepEqual(checkPayerReadiness("crisis-plan", "Physical aggression can be dangerous to her brother. The RBT or caregiver calls 911 when the situation gets out of control.", caseB.key), []);
+  assert.deepEqual(checkPayerReadiness("crisis-plan", "Physical aggression, property destruction and hand biting can be dangerous to her brother. The RBT or caregiver calls 911 when the situation gets out of control.", caseB.key), []);
 });
 
 test("runChecks runs her three new checks on every section", () => {
@@ -328,4 +328,46 @@ test("payer readiness in Medical Necessity: the same criteria in other words (fi
   assert.equal(item("mn-complements").test("The family repeats the routine.", key).ok, false);
   for (const text of ["Progress will be judged by direct data on target behaviors.", "The BCBA will judge progress from direct data.", "Progress will be measured with direct data."]) assert.equal(item("mn-measurement").test(text, key).ok, true, text);
   assert.equal(item("mn-measurement").test("Progress will be reviewed with the family.", key).ok, false);
+});
+
+test("review round 1 (findings 6 and 13): her wording and quotes let the sources' terms and the child's target phrases through", () => {
+  const ids = (findings: ReturnType<typeof checkWording>) => findings.map((f) => /\((\S+)\)/.exec(f.message)?.[1]);
+  for (const ok of [
+    "The IEP gives support facilitation in the classroom.",
+    "Services end when the frequency and severity of maladaptive behaviors no longer pose a barrier.",
+    "The severity of the injuries increased over the last month.",
+    "Sofia completed Level 1 milestones of the VB-MAPP.",
+  ]) assert.deepEqual(checkWording("discharge-and-service-fading-plan", ok), [], ok);
+  assert.deepEqual(ids(checkWording("background-information", "Autism Spectrum Disorder, Level 2.")), ["severity-level"]);
+  assert.deepEqual(ids(checkWording("background-information", "The CDE gives a severity level.")), ["severity-level"]);
+  assert.deepEqual(ids(checkWording("risk-assessment", "The plan will facilitate access.")), ["banned-word"]);
+  assert.deepEqual(checkQuotes("medical-necessity", 'ABA will teach Sofia to say "break" when work is hard.'), []);
+  assert.deepEqual(checkQuotes("medical-necessity", 'She will learn to request "all done" at the end of a task.'), []);
+  assert.equal(checkQuotes("risk-assessment", 'She said "I will hurt you".').length, 1, "what someone said is still a quote");
+  assert.equal(checkQuotes("risk-assessment", 'She will learn to say "I do not want to do this work right now".').length, 1, "a long quoted span is not a target phrase");
+});
+
+test("review round 1 (finding 7): dates and names leave fractions, 24/7 and credential lists alone, and exempt only a governed coming date", () => {
+  const found = (text: string) => checkDatesNames("discharge-and-service-fading-plan", text).map((f) => f.message.split(":")[0]);
+  for (const ok of [
+    "She answered correctly on 2/10 opportunities.",
+    "An adult supervises her 24/7 near the pool.",
+    "Direct hours will be faded from the RBT, BCaBA, and BCBA levels as goals are met.",
+    "Services will start on December 15, 2026.",
+    "From December 15, 2026, her grandmother will travel.",
+  ]) assert.deepEqual(found(ok), [], ok);
+  assert.deepEqual(found("The CDE completed on March 3, 2026 found that ABA will be needed."), ["full-date"], "a past date is not exempt because the sentence also says will");
+  assert.deepEqual(found("Services will start on December 15, 2026, after the evaluation of March 3, 2026."), ["full-date"], "the governed date is exempt, the other one is not");
+});
+
+test("review round 1 (findings 8 and 9): mn-measurement needs progress, cp-dangerous needs the behaviors by name", () => {
+  const key = caseB.key;
+  const item = (id: string) => PAYER_ITEMS.find((p) => p.id === id)!;
+  for (const text of ["The Comprehensive Diagnostic Evaluation (CDE) is consistent with the direct data from the home.", "The findings of this assessment rest on the data gathered in the home and the community."]) {
+    assert.equal(item("mn-measurement").test(text, key).ok, false, text);
+  }
+  assert.equal(item("cp-dangerous").test("Sofia has no history of crisis, and no harm has come to anyone.", key).ok, false);
+  assert.equal(item("cp-dangerous").test("Physical aggression, property destruction and hand biting can be dangerous.", key).ok, true);
+  assert.equal(item("cp-dangerous").test("Physical aggression and self-injury toward her hand can occur, and she may destroy property.", key).ok, true, "accepted forms count");
+  assert.equal(item("cp-dangerous").test("Elopement, physical aggression and head hitting can put him at risk.", caseA.key).ok, true);
 });

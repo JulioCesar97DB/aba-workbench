@@ -5,19 +5,19 @@
 > - Its Risk Assessment drafts were written with Risk Assessment rule v5 (`drafting.rulesVersions` says `"section-risk-assessment": "5"`) and judged under the expectations that came with v6.
 > - v6 (7da80cb) only stops that section restating the caregiver training method and naming a procedure. Run 2's draft still names one ("reinforcement for requesting help or a break during demands"), which is why its nothing-invented score is 1.
 > - Every other section was drafted with the rules as they are at 7da80cb.
-> - The baseline's name, "dev-step0-2026-11-23 re-judged re-judged", is the dev arm re-judged twice through `--baseline-run` (fixed in 6b62b5d for later runs).
+> - **Re-scored offline with checks v5** (review round 1 of T1, findings 6 to 9 and 13, no request): the code items of both arms were checked again. The her-wording false positives ("support facilitation", the payer's "frequency and severity") are gone, which moves code from 205 to 207 of 216 (dev from 171 to 173), and nothing else changed. The judge answers are the stored ones. The baseline arm's name is written once ("dev-step0-2026-11-23 re-judged"), and its note says where its drafts were all judged again.
 
-**No hard regression: no code item's median went down, no check that passed in the baseline fails in most runs now, and nothing went unscored. Judge item medians, apart from the verdict: 0 down, 22 up.** (baseline: dev-step0-2026-11-23 re-judged re-judged)
+**No hard regression: no code item's median went down, no check that passed in the baseline fails in most runs now, and nothing went unscored. Judge item medians, apart from the verdict: 0 down, 22 up.** (baseline: dev-step0-2026-11-23 re-judged)
 
 - Drafted by this checkout (JulioCesar97DB/rules-her-answers at cc1864d); judged by this checkout at 6b62b5d.
 - 3 runs per case, each drafted and judged on its own. Every score below is the median of the runs; an item is unscored when any run could not score it, and a check fails when it fails in most runs.
-- Rubric v3, judge prompt v2, checks v4, 1 judge sample per section in each run (median when more than one); judge format json-schema; openai (ChatGPT sign-in), gpt-6.2-astra; chained drafting.
+- Rubric v3, judge prompt v2, checks v5, 1 judge sample per section in each run (median when more than one); judge format json-schema; openai (ChatGPT sign-in), gpt-6.2-astra; chained drafting.
 - Judged again only where a run had no answer from run 2026-11-28T00-53-24-t1-fix2-rejudge's drafts, checked again with the current checks. The request counts below are both runs together.
 - Requests: 90 (27 drafts, 24 consistency checks, 30 judge, 0 repairs, 9 judging the baseline's drafts again). 2026-11-28T00:58:19.843Z to 2026-11-28T00:58:23.104Z.
 - Judge input: 543186 tokens, 0 read from the cache.
 - Windows: draft launch: 0 visible, Dock hidden, 0 focused; draft end: 0 visible, Dock hidden, 0 focused; judge launch: 0 visible, Dock hidden, 0 focused; judge end: 0 visible, Dock hidden, 0 focused; judge launch: 0 visible, Dock hidden, 0 focused; judge end: 0 visible, Dock hidden, 0 focused; 0 checks during the run, all clear.
-- Scores (medians): code items 205 of 216, judge items 100 of 144; the baseline as the current checks score it: code 171 of 216, judge 72 of 144 (3 runs).
-- Noise: the runs disagree on 12 of 108 code item scores and 18 of 72 judge item scores (see each case's spread).
+- Scores (medians): code items 207 of 216, judge items 100 of 144; the baseline as the current checks score it: code 173 of 216, judge 72 of 144 (3 runs).
+- Noise: the runs disagree on 10 of 108 code item scores and 18 of 72 judge item scores (see each case's spread).
 
 ## case-b-sofia
 
@@ -32,7 +32,7 @@ Medians. Each cell: baseline → this run.
 | repetition (code) | 0 → 0 | 1 → 1 | 2 → 2 | 1 → 2 | 1 → 1 | 2 → 2 | 2 → 2 | 0 → 2 | 1 → 1 |
 | data-density (code) | 1 → 2 | 0 → 0 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 1 → 2 | 1 → 1 | 2 → 2 |
 | banned-patterns (code) | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 |
-| her-wording (code) | 1 → 1 | 0 → 2 | 1 → 2 | 1 → 2 | 1 → 2 | 2 → 2 | 0 → 1 | 1 → 2 | 0 → 2 |
+| her-wording (code) | 2 → 2 | 0 → 2 | 1 → 2 | 1 → 2 | 1 → 2 | 2 → 2 | 1 → 2 | 1 → 2 | 0 → 2 |
 | no-quoted-speech (code) | 1 → 2 | 2 → 2 | 2 → 2 | 1 → 2 | 1 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 0 → 2 |
 | no-dates-or-names (code) | 0 → 2 | 0 → 2 | 1 → 2 | 0 → 2 | 0 → 2 | 2 → 2 | 1 → 2 | 0 → 2 | 0 → 2 |
 | examples-not-copied (code) | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 | 2 → 2 |
@@ -59,7 +59,7 @@ Spread over the 3 runs: each cell is every run's score in order; **bold** where 
 | repetition (code) | **0·0·1** | **0·1·1** | **1·2·2** | 2·2·2 | **1·1·2** | 2·2·2 | 2·2·2 | **1·2·2** | **2·1·1** |
 | data-density (code) | **1·2·2** | 0·0·0 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 1·1·1 | 2·2·2 |
 | banned-patterns (code) | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 |
-| her-wording (code) | **2·1·1** | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | **2·1·1** | 2·2·2 | 2·2·2 |
+| her-wording (code) | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 |
 | no-quoted-speech (code) | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 |
 | no-dates-or-names (code) | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 |
 | examples-not-copied (code) | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 | 2·2·2 |
@@ -88,7 +88,7 @@ Spread over the 3 runs: each cell is every run's score in order; **bold** where 
 
 ## Notes
 
-- The baseline was accepted under rubric version 2. Every one of its stored drafts was checked and judged again in this run, so it is compared under rubric version 3: the baseline arm is its stored drafts, re-judged, not drafted again.
+- The baseline was accepted under rubric version 2. Every one of its stored drafts was checked and judged again in run 2026-11-27T21-31-23-t1-rules, so it is compared under rubric version 3; in this run its drafts were checked again, and judged again only where the judge changed: the baseline arm is its stored drafts, re-judged, not drafted again.
 
 ## Code item medians that went up
 
@@ -107,7 +107,7 @@ Spread over the 3 runs: each cell is every run's score in order; **bold** where 
 - case-b-sofia FCI no-quoted-speech: 1 → 2 (runs 1·1·1 → 2·2·2)
 - case-b-sofia FCI no-dates-or-names: 0 → 2 (runs 0·0·0 → 2·2·2)
 - case-b-sofia DC data-density: 1 → 2 (runs 1·1·1 → 2·2·2)
-- case-b-sofia DC her-wording: 0 → 1 (runs 0·0·1 → 2·1·1)
+- case-b-sofia DC her-wording: 1 → 2 (runs 1·1·2 → 2·2·2)
 - case-b-sofia DC no-dates-or-names: 1 → 2 (runs 1·0·1 → 2·2·2)
 - case-b-sofia RA shape: 1 → 2 (runs 1·1·1 → 1·2·2)
 - case-b-sofia RA repetition: 0 → 2 (runs 0·0·2 → 1·2·2)

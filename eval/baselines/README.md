@@ -18,7 +18,9 @@ Each folder here is one accepted run of `pnpm eval` (owner's decision, 2026-11-2
   - **Risk Assessment drafted with v5:** its drafts are those of T1 fix round 1 (cc1864d). Risk Assessment was re-judged under v6's expectations (7da80cb) but not drafted again, so its drafts were written with Risk Assessment rule v5.
   - **What v6 changes:** it only stops that section restating the caregiver training method and naming a procedure.
   - **Every other section** was drafted with the rules as they are at 7da80cb.
-  - **The doubled name:** the baseline it compares with is named "dev-step0-2026-11-23 re-judged re-judged" (the dev arm re-judged twice through `--baseline-run`; fixed in 6b62b5d).
+  - **Re-scored offline with checks v5** (review round 1 of T1, no request): both arms' code items were checked again with the fixed checks, and `results.json` and `summary.md` were written again. Only the her-wording false positives in Background and Discharge went away: code 205 → 207 of 216, dev 171 → 173. The judge answers are the stored ones.
+  - **Its notes, corrected:** the summary names the dev arm once ("dev-step0-2026-11-23 re-judged", not "re-judged re-judged"). It also says that the dev arm's drafts were all judged again in run 2026-11-27T21-31-23-t1-rules, and later only where the judge changed (finding 10).
+  - **Its key is version 2;** case B's key is now version 3 (review round 1: `sw-family` and `fci-father` follow who owns the fact). With that and the Background and Family/Caregiver Involvement expectations of the same round, the next comparison notes that the key changed and judges Background, Strengths and Weaknesses and Family/Caregiver Involvement again.
 
 - **`dev-2026-11-23`:**
   - **One run:** it is from before runs, one run of case B. It is read as a single run, whose medians are its own scores, and a comparison with it notes that the run counts differ.

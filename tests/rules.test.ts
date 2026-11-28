@@ -111,10 +111,11 @@ test("the case map's definition example lives in the behaviors rules, sent with 
   assert.match(behaviors, /## An example[\s\S]*Climbing furniture/);
   assert.match(behaviors, /Never reuse its sentences, names, dates or numbers/);
   // examples.md is in the cached prefix of every section request: the case map's example stays out of it.
-  // Version 4 (2026-11-27) rewrote its examples to her questionnaire answers, still without the case map's.
+  // Version 4 (2026-11-27) rewrote its examples to her questionnaire answers, still without the case map's;
+  // version 5 (review round 1 of T1) stops its Strengths and Weaknesses example restating who is willing.
   const examples = readFileSync("rules/examples.md", "utf8");
   assert.doesNotMatch(examples, /Climbing furniture|Case map/);
-  assert.match(examples, /^version: 4$/m);
+  assert.match(examples, /^version: 5$/m);
 });
 
 test("the examples stay labeled as invented, with the rule never to reuse them", () => {
@@ -173,4 +174,18 @@ test("fix round 2 of T1: Risk Assessment names caregiver training only; Discharg
   const { SECTION_EXPECTATIONS } = await import("../eval/rubric.ts");
   assert.match(SECTION_EXPECTATIONS["risk-assessment"].join(" "), /Behavioral Skills Training given in person is also her standard practice/);
   assert.match(SECTION_EXPECTATIONS["discharge-and-service-fading-plan"].join(" "), /caregiver training that increases as fading nears/);
+});
+
+test("review round 1 of T1: one owner per household fact, whole sentences, her own lists", () => {
+  const read = (file: string) => readFileSync(`rules/${file}`, "utf8");
+  assert.doesNotMatch(read("sections/background-information.md"), /how the caregivers are involved/);
+  assert.match(read("sections/background-information.md"), /a parent who lives elsewhere or has no regular contact/);
+  assert.match(read("sections/family-caregiver-involvement.md"), /referred to in a clause because Background Information states it/);
+  assert.doesNotMatch(read("examples.md"), /both want to take part/);
+  assert.match(read("sections/generalization-and-maintenance.md"), /beyond settings and people\) is her standard practice: add it only/);
+  assert.match(read("sections/environmental-changes.md"), /as she chose them: a change of school or grade, a change of who cares for the child, a new sibling, a change of medication, a change of RBT or BCBA\. A move/);
+  assert.match(read("assessment.md"), /The reviewer is technical: the BCBA writes for that reader/);
+  assert.match(read("style.md"), /after "to say" or "to request"/);
+  assert.match(read("payers/florida-medicaid-molina.md"), /1\. The diagnosis stated by a qualified clinician, and the physician's order for behavior analysis, which is one of her documents/);
+  assert.doesNotMatch(read("guide.md"), /the monitoring part she writes/);
 });

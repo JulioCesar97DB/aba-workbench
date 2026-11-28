@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { checkBannedPatterns, checkShape, CHECK_IDS, type Finding } from "../eval/checks/checks.ts";
-import { adoptRubricWhenRescored, baselineCopy, caseMedians, compareRuns, exitCodeFor, failsInMost, incompleteParts, keepsEarlierJudge, localPathsIn, medianAnswer, medianScore, noiseOf, normalizeRun, rescoreRun, scoreSection, summaryMarkdown, verdictLine, type CaseRun, type JudgeRecord, type RunResult, type SectionResult } from "../eval/results.ts";
+import { adoptRubricWhenRescored, baselineCaseLabel, rejudgedBaselineName, rescoredBaselineNote, reusableBaselineJudge, type SavedBaselineJudge, baselineCopy, caseMedians, compareRuns, exitCodeFor, failsInMost, incompleteParts, keepsEarlierJudge, localPathsIn, medianAnswer, medianScore, noiseOf, normalizeRun, rescoreRun, scoreSection, summaryMarkdown, verdictLine, type CaseRun, type JudgeRecord, type RunResult, type SectionResult } from "../eval/results.ts";
 import { codeScore, keyFactsScore, RUBRIC, RUBRIC_VERSION, SECTION_EXPECTATIONS, SECTION_PAYER_FACTS, SECTION_SHAPES, STYLE_EXPECTATIONS, type CodeItem } from "../eval/rubric.ts";
 import { buildJudgePrompt, JudgeInputSchema, judgeAnswerSchema, parseJudgeAnswer, type JudgeInput } from "../src/lib/judge.ts";
 import { REPORT_SECTIONS, type ReportSectionId } from "../src/shared/report-sections.ts";
@@ -498,4 +498,45 @@ test("rubric v3: a baseline of another rubric version is compared only when ever
   assert.equal(adoptRubricWhenRescored(old, current, rejudgedOf([both()])).rubricVersion, "2", "a run left unjudged keeps it refused");
   assert.equal(adoptRubricWhenRescored(old, current, rejudgedOf([both(), [["medical-necessity", judged()], ["risk-assessment", judged("timeout")]]])).rubricVersion, "2", "a judge error keeps it refused");
   assert.equal(adoptRubricWhenRescored(old, current, new Map()).rubricVersion, "2", "nothing judged again: refused");
+});
+
+test("review round 1 (finding 10): the note says where the baseline's drafts were judged again", () => {
+  const current = runs([[section("medical-necessity", [], { thread: 2 })]], { label: "run-b" });
+  const here = { ...current, rescoredFromRubric: "2", rejudgedIn: "run-b" };
+  assert.match(rescoredBaselineNote(here, current), /judged again in this run, so/);
+  const earlier = { ...current, rescoredFromRubric: "2", rejudgedIn: "run-a" };
+  assert.match(rescoredBaselineNote(earlier, current), /judged again in run run-a, .*in this run its drafts were checked again, and judged again only where the judge changed/);
+  assert.match(rescoredBaselineNote({ ...current, rescoredFromRubric: "2" }, current), /in an earlier run/, "a baseline from before the field never claims this run");
+  const judged: JudgeRecord = { format: "json-schema", repaired: false, answers: [{ section: "medical-necessity", items: [], keyFacts: [] }] as never, error: null, requests: 1, seconds: 1, usage: null, fingerprint: "new" };
+  const old = runs([[section("medical-necessity", [], { thread: 2 })]], { rubricVersion: "2" });
+  assert.equal(adoptRubricWhenRescored(old, current, new Map([["case-b-sofia", [new Map([["medical-necessity" as ReportSectionId, judged]])]]])).rejudgedIn, "run-b", "a full re-judge records this run");
+});
+
+test("review round 1 (finding 12): a re-judged baseline's name is suffixed once, and its case label stays within the app's limit", () => {
+  assert.equal(rejudgedBaselineName("dev-step0"), "dev-step0 re-judged");
+  assert.equal(rejudgedBaselineName(rejudgedBaselineName("dev-step0")), "dev-step0 re-judged");
+  assert.equal(rejudgedBaselineName(undefined), "unknown re-judged");
+  const label = baselineCaseLabel("Sofía Inventada Ejemplo", "x".repeat(200), 3, 100);
+  assert.equal(label.length, 100);
+  assert.ok(label.startsWith("Sofía Inventada Ejemplo (baseline "));
+  assert.equal(baselineCaseLabel("Sofía", "dev", 1, 100), "Sofía (baseline dev, run 1)");
+});
+
+test("review round 1 (finding 11): a saved baseline answer is reused only for the same draft, baseline and judge", () => {
+  const record: JudgeRecord = { format: "json-schema", repaired: false, answers: [{ section: "risk-assessment", items: [], keyFacts: [] }] as never, error: null, requests: 1, seconds: 1, usage: null, fingerprint: "judge-a" };
+  const saved: SavedBaselineJudge[] = [{ baseline: "dev re-judged", caseId: "case-b-sofia", run: 2, section: "risk-assessment", textHash: "h1", record }];
+  const wanted = { baseline: "dev re-judged", caseId: "case-b-sofia", run: 2, section: "risk-assessment" as ReportSectionId, textHash: "h1", fingerprint: "judge-a", samples: 1 };
+  assert.equal(reusableBaselineJudge(saved, wanted), record);
+  assert.equal(reusableBaselineJudge(saved, { ...wanted, fingerprint: "judge-b" }), null, "another judge");
+  assert.equal(reusableBaselineJudge(saved, { ...wanted, textHash: "h2" }), null, "another draft");
+  assert.equal(reusableBaselineJudge(saved, { ...wanted, baseline: "other" }), null, "another baseline");
+  assert.equal(reusableBaselineJudge(saved, { ...wanted, run: 1 }), null, "another run");
+  assert.equal(reusableBaselineJudge(saved, { ...wanted, samples: 2 }), null, "fewer samples than wanted");
+  assert.equal(reusableBaselineJudge([{ ...saved[0], record: { ...record, error: "timeout" } }], wanted), null, "an error is judged again");
+});
+
+test("review round 1 (finding 11): a partial run is never compared", () => {
+  const done = run([section("medical-necessity", [], { thread: 2 })]);
+  assert.equal(compareRuns({ ...done, partial: true }, done).status, "not-compared");
+  assert.equal(compareRuns(done, { ...done, partial: true }).status, "not-compared");
 });

@@ -63,7 +63,7 @@ Every rules change passes the evaluation set before it reaches the BCBA (owner's
 - **Checks:** a check passes when it finds nothing in most runs (at least 2 of 3) and fails when it finds something in most runs.
 - **Rescoring:** every stored run of the baseline is checked again with the current checks before the comparison, so a change to the checks never reads as a change of the rules.
 - **Same judge:** where the baseline was judged by another judge (another prompt, inputs, model or number of samples per run: its fingerprint), its drafts are judged again in the same run by this judge, run by run.
-- **Another rubric version:** a baseline accepted under another rubric version is compared only when every stored draft of every case compared was checked again and judged again in this run, with a valid answer for each. It is then scored by this version, and the summary's notes say that the baseline arm is its stored drafts, re-judged. A baseline judged only in part is not compared.
+- **Another rubric version:** a baseline accepted under another rubric version is compared only when every stored draft of every case compared was checked again and judged again in this run, with a valid answer for each. It is then scored by this version, and the summary's notes say that the baseline arm is its stored drafts, re-judged, and in which run they were all judged again: with `--baseline-run`, an earlier run, and this run only where the judge changed. A baseline judged only in part is not compared.
 
 The verdict is one of:
 
@@ -84,8 +84,8 @@ The verdict is one of:
 | `repetition` No repetition beyond a reference | code | No 12-word run shared with another section; no incident told, by its own details, outside its home and the sections whose facts require it in more sections than allowed | One or two | Three or more |
 | `data-density` No list of numbers | code | No sentence with 3 or more values (not dates or times) and no clause saying what they mean, in it or in the next sentence | One or two | Three or more |
 | `banned-patterns` No banned patterns | code | None of: meta sentences, filler, sentences about the text, first person, addressing the reader, promised outcomes, hours of service (unless the CDE's or the IEP's recommendation), scores in Background Information, restraint or seclusion | One or two | Three or more |
-| `her-wording` Her wording | code | None of: a long dash (— or a spaced –), utilize, facilitate or leverage, "the BCBA observed" or "saw" (or "observed by the BCBA"), "hypothesized" or "hypothesis", a severity level or a mention of one in any section (markers included) | One or two | Three or more |
-| `no-quoted-speech` No quoted speech | code | No quoted span outside a marker, straight or curly quotes | One or two | Three or more |
+| `her-wording` Her wording | code | None of: a long dash (— or a spaced –), utilize, facilitate or leverage ("support facilitation", the ESE service, is its name), "the BCBA observed" or "saw" (or "observed by the BCBA"), "hypothesized" or "hypothesis", a DSM-5 severity level or a mention of one in any section, markers included ("severity level", a level 1 to 3 beside autism or support, "requiring support"; a behavior's severity is not one) | One or two | Three or more |
+| `no-quoted-speech` No quoted speech | code | No quoted span outside a marker, straight or curly quotes; a short phrase the plan teaches the child, after "to say" or "to request", is not speech | One or two | Three or more |
 | `no-dates-or-names` No dates or names in narrative | code | No numeric date; no "Month D" date except in a sentence about a coming change; no person named with "Dr.", credentials, or Mr., Mrs. or Ms. and a surname | One or two | Three or more |
 | `examples-not-copied` No example copied | code | No 10-word run of an invented example from the rules | – | Any |
 | `payer-readiness` Payer items present | code | Every payer item that applies to the section (list below), in the prose | One missing | Two or more |
@@ -173,7 +173,7 @@ Code checks these items (`PAYER_ITEMS`), in the prose; a marker counts only wher
   - the behaviors' functions;
   - ABA complements, and does not duplicate, other services;
   - caregiver training;
-  - how progress is measured.
+  - how progress is measured ("measured", "monitored", "tracked", data collection, or progress judged or reviewed from the data; an evaluation or assessment that merely matches the data does not count).
 - **Strengths and Weaknesses:** strengths documented.
 - **Environmental Changes:** supports for the changes, or a marker.
 - **Family/Caregiver Involvement:** each caregiver by role; their availability; the language of training; what training covers.
@@ -184,7 +184,7 @@ Code checks these items (`PAYER_ITEMS`), in the prose; a marker counts only wher
   - how services step down;
   - the transition.
 - **Risk Assessment:** every target behavior; injuries and near misses.
-- **Crisis Plan:** when emergency services are called, or a marker; the behaviors that can be dangerous.
+- **Crisis Plan:** when emergency services are called, or a marker; the behaviors that can be dangerous, named: each of the case's behaviors in her protocol list (mouthing, physical aggression, property destruction, self-injury, elopement), by its name or an accepted form.
 
 ## The case keys
 
