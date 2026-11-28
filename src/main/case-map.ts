@@ -21,6 +21,7 @@ import {
   type MapVersionKind,
 } from "../shared/case-map.ts";
 import type { DefinitionReviewFinding, DefinitionReviewView } from "../shared/definition-checks.ts";
+import { CASE_MAP_BLOCK_PARTS, type BlockPart, type CaseMapBlockInput } from "../lib/case-map-block.ts";
 
 /*
  * The case map inside a case's data file (schema version 4; src/shared/case-map.ts says
@@ -1065,4 +1066,25 @@ export function mapFactsForPrompt(data: WithCaseMap): { text: string; settingIds
 /** Every id an item of these parts has had, for the answers' keys to reuse (D5). */
 export function partsWithVersions(data: WithCaseMap): Set<MapPartId> {
   return new Set(MAP_PARTS.filter((part) => storedPart(data, part).versions.length > 0));
+}
+
+/**
+ * The map as section requests get it (step 1's D9): each part of the block with the items of
+ * the version she approved, when the version shown is that one (the screen says "approved"),
+ * and as not approved otherwise: a part she approved and then edited, or went back from,
+ * waits for her approval again, as a section does. Items come with every field filled in
+ * (mapPartView), so the block reads the same whatever app version wrote them.
+ */
+export function caseMapBlockInput(data: WithCaseMap): CaseMapBlockInput {
+  return Object.fromEntries(
+    CASE_MAP_BLOCK_PARTS.map((part): [string, BlockPart] => {
+      const view = mapPartView(data, part);
+      if (view.status !== "approved" || view.approvedVersion === null) return [part, { approved: false }];
+      const strip = <T extends { editedAt: string | null }>({ editedAt: _edited, ...rest }: T) => {
+        void _edited;
+        return rest;
+      };
+      return [part, { approved: true, version: view.approvedVersion, items: view.items.map(strip) as never, ...(part === "behaviors" ? { groups: view.groups.map(strip) } : {}) }];
+    }),
+  ) as CaseMapBlockInput;
 }

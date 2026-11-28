@@ -54,9 +54,12 @@ function makeClient(apiKey: string, deps: ProviderDeps): Anthropic {
 }
 
 /**
- * system (rules) ▼ | sources ▼ | task
- * Two cache breakpoints: the rules are shared by every case, the sources by every
- * section of one case. The task after the last breakpoint is never written to cache.
+ * system (rules) ▼ | sources ▼ | case map ▼ | task
+ * Up to three cache breakpoints of the four Claude takes: the rules are shared by every
+ * case, the sources by every section of one case, and the approved case map (section
+ * requests only; step 1's D8) by every section of one case until she approves another part.
+ * When the map changes, the rules and the sources are still read from the cache. The task
+ * after the last breakpoint is never written to cache.
  *
  * One-hour cache (owner's decision, 2026-11-22): writing it costs twice the input price
  * instead of 1.25 times, but she reads and corrects for more than five minutes between
@@ -80,6 +83,7 @@ function buildParams(options: GenerateOptions, includeTask = true) {
   }
   const lastSource = content.at(-1);
   if (lastSource) lastSource.cache_control = CACHE;
+  if (prompt.caseMap) content.push({ type: "text", text: prompt.caseMap, cache_control: CACHE });
   if (includeTask) content.push({ type: "text", text: prompt.task });
 
   return {

@@ -4,7 +4,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { mockProvider } from "../src/lib/providers/mock.ts";
 import type { GenerateEvent, Provider } from "../src/lib/providers/types.ts";
-import { buildSectionPrompt, loadSectionShape, quoteForPrompt, SECTIONS, type SectionId } from "../src/lib/rules.ts";
+import { buildSectionPrompt, loadSectionShape, NO_APPROVED_MAP, quoteForPrompt, SECTIONS, type SectionId } from "../src/lib/rules.ts";
 import { prepareOutgoingRequest, outgoingSourceTitle, StreamRestorer, type OutgoingInput } from "../src/main/outgoing.ts";
 import { runSectionGeneration, type SectionGenerationEvent } from "../src/main/section-generation.ts";
 import { REPORT_SECTIONS } from "../src/shared/report-sections.ts";
@@ -80,7 +80,7 @@ test("a source is named to the model by its type, title and date, never able to 
 });
 
 function input(overrides: Partial<OutgoingInput> = {}): OutgoingInput {
-  return { section: "medical-necessity", request: { kind: "draft" }, sources: [], herSections: [], instructions: null, notes: null, rulesDir: path.join(process.cwd(), "rules"), ...overrides };
+  return { section: "medical-necessity", request: { kind: "draft" }, sources: [], herSections: [], instructions: null, notes: null, caseMap: NO_APPROVED_MAP, rulesDir: path.join(process.cwd(), "rules"), ...overrides };
 }
 
 test("prepareOutgoingRequest: every source, PDFs read only when sent; not de-identified yet, and nothing to restore", async () => {

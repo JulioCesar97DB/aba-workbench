@@ -5,6 +5,7 @@ import { buildReviewPrompt, REVIEW_RULES_FILE, type reviewedBehaviors, type Revi
 import { buildJudgePrompt, JUDGE_PROMPT_VERSION, type JudgedSection, type JudgeInput } from "../lib/judge.ts";
 import { buildCaseMapPrompt, buildSectionPrompt, loadRulesFile, type ContextSection, type MapPromptInput, type SectionId, type SectionRequest } from "../lib/rules.ts";
 import { isSourceType, SOURCE_TYPE_NAMES } from "../shared/sources.ts";
+import type { CaseMapBlockInput, MapUsed } from "../lib/case-map-block.ts";
 import type { CaseData } from "./case-file.ts";
 
 /*
@@ -36,6 +37,8 @@ export interface OutgoingInput {
   herSections: ContextSection[];
   instructions: string | null;
   notes: string | null;
+  /** The case map's parts, approved or not (caseMapBlockInput in src/main/case-map.ts): the case's content too. */
+  caseMap: CaseMapBlockInput;
   rulesDir: string;
 }
 
@@ -50,6 +53,8 @@ export interface PreparedRequest {
   readonly sourcesUsed: ReadonlyArray<{ id: string; title: string }>;
   /** Whether the client's details were hidden before sending. False until de-identification is plugged in. */
   readonly deidentified: boolean;
+  /** A section request: which approved version of each map part it sent (none approved: empty). Other requests send no map. */
+  readonly mapUsed?: MapUsed;
   /** Turns what the provider wrote back into the case's own words (the placeholders restored). */
   restore(text: string): string;
 }
@@ -148,14 +153,15 @@ export async function prepareJudgeRequest(input: {
  */
 export async function prepareOutgoingRequest(input: OutgoingInput): Promise<PreparedRequest> {
   const sources = await loadSources(input.sources);
-  const { prompt, rulesVersions } = await buildSectionPrompt(
-    { section: input.section, request: input.request, sources, herSections: input.herSections, instructions: input.instructions, notes: input.notes },
+  const { prompt, rulesVersions, mapUsed } = await buildSectionPrompt(
+    { section: input.section, request: input.request, sources, herSections: input.herSections, instructions: input.instructions, notes: input.notes, caseMap: input.caseMap },
     input.rulesDir,
   );
   return {
     [prepared]: true,
     prompt,
     rulesVersions,
+    mapUsed,
     sourcesUsed: input.sources.map(({ id, title }) => ({ id, title })),
     deidentified: false,
     restore: restoreNothing,

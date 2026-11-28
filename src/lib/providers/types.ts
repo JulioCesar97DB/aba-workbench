@@ -5,6 +5,8 @@
  * repeats across the section calls of one assessment:
  *   system  - rules for the whole assessment and payer facts (same for every case)
  *   sources - the case's documents (same for every section of one case)
+ *   caseMap - section requests only: the approved case map, rendered by code (src/lib/case-map-block.ts);
+ *             the same for every section of one case until she approves another part (cached)
  *   task    - the section's own rules and the request (changes every call, never cached)
  */
 
@@ -19,6 +21,13 @@ export type SourceDocument =
 export interface PromptParts {
   system: string;
   sources: SourceDocument[];
+  /**
+   * The approved case map, a third cached block after the sources (step 1's D8, owner's
+   * decision of 2026-11-23). Section requests always carry it, even when nothing is approved
+   * yet (the block then names each part as not approved), so their layout never changes;
+   * the case map's own requests, the definitions review and the judge carry none.
+   */
+  caseMap?: string | null;
   task: string;
   /** What the task is: a section's (the default) or the case map's (its own preamble on the ChatGPT route; review round 1, M4). */
   kind?: "section" | "case-map" | "definition-review";

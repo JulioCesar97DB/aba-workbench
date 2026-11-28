@@ -138,6 +138,9 @@ const UsageRecordSchema = z.looseObject({
   reasoningTokens: z.int().min(0).nullable().optional(),
 });
 
+/** Which approved version of each case map part a section request sent (src/lib/case-map-block.ts). */
+const MapUsedSchema = z.array(z.looseObject({ part: z.string().regex(/^[a-z][a-zA-Z0-9]{0,31}$/), version: VersionNumberSchema })).max(50);
+
 /** What an AI version was made from and by, so any version can be traced back. */
 const GenerationRecordSchema = z.looseObject({
   provider: z.string().max(32),
@@ -149,6 +152,8 @@ const GenerationRecordSchema = z.looseObject({
   sourcesUsed: z.array(z.looseObject({ id: z.string().max(64), title: z.string().max(1000) })).max(MAX_SOURCES),
   /** Her other sections sent as context, by id and version. */
   sectionsUsed: z.array(z.looseObject({ id: z.string().max(64), version: VersionNumberSchema })).max(100),
+  /** The approved case map parts sent, by part and version (absent: written before the map was sent). */
+  mapUsed: MapUsedSchema.optional(),
   /** Her standing instructions and session notes as they were sent. */
   instructions: z.string().max(MAX_NOTES_LENGTH * 2).optional(),
   notes: z.string().max(MAX_NOTES_LENGTH * 2).optional(),
@@ -182,6 +187,8 @@ const StoredVersionSchema = z.looseObject({
       costUsd: z.number().min(0).nullable(),
       /** Her sections it compared against, by id and version. */
       sectionsCompared: z.array(z.looseObject({ id: z.string().max(64), version: VersionNumberSchema })).max(100),
+      /** The approved case map parts the check sent, as for a version (absent: no request was prepared, or written before the map was sent). */
+      mapUsed: MapUsedSchema.optional(),
       /** Her own text of this section it compared against, by version (absent: none, or written before it was compared). */
       ownTextCompared: VersionNumberSchema.nullable().optional(),
       /** The check's tokens, as for a version (absent: no request was answered, or written before they were kept). */

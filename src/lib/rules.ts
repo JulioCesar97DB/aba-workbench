@@ -3,6 +3,7 @@ import path from "node:path";
 import type { PromptParts, SourceDocument } from "./providers/types.ts";
 import { splitParagraphs, type SectionShape } from "../shared/section-text.ts";
 import { mapAnswerSchema, type MapAnswerFormat, type MapRequestKind } from "./case-map-extraction.ts";
+import { CASE_MAP_BLOCK_PARTS, CASE_MAP_BLOCK_TAGS, mapUsedOf, renderCaseMapBlock, type CaseMapBlockInput, type MapUsed } from "./case-map-block.ts";
 
 export type { SectionShape } from "../shared/section-text.ts";
 
@@ -175,10 +176,15 @@ export interface SectionPromptInput {
   instructions: string | null;
   /** Her notes for this session. */
   notes: string | null;
+  /** The case map's parts (src/main/case-map.ts, caseMapBlockInput); none approved when left out. */
+  caseMap?: CaseMapBlockInput;
 }
 
+/** A case map with no part approved: every part named as not approved yet. */
+export const NO_APPROVED_MAP: CaseMapBlockInput = Object.fromEntries(CASE_MAP_BLOCK_PARTS.map((part) => [part, { approved: false }])) as CaseMapBlockInput;
+
 /** The tags the section prompt uses: text she typed can never open or close one of them. */
-const PROMPT_TAGS = ["her-sections", "section", "standing-instructions", "session-notes", "current-text", "marked-paragraph", "her-request", "her-own-text", "source", "sources", "her-map", "map-facts", "previous-answer"];
+const PROMPT_TAGS = ["her-sections", "section", "standing-instructions", "session-notes", "current-text", "marked-paragraph", "her-request", "her-own-text", "source", "sources", "her-map", "map-facts", "previous-answer", ...CASE_MAP_BLOCK_TAGS];
 const TAG_PATTERN = new RegExp(`<(/?)(${PROMPT_TAGS.join("|")})\\b`, "giu");
 
 /** Text typed or pasted by her, made unable to break out of the tag it is put in. */
@@ -197,13 +203,14 @@ function currentTextBlock(text: string, markedIndex: number | null): string {
 /**
  * The prompt of one request of the section workspace. The cached prefix (system: the
  * assessment rules, the payer facts, the instruments and how requests work; then the
- * sources) is the same for every request of one case; everything that changes from one
- * request to the next goes in the task, after it.
+ * sources) is the same for every request of one case, and so is the approved case map after
+ * it until she approves another part; everything that changes from one request to the next
+ * goes in the task, after them.
  */
 export async function buildSectionPrompt(
   input: SectionPromptInput,
   rulesDir: string = DEFAULT_RULES_DIR,
-): Promise<{ prompt: PromptParts; rulesVersions: Record<string, string> }> {
+): Promise<{ prompt: PromptParts; rulesVersions: Record<string, string>; mapUsed: MapUsed }> {
   const section = SECTIONS[input.section];
   const [systemFiles, sectionFile] = await Promise.all([
     Promise.all(SECTION_REQUEST_SYSTEM_FILES.map((file) => loadRulesFile(rulesDir, file))),
@@ -279,7 +286,9 @@ export async function buildSectionPrompt(
       break;
     }
   }
-  return { prompt: { system, sources: input.sources, task: parts.join("\n\n") }, rulesVersions };
+  // The approved case map: its own cached block after the sources (step 1's D8 to D11), the same for every section.
+  const caseMap = input.caseMap ?? NO_APPROVED_MAP;
+  return { prompt: { system, sources: input.sources, caseMap: renderCaseMapBlock(caseMap, quoteForPrompt), task: parts.join("\n\n") }, rulesVersions, mapUsed: mapUsedOf(caseMap) };
 }
 
 /* The case map's requests (step 1, pull request 2: D12 to D15) */

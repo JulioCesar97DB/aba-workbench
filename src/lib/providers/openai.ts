@@ -41,12 +41,14 @@ function makeClient(credential: ProviderCredential, deps: ProviderDeps): OpenAI 
 const breakpoint = { mode: "explicit" as const };
 
 /**
- * With an API key: [developer: rules ▼] [user: sources ▼] [user: task]
+ * With an API key: [developer: rules ▼] [user: sources ▼] [user: case map ▼] [user: task]
  * GPT-6.2 appends top-level `instructions` after the input and never caches them,
  * so the rules go in the first developer message. Explicit-only caching writes just
- * the two stable prefixes; the task is billed as plain input with no cache write.
+ * the stable prefixes; the task is billed as plain input with no cache write. The case
+ * map (section requests only; step 1's D8) is a third explicit breakpoint: explicit mode
+ * writes up to the latest four (the SDK's PromptCacheOptions, read 2026-11-28).
  *
- * With Sign in with ChatGPT: [developer: rules] [user: sources ▼], task in `instructions`.
+ * With Sign in with ChatGPT: [developer: rules] [user: sources] [user: case map ▼], task in `instructions`.
  * That route refuses `prompt_cache_options` and `prompt_cache_breakpoint`, so only
  * OpenAI's implicit caching applies, and it writes the cache at one place: the end of
  * the latest user message (prompt caching guide, "Implicit mode", read 2026-11-23). With
@@ -55,7 +57,10 @@ const breakpoint = { mode: "explicit" as const };
  * requests). The task goes in `instructions` instead, which GPT-6.2 appends after the
  * input, beyond the cache: the sources message is then the latest user message, and
  * the rules and the sources (the same for every request of one case) are written once
- * and read by every request after it.
+ * and read by every request after it. A section request's case map is its own user
+ * message after the sources, so it is the latest user message and the cache is written at
+ * its end: the same for every section of one case until she approves another part, and
+ * when it changes the rules and the sources are still a prefix the cache can serve.
  */
 function buildInput(options: GenerateOptions, includeTask: boolean): OpenAI.Responses.ResponseInput {
   const { prompt } = options;
@@ -81,6 +86,7 @@ function buildInput(options: GenerateOptions, includeTask: boolean): OpenAI.Resp
     { role: "developer", content: [{ type: "input_text", text: prompt.system, ...mark }] },
     { role: "user", content: [{ type: "input_text", text: "<sources>" }, ...sourceParts] },
   ];
+  if (prompt.caseMap) input.push({ role: "user", content: [{ type: "input_text", text: prompt.caseMap, ...mark }] });
   if (includeTask && !chatgpt) input.push({ role: "user", content: [{ type: "input_text", text: prompt.task }] });
   return input;
 }

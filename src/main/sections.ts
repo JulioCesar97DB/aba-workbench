@@ -50,6 +50,7 @@ import { JUDGE_SCHEMA_NAME, JudgeInputSchema, judgeAnswerSchema } from "../lib/j
 import { REPORT_SECTIONS } from "../shared/report-sections.ts";
 import { caseCacheKey } from "./cache-key.ts";
 import { runSectionGeneration } from "./section-generation.ts";
+import { caseMapBlockInput } from "./case-map.ts";
 
 /*
  * The report's sections, as the interface reaches them (src/main/ipc.ts): reading a
@@ -356,6 +357,7 @@ export class SectionService {
       herSections: context.map(({ title, text }) => ({ title, text })),
       instructions,
       notes: sessionNotes(data),
+      caseMap: caseMapBlockInput(data),
       rulesDir: this.options.rulesDir,
     });
     return { prepared, context: context.map(({ id: sectionId, version }) => ({ id: sectionId, version })) };
@@ -401,6 +403,8 @@ export class SectionService {
       rulesVersions: built.prepared.rulesVersions,
       sourcesUsed: built.prepared.sourcesUsed.map(({ id: sourceId, title }) => ({ id: sourceId, title })),
       sectionsUsed: built.context,
+      // Which approved version of each case map part it sent (step 1's D9): empty when none was approved.
+      mapUsed: [...(built.prepared.mapUsed ?? [])],
       ...(instructions.trim() ? { instructions } : {}),
       ...(sessionNotes(args.data).trim() ? { notes: sessionNotes(args.data) } : {}),
       deidentified: built.prepared.deidentified,
@@ -496,6 +500,7 @@ export class SectionService {
       try {
         const herRequest = own && own.requests.length > 0 ? own.requests.join("\n\n") : null;
         const { prepared } = await this.prepare(data, args.folder, id, { kind: "consistency", currentText: text, ownText: own?.text ?? null, herRequest }, instructions);
+        consistency.mapUsed = [...(prepared.mapUsed ?? [])];
         let answer: string | null = null;
         const events = runSectionGeneration<null>({
           prepared,
