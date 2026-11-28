@@ -159,6 +159,9 @@ const sections = new SectionService({
 // the AI with the same connections, models and rules as the sections.
 const caseMap = new CaseMapService({
   cases,
+  instructions: instructionsStore,
+  // The plan's fields go to ABA Matrix as plain text only (the Plan step's D22).
+  writeClipboard: (text) => clipboard.writeText(text),
   ai: {
     instructions: instructionsStore,
     rulesDir,

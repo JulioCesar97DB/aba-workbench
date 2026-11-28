@@ -67,11 +67,11 @@ function library(folder: string, extra: Partial<ConstructorParameters<typeof Cas
 
 /* The data file */
 
-test("case file: a new case's data file has the version 5 shape (no case map, nothing copied yet), and reads back the same", () => {
+test("case file: a new case's data file has the version 6 shape (no case map, no plan, nothing copied yet), and reads back the same", () => {
   const data = sample();
   const text = serializeCaseFile(data);
   assert.deepEqual(JSON.parse(text), {
-    schemaVersion: 5,
+    schemaVersion: 6,
     id: ID,
     label: "M.F. initial assessment",
     clientAge: { years: 4, months: 2 },
@@ -158,13 +158,15 @@ test("case file: an older version is migrated one step at a time; a missing step
     assert.equal(migrateCaseData(bad, 3, migrations).ok, false, JSON.stringify(bad));
   }
   // The real chain: version 4 is current; a version 1 file gains an empty list of sources, a version 2 file an empty set of sections, and a version 3 file nothing (no case map until she makes one, D7).
-  assert.equal(CASE_SCHEMA_VERSION, 5);
-  assert.deepEqual(migrateCaseData({ schemaVersion: 1 }), { ok: true, data: { schemaVersion: 5, sources: [], sections: {} }, migratedFrom: 1 });
-  assert.deepEqual(migrateCaseData({ schemaVersion: 2 }), { ok: true, data: { schemaVersion: 5, sections: {} }, migratedFrom: 2 });
-  assert.deepEqual(migrateCaseData({ schemaVersion: 3 }), { ok: true, data: { schemaVersion: 5 }, migratedFrom: 3 });
+  assert.equal(CASE_SCHEMA_VERSION, 6);
+  assert.deepEqual(migrateCaseData({ schemaVersion: 1 }), { ok: true, data: { schemaVersion: 6, sources: [], sections: {} }, migratedFrom: 1 });
+  assert.deepEqual(migrateCaseData({ schemaVersion: 2 }), { ok: true, data: { schemaVersion: 6, sections: {} }, migratedFrom: 2 });
+  assert.deepEqual(migrateCaseData({ schemaVersion: 3 }), { ok: true, data: { schemaVersion: 6 }, migratedFrom: 3 });
   // Version 4 to 5 adds nothing (T8): an old file reads as nothing copied.
-  assert.deepEqual(migrateCaseData({ schemaVersion: 4 }), { ok: true, data: { schemaVersion: 5 }, migratedFrom: 4 });
-  assert.deepEqual(migrateCaseData({ schemaVersion: 5 }), { ok: true, data: { schemaVersion: 5 }, migratedFrom: null });
+  assert.deepEqual(migrateCaseData({ schemaVersion: 4 }), { ok: true, data: { schemaVersion: 6 }, migratedFrom: 4 });
+  // Version 5 to 6 adds nothing either (the Plan step's D5): an old file reads as no plan.
+  assert.deepEqual(migrateCaseData({ schemaVersion: 5 }), { ok: true, data: { schemaVersion: 6 }, migratedFrom: 5 });
+  assert.deepEqual(migrateCaseData({ schemaVersion: 6 }), { ok: true, data: { schemaVersion: 6 }, migratedFrom: null });
 });
 
 test("case file: the updated time always moves forward", () => {
@@ -360,7 +362,13 @@ test("cases: create a case, list it, open it; the folder holds only its data fil
   assert.deepEqual(list.cases, [
     {
       ...created.case,
-      progress: { sources: 0, caseMap: { approved: 0, withContent: 0 }, mapPartToApprove: null, sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", copied: false })) },
+      progress: {
+        sources: 0,
+        caseMap: { approved: 0, withContent: 0 },
+        mapPartToApprove: null,
+        sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", copied: false })),
+        plan: { decided: 0, total: 0 },
+      },
     },
   ]);
   assert.deepEqual(list.unreadable, []);
@@ -374,7 +382,14 @@ test("cases: create a case, list it, open it; the folder holds only its data fil
       sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", currentVersion: null, approvedVersion: null, versionCount: 0, costUsd: 0, copiedVersion: null, copied: false })),
       notes: "",
       caseMap: { approved: 0, withContent: 0 },
-      progress: { sources: 0, caseMap: { approved: 0, withContent: 0 }, mapPartToApprove: null, sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", copied: false })) },
+      plan: { decided: 0, total: 0 },
+      progress: {
+        sources: 0,
+        caseMap: { approved: 0, withContent: 0 },
+        mapPartToApprove: null,
+        sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", copied: false })),
+        plan: { decided: 0, total: 0 },
+      },
     },
   });
 });

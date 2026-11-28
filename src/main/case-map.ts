@@ -21,6 +21,31 @@ import {
   type MapVersionKind,
 } from "../shared/case-map.ts";
 import type { DefinitionReviewFinding, DefinitionReviewView } from "../shared/definition-checks.ts";
+import {
+  MAX_BASELINE_SESSIONS,
+  MAX_PARAMETERS,
+  MAX_PROGRAM_STEPS,
+  MAX_PROGRAM_TARGETS,
+  PLAN_ID_PREFIX,
+  PLAN_PART_LIMITS,
+  PLAN_PARTS,
+  isPlanPartId,
+  planSummary,
+  strategyFingerprint,
+  type PlanCopiedMark,
+  type PlanPartId,
+  type PlanPartView,
+  type PlanSummary,
+  type PlanView,
+} from "../shared/plan.ts";
+
+/** A part of the case map or of the plan (the plan lives in the case map: D1 of the Plan step). */
+export type PartId = MapPartId | PlanPartId;
+const ALL_PARTS: readonly PartId[] = [...MAP_PARTS, ...PLAN_PARTS];
+const PART_LIMITS: Readonly<Record<PartId, number>> = { ...MAP_PART_LIMITS, ...PLAN_PART_LIMITS };
+const ID_PREFIX: Readonly<Record<PartId, string>> = { ...MAP_ID_PREFIX, ...PLAN_ID_PREFIX };
+/** The parts with one item of a fixed id: the client, and the plan's inputs. */
+const SINGLE_ITEM: Partial<Record<PartId, string>> = { client: "client", planInputs: "plan" };
 
 /*
  * The case map inside a case's data file (schema version 4; src/shared/case-map.ts says
@@ -194,7 +219,83 @@ const ReportItemSchema = z.looseObject({
   ...edited,
 });
 
-const ITEM_SCHEMAS: Record<MapPartId, z.ZodType> = {
+/* The plan's items (schema version 6; the Plan step's D1, D2, D13). */
+
+/** An item's decision (D2): proposed, accepted or rejected; a word a newer app writes is kept. */
+const decided = { decision: WordSchema.optional(), decidedAt: TimestampSchema.nullable().optional(), by: WordSchema.optional(), ...edited };
+const ParameterSchema = z.looseObject({ label: z.string().max(T.name), role: WordSchema, value: text(T.short), unit: WordSchema });
+const ParametersSchema = z.array(ParameterSchema).max(MAX_PARAMETERS).optional();
+
+const StrategySchema = z.looseObject({
+  id: ItemIdSchema,
+  name: text(T.name),
+  kind: WordSchema.optional(),
+  functions: z.array(WordSchema).max(5).optional(),
+  parameters: ParametersSchema,
+  tracesTo: z.array(z.looseObject({ behaviorId: ItemIdSchema, antecedent: text(T.text) })).max(MAX_MAP_LIST).optional(),
+  ...decided,
+});
+const ManagementSchema = z.looseObject({
+  id: ItemIdSchema,
+  function: WordSchema.optional(),
+  kind: WordSchema.optional(),
+  behaviorIds: IdListSchema.optional(),
+  groupId: ItemIdSchema.nullable().optional(),
+  text: text(T.definition),
+  strategyIds: IdListSchema.optional(),
+  safetyFirst: z.boolean().optional(),
+  ...decided,
+});
+const ProgramSchema = z.looseObject({
+  id: ItemIdSchema,
+  kind: WordSchema.optional(),
+  title: text(T.name),
+  function: WordSchema.nullable().optional(),
+  outcome: WordSchema.nullable().optional(),
+  area: WordSchema.nullable().optional(),
+  answers: list(),
+  definition: text(T.definition),
+  procedure: z.array(claimOf(z.string().max(T.text))).max(MAX_PROGRAM_STEPS).optional(),
+  targets: z.array(claimOf(z.string().max(T.name))).max(MAX_PROGRAM_TARGETS).optional(),
+  measure: WordSchema.optional(),
+  parameters: ParametersSchema,
+  baseline: z
+    .looseObject({
+      sessions: z.array(z.looseObject({ date: text(T.short), correct: text(T.short), opportunities: text(T.short) })).max(MAX_BASELINE_SESSIONS).optional(),
+      caregiverReport: text(T.text),
+      caregiverPercent: text(T.short),
+      override: text(T.short),
+    })
+    .optional(),
+  mastery: z.looseObject({ category: WordSchema.optional(), override: text(T.short) }).optional(),
+  ...decided,
+});
+const GlossarySchema = z.looseObject({
+  id: ItemIdSchema,
+  strategyId: ItemIdSchema.optional(),
+  definition: text(T.text),
+  implementation: text(T.definition),
+  writtenFrom: z.string().max(16).nullable().optional(),
+  ...decided,
+});
+const CaregiverGoalSchema = z.looseObject({
+  id: ItemIdSchema,
+  kind: WordSchema.optional(),
+  title: text(T.name),
+  procedure: text(T.definition),
+  baselinePercent: text(T.short),
+  masteryOverride: text(T.short),
+  ...decided,
+});
+const PlanInputsSchema = z.looseObject({ id: z.literal("plan"), weeklyHours: text(T.short), targetOverride: text(T.short), ...decided });
+
+const ITEM_SCHEMAS: Record<PartId, z.ZodType> = {
+  strategies: StrategySchema,
+  interventions: ManagementSchema,
+  programs: ProgramSchema,
+  glossary: GlossarySchema,
+  caregiverGoals: CaregiverGoalSchema,
+  planInputs: PlanInputsSchema,
   client: ClientSchema,
   caregivers: CaregiverSchema,
   settings: SettingSchema,
@@ -216,15 +317,15 @@ const ContentSchema = z.looseObject({
 });
 
 /** The schema of one known part's content: its items and limits (D6). */
-export function contentSchemaFor(part: MapPartId) {
+export function contentSchemaFor(part: PartId) {
   return z.looseObject({
-    items: z.array(ITEM_SCHEMAS[part]).max(MAP_PART_LIMITS[part]),
+    items: z.array(ITEM_SCHEMAS[part]).max(PART_LIMITS[part]),
     ...(part === "behaviors" ? { groups: z.array(GroupSchema).max(MAX_MAP_GROUPS).optional() } : {}),
   });
 }
 
 /** Each known part's content schema, built once (a read checks every version of every part). */
-const CONTENT_SCHEMAS = Object.fromEntries(MAP_PARTS.map((part) => [part, contentSchemaFor(part)])) as Record<MapPartId, ReturnType<typeof contentSchemaFor>>;
+const CONTENT_SCHEMAS = Object.fromEntries(ALL_PARTS.map((part) => [part, contentSchemaFor(part)])) as Record<PartId, ReturnType<typeof contentSchemaFor>>;
 
 const PartVersionSchema = z.looseObject({
   number: VersionNumberSchema,
@@ -258,9 +359,17 @@ export const CaseMapSchema = z
     parts: z.record(z.string().regex(/^[a-z][a-zA-Z0-9]{0,31}$/), PartSchema),
     /** The AI requests that made versions (from the extraction pull request on), each as a generation record. */
     extractions: z.array(z.looseObject({ id: z.string().max(64), kind: WordSchema })).max(MAX_MAP_VERSIONS).optional(),
+    /** The plan's fields copied for ABA Matrix (the Plan step's D23), by field id. */
+    planCopied: z
+      .record(
+        z.string().regex(/^[a-z][a-z0-9:-]{0,79}$/),
+        z.looseObject({ copiedAt: TimestampSchema, fingerprint: z.string().max(16), versions: z.record(z.string().max(32), VersionNumberSchema.nullable()) }),
+      )
+      .refine((marks) => Object.keys(marks).length <= 2_000)
+      .optional(),
   })
   .superRefine((map, ctx) => {
-    for (const part of MAP_PARTS) {
+    for (const part of ALL_PARTS) {
       for (const version of map.parts[part]?.versions ?? []) {
         if (!CONTENT_SCHEMAS[part].safeParse(version.content).success) ctx.addIssue({ code: "custom", message: `part ${part}, version ${version.number}` });
       }
@@ -285,7 +394,7 @@ function emptyPart(): StoredMapPart {
   return { currentVersion: null, approvedVersion: null, versions: [] };
 }
 
-export function storedPart(data: WithCaseMap, part: MapPartId): StoredMapPart {
+export function storedPart(data: WithCaseMap, part: PartId): StoredMapPart {
   return data.caseMap?.parts[part] ?? emptyPart();
 }
 
@@ -304,8 +413,39 @@ function versionKind(kind: string): MapVersionKind {
 
 /* Defaults: what an item's missing fields read as. A stored item is never filled in on disk; the view does it. */
 
-function blankItem(part: MapPartId, id: string): Record<string, unknown> {
+/** A plan item's decision fields when it has none written: a proposal, the AI's (D2). */
+const UNDECIDED = { decision: "proposed", decidedAt: null, by: "ai" };
+
+function blankItem(part: PartId, id: string): Record<string, unknown> {
   switch (part) {
+    case "strategies":
+      return { id, name: null, kind: "antecedent", functions: [], parameters: [], tracesTo: [], ...UNDECIDED };
+    case "interventions":
+      return { id, function: "", kind: "maladaptive", behaviorIds: [], groupId: null, text: null, strategyIds: [], safetyFirst: false, ...UNDECIDED };
+    case "programs":
+      return {
+        id,
+        kind: "skill",
+        title: null,
+        function: null,
+        outcome: null,
+        area: null,
+        answers: [],
+        definition: null,
+        procedure: [],
+        targets: [],
+        measure: "percent-opportunities",
+        parameters: [],
+        baseline: { sessions: [], caregiverReport: null, caregiverPercent: null, override: null },
+        mastery: { category: "general", override: null },
+        ...UNDECIDED,
+      };
+    case "glossary":
+      return { id, strategyId: "", definition: null, implementation: null, writtenFrom: null, ...UNDECIDED };
+    case "caregiverGoals":
+      return { id, kind: "extra", title: null, procedure: null, baselinePercent: null, masteryOverride: null, ...UNDECIDED };
+    case "planInputs":
+      return { id, weeklyHours: null, targetOverride: null, ...UNDECIDED };
     case "client":
       return { id, age: null, diagnosis: null, severityLevel: null, evaluator: null, evaluationDate: null, medications: [], school: null, grade: null, schedule: null, iep: null, otherServices: [], languages: [] };
     case "caregivers":
@@ -365,7 +505,7 @@ function withDefaults(blank: unknown, stored: unknown): unknown {
   return stored === undefined ? blank : stored;
 }
 
-function itemView(part: MapPartId, item: StoredItem): MapItemView {
+function itemView(part: PartId, item: StoredItem): MapItemView {
   const filled = withDefaults(blankItem(part, item.id), item) as Record<string, unknown>;
   return { ...filled, editedAt: typeof item.editedAt === "string" ? item.editedAt : null } as unknown as MapItemView;
 }
@@ -427,7 +567,7 @@ function refuse(message: string): never {
   throw new MapInputError(`Refused: ${message}`);
 }
 
-function withPart<D extends WithCaseMap>(data: D, part: MapPartId, stored: StoredMapPart): D {
+function withPart<D extends WithCaseMap>(data: D, part: PartId, stored: StoredMapPart): D {
   const map: StoredCaseMap = data.caseMap ?? { parts: {} };
   return { ...data, caseMap: { ...map, parts: { ...map.parts, [part]: stored } } };
 }
@@ -449,7 +589,7 @@ function withoutApproval(part: StoredMapPart): StoredMapPart {
  * place, even after she took the approval back. A new version takes the approval away (she
  * approves again), as for a section.
  */
-function writeContent<D extends WithCaseMap>(data: D, part: MapPartId, content: Content, editing: number | null, now: string): { data: D; version: number } {
+function writeContent<D extends WithCaseMap>(data: D, part: PartId, content: Content, editing: number | null, now: string): { data: D; version: number } {
   const stored = storedPart(data, part);
   const newest = stored.versions.at(-1);
   const checked = CONTENT_SCHEMAS[part].safeParse(content);
@@ -479,9 +619,10 @@ function currentContent(stored: StoredMapPart): Content {
 }
 
 /** A new id for an item of a part (or a group): one more than any id with that prefix in any version, so an id is never reused. */
-function newId(stored: StoredMapPart, part: MapPartId, collection: MapCollection): string {
-  if (part === "client") return "client";
-  const prefix = collection === "groups" ? GROUP_ID_PREFIX : MAP_ID_PREFIX[part];
+function newId(stored: StoredMapPart, part: PartId, collection: MapCollection): string {
+  const single = SINGLE_ITEM[part];
+  if (single) return single;
+  const prefix = collection === "groups" ? GROUP_ID_PREFIX : ID_PREFIX[part];
   let max = 0;
   for (const version of stored.versions) {
     for (const item of [...version.content.items, ...(version.content.groups ?? [])]) {
@@ -589,7 +730,49 @@ const textIn = (max: number) => ClaimInputSchema(max).nullable();
 const listIn = (max: number = T.text) => z.array(ClaimInputSchema(max)).max(MAX_MAP_LIST);
 const TagListInput = z.strictObject({ value: z.array(WordSchema).max(20), check: z.string().max(T.text).nullable() }).nullable();
 
-const ITEM_INPUTS: Record<MapPartId, z.ZodType> = {
+const ParameterInputSchema = z.strictObject({ label: z.string().max(T.name), role: WordSchema, value: textIn(T.short), unit: WordSchema });
+const ParametersInput = z.array(ParameterInputSchema).max(MAX_PARAMETERS);
+
+const ITEM_INPUTS: Record<PartId, z.ZodType> = {
+  strategies: z.strictObject({
+    name: textIn(T.name),
+    kind: WordSchema,
+    functions: z.array(WordSchema).max(5),
+    parameters: ParametersInput,
+    tracesTo: z.array(z.strictObject({ behaviorId: ItemIdSchema, antecedent: textIn(T.text) })).max(MAX_MAP_LIST),
+  }),
+  interventions: z.strictObject({
+    function: WordSchema,
+    kind: WordSchema,
+    behaviorIds: IdListSchema,
+    groupId: ItemIdSchema.nullable(),
+    text: textIn(T.definition),
+    strategyIds: IdListSchema,
+    safetyFirst: z.boolean(),
+  }),
+  programs: z.strictObject({
+    kind: WordSchema,
+    title: textIn(T.name),
+    function: WordSchema.nullable(),
+    outcome: WordSchema.nullable(),
+    area: WordSchema.nullable(),
+    answers: listIn(),
+    definition: textIn(T.definition),
+    procedure: z.array(ClaimInputSchema(T.text)).max(MAX_PROGRAM_STEPS),
+    targets: z.array(ClaimInputSchema(T.name)).max(MAX_PROGRAM_TARGETS),
+    measure: WordSchema,
+    parameters: ParametersInput,
+    baseline: z.strictObject({
+      sessions: z.array(z.strictObject({ date: textIn(T.short), correct: textIn(T.short), opportunities: textIn(T.short) })).max(MAX_BASELINE_SESSIONS),
+      caregiverReport: textIn(T.text),
+      caregiverPercent: textIn(T.short),
+      override: textIn(T.short),
+    }),
+    mastery: z.strictObject({ category: WordSchema, override: textIn(T.short) }),
+  }),
+  glossary: z.strictObject({ strategyId: ItemIdSchema, definition: textIn(T.text), implementation: textIn(T.definition) }),
+  caregiverGoals: z.strictObject({ kind: WordSchema, title: textIn(T.name), procedure: textIn(T.definition), baselinePercent: textIn(T.short), masteryOverride: textIn(T.short) }),
+  planInputs: z.strictObject({ weeklyHours: textIn(T.short), targetOverride: textIn(T.short) }),
   client: z.strictObject({
     age: textIn(T.name),
     diagnosis: textIn(T.text),
@@ -664,7 +847,7 @@ const GroupInputSchema = z.strictObject({
 });
 
 /** Checks what the interface sent for an item (any field may be left out: it keeps its value). */
-export function parseItemInput(part: MapPartId, collection: MapCollection, input: unknown): Record<string, unknown> {
+export function parseItemInput(part: PartId, collection: MapCollection, input: unknown): Record<string, unknown> {
   if (collection === "groups" && part !== "behaviors") refuse("only the behaviors part has groups.");
   const schema = collection === "groups" ? GroupInputSchema : ITEM_INPUTS[part];
   const parsed = (schema as z.ZodObject).partial().safeParse(input);
@@ -715,7 +898,7 @@ function latestStoredItem(stored: StoredMapPart, collection: MapCollection, item
 /** Her change to an item (or a group) of a part, as she types: the item as saved, in her editing pass. Null when nothing changed. */
 export function saveMapItem<D extends WithCaseMap>(
   data: D,
-  part: MapPartId,
+  part: PartId,
   collection: MapCollection,
   itemId: string,
   rawInput: unknown,
@@ -733,7 +916,7 @@ export function saveMapItem<D extends WithCaseMap>(
     // version that had it, so what she typed is never lost (review round 1, minor 2).
     const earlier = latestStoredItem(stored, collection, itemId);
     if (!earlier) return "item-not-found";
-    const limit = collection === "groups" ? MAX_MAP_GROUPS : MAP_PART_LIMITS[part];
+    const limit = collection === "groups" ? MAX_MAP_GROUPS : PART_LIMITS[part];
     if (items.length >= limit) refuse("this part is full.");
     items.push(earlier);
     index = items.length - 1;
@@ -741,25 +924,27 @@ export function saveMapItem<D extends WithCaseMap>(
   const before = items[index];
   const merged = mergeInput(input, before) as StoredItem;
   if (same(merged, before) && items.length === itemsOf(content, collection).length) return null;
-  items[index] = { ...merged, id: before.id, editedAt: now };
+  items[index] = planEdited(data, part, { ...merged, id: before.id, editedAt: now } as StoredItem, now);
   let next = withItems(content, collection, items);
   if (part === "behaviors") next = settleGroups(next, collection === "groups" ? before.id : null, now);
   return writeContent(data, part, next, editing, now);
 }
 
 /** Adds an item (or a group) she typed or started: hers, with a new id. */
-export function addMapItem<D extends WithCaseMap>(data: D, part: MapPartId, collection: MapCollection, rawInput: unknown, editing: number | null, now: string): { data: D; version: number; itemId: string } {
+export function addMapItem<D extends WithCaseMap>(data: D, part: PartId, collection: MapCollection, rawInput: unknown, editing: number | null, now: string): { data: D; version: number; itemId: string } {
   const input = parseItemInput(part, collection, rawInput);
   const stored = storedPart(data, part);
   const content = currentContent(stored);
   const items = itemsOf(content, collection);
-  const limit = collection === "groups" ? MAX_MAP_GROUPS : MAP_PART_LIMITS[part];
-  if (part === "client" && items.length > 0) refuse("the client part has one item.");
+  const limit = collection === "groups" ? MAX_MAP_GROUPS : PART_LIMITS[part];
+  if (SINGLE_ITEM[part] && items.length > 0) refuse("this part has one item.");
   if (items.length >= limit) refuse("this part is full.");
   const id = newId(stored, part, collection);
   const blank = collection === "groups" ? blankGroup(id) : blankItem(part, id);
   const merged = mergeInput(input, {}) as Record<string, unknown>;
-  const item = { ...(withDefaults(blank, merged) as Record<string, unknown>), id, editedAt: now } as StoredItem;
+  let item = { ...(withDefaults(blank, merged) as Record<string, unknown>), id, editedAt: now } as StoredItem;
+  // A plan item she adds is hers, and accepted (D3).
+  if (isPlanPartId(part)) item = planEdited(data, part, { ...item, by: "her" }, now);
   if (collection === "groups") item.origin = "her";
   if (part === "behaviors" && collection === "items") (item.function as Record<string, unknown>).origin = "her";
   let next = withItems(content, collection, [...items, item]);
@@ -769,7 +954,7 @@ export function addMapItem<D extends WithCaseMap>(data: D, part: MapPartId, coll
 }
 
 /** Removes an item from the version she works in (D: allowed; every earlier version keeps it). A behavior leaves its group too. */
-export function removeMapItem<D extends WithCaseMap>(data: D, part: MapPartId, collection: MapCollection, itemId: string, editing: number | null, now: string): { data: D; version: number } | "item-not-found" {
+export function removeMapItem<D extends WithCaseMap>(data: D, part: PartId, collection: MapCollection, itemId: string, editing: number | null, now: string): { data: D; version: number } | "item-not-found" {
   const stored = storedPart(data, part);
   const content = currentContent(stored);
   const items = itemsOf(content, collection);
@@ -788,7 +973,7 @@ export function removeMapItem<D extends WithCaseMap>(data: D, part: MapPartId, c
 }
 
 /** Shows another version of a part (going back moves the pointer only). Null when there is no such version. */
-export function setMapPartVersion<D extends WithCaseMap>(data: D, part: MapPartId, number: number): D | null {
+export function setMapPartVersion<D extends WithCaseMap>(data: D, part: PartId, number: number): D | null {
   const stored = storedPart(data, part);
   if (!findVersion(stored, number)) return null;
   return withPart(data, part, { ...stored, currentVersion: number });
@@ -801,6 +986,105 @@ export function approveMapPart<D extends WithCaseMap>(data: D, part: MapPartId, 
   if (!findVersion(stored, number)) return null;
   const versions = stored.versions.map((version) => (version.number === number && version.approvedOnce !== true ? { ...version, approvedOnce: true as const } : version));
   return withPart(data, part, { ...stored, versions, approvedVersion: number, approvedAt: now, currentVersion: number });
+}
+
+/* The plan (the Plan step, PR 1): decisions, copied marks and its view */
+
+/**
+ * A plan item she changed by hand: accepted (D3, "Corregida por ti"), with when she decided.
+ * A glossary entry records the strategy it was written from, so a later change to the
+ * strategy marks it out of date. The plan's inputs carry no decision.
+ */
+function planEdited(data: WithCaseMap, part: PartId, item: StoredItem, now: string): StoredItem {
+  if (!isPlanPartId(part) || part === "planInputs") return item;
+  const out: StoredItem = { ...item, decision: "accepted", decidedAt: item.decision === "accepted" && typeof item.decidedAt === "string" ? item.decidedAt : now };
+  if (part === "glossary") {
+    const strategy = currentContent(storedPart(data, "strategies")).items.find((candidate) => candidate.id === item.strategyId);
+    out.writtenFrom = strategy ? strategyFingerprint(strategy as Parameters<typeof strategyFingerprint>[0]) : null;
+  }
+  return out;
+}
+
+export function planPartView<P extends PlanPartId>(data: WithCaseMap, part: P): PlanPartView<P> {
+  const stored = storedPart(data, part);
+  const current = currentPartVersion(stored);
+  return {
+    id: part,
+    currentVersion: current?.number ?? null,
+    outOfDate: stored.outOfDate ? { since: stored.outOfDate.since, reasons: [...stored.outOfDate.reasons] } : null,
+    versions: stored.versions.map((version) => ({
+      number: version.number,
+      kind: versionKind(version.kind),
+      createdAt: version.createdAt,
+      updatedAt: version.updatedAt ?? null,
+      basedOn: version.basedOn ?? null,
+      itemCount: version.content.items.length,
+      groupCount: 0,
+    })),
+    items: (current?.content.items ?? []).map((item) => itemView(part, item)) as unknown as PlanPartView<P>["items"],
+  };
+}
+
+export function planView(data: WithCaseMap): PlanView {
+  const parts = Object.fromEntries(PLAN_PARTS.map((part) => [part, planPartView(data, part)])) as unknown as PlanView["parts"];
+  const copied: Record<string, PlanCopiedMark> = {};
+  for (const [id, mark] of Object.entries(data.caseMap?.planCopied ?? {})) copied[id] = { copiedAt: mark.copiedAt, fingerprint: mark.fingerprint, versions: { ...mark.versions } };
+  return { parts, copied, revision: data.updatedAt };
+}
+
+export function planSummaryOf(data: WithCaseMap): PlanSummary {
+  return planSummary(planView(data).parts);
+}
+
+/** One decision on one item: accept it, reject it, or bring a rejected one back to undecided ("Recuperar", D4). */
+export type PlanDecisionChange = { part: Exclude<PlanPartId, "planInputs">; itemId: string; decision: "accepted" | "rejected" | "proposed" };
+
+/**
+ * Her decisions on plan items (D2, D4): each part written once, into her editing pass (a
+ * decision is an edit, so history records who decided what and when without a new version
+ * per click). "Aceptar lo que queda" is many of them at once; it never accepts an item she
+ * rejected (the interface sends only undecided ones, and a rejected item asked to be accepted
+ * that way is left as it is when `onlyUndecided`). Null when nothing changed.
+ */
+export function decidePlanItems<D extends WithCaseMap>(
+  data: D,
+  changes: readonly PlanDecisionChange[],
+  editing: Partial<Record<PlanPartId, number | null>>,
+  now: string,
+  onlyUndecided = false,
+): { data: D; versions: Partial<Record<PlanPartId, number>> } | "item-not-found" | null {
+  let next = data;
+  const versions: Partial<Record<PlanPartId, number>> = {};
+  const byPart = new Map<PlanPartId, PlanDecisionChange[]>();
+  for (const change of changes) byPart.set(change.part, [...(byPart.get(change.part) ?? []), change]);
+  for (const [part, list] of byPart) {
+    const content = currentContent(storedPart(next, part));
+    let changed = false;
+    for (const change of list) {
+      const index = content.items.findIndex((item) => item.id === change.itemId);
+      if (index === -1) return "item-not-found";
+      const item = content.items[index];
+      const was = item.decision === "accepted" || item.decision === "rejected" ? item.decision : "proposed";
+      if (was === change.decision) continue;
+      if (onlyUndecided && was !== "proposed") continue;
+      content.items[index] = { ...item, decision: change.decision, decidedAt: change.decision === "proposed" ? null : now };
+      changed = true;
+    }
+    if (!changed) continue;
+    const written = writeContent(next, part, content, editing[part] ?? null, now);
+    next = written.data;
+    versions[part] = written.version;
+  }
+  return Object.keys(versions).length === 0 ? null : { data: next, versions };
+}
+
+/** Records fields copied for ABA Matrix (D23): when, a fingerprint of what was copied, and the plan parts' versions then. */
+export function markPlanCopied<D extends WithCaseMap>(data: D, marks: ReadonlyArray<{ id: string; fingerprint: string }>, now: string): D {
+  const map: StoredCaseMap = data.caseMap ?? { parts: {} };
+  const versions = Object.fromEntries(PLAN_PARTS.map((part) => [part, currentPartVersion(storedPart(data, part))?.number ?? null]));
+  const planCopied = { ...(map.planCopied ?? {}) };
+  for (const mark of marks) planCopied[mark.id] = { copiedAt: now, fingerprint: mark.fingerprint, versions };
+  return { ...data, caseMap: { ...map, planCopied } };
 }
 
 /* The AI's drafts (step 1, pull request 2) */

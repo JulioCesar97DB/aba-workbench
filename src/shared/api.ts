@@ -1,5 +1,6 @@
 import type { GenerationEvent } from "../lib/generation-events.ts";
 import type { CaseMapSummary, CaseMapView, MapCollection, MapPartId, MapRequestKind } from "./case-map.ts";
+import type { DecidedPart, PlanInstructionsView, PlanPartId, PlanSummary, PlanView } from "./plan.ts";
 import type { ReportSectionId } from "./report-sections.ts";
 import type { SectionDetail, SectionRequestInput, SectionSummary } from "./sections.ts";
 import type { AddPdfsResult, CaseSources, DroppedPdf, FailedSave, NewTextSource, ReadSourceTextResult, SourceChange, SourceSaveResult } from "./sources.ts";
@@ -134,6 +135,8 @@ export interface CaseProgress {
   mapPartToApprove: MapPartId | null;
   /** Each section's state and whether it is copied for ABA Matrix (T8), in the report's order. */
   sections: Array<Pick<SectionSummary, "id" | "state" | "copied">>;
+  /** Its plan (step 3): items decided, out of its items. */
+  plan: PlanSummary;
 }
 
 /** A case as Home lists it, with how far it is; null when that could not be read (the case is still listed). */
@@ -159,6 +162,8 @@ export interface CaseDetail extends CaseSummary {
   notes: string;
   /** Its case map (src/shared/case-map.ts): parts approved, out of parts with something in them. */
   caseMap: CaseMapSummary;
+  /** Its plan (src/shared/plan.ts): items decided, out of its items. */
+  plan: PlanSummary;
   /** How far it is when it was opened, as Home lists it; null when that could not be read. */
   progress: CaseProgress | null;
 }
@@ -173,7 +178,43 @@ export type MapSaveFailure = { outcome: "case-unavailable" } | { outcome: "not-s
  * the version of the part the change wrote (her editing pass, which her next change
  * names), and the id of an item just added. version is null when nothing changed.
  */
-export type MapSaveResult = { outcome: "saved"; map: CaseMapView; summary: CaseMapSummary; version: number | null; itemId: string | null } | MapSaveFailure;
+export type MapSaveResult =
+  | {
+      outcome: "saved";
+      map: CaseMapView;
+      summary: CaseMapSummary;
+      version: number | null;
+      itemId: string | null;
+      /** The plan (step 3), which lives in the case map, as saved, and its summary for the sidebar. */
+      plan: PlanView;
+      planSummary: PlanSummary;
+      /** Decisions on plan items write several parts: each part's editing pass now. */
+      versions?: Partial<Record<PlanPartId, number>>;
+    }
+  | MapSaveFailure;
+
+/** A part of the case map or of the plan, as the interface names it. */
+export type AnyPartId = MapPartId | PlanPartId;
+
+/** The plan (step 3), the map it is built from, and her plan standing instructions and confirmed intro. */
+export type GetPlanResult = { outcome: "read"; plan: PlanView; map: CaseMapView; instructions: PlanInstructionsView } | { outcome: "case-unavailable" };
+
+/** One decision on a plan item: accept, reject, or bring back to undecided ("Recuperar"). */
+export interface PlanDecisionInput {
+  part: DecidedPart;
+  itemId: string;
+  decision: "accepted" | "rejected" | "proposed";
+}
+
+/**
+ * Plan fields copied for ABA Matrix (plain text only), and marked: `markers` counts the
+ * [MISSING] and [CHECK] in what was copied; `result` is the plan as saved with its marks
+ * (null when the mark could not be saved, though the clipboard holds the text).
+ */
+export type PlanCopyResult = { outcome: "copied"; markers: number; result: MapSaveResult | null } | { outcome: "field-not-found" } | { outcome: "case-unavailable" };
+
+/** The HBI intro confirmed: her plan instructions as saved now. */
+export type HbiIntroResult = { outcome: "saved"; instructions: PlanInstructionsView } | { outcome: "not-saved" };
 
 /** The map, and her standing instructions for it (her thresholds, D16): empty until she confirms them. */
 export type GetCaseMapResult = { outcome: "read"; map: CaseMapView; instructions: string } | { outcome: "case-unavailable" };
@@ -578,7 +619,7 @@ export interface AbaApi {
    * definition thresholds, D16), for all her cases. `caseId` is the case she typed them in:
    * where a save that failed is shown again.
    */
-  saveSectionInstructions(caseId: string, sectionId: ReportSectionId | "case-map", text: string): Promise<InstructionsSaveResult>;
+  saveSectionInstructions(caseId: string, sectionId: ReportSectionId | "case-map" | "plan", text: string): Promise<InstructionsSaveResult>;
   /** Saves her notes for this session, in the case. */
   saveSessionNotes(caseId: string, text: string): Promise<NotesSaveResult>;
   /** "Start a new session": archives the notes (kept in the case, never sent again) and empties the box. */
@@ -607,15 +648,26 @@ export interface AbaApi {
   /** The whole map, every part with its versions and the items of the version shown. */
   getCaseMap(caseId: string): Promise<GetCaseMapResult>;
   /** Saves her change to an item or a group as she types. `item` is the item's fields as JSON: values and [CHECK]s only. */
-  saveMapItem(caseId: string, part: MapPartId, collection: MapCollection, itemId: string, item: string, editing: number | null): Promise<MapSaveResult>;
+  saveMapItem(caseId: string, part: AnyPartId, collection: MapCollection, itemId: string, item: string, editing: number | null): Promise<MapSaveResult>;
   /** Adds an item or a group (her own), with what she typed so far (JSON); the answer names its id. */
-  addMapItem(caseId: string, part: MapPartId, collection: MapCollection, item: string, editing: number | null): Promise<MapSaveResult>;
+  addMapItem(caseId: string, part: AnyPartId, collection: MapCollection, item: string, editing: number | null): Promise<MapSaveResult>;
   /** Removes an item or a group from the version she works in; earlier versions keep it. */
   removeMapItem(caseId: string, part: MapPartId, collection: MapCollection, itemId: string, editing: number | null): Promise<MapSaveResult>;
   /** Shows another version of a part: nothing is lost, only which one is current changes. */
   setMapPartVersion(caseId: string, part: MapPartId, version: number): Promise<MapSaveResult>;
   /** Approves a version of a part (null takes the approval back). */
   approveMapPart(caseId: string, part: MapPartId, version: number | null): Promise<MapSaveResult>;
+  /** The plan (step 3), with the map it is built from and her plan instructions. */
+  getPlan(caseId: string): Promise<GetPlanResult>;
+  /**
+   * Her decisions on plan items (accept, reject, recover), each part in its editing pass.
+   * `onlyUndecided`: "Aceptar lo que queda", which never accepts an item she rejected.
+   */
+  decidePlanItems(caseId: string, changes: PlanDecisionInput[], editing: Partial<Record<PlanPartId, number | null>>, onlyUndecided: boolean): Promise<MapSaveResult>;
+  /** Copies plan fields for ABA Matrix, by id (several: "the whole block"), as plain text, and marks them copied. */
+  copyPlanFields(caseId: string, fieldIds: string[]): Promise<PlanCopyResult>;
+  /** Confirms (or replaces) the HBI intro, once for all her cases. */
+  confirmHbiIntro(text: string): Promise<HbiIntroResult>;
   /**
    * "Draft the map" / "Update the map" (step 1, pull request 2): the AI's two requests, one
    * after the other. Progress arrives as "map-progress" updates, each request's saved parts
@@ -689,6 +741,10 @@ export const IPC_CHANNELS = {
   removeMapItem: "case-map:remove-item",
   setMapPartVersion: "case-map:set-current",
   approveMapPart: "case-map:approve",
+  getPlan: "plan:get",
+  decidePlanItems: "plan:decide",
+  copyPlanFields: "plan:copy",
+  confirmHbiIntro: "plan:confirm-intro",
   startMapDraft: "case-map:draft",
   startMapReview: "case-map:review",
   getAiPreferences: "settings:get-ai",

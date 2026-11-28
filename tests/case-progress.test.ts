@@ -27,6 +27,7 @@ test("a new case: no documents, no map, every section not started", () => {
     caseMap: { approved: 0, withContent: 0 },
     mapPartToApprove: null,
     sections: REPORT_SECTIONS.map((section) => ({ id: section.id, state: "not-started", copied: false })),
+    plan: { decided: 0, total: 0 },
   });
 });
 

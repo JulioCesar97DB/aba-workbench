@@ -141,7 +141,7 @@ test("a draft streams in and becomes a version with what made it; nothing to com
   assert.ok(checked?.type === "checked" && checked.result.outcome === "saved");
   assert.deepEqual(checked.result.section.versions[0].consistency, { status: "nothing-to-compare", items: [], stale: false });
   const stored = JSON.parse(readFileSync(caseFile, "utf8"));
-  assert.equal(stored.schemaVersion, 5);
+  assert.equal(stored.schemaVersion, CASE_SCHEMA_VERSION);
   const record = stored.sections["medical-necessity"].versions[0].generation;
   assert.equal(record.deidentified, false);
   assert.equal(record.effort, "high");
@@ -431,7 +431,7 @@ test("T8: a copy is marked in the case once the clipboard holds it; a newer vers
   saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
   saved(await service.approve(caseId, "crisis-plan", 1));
   const before = JSON.parse(readFileSync(caseFile, "utf8"));
-  assert.equal(before.schemaVersion, 5);
+  assert.equal(before.schemaVersion, CASE_SCHEMA_VERSION);
   assert.equal(before.sections["crisis-plan"].copiedAt, undefined);
   const copied = await service.copy(caseId, "crisis-plan", 1);
   assert.ok(copied.outcome === "copied" && copied.marked);
@@ -558,7 +558,7 @@ test("Revisión y copia reads every section with the text she would copy: the ap
   assert.deepEqual(await service.readReport("00000000-0000-4000-8000-999999999999"), { outcome: "case-unavailable" });
 });
 
-test("T8: a version 4 case reads as version 5 with nothing copied; a mark with half its parts is damaged", async () => {
+test("T8: a version 4 case reads as the current version with nothing copied; a mark with half its parts is damaged", async () => {
   const { service, caseId, caseFile } = await setup();
   saved(await service.saveText(caseId, "crisis-plan", "Her crisis plan.", null));
   const v5 = JSON.parse(readFileSync(caseFile, "utf8"));
@@ -572,10 +572,10 @@ test("T8: a version 4 case reads as version 5 with nothing copied; a mark with h
   assert.ok(opened.outcome === "read");
   assert.equal(opened.section.copiedVersion, null);
   assert.equal(opened.section.copied, false);
-  // Only the copy writes the file in version 5, as any save does.
+  // Only the copy writes the file in the current version, as any save does.
   const copied = await service.copy(caseId, "crisis-plan", 1);
   assert.ok(copied.outcome === "copied" && copied.marked);
-  assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion, 5);
+  assert.equal(JSON.parse(readFileSync(caseFile, "utf8")).schemaVersion, CASE_SCHEMA_VERSION);
   const half = { ...v5, sections: { "crisis-plan": { ...v5.sections["crisis-plan"], copiedAt: v5.createdAt } } };
   assert.deepEqual(readCaseFile(JSON.stringify(half)), { ok: false, problem: "damaged" });
   // A copied version the section no longer has is read, and shows as not copied.

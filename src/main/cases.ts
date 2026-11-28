@@ -37,7 +37,7 @@ import {
 import { caseFolderNames } from "./case-folder-name.ts";
 import { SectionInputError, sectionSummaries, sessionNotes } from "./case-sections.ts";
 import { mapProgress } from "../shared/case-progress.ts";
-import { caseMapSummary, caseMapView } from "./case-map.ts";
+import { caseMapSummary, caseMapView, planSummaryOf } from "./case-map.ts";
 import { inspectCasesFolder } from "./cases-folder.ts";
 import { finishInterruptedSave, isLeftBehind, isTemporaryFileOf, writeFileDurably } from "./durable-write.ts";
 
@@ -116,6 +116,7 @@ export function caseProgress(data: CaseData): CaseProgress {
     sources: data.sources.filter((source) => !source.removedAt).length,
     ...mapProgress(caseMapView(data).parts),
     sections: sectionSummaries(data).map(({ id, state, copied }) => ({ id, state, copied })),
+    plan: planSummaryOf(data),
   };
 }
 
@@ -528,6 +529,7 @@ export class CaseLibrary {
         sections: sectionSummaries(data),
         notes: sessionNotes(data),
         caseMap: caseMapSummary(data),
+        plan: planSummaryOf(data),
         // The same progress as Home's, so the summary names the map part to approve at once (review round 1, M1).
         progress: listedCase(data, this.options.log).progress,
       };
