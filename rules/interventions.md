@@ -1,14 +1,14 @@
 ---
 id: interventions
-version: 1
-updated: 2026-11-27
+version: 2
+updated: 2026-11-28
 sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words) and the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words). No text from any real assessment.
 confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Interventions: what she uses and how she writes them
 
-For the Plan step: Hypothesis Based Interventions (section 14) and the Interventions glossary (section 15). No request loads this file yet; the Plan step will. The points that bear on a section the app already drafts are also in that section's rules: no telehealth for caregiver training (Family/Caregiver Involvement), no restraint (Crisis Plan), and no extinction or punishment named (Medical Necessity).
+For the Plan step: Hypothesis Based Interventions (section 14) and the Interventions glossary (section 15). No request loads this file yet; the Plan step will. Replacements, skills and caregiver goals are in the programs rules, which the Plan step will load with this file. The points that bear on a section the app already drafts are also in that section's rules: no telehealth for caregiver training (Family/Caregiver Involvement), no restraint (Crisis Plan), and no extinction or punishment named (Medical Necessity).
 
 ## What an initial plan never uses
 
@@ -21,7 +21,7 @@ For the Plan step: Hypothesis Based Interventions (section 14) and the Intervent
 
 - The strategies and teaching procedures of her patterns (antecedent strategies by function, functional communication training, differential reinforcement of alternative behavior, the Premack principle, a high-probability request sequence, noncontingent reinforcement, scheduled breaks, prompting and prompt fading, chaining, shaping, discrete trial and natural environment teaching).
 - Also: token economy, video modeling, visual timers, and the Picture Exchange Communication System (PECS).
-- Every function gets a functionally equivalent replacement skill (for example functional communication training to ask for a break when a behavior is maintained by escape).
+- Every function gets a functionally equivalent replacement skill (for example functional communication training to ask for a break when a behavior is maintained by escape); the programs rules say how replacements are chosen and counted.
 - Differential reinforcement of other behavior (DRO): rarely, and almost only for behaviors maintained by sensory or automatic reinforcement. Give a starting interval, momentary or variable, and say that it will be adjusted to the child during the first week of implementation.
 - Automatic reinforcement: environmental manipulation first, and access to alternative stimulation, almost always an activity that competes with the behavior. A direct alternative response (such as a chewable item for mouthing) only rarely, since families usually decline it.
 

@@ -389,18 +389,118 @@ export function mapPartStatus(versions: ReadonlyArray<{ number: number; kind: st
 
 /**
  * The mean of a behavior's baseline observations, as section 8 gives it (D20): computed by
- * the app from the counts, decimals kept to two places. Null when any count is missing or
- * not a plain number, or there is none: the app never guesses.
+ * the app from the counts, decimals kept to two places. A count is the plain number its value
+ * starts with (owner's decision of 2026-11-28), so "3 contacts" is 3 and "2.5 incidents" is
+ * 2.5. Null when any count is missing or does not start with a plain number ("about 3", "3-4",
+ * "3 to 4", "3:30", an empty value), or there is none: the app never guesses.
  */
 export function baselineMean(observations: ReadonlyArray<Pick<BaselineObservation, "value">>): number | null {
   if (observations.length === 0) return null;
   let sum = 0;
   for (const observation of observations) {
-    const raw = observation.value?.value.trim() ?? "";
-    if (!/^\d+(\.\d+)?$/.test(raw)) return null;
-    sum += Number(raw);
+    const count = leadingCount(observation.value?.value ?? "");
+    if (count === null) return null;
+    sum += count;
   }
   return Math.round((sum / observations.length) * 100) / 100;
+}
+
+/** The unit of a duration mean, and what it is a mean of when every value says so. */
+export interface DurationMean {
+  mean: number;
+  unit: "seconds" | "minutes";
+  /** "incident" when every value says per incident (or episode), "session" when every value says total or per session, null when none says. */
+  per: "incident" | "session" | null;
+}
+
+/**
+ * The mean of a duration behavior's baseline observations (owner's decision of 2026-11-28): a
+ * duration only. Each value must start with a plain number followed by a time unit ("12 minutes",
+ * "9 min per incident", "45 s"); its unit is seconds (s, sec, seconds) or minutes (min, minutes),
+ * and every value of the behavior must give the same unit, and say per incident, total or per
+ * session alike (or none of them say it). A value with no unit ("2 episodes"), a second number
+ * ("1 min 30 s", "30 minutes total, about 10 per incident"), a range or rate word, both per
+ * incident and total, a missing value, or mixed units gives no mean: the app never converts or
+ * guesses (check 3); she fills it in herself.
+ */
+export function baselineDurationMean(observations: ReadonlyArray<Pick<BaselineObservation, "value">>): DurationMean | null {
+  if (observations.length === 0) return null;
+  let sum = 0;
+  let unit: DurationMean["unit"] | undefined;
+  let per: DurationMean["per"] | undefined;
+  for (const observation of observations) {
+    const match = /^(\d+(?:\.\d+)?)\s*(s|secs?|seconds?|mins?|minutes?)(?=$|[\s.,;:)])(.*)$/isu.exec((observation.value?.value ?? "").trim());
+    if (!match) return null;
+    const rest = (match[3] ?? "").trim();
+    if (!plainRest(rest)) return null;
+    // "per" or "por" only as per incident, per episode or per session: any other is a rate.
+    const perWords = [...rest.matchAll(/(?<!\p{L})(?:per|por)(?!\p{L})\s*(\p{L}*)/giu)].map((word) => (word[1] ?? "").toLowerCase());
+    if (perWords.some((word) => !PER_INCIDENT.has(word) && !PER_SESSION.has(word))) return null;
+    const incident = perWords.some((word) => PER_INCIDENT.has(word));
+    const session = perWords.some((word) => PER_SESSION.has(word)) || /(?<!\p{L})total(?!\p{L})/iu.test(rest);
+    if (incident && session) return null;
+    const own: DurationMean["unit"] = /^s|^sec/iu.test(match[2] ?? "") ? "seconds" : "minutes";
+    const ownPer: DurationMean["per"] = incident ? "incident" : session ? "session" : null;
+    if ((unit !== undefined && unit !== own) || (per !== undefined && per !== ownPer)) return null;
+    unit = own;
+    per = ownPer;
+    sum += Number(match[1]);
+  }
+  return { mean: Math.round((sum / observations.length) * 100) / 100, unit: unit ?? "minutes", per: per ?? null };
+}
+
+const PER_INCIDENT = new Set(["incident", "episode", "incidente", "episodio"]);
+const PER_SESSION = new Set(["session", "sesión", "sesion"]);
+
+/**
+ * Words that make the leading number a range, two numbers, an estimate or a rate rather than one
+ * count (check 3), in English and in Spanish, since she types the counts on either screen.
+ */
+const NOT_ONE_NUMBER = new RegExp(
+  [
+    // Ranges, two numbers, and rates.
+    "(?<!\\p{L})(?:through|thru|until|till|up|to|and|or|vs|versus|plus|half|each|every|hasta|o|ó|u|y|e|entre|cada|unos|unas",
+    // Hedges (check 4): an estimate is no count, however it is written.
+    "|about|around|approx|approximate|approximately|roughly|least|most|maybe|perhaps|estimate|estimated|est|nearly|almost|so",
+    "|aprox|aproximado|aproximada|aproximados|aproximadas|aproximadamente|alrededor|cerca|casi|quizás|quizas|quizá|quiza|mínimo|minimo|máximo|maximo|estimado|estimada|estimados|estimadas|más|menos)(?!\\p{L})",
+    // "a", "an" and "al" only as a rate, before a time word ("3 a day", "3 a la hora", "3 al día"): "3 aggressions toward a peer" is a count (check 4).
+    "|(?<!\\p{L})(?:an?|al)\\s+(?:la\\s+)?(?:day|hour|week|month|session|minute|día|dia|hora|semana|mes|sesión|sesion|minuto)(?!\\p{L})",
+    "|[-‐‑‒–—―−~+/&*≈±<>?]",
+  ].join(""),
+  "iu",
+);
+
+/** What follows the leading number leaves it one plain number: no other digit and no range or rate word. */
+function plainRest(rest: string): boolean {
+  return !/\p{N}/u.test(rest) && !NOT_ONE_NUMBER.test(rest);
+}
+
+/**
+ * The plain number a count's value starts with, or null. The number must end the value or be
+ * followed by a space, and the rest must have no other digit and no range or rate word ("3 - 4",
+ * "3 to 4", "3 and 4", "3 per hour", "3 a 4"): when in doubt, no number (check 3).
+ */
+function leadingCount(value: string): number | null {
+  const match = /^(\d+(?:\.\d+)?)(?:\s+(.*))?$/su.exec(value.trim());
+  if (!match) return null;
+  const rest = match[2] ?? "";
+  if (!plainRest(rest) || /(?<!\p{L})(?:per|por)(?!\p{L})/iu.test(rest)) return null;
+  return Number(match[1]);
+}
+
+/**
+ * The intensity the app suggests for section 8, by her rule (questionnaire answers of
+ * 2026-11-27; owner's decision of 2026-11-28, design 2A): from the baseline mean per 2-hour
+ * session, more than 10 is 3, 5 to 10 is 2, under 5 is 1. Only for a behavior measured by
+ * frequency with a mean: a behavior measured by duration (or anything else), or with only a
+ * caregiver's count and so no mean, gets none, and she rates it. A suggestion is never saved
+ * by itself: she accepts it, and then it is hers.
+ */
+export function suggestedIntensity(mean: number | null, measure: string | null | undefined): (typeof INTENSITIES)[number] | null {
+  if (mean === null || !Number.isFinite(mean) || mean < 0 || measure !== "frequency") return null;
+  if (mean > 10) return "3";
+  if (mean >= 5) return "2";
+  return "1";
 }
 
 /**

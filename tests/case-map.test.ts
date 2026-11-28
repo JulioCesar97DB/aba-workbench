@@ -9,7 +9,7 @@ import { CaseLibrary } from "../src/main/cases.ts";
 import { writeFileDurably } from "../src/main/durable-write.ts";
 import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
 import { addMapItem, approveMapPart, caseMapSummary, caseMapView, mapPartView, mergeInput, parseItemInput, removeMapItem, saveMapItem, setMapPartVersion, type StoredCaseMap } from "../src/main/case-map.ts";
-import { baselineMean, MAP_PART_LIMITS, mapPartStatus } from "../src/shared/case-map.ts";
+import { baselineDurationMean, baselineMean, MAP_PART_LIMITS, mapPartStatus, suggestedIntensity } from "../src/shared/case-map.ts";
 
 /*
  * The case map inside the case's data file (schema version 4): the migration from version
@@ -409,6 +409,83 @@ test("case map: the section 8 baseline mean is the app's, from the three counts,
   assert.equal(baselineMean([]), null);
 });
 
+test("case map: a count is the plain number its value starts with, or none (owner's decision, 2026-11-28)", () => {
+  const obs = (value: string) => ({ value: { value, refs: [], origin: "her" as const, check: null } });
+  assert.equal(baselineMean([obs("3 contacts"), obs("2 contacts"), obs("4")]), 3);
+  assert.equal(baselineMean([obs("2.5 incidents"), obs("3.5 incidents")]), 3);
+  assert.equal(baselineMean([obs("  12 hits ")]), 12, "spaces around are trimmed");
+  assert.equal(baselineMean([obs("0 incidents")]), 0);
+  // Check 4: "a" and "an" are no rate unless a time word follows.
+  assert.equal(baselineMean([obs("3 aggressions toward a peer")]), 3);
+  assert.equal(baselineMean([obs("3 golpes a su madre")]), 3);
+  assert.equal(baselineMean([obs("3 a 4")]), null, "a range stays none: another digit follows");
+  for (const value of ["about 3", "3-4", "3 - 4", "3 to 4", "3 or 4", "3:30", "3/4", "3,5", "3x", "3.", "", "   ", "-3", "three",
+    // Check 3: a range, two numbers or a rate, in English or Spanish, is no count.
+    "3 through 5", "3 up to 5", "3 until 4", "3 ~ 4", "3 ‒ 4", "3 and 4", "3 vs 4", "3 and a half", "3 per hour", "3 a day",
+    "3 a 4", "3 o 4", "3 ó 4", "3 y 4", "3 hasta 5", "3 por hora", "3 a la hora", "3\n4", "3 (2 at home, 1 at school)", "3 incidents in 2 hours",
+    // Check 4: a hedged count is an estimate, in English and Spanish.
+    "3 at least", "3 at most", "3 (estimated)", "3 estimated", "3 approximate", "3 approximately", "3 maybe", "3 maybe more", "3 times (est.)",
+    "3 nearly", "3 almost", "3 roughly", "3 around", "3 or so", "3 perhaps", "3 ?",
+    "3 como mínimo", "3 como máximo", "3 quizás", "3 casi", "3 alrededor de", "3 aproximadamente", "3 aproximados", "3 estimados", "3 cerca de",
+    "3 a la hora", "3 al día", "3 an hour", "3 a session"]) {
+    assert.equal(baselineMean([obs("3"), obs(value)]), null, `"${value}" gives no number`);
+  }
+  assert.equal(suggestedIntensity(baselineMean([obs("12 contacts"), obs("11 contacts"), obs("10 contacts")]), "frequency"), "3");
+  assert.equal(suggestedIntensity(baselineMean([obs("about 12"), obs("11"), obs("10")]), "frequency"), null);
+});
+
+test("case map: a duration behavior's mean is a duration in one unit, or none (owner's decision, 2026-11-28)", () => {
+  const obs = (value: string | null) => ({ value: value === null ? null : { value, refs: [], origin: "her" as const, check: null } });
+  const mean = (...values: Array<string | null>) => baselineDurationMean(values.map(obs));
+  assert.deepEqual(mean("12 minutes", "7 minutes", "11 min"), { mean: 10, unit: "minutes", per: null });
+  assert.deepEqual(mean("45 s", "30 sec", "15 seconds"), { mean: 30, unit: "seconds", per: null });
+  assert.deepEqual(mean("9 minutes per incident", "6.5 minutes per episode"), { mean: 7.75, unit: "minutes", per: "incident" });
+  assert.deepEqual(mean("40 minutes in total", "20 minutes per session"), { mean: 30, unit: "minutes", per: "session" });
+  assert.deepEqual(mean("12min"), { mean: 12, unit: "minutes", per: null }, "no space before the unit");
+  assert.deepEqual(mean("12 min por episodio", "8 min por episodio"), { mean: 10, unit: "minutes", per: "incident" }, "in Spanish");
+  assert.deepEqual(mean("12 min. total", "18 min en total"), { mean: 15, unit: "minutes", per: "session" });
+  // No unit, a count of episodes, a range, mixed units or mixed bases, a missing value: no mean.
+  for (const values of [
+    ["2 episodes: 12 and 7 minutes", "1 episode: 9 minutes per incident"],
+    ["12", "7"],
+    ["12 minutes", "7"],
+    ["12 minutes", "30 seconds"],
+    ["9 minutes per incident", "40 minutes in total"],
+    ["9 minutes per incident", "7 minutes"],
+    ["12-15 minutes"],
+    ["12 to 15 minutes"],
+    ["12 minutes - 15 minutes"],
+    ["about 12 minutes"],
+    ["12 mins", null],
+    ["3:30"],
+    ["12 hours"],
+    ["12 m"],
+    // Check 3: a second number, both per incident and total, or a rate.
+    ["1 min 30 s"],
+    ["2 minutes 30 seconds"],
+    ["1 min, 30 sec"],
+    ["3 minutes and 20 seconds"],
+    ["1 minute 45 seconds per incident"],
+    ["30 minutes total, about 10 per incident"],
+    ["30 min in total (10 min per incident)"],
+    ["30 minutes total per incident"],
+    ["12 minutes per hour"],
+    ["12 minutos por hora"],
+    // Check 4: a hedged duration.
+    ["12 min at least"],
+    ["12 minutes (estimated)"],
+    ["12 min approximately"],
+    ["12 minutos como mínimo"],
+    ["12 minutos quizás"],
+    ["12 minutes a session"],
+  ]) {
+    assert.equal(mean(...values), null, JSON.stringify(values));
+  }
+  assert.equal(mean(), null);
+  // Frequency stays as it was: a count reads its leading number.
+  assert.equal(baselineMean([obs("2 episodes"), obs("4 episodes")]), 3);
+});
+
 /* The service, on a real case in a temporary folder: every change through the case's save queue, and a change she typed kept when the disk refuses it. */
 
 const folders: string[] = [];
@@ -540,4 +617,19 @@ test("case map service: what she typed is kept when the disk refuses it, and Try
   assert.equal(failedSaves.size, 0);
   const stored = JSON.parse(readFileSync(caseFile, "utf8"));
   assert.equal(stored.caseMap.parts.caregivers.versions.at(-1).content.items[0].availability.value, "Tuesdays and Thursdays");
+});
+
+test("intensity (design 2A, 2026-11-28): the app suggests it from the per-session mean by her rule, only for a frequency behavior with a mean", () => {
+  assert.equal(suggestedIntensity(15, "frequency"), "3");
+  assert.equal(suggestedIntensity(10.33, "frequency"), "3");
+  assert.equal(suggestedIntensity(10, "frequency"), "2");
+  assert.equal(suggestedIntensity(7, "frequency"), "2");
+  assert.equal(suggestedIntensity(5, "frequency"), "2");
+  assert.equal(suggestedIntensity(4.67, "frequency"), "1");
+  assert.equal(suggestedIntensity(0, "frequency"), "1");
+  // No mean (only a caregiver's count, or a count that is not a number): none.
+  assert.equal(suggestedIntensity(null, "frequency"), null);
+  assert.equal(suggestedIntensity(baselineMean([]), "frequency"), null);
+  // Duration, or a measure not set or not frequency: hers to rate.
+  for (const measure of ["duration", "latency", "intensity", "", null, undefined]) assert.equal(suggestedIntensity(12, measure), null, String(measure));
 });

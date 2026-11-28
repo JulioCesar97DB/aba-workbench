@@ -1,9 +1,9 @@
 ---
 id: case-map
-version: 5
-updated: 2026-11-27
+version: 6
+updated: 2026-11-28
 sources: The owner's decisions D1 to D35 on the case map (2026-11-23), the assessment guide's section map, and the four kinds of content of the whole-assessment rules. Written for these rules; no text from any real assessment.
-confirmed: in part, by the BCBA's questionnaire answers of 2026-11-27 (no severity level; caregivers and professionals by role); the rest is pending her review
+confirmed: in part, by the BCBA's questionnaire answers of 2026-11-27 (no severity level; caregivers and professionals by role; her defaults for behaviors, in the behaviors rules, by the owner's decision of 2026-11-28); the rest is pending her review
 ---
 
 # Drafting the case map
@@ -32,7 +32,7 @@ Each value is a claim: its `value`, its `refs`, its `origin` and its `check`. A 
   - `ai-drafted`: you wrote it from cited facts (a definition, an onset sentence); its refs are the facts you used;
   - `hypothesis`: a function or a group;
   - `proposed`: a clinical choice that is hers to make (a barrier tag, a caregiver mitigation the sources do not give).
-- **Numbers**: every number in a value (a count, a score, a date, a dose, a number of minutes) is written in one of its quotes. A value you draft (`ai-drafted`) may also take a number from `<standing-instructions>`, and from nowhere else.
+- **Numbers**: every number in a value (a count, a score, a date, a dose, a number of minutes) is written in one of its quotes. A value you draft (`ai-drafted`) may also take a number from her defaults in the behaviors rules (her thresholds) or from `<standing-instructions>`, and from nowhere else.
 - **check**: the text of a [CHECK] on this value, without brackets, or "" when there is none. Use it when sources disagree, when her text and a source differ, or when a value needs her eye.
 
 ## Nothing invented
@@ -43,13 +43,13 @@ The rule outranks everything else in this request.
 - Never compute, estimate, average or round a number the sources do not give. The app computes the baseline mean itself.
 - Never move evidence between settings: what a parent reports about school is a report, not a school observation.
 - Never write a diagnosis or a score the documents do not state.
-- Intensity is hers to rate: never fill it.
+- Intensity is hers to rate: never fill it. The app suggests one from her rule and the baseline it computes, and she accepts it or picks her own.
 
 ## The four kinds of content, in the map
 
 - **Facts** (scores, incidents, people, settings, services): `extracted` or `her`, with quotes.
 - **Clinical reasoning** (what the facts mean): only in the fields made for it, a definition, a function's reasoning, a group's reason; `ai-drafted` or `hypothesis`, citing the facts it rests on.
-- **Her standard practice**: only from `<standing-instructions>`, or as the whole-assessment rules list it as confirmed. Never supply it from what behavior analysts usually do.
+- **Her standard practice**: only from `<standing-instructions>`, or as these rules, the behaviors rules and the whole-assessment rules give it as her confirmed default; a standing instruction overrides a default. Never supply it from what behavior analysts usually do.
 - **Proposals** (her clinical choices): marked `proposed`, never presented as a fact. Before her plan is approved there are few: barrier tags, and a mitigation for a caregiver's limits when the sources give none.
 
 ## The parts

@@ -409,17 +409,89 @@ test("S1: a value with no ref, a quote too short to prove anything, a number in 
   first.name = claim("Spitting", []);
   first.antecedents = [claim("A worksheet set down in 6 of 8 episodes", [ref("o", "she set the reading worksheet on the table")])];
   (first.baseline as { observations: Array<Record<string, unknown>> }).observations[0].value = claim("3", [ref("o", "3")]);
-  first.offset = claim("The child has not spat for 10 seconds.", [ref("o", "spat toward his mother's forearm")], "ai-drafted");
+  first.offset = claim("The child has not spat for 15 seconds.", [ref("o", "spat toward his mother's forearm")], "ai-drafted");
   const result = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext());
   const has = (pattern: RegExp) => assert.ok(result.problems.some((problem) => pattern.test(problem)), `${pattern} in ${result.problems.join(" | ")}`);
   has(/behaviors\[0\]\.name: a value a source or her text states needs a ref/);
   has(/behaviors\[0\]\.antecedents\[0\]: the number 6, 8 in/);
   has(/observations\[0\]\.value\.refs\[0\]: the quote "3" is too short/);
-  has(/behaviors\[0\]\.offset: .*gives a threshold that no standing instruction gives/);
+  has(/behaviors\[0\]\.offset: .*gives a threshold that no quote gives and that is not her default or her own for this place/);
   assert.deepEqual([...result.failing.get("behaviors")!], [0], "the problems point at the one behavior");
-  // With her confirmed thresholds, an AI-drafted offset may take its number from them (D16).
-  const withThresholds = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext({ instructions: "End of an episode: the behavior has stopped for 10 seconds in a row." }));
+  // With her own thresholds, an AI-drafted offset may take its number from them (D16).
+  const withThresholds = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext({ instructions: "End of an episode: the behavior has stopped for 15 seconds in a row." }));
   assert.ok(!withThresholds.problems.some((problem) => /offset/.test(problem)));
+});
+
+test("her default thresholds (owner's decision, 2026-11-28): an AI-drafted definition, onset or offset may state each one as the threshold it is, in its place", async () => {
+  const passes = (key: "definition" | "onset" | "offset", value: string, name = "Spitting", instructions?: string) => {
+    const answer = behaviorsAnswer({ obs: "o", interview: "i" }, []);
+    const [first] = answer.behaviors as Array<Record<string, unknown>>;
+    first.name = claim(name, [ref("o", "spat toward his mother's forearm")], "ai-drafted");
+    first[key] = claim(value, [ref("o", "spat toward his mother's forearm")], "ai-drafted");
+    const result = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext(instructions === undefined ? {} : { instructions }));
+    return !result.problems.some((problem) => problem.startsWith(`behaviors[0].${key}`));
+  };
+  assert.ok(passes("onset", "The child does not start what was asked within 5 seconds."));
+  assert.ok(passes("onset", "The child is more than 6 feet from the supervising adult."));
+  assert.ok(passes("onset", "The child stops attending to the task for 3 seconds."));
+  assert.ok(passes("offset", "The child has not spat for 10 seconds in a row."));
+  assert.ok(passes("offset", "No crying or dropping for 30 seconds.", "Tantrum (duration)"));
+  assert.ok(passes("definition", "Any instance in which the child spits. Onset: within 5 seconds of a demand. Offset: 10 seconds without spitting."));
+  // Refused: a default number with another unit, in another place, or for another behavior.
+  assert.ok(!passes("onset", "The child is more than 3 feet from the assigned spot."), "the 3 ft task area is not a default");
+  assert.ok(!passes("onset", "The child is more than 10 feet from the supervising adult."), "her elopement default is 6 ft");
+  assert.ok(!passes("definition", "Any instance in which the child does not start within 6 seconds."), "6 is feet, not seconds");
+  assert.ok(!passes("offset", "The child has not spat for 30 seconds."), "30 s is only for a tantrum");
+  assert.ok(!passes("offset", "The child has not spat for 5 minutes."));
+  assert.ok(!passes("offset", "The child has not spat for 5 seconds."), "5 s belongs to the start of an instruction, not the offset");
+  assert.ok(!passes("onset", "The child spits 3 times."), "a bare count is not a threshold");
+  // Her own line takes the place of the default it changes, one threshold at a time (finding 3).
+  const hers = "- Leaving the supervising adult (elopement): more than 10 feet away from the supervising adult.";
+  assert.ok(passes("onset", "The child is more than 10 feet from the supervising adult.", "Elopement", hers));
+  assert.ok(!passes("onset", "The child is more than 6 feet from the supervising adult.", "Elopement", hers), "her 10 ft replaces the default 6 ft");
+  assert.ok(passes("offset", "The child has not left for 10 seconds in a row.", "Elopement", hers), "the defaults she did not change stay");
+  // Review round 2, finding 1: once she saves the dialog, her end-of-episode line keeps 30 s (or her own number) for a tantrum only.
+  const { THRESHOLDS_DRAFT } = await import("../src/shared/case-map-thresholds.ts");
+  assert.ok(!passes("offset", "The child has not spat for 30 seconds.", "Spitting", THRESHOLDS_DRAFT), "the draft saved unchanged");
+  const offTaskChanged = THRESHOLDS_DRAFT.replace("Off task: 3 seconds", "Off task: 5 seconds");
+  assert.ok(!passes("offset", "The child has not spat for 30 seconds.", "Spitting", offTaskChanged), "only the Off task line changed");
+  assert.ok(passes("offset", "No crying or dropping for 30 seconds.", "Tantrum", offTaskChanged));
+  const sixty = "- End of an episode: the behavior has stopped for 10 seconds in a row; for a tantrum, 60 seconds.";
+  assert.ok(!passes("offset", "The child has not spat for 60 seconds.", "Spitting", sixty));
+  assert.ok(passes("offset", "No crying for 60 seconds.", "Tantrum", sixty));
+  assert.ok(passes("offset", "The child has not spat for 10 seconds in a row.", "Spitting", sixty));
+  // Check 3: in her own order, the clause that names a tantrum is for a tantrum only.
+  const after = "- End of an episode: 10 seconds; 30 seconds for a tantrum.";
+  assert.ok(!passes("offset", "The child has not spat for 30 seconds.", "Spitting", after), "30 s for a tantrum, written after the number");
+  assert.ok(passes("offset", "The child has not spat for 10 seconds.", "Spitting", after));
+  assert.ok(passes("offset", "No crying for 30 seconds.", "Tantrum", after));
+  const first = "- End of an episode: for a tantrum, 60 seconds; otherwise 10 seconds in a row.";
+  assert.ok(passes("offset", "The child has not spat for 10 seconds in a row.", "Spitting", first), "her tantrum clause first does not refuse the others' 10 s");
+  assert.ok(!passes("offset", "The child has not spat for 60 seconds.", "Spitting", first));
+  assert.ok(passes("offset", "No crying for 60 seconds.", "Tantrum", first));
+  const sentences = "- End of an episode: 10 seconds in a row. For a tantrum, 45 seconds.";
+  assert.ok(!passes("offset", "The child has not spat for 45 seconds.", "Spitting", sentences), "a sentence is a clause too");
+  assert.ok(passes("offset", "No crying for 45 seconds.", "Tantrum", sentences));
+  // Review round 2, finding 2: her 6 ft also ends an elopement.
+  assert.ok(passes("offset", "The child is back within 6 feet of the supervising adult.", "Elopement"));
+  // A line of hers that changes no default adds its thresholds in the three fields.
+  assert.ok(passes("onset", "The child is more than 3 feet from the assigned spot.", "Leaving task area", "- Leaving the task area: more than 3 feet from the assigned spot."));
+});
+
+test("review of T2, finding 1: a default's number is never a count: invented counts in antecedents, examples and the baseline are refused; an extracted threshold needs its quote", () => {
+  const problemsWith = (change: (behavior: Record<string, unknown>) => void) => {
+    const answer = behaviorsAnswer({ obs: "o", interview: "i" }, []);
+    change((answer.behaviors as Array<Record<string, unknown>>)[0]);
+    return checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext()).problems;
+  };
+  const cited = [ref("o", "spat toward his mother's forearm")];
+  assert.ok(problemsWith((b) => (b.antecedents = [claim("A worksheet set down in 6 of 10 episodes", cited, "ai-drafted")])).some((p) => /antecedents\[0\]: the number 6, 10/.test(p)));
+  assert.ok(problemsWith((b) => (b.examples = [claim("The child spat 5 times at his mother.", cited, "ai-drafted")])).some((p) => /examples\[0\]: the number 5/.test(p)));
+  assert.ok(
+    problemsWith((b) => ((b.baseline as { observations: Array<Record<string, unknown>> }).observations[0].value = claim("10", cited, "ai-drafted"))).some((p) => /observations\[0\]\.value: the number 10/.test(p)),
+  );
+  assert.ok(problemsWith((b) => ((b.baseline as { other: unknown[] }).other = [claim("About 30 a week", cited, "ai-drafted")])).some((p) => /baseline\.other\[0\]: the number 30/.test(p)));
+  assert.ok(problemsWith((b) => (b.offset = claim("The child has not spat for 10 seconds in a row.", cited, "extracted"))).some((p) => /offset/.test(p)));
 });
 
 test("S2 and S3: 'her' needs a found quote of her section or notes; a mitigation no source states is a proposal", () => {
@@ -634,13 +706,13 @@ test("R2-S1: a PDF ref next to a found text quote does not turn off the number a
   // The review's probe: a count in neither quote, one quote found in the notes, one a PDF's.
   first.antecedents = [claim("7 of 8 episodes followed a demand", [ref("o", "she set the reading worksheet on the table"), ref("p", "demands at home")])];
   // A threshold nobody gave, cited with a text quote and a PDF.
-  first.offset = claim("The child has not spat for 10 seconds.", [ref("o", "spat toward his mother's forearm"), ref("p", "spitting episodes")], "ai-drafted");
+  first.offset = claim("The child has not spat for 15 seconds.", [ref("o", "spat toward his mother's forearm"), ref("p", "spitting episodes")], "ai-drafted");
   // A score only in the PDF's quote, next to a found text quote: passes, marked [CHECK].
   first.consequences = [claim("Communication standard score 68", [ref("o", "she stopped the worksheet to clean up"), ref("p", "Communication 68")])];
   const parsed = parsedBehaviors(answer);
   const result = checkMapAnswer("map-behaviors", parsed, withPdf());
   assert.ok(result.problems.some((problem) => /antecedents\[0\]: the number 7, 8 in/.test(problem)), result.problems.join(" | "));
-  assert.ok(result.problems.some((problem) => /offset: .*gives a threshold that no standing instruction gives/.test(problem)));
+  assert.ok(result.problems.some((problem) => /offset: .*gives a threshold that no quote gives and that is not her default or her own for this place/.test(problem)));
   assert.ok(!result.problems.some((problem) => /consequences\[0\]/.test(problem)));
   const score = parsed.behaviors[0].consequences[0];
   assert.ok(result.pdfNumbers.has(score));
