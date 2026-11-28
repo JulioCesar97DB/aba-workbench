@@ -1,6 +1,6 @@
 ---
 id: section-family-caregiver-involvement
-version: 7
+version: 8
 updated: 2026-11-28
 paragraphs: 1-4
 words: 200-400
@@ -10,7 +10,7 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 
 # Section 16: Family/Caregiver Involvement
 
-From the case map, this section uses the caregivers; the facts whose home is section 16; the behaviors by name. The other parts only keep names and numbers the same.
+From the case map, this section gets in full the caregivers (role, language, availability, participation, limits, mitigation) and the facts whose home is section 16. Everything else comes by name only (the behaviors, the settings, the other services); the household is Background's, referred to in a clause.
 
 ## What this section is for
 

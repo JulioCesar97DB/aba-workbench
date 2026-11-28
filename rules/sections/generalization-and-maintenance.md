@@ -1,6 +1,6 @@
 ---
 id: section-generalization-and-maintenance
-version: 7
+version: 8
 updated: 2026-11-28
 paragraphs: 2-2
 words: 150-320
@@ -10,7 +10,7 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 
 # Section 17: Generalization and Maintenance
 
-From the case map, this section uses the settings; the caregivers; the behaviors by name. The other parts only keep names and numbers the same.
+From the case map, this section gets in full the facts whose home is section 17. Everything else comes by name only (the caregivers by relation, the settings, the behaviors), so the people, settings and behaviors it names stay the same.
 
 ## What this section is for
 

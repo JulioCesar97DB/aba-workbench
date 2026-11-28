@@ -1,6 +1,6 @@
 ---
 id: section-environmental-changes
-version: 6
+version: 7
 updated: 2026-11-28
 paragraphs: 2-3
 words: 150-450
@@ -10,7 +10,7 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 
 # Section 7: Environmental Changes
 
-From the case map, this section uses the facts whose home is section 7; the settings; the caregivers. The other parts only keep names and numbers the same.
+From the case map, this section gets in full the facts whose home is section 7. Everything else comes by name only (the caregivers by relation, the settings, the other services, the behaviors), so the names stay the same; the examples come from the sources.
 
 ## What this section is for
 

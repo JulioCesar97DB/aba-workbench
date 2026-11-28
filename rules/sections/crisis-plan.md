@@ -1,6 +1,6 @@
 ---
 id: section-crisis-plan
-version: 12
+version: 13
 updated: 2026-11-28
 sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 20, read 2026-11-21), the payer facts (Florida Medicaid policy 5.2), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the owner's decision that clinical proposals live only in the case formulation (2026-11-23).
 confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
@@ -8,7 +8,7 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 
 # Section 20: Crisis Plan
 
-From the case map, this section uses the risks; the behaviors that a risk names as dangerous; the caregivers. The other parts only keep names and numbers the same.
+From the case map, this section gets in full the facts whose home is section 20. The risks come by the behaviors they come from (Risk Assessment states them), and everything else by name only (the behaviors, the caregivers by relation, the settings).
 
 ## What this section is for
 

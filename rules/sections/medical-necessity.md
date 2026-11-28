@@ -1,6 +1,6 @@
 ---
 id: section-medical-necessity
-version: 9
+version: 10
 updated: 2026-11-28
 paragraphs: 7-10
 words: 900-1250
@@ -10,7 +10,7 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 
 # Section 4: Medical Necessity Criteria
 
-From the case map, this section uses the client (the diagnosis and the other services); the deficits with their scores; the behaviors (names and baselines, the most impairing argued with their incidents); the settings; the strengths, only to qualify. The other parts only keep names and numbers the same.
+From the case map, this section gets in full the deficits with their scores and the facts whose home is section 4. Everything else comes by name only: the diagnosis and the other services, the caregivers, the settings, the behaviors (argue the most impairing from the sources and her sections; name the others) and the risks by their behaviors.
 
 ## What this section is for
 

@@ -1,6 +1,6 @@
 ---
 id: section-strengths-and-weaknesses
-version: 6
+version: 7
 updated: 2026-11-28
 paragraphs: 2-3
 words: 300-450
@@ -10,7 +10,7 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 
 # Section 6: Strengths and Weaknesses
 
-From the case map, this section uses the strengths; the deficits (names, in the order Medical Necessity gives them). The other parts only keep names and numbers the same.
+From the case map, this section gets in full the strengths and the facts whose home is section 6. The deficit areas come by name only, in the order Medical Necessity gives them; everything else by name only too.
 
 ## What this section is for
 

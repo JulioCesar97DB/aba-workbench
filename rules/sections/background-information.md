@@ -1,6 +1,6 @@
 ---
 id: section-background-information
-version: 7
+version: 8
 updated: 2026-11-28
 paragraphs: 5-7
 words: 600-900
@@ -10,7 +10,7 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 
 # Section 3: Background Information
 
-From the case map, this section uses the client; the caregivers; the settings; the facts whose home is section 3; the behaviors by name only. The other parts only keep names and numbers the same.
+From the case map, this section gets in full the client (diagnosis, medications, school, other services, languages) and the facts whose home is section 3. Everything else comes by name only (the caregivers by relation, the settings, the deficit areas, the behaviors, the risks by their behaviors), so the names stay the same; what those items say is their home sections' to tell.
 
 ## What this section is for
 

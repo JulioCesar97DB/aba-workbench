@@ -1,6 +1,6 @@
 ---
 id: section-risk-assessment
-version: 7
+version: 8
 updated: 2026-11-28
 paragraphs: 3-4
 words: 250-450
@@ -10,7 +10,7 @@ confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 
 # Section 19: Risk Assessment
 
-From the case map, this section uses the risks; the behaviors (names, incidents and intensity). The other parts only keep names and numbers the same.
+From the case map, this section gets in full the risks (each with its behaviors, evidence and level) and the facts whose home is section 19. The behaviors come by name only; their definitions and baselines are the Maladaptive Behaviors Summary's.
 
 ## What this section is for
 

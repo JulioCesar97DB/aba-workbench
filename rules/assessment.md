@@ -1,6 +1,6 @@
 ---
 id: assessment
-version: 11
+version: 12
 updated: 2026-11-28
 confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27 (who reads it, attribution, quotes, dates, payers, privacy); the four kinds of content are the owner's decision of 2026-11-23
 ---
@@ -81,4 +81,4 @@ Score reports are authoritative for scores. If another source restates a score d
 
 ## The approved case map
 
-A section request also carries, after the sources, the case map she approved, inside <case-map>: the client, the caregivers, the settings, the deficits, the strengths, the target behaviors (with their definitions, baselines and hypothesized functions), the risks and the facts with their home sections, rendered by the app. Only the parts she approved are written out; every other part is named in one line as not approved yet, and for it you work from her sections and the sources as before. The map is the case as she checked it, so it keeps names, numbers and definitions the same across sections; her sections still come first. How a request uses it is in how requests work.
+A section request also carries, after the sources, the case map she approved, inside <case-map>, rendered by the app for that section: the client, the caregivers, the settings, the deficits, the strengths, the target behaviors (with their definitions, baselines and hypothesized functions), the risks and the facts. The section gets in full only the items whose home is that section (a fact's own home section; for the other parts the section map below); every other item comes by name only, its name and nothing else, so the section names it the same way and leaves its detail to its home. Only the parts she approved are written out; every other part is named in one line as not approved yet, and for it you work from her sections and the sources as before. Her sections still come first. How a request uses it is in how requests work.
