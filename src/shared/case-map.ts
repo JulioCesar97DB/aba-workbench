@@ -404,6 +404,21 @@ export function baselineMean(observations: ReadonlyArray<Pick<BaselineObservatio
 }
 
 /**
+ * The intensity the app suggests for section 8, by her rule (questionnaire answers of
+ * 2026-11-27; owner's decision of 2026-11-28, design 2A): from the baseline mean per 2-hour
+ * session, more than 10 is 3, 5 to 10 is 2, under 5 is 1. Only for a behavior measured by
+ * frequency with a mean: a behavior measured by duration (or anything else), or with only a
+ * caregiver's count and so no mean, gets none, and she rates it. A suggestion is never saved
+ * by itself: she accepts it, and then it is hers.
+ */
+export function suggestedIntensity(mean: number | null, measure: string | null | undefined): (typeof INTENSITIES)[number] | null {
+  if (mean === null || !Number.isFinite(mean) || mean < 0 || measure !== "frequency") return null;
+  if (mean > 10) return "3";
+  if (mean >= 5) return "2";
+  return "1";
+}
+
+/**
  * The minutes of an observation from its length as the notes write it (review round 1, S7):
  * a span of clock times ("3:30 to 5:30 p.m.", "10:00 a.m. to 12:00 p.m."), hours ("2 hours",
  * "a 2-hour observation", "1.5 hrs") or minutes ("45 minutes"), with hours and minutes

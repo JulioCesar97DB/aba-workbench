@@ -9,7 +9,7 @@ import { CaseLibrary } from "../src/main/cases.ts";
 import { writeFileDurably } from "../src/main/durable-write.ts";
 import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
 import { addMapItem, approveMapPart, caseMapSummary, caseMapView, mapPartView, mergeInput, parseItemInput, removeMapItem, saveMapItem, setMapPartVersion, type StoredCaseMap } from "../src/main/case-map.ts";
-import { baselineMean, MAP_PART_LIMITS, mapPartStatus } from "../src/shared/case-map.ts";
+import { baselineMean, MAP_PART_LIMITS, mapPartStatus, suggestedIntensity } from "../src/shared/case-map.ts";
 
 /*
  * The case map inside the case's data file (schema version 4): the migration from version
@@ -540,4 +540,19 @@ test("case map service: what she typed is kept when the disk refuses it, and Try
   assert.equal(failedSaves.size, 0);
   const stored = JSON.parse(readFileSync(caseFile, "utf8"));
   assert.equal(stored.caseMap.parts.caregivers.versions.at(-1).content.items[0].availability.value, "Tuesdays and Thursdays");
+});
+
+test("intensity (design 2A, 2026-11-28): the app suggests it from the per-session mean by her rule, only for a frequency behavior with a mean", () => {
+  assert.equal(suggestedIntensity(15, "frequency"), "3");
+  assert.equal(suggestedIntensity(10.33, "frequency"), "3");
+  assert.equal(suggestedIntensity(10, "frequency"), "2");
+  assert.equal(suggestedIntensity(7, "frequency"), "2");
+  assert.equal(suggestedIntensity(5, "frequency"), "2");
+  assert.equal(suggestedIntensity(4.67, "frequency"), "1");
+  assert.equal(suggestedIntensity(0, "frequency"), "1");
+  // No mean (only a caregiver's count, or a count that is not a number): none.
+  assert.equal(suggestedIntensity(null, "frequency"), null);
+  assert.equal(suggestedIntensity(baselineMean([]), "frequency"), null);
+  // Duration, or a measure not set or not frequency: hers to rate.
+  for (const measure of ["duration", "latency", "intensity", "", null, undefined]) assert.equal(suggestedIntensity(12, measure), null, String(measure));
 });

@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { baselineMean, FUNCTION_NAMES, MAX_MAP_LIST, TEMPLATE_SECTIONS, type Claim, type ClaimInput, type MapPartId, type MapRef } from "../../../shared/case-map.ts";
+import { baselineMean, FUNCTION_NAMES, MAX_MAP_LIST, suggestedIntensity, TEMPLATE_SECTIONS, type Claim, type ClaimInput, type MapPartId, type MapRef } from "../../../shared/case-map.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { Button } from "../components/Button.tsx";
 import { Tooltip } from "../components/Tooltip.tsx";
@@ -521,8 +521,12 @@ function PlainChoice({ label, spec, value, onChange }: { label: string; spec: Ex
   );
 }
 
-/** The section 8 baseline: the mean of the observations' counts, computed by the app from what the form holds (D20; review round 1, S2). */
-function BaselineMean({ value }: { value: unknown }) {
+/**
+ * The section 8 baseline: the mean of the observations' counts, computed by the app from what the form holds (D20; review round 1, S2).
+ * Next to it, the intensity her rule gives for that mean (design 2A, 2026-11-28), with "Use it", which puts it in the
+ * behavior's intensity as hers; nothing is suggested for a duration behavior or one with no mean.
+ */
+function BaselineMean({ value, measure, intensity, onUseIntensity }: { value: unknown; measure?: unknown; intensity?: unknown; onUseIntensity?: (level: string) => void }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const observations = (typeof value === "object" && value !== null && Array.isArray((value as Values).observations) ? (value as Values).observations : []) as Array<{ value: ClaimInput | null }>;
@@ -539,7 +543,24 @@ function BaselineMean({ value }: { value: unknown }) {
           <Provenance claim={{ refs: [{ kind: "app" }], origin: "app" }} context={{ part: "behaviors", behaviors: [], settings: [], sourceLabel: () => null }} />
         </>
       )}
+      <IntensitySuggestion mean={mean} measure={asClaim(measure)?.value ?? null} intensity={asClaim(intensity)?.value ?? ""} onUse={onUseIntensity} />
     </p>
+  );
+}
+
+function IntensitySuggestion({ mean, measure, intensity, onUse }: { mean: number | null; measure: string | null; intensity: string; onUse?: (level: string) => void }) {
+  const { t } = useTranslation();
+  const level = suggestedIntensity(mean, measure);
+  if (level === null || !onUse) return null;
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <span className="text-fg-muted">{t("caseMap.intensitySuggested", { level })}</span>
+      {intensity === level ? null : (
+        <Button size="sm" onClick={() => onUse(level)}>
+          {t("caseMap.intensityUse")}
+        </Button>
+      )}
+    </span>
   );
 }
 
@@ -586,7 +607,14 @@ export function MapFields({ fields, labelPart, value, saved, onChange, context }
                   onChange={set}
                   context={context}
                 />
-                {spec.key === "baseline" ? <BaselineMean value={current} /> : null}
+                {spec.key === "baseline" ? (
+                  <BaselineMean
+                    value={current}
+                    measure={value.measure}
+                    intensity={value.intensity}
+                    onUseIntensity={"intensity" in value ? (level) => onChange({ ...value, intensity: { value: level, check: asClaim(value.intensity)?.check ?? null } }) : undefined}
+                  />
+                ) : null}
               </fieldset>
             );
         }
