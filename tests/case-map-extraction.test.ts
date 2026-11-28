@@ -460,6 +460,18 @@ test("her default thresholds (owner's decision, 2026-11-28): an AI-drafted defin
   assert.ok(!passes("offset", "The child has not spat for 60 seconds.", "Spitting", sixty));
   assert.ok(passes("offset", "No crying for 60 seconds.", "Tantrum", sixty));
   assert.ok(passes("offset", "The child has not spat for 10 seconds in a row.", "Spitting", sixty));
+  // Check 3: in her own order, the clause that names a tantrum is for a tantrum only.
+  const after = "- End of an episode: 10 seconds; 30 seconds for a tantrum.";
+  assert.ok(!passes("offset", "The child has not spat for 30 seconds.", "Spitting", after), "30 s for a tantrum, written after the number");
+  assert.ok(passes("offset", "The child has not spat for 10 seconds.", "Spitting", after));
+  assert.ok(passes("offset", "No crying for 30 seconds.", "Tantrum", after));
+  const first = "- End of an episode: for a tantrum, 60 seconds; otherwise 10 seconds in a row.";
+  assert.ok(passes("offset", "The child has not spat for 10 seconds in a row.", "Spitting", first), "her tantrum clause first does not refuse the others' 10 s");
+  assert.ok(!passes("offset", "The child has not spat for 60 seconds.", "Spitting", first));
+  assert.ok(passes("offset", "No crying for 60 seconds.", "Tantrum", first));
+  const sentences = "- End of an episode: 10 seconds in a row. For a tantrum, 45 seconds.";
+  assert.ok(!passes("offset", "The child has not spat for 45 seconds.", "Spitting", sentences), "a sentence is a clause too");
+  assert.ok(passes("offset", "No crying for 45 seconds.", "Tantrum", sentences));
   // Review round 2, finding 2: her 6 ft also ends an elopement.
   assert.ok(passes("offset", "The child is back within 6 feet of the supervising adult.", "Elopement"));
   // A line of hers that changes no default adds its thresholds in the three fields.

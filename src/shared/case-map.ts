@@ -418,8 +418,10 @@ export interface DurationMean {
  * duration only. Each value must start with a plain number followed by a time unit ("12 minutes",
  * "9 min per incident", "45 s"); its unit is seconds (s, sec, seconds) or minutes (min, minutes),
  * and every value of the behavior must give the same unit, and say per incident, total or per
- * session alike (or none of them say it). A value with no unit ("2 episodes"), a range, a missing
- * value, or mixed units gives no mean: the app never converts or guesses.
+ * session alike (or none of them say it). A value with no unit ("2 episodes"), a second number
+ * ("1 min 30 s", "30 minutes total, about 10 per incident"), a range or rate word, both per
+ * incident and total, a missing value, or mixed units gives no mean: the app never converts or
+ * guesses (check 3); she fills it in herself.
  */
 export function baselineDurationMean(observations: ReadonlyArray<Pick<BaselineObservation, "value">>): DurationMean | null {
   if (observations.length === 0) return null;
@@ -430,9 +432,15 @@ export function baselineDurationMean(observations: ReadonlyArray<Pick<BaselineOb
     const match = /^(\d+(?:\.\d+)?)\s*(s|secs?|seconds?|mins?|minutes?)(?=$|[\s.,;:)])(.*)$/isu.exec((observation.value?.value ?? "").trim());
     if (!match) return null;
     const rest = (match[3] ?? "").trim();
-    if (/^(?:[-–—/]|(?:to|or)\b)/iu.test(rest)) return null;
+    if (!plainRest(rest)) return null;
+    // "per" or "por" only as per incident, per episode or per session: any other is a rate.
+    const perWords = [...rest.matchAll(/(?<!\p{L})(?:per|por)(?!\p{L})\s*(\p{L}*)/giu)].map((word) => (word[1] ?? "").toLowerCase());
+    if (perWords.some((word) => !PER_INCIDENT.has(word) && !PER_SESSION.has(word))) return null;
+    const incident = perWords.some((word) => PER_INCIDENT.has(word));
+    const session = perWords.some((word) => PER_SESSION.has(word)) || /(?<!\p{L})total(?!\p{L})/iu.test(rest);
+    if (incident && session) return null;
     const own: DurationMean["unit"] = /^s|^sec/iu.test(match[2] ?? "") ? "seconds" : "minutes";
-    const ownPer: DurationMean["per"] = /\bper (?:incident|episode)\b/iu.test(rest) ? "incident" : /\b(?:total|per session)\b/iu.test(rest) ? "session" : null;
+    const ownPer: DurationMean["per"] = incident ? "incident" : session ? "session" : null;
     if ((unit !== undefined && unit !== own) || (per !== undefined && per !== ownPer)) return null;
     unit = own;
     per = ownPer;
@@ -441,14 +449,30 @@ export function baselineDurationMean(observations: ReadonlyArray<Pick<BaselineOb
   return { mean: Math.round((sum / observations.length) * 100) / 100, unit: unit ?? "minutes", per: per ?? null };
 }
 
+const PER_INCIDENT = new Set(["incident", "episode", "incidente", "episodio"]);
+const PER_SESSION = new Set(["session", "sesión", "sesion"]);
+
+/**
+ * Words that make the leading number a range, two numbers, an estimate or a rate rather than one
+ * count (check 3), in English and in Spanish, since she types the counts on either screen.
+ */
+const NOT_ONE_NUMBER = /(?<!\p{L})(?:through|thru|until|till|up|to|and|or|vs|versus|plus|half|a|an|each|every|about|around|approx|approximately|roughly|hasta|o|ó|u|y|e|entre|al|cada|unos|unas|aprox|aproximadamente|más|menos)(?!\p{L})|[-‐‑‒–—―−~+/&*≈±<>]/iu;
+
+/** What follows the leading number leaves it one plain number: no other digit and no range or rate word. */
+function plainRest(rest: string): boolean {
+  return !/\p{N}/u.test(rest) && !NOT_ONE_NUMBER.test(rest);
+}
+
 /**
  * The plain number a count's value starts with, or null. The number must end the value or be
- * followed by a space, and what follows must not make it a range ("3 - 4", "3 to 4", "3 or 4").
+ * followed by a space, and the rest must have no other digit and no range or rate word ("3 - 4",
+ * "3 to 4", "3 and 4", "3 per hour", "3 a 4"): when in doubt, no number (check 3).
  */
 function leadingCount(value: string): number | null {
   const match = /^(\d+(?:\.\d+)?)(?:\s+(.*))?$/su.exec(value.trim());
   if (!match) return null;
-  if (match[2] !== undefined && /^(?:[-–—/]|(?:to|or)\b)/iu.test(match[2])) return null;
+  const rest = match[2] ?? "";
+  if (!plainRest(rest) || /(?<!\p{L})(?:per|por)(?!\p{L})/iu.test(rest)) return null;
   return Number(match[1]);
 }
 

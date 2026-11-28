@@ -101,9 +101,13 @@ export function allowedThresholds(instructions: string, field: ThresholdField, t
     const threshold = label ? DEFAULTS.find((candidate) => candidate.label.toLowerCase() === label) : undefined;
     if (threshold) replaced.add(threshold.label);
     const fields = threshold ? new Set(threshold.allows.flatMap((allow) => allow.fields)) : new Set<ThresholdField>(["definition", "onset", "offset"]);
-    // A pair after the word "tantrum" is for a tantrum only, as her default's 30 s (review round 2, finding 1).
-    const tantrumAt = line.search(/tantrum/iu);
-    if (fields.has(field)) out.push(...thresholdPairs(line).filter((pair) => tantrum || tantrumAt < 0 || pair.index < tantrumAt).map(({ value, unit }) => ({ value, unit })));
+    // A clause (split on ";" or a sentence's end) that names a tantrum is for a tantrum only, as her
+    // default's 30 s, in whatever order she writes it (review round 2, finding 1; check 3).
+    if (!fields.has(field)) continue;
+    for (const clause of line.split(/;|\.(?=\s|$)/u)) {
+      if (!tantrum && /tantrum/iu.test(clause)) continue;
+      out.push(...thresholdPairs(clause).map(({ value, unit }) => ({ value, unit })));
+    }
   }
   for (const threshold of DEFAULTS) {
     if (replaced.has(threshold.label)) continue;

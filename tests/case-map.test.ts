@@ -415,7 +415,10 @@ test("case map: a count is the plain number its value starts with, or none (owne
   assert.equal(baselineMean([obs("2.5 incidents"), obs("3.5 incidents")]), 3);
   assert.equal(baselineMean([obs("  12 hits ")]), 12, "spaces around are trimmed");
   assert.equal(baselineMean([obs("0 incidents")]), 0);
-  for (const value of ["about 3", "3-4", "3 - 4", "3 to 4", "3 or 4", "3:30", "3/4", "3,5", "3x", "3.", "", "   ", "-3", "three"]) {
+  for (const value of ["about 3", "3-4", "3 - 4", "3 to 4", "3 or 4", "3:30", "3/4", "3,5", "3x", "3.", "", "   ", "-3", "three",
+    // Check 3: a range, two numbers or a rate, in English or Spanish, is no count.
+    "3 through 5", "3 up to 5", "3 until 4", "3 ~ 4", "3 ‒ 4", "3 and 4", "3 vs 4", "3 and a half", "3 per hour", "3 a day",
+    "3 a 4", "3 o 4", "3 ó 4", "3 y 4", "3 hasta 5", "3 por hora", "3 a la hora", "3\n4", "3 (2 at home, 1 at school)", "3 incidents in 2 hours"]) {
     assert.equal(baselineMean([obs("3"), obs(value)]), null, `"${value}" gives no number`);
   }
   assert.equal(suggestedIntensity(baselineMean([obs("12 contacts"), obs("11 contacts"), obs("10 contacts")]), "frequency"), "3");
@@ -430,6 +433,8 @@ test("case map: a duration behavior's mean is a duration in one unit, or none (o
   assert.deepEqual(mean("9 minutes per incident", "6.5 minutes per episode"), { mean: 7.75, unit: "minutes", per: "incident" });
   assert.deepEqual(mean("40 minutes in total", "20 minutes per session"), { mean: 30, unit: "minutes", per: "session" });
   assert.deepEqual(mean("12min"), { mean: 12, unit: "minutes", per: null }, "no space before the unit");
+  assert.deepEqual(mean("12 min por episodio", "8 min por episodio"), { mean: 10, unit: "minutes", per: "incident" }, "in Spanish");
+  assert.deepEqual(mean("12 min. total", "18 min en total"), { mean: 15, unit: "minutes", per: "session" });
   // No unit, a count of episodes, a range, mixed units or mixed bases, a missing value: no mean.
   for (const values of [
     ["2 episodes: 12 and 7 minutes", "1 episode: 9 minutes per incident"],
@@ -446,6 +451,17 @@ test("case map: a duration behavior's mean is a duration in one unit, or none (o
     ["3:30"],
     ["12 hours"],
     ["12 m"],
+    // Check 3: a second number, both per incident and total, or a rate.
+    ["1 min 30 s"],
+    ["2 minutes 30 seconds"],
+    ["1 min, 30 sec"],
+    ["3 minutes and 20 seconds"],
+    ["1 minute 45 seconds per incident"],
+    ["30 minutes total, about 10 per incident"],
+    ["30 min in total (10 min per incident)"],
+    ["30 minutes total per incident"],
+    ["12 minutes per hour"],
+    ["12 minutos por hora"],
   ]) {
     assert.equal(mean(...values), null, JSON.stringify(values));
   }
