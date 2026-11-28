@@ -46,6 +46,7 @@ const DEAD_MAN: Array<[string, string]> = [
   ["off task", "Any period in which Leo is off task for 3 seconds or more."],
   ["lack of", "Lack of engagement with the materials for 3 seconds or more."],
   ["disengaged", "Any period in which Leo is disengaged from the group activity."],
+  ["not start", "Any instance in which Leo sits at the table and does not start the task within 5 seconds."],
   // Spanish, if she types in Spanish
   ["deja de interactuar", "Cualquier instancia en la que Leo deja de interactuar con el adulto."],
   ["no hace", "Cualquier instancia en la que Leo no hace nada para iniciar la tarea en 5 segundos."],
@@ -64,6 +65,9 @@ const PASSES: string[] = [
   "Any instance in which Leo refuses a demand by saying no, putting his head on the table or throwing the materials.",
   "Any period of 3 seconds or more in which Leo looks away from the task materials, leaves his seat or plays with an item not related to the task.",
   "Any instance in which Leo stops working and runs to the door.",
+  // The real check's case B (2026-11-28): forms named by argument, a statement and sitting down
+  "Any instance in which Leo does not start an instructed action within 5 seconds and instead argues about starting or sits on the floor.",
+  "Any instance in which Leo does not begin the worksheet and states that he will not do it.",
   "Cualquier instancia en la que Leo no inicia la tarea en 5 segundos y en su lugar dice que no, se aleja o empuja los materiales.",
   "Cualquier instancia en la que Leo se niega gritando o tirando los materiales al piso.",
   // Active definitions, with exclusions and offsets that hold a negation
