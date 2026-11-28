@@ -16,8 +16,13 @@ import type { ReportSectionId } from "../src/shared/report-sections.ts";
  * only when her standing instructions give it (S2); the caregiver given-name rule is not
  * scored until she answers (S1); payer readiness is scored as its anchor says (S11); the
  * judge sees the payer facts of each section.
+ *
+ * Version 3 (the BCBA's questionnaire answers of 2026-11-27): three code items for her
+ * wording, quoted speech, and dates and names in narrative; a caregiver called by a name is
+ * scored now that she has answered; the judge's anchors, her structure for each section and
+ * her habits follow her answers.
  */
-export const RUBRIC_VERSION = "2";
+export const RUBRIC_VERSION = "3";
 
 export type Score = 0 | 1 | 2;
 
@@ -90,6 +95,25 @@ export const RUBRIC: readonly RubricItem[] = [
   { id: "data-density", title: "No sentence lists numbers without meaning", scoredBy: "code", check: "data-density", stage: "body", sections: "all", anchors: countAnchors("sentences with 3 or more values, not dates or times, and no clause of meaning") },
   { id: "banned-patterns", title: "No banned patterns", scoredBy: "code", check: "banned-patterns", stage: "body", sections: "all", anchors: countAnchors("meta sentences, filler, sentences about the text, first person, or restraint or seclusion") },
   {
+    id: "her-wording",
+    title: "Her wording",
+    scoredBy: "code",
+    check: "wording",
+    stage: "body",
+    sections: "all",
+    anchors: countAnchors("long dashes, utilize, facilitate or leverage, \"the BCBA observed\" or \"saw\", \"hypothesized\", or a severity level, in any section, markers included for the severity level"),
+  },
+  { id: "no-quoted-speech", title: "No quoted speech", scoredBy: "code", check: "quotes", stage: "body", sections: "all", anchors: countAnchors("quoted spans: she always paraphrases") },
+  {
+    id: "no-dates-or-names",
+    title: "No dates or names in narrative",
+    scoredBy: "code",
+    check: "dates-names",
+    stage: "body",
+    sections: "all",
+    anchors: countAnchors("numeric dates, dates other than the day a coming change starts, or people named by Dr., credentials or Mr. or Ms. and a surname"),
+  },
+  {
     id: "examples-not-copied",
     title: "No example sentence copied",
     scoredBy: "code",
@@ -151,7 +175,7 @@ export const RUBRIC: readonly RubricItem[] = [
     stage: "body",
     sections: "all",
     anchors: {
-      2: "Every fact names its source in the sentence, and the kind of evidence is clear (direct observation, standardized score, caregiver report, second-hand).",
+      2: "Every fact names its source in the sentence, by the source and not by a date (\"During the parent interview\", \"During direct observation, ... was observed\"), and the kind of evidence is clear (direct observation, standardized score, caregiver report, second-hand).",
       1: "A few facts unattributed, or second-hand evidence written as if observed.",
       0: "Attribution mostly missing, or a report presented as observation.",
     },
@@ -175,8 +199,8 @@ export const RUBRIC: readonly RubricItem[] = [
     stage: "body",
     sections: "all",
     anchors: {
-      2: "Her habits (listed with the section): first name for the child, the BCBA in the third person, active plain clinical English, present for current functioning, past for history and observations, will for the plan, no blame, no promised outcomes. How caregivers are named is pending her answer and is not scored.",
-      1: "One lapse (a padded passage, a tense slip, a promised outcome).",
+      2: "Her habits (listed with the section): first name for the child; caregivers by relation and professionals by role, never by name; the BCBA in the third person and never as the one who observed; written for a technical reviewer, no term explained; short plain clinical sentences, no generic, sales-like or translated-sounding text; present for current functioning, past for history and observations, will for the plan; no blame, no promised outcomes.",
+      1: "One lapse (a padded passage, a tense slip, a promised outcome, a generic sentence, a term explained).",
       0: "Several lapses.",
     },
   },
@@ -280,43 +304,45 @@ export function keyFactsScore(statuses: ReadonlyArray<"present" | "partial" | "a
  */
 export const SECTION_EXPECTATIONS: Record<ReportSectionId, readonly string[]> = {
   "background-information": [
-    "About six paragraphs, in this order: the household, languages, the parents' involvement and the family's priorities; then the diagnosis, medications, pregnancy and birth, medical history and specialists; then milestones and the history of communication; then school and its plan, past therapies, and prior ABA with why it ended; then the daily-living and behavior concerns, each by its source; then social life, play, sensory needs and transitions.",
-    "Every claim names its source; where two sources disagree, both are given side by side. No severity level and no test scores in this section. Missing information is said plainly.",
+    "About six paragraphs, in this order: the household (with a parent who lives elsewhere or has no regular contact), the languages spoken at home and the family's priorities; then the diagnosis, medications, pregnancy and birth, medical history and specialists; then milestones and the history of communication; then school and its plan, past therapies, and prior ABA with why it ended; then the daily-living and behavior concerns, each by its source; then social life, play, sensory needs and transitions.",
+    "The first paragraph also gives who cares for the child, who works and supports the household, the family's culture, and a request for therapy in another language when there is one. Sensitive family matters only when they affect treatment, in neutral terms.",
+    "Every claim names its source, without dates; where two sources disagree, both are given side by side (the only section that does). No severity level, no test scores and no names of the CDE's tests. The reason for referral and who referred are the agency's: not written. Missing information is said plainly.",
     "School services under the IEP are part of the IEP, not separate services.",
   ],
   "medical-necessity": [
-    "Her own structure, in order: (1) an opening that says the need for ABA is supported by the sources it names, then names the affected areas together; (2) the Vineland-3 composite and domain scores with percentiles, written as prose and tied at once to what the caregiver describes; (3) one paragraph per functional area (for example daily living, communication, flexibility and escape, safety, peers and community), each: the deficit, one concrete reported or observed example, its impact on the family, safety or participation, then what ABA will do, said as what the child needs to learn (the reverse of the documented deficit) and the general approach; (4) a paragraph on what the direct observations showed; (5) a closing that individualized ABA is medically necessary, where and how it will be delivered, caregiver training, how it complements rather than duplicates the other services, and how effectiveness will be measured (fewer prompts, more independence, more access).",
-    "Before her plan is approved, a named procedure, parameter, program title or support (DRA, FCT, DRO, Premack, high-p requests, NCR, BST, a warning, a visual schedule) is a proposal: it belongs here only where her sections, standing instructions, notes or a source give it (owner's decision, 2026-11-23). The diagnosis is given with its severity level as the CDE states it, or a marker where the CDE gives none.",
+    "Her own structure, in order: (1) an opening that says the need for ABA is supported by the sources it names (by source, with no dates or names), then names the affected areas together; (2) the Vineland-3 composite and domain scores with percentiles, the subdomain v-scale scores, the descriptive levels, the Maladaptive Behavior Index with Internalizing and Externalizing and the critical items when reported, written as prose with a plain explanation and tied at once to what the caregiver describes; (3) one paragraph per functional area (for example daily living, communication, flexibility and escape, safety, peers and community), each: the deficit, one concrete reported or observed example (one per paragraph), its impact on the family, safety or participation, then what ABA will do, said as what the child needs to learn (the reverse of the documented deficit) and the general approach; (4) a paragraph on what the direct observations showed; (5) a closing that individualized ABA is medically necessary, where and how it will be delivered, caregiver training, how it always complements rather than duplicates the other services, and how effectiveness will be measured (fewer prompts, more independence, more access).",
+    "No FAST or MAS results and no BASC-3 PRQ scores here: the BASC-3 PRQ only as what it shows that supports the need, in words. Functions as \"is maintained by\". With no school data, impairment at home (primary setting) and in the community (secondary). The Florida definition of medical necessity is never cited. No extinction or punishment named.",
+    "Before her plan is approved, a named procedure for the child, parameter, program title or support (DRA, FCT, DRO, Premack, high-p requests, NCR, a warning, a visual schedule) is a proposal: it belongs here only where her sections, standing instructions, notes or a source give it (owner's decision, 2026-11-23). Caregiver training by Behavioral Skills Training, in person, in the family's language, is her confirmed practice (owner's decision, 2026-11-27): naming it is not a proposal and is never scored as one. The diagnosis is given by its name as the CDE writes it, never with a severity level and never with a marker for one.",
     "About eight or nine paragraphs. Never hours. Fluent and very specific; explains the data rather than listing it.",
   ],
   "strengths-and-weaknesses": [
-    "Prose, two or three paragraphs, no bullets. Strengths first, each sourced and tied to how it will help treatment; then the weaknesses, each sourced, by the names Medical Necessity uses; a closing sentence on how ABA will address the needs.",
+    "Prose, two or three paragraphs, no bullets, no scores or score levels. Strengths first, each sourced and tied to how it will help treatment: emerging and preferred skills, preferences and reinforcers, a good BASC-3 PRQ result in words, and the family's involvement as a strength for carrying out and generalizing the plan; then the weaknesses, each sourced, by the names Medical Necessity uses, preferably with other examples than its own; a closing sentence on how ABA will address the needs.",
     "Where a strength does not hold consistently, it is qualified by a fact from the sources, never a guess.",
   ],
   "environmental-changes": [
-    "Two or three paragraphs. First how the child reacts to changes of place, routine or people, with sourced examples drawn together; then the changes reported (recent, current, coming: who reported them and when) and concrete supports for them.",
+    "Two or three paragraphs. First how the child reacts to changes of place, routine or people, with sourced examples drawn together; then the changes reported (a school or grade, who cares for the child, a new sibling, medication, the RBT or BCBA, a move: who reported them and when) and the supports, written even when no change is coming.",
     "Supports for the changes as her plan, her standing instructions, her notes or a source give them. When her standing instructions give her standard supports, writing them is her structure; otherwise a support none of them names is marked missing, not proposed. (Her standard supports are pending her confirmation.)",
   ],
   "family-caregiver-involvement": [
-    "The narrative part only (ABA Matrix holds the caregiver goals): one to four paragraphs on the caregivers' involvement and priorities, who takes part and when, training through Behavioral Skills Training adapted to the home language, and the family's current responses described without blame; limited participation, its impact and the mitigation.",
-    "Procedures named, not described.",
+    "The narrative part only (ABA Matrix holds the caregiver goals, one set for all caregivers): one to four paragraphs on the caregivers' involvement and priorities, who takes part and when, training through Behavioral Skills Training in person (never by telehealth) in the home language, what it covers and why, the family's current everyday responses described without blame; a caregiver who is absent referred to in a clause (Background Information states it), and the caregivers' stress or limits as the sources give them; limited participation, its impact and the mitigation.",
+    "\"The caregiver\" or the relation, never a name. The BASC-3 PRQ only when it bears directly on training, without scores. Procedures named, not described, and only those her plan, instructions, notes or a source name: no procedure, routine or starting point for training chosen by the draft. The family's priorities and household referred to in a clause, not restated.",
   ],
   "generalization-and-maintenance": [
     "Exactly two paragraphs, for the plan as a whole.",
     "Generalization: taught with the same SD, then practiced with varied people, settings, materials and routines of this child; prompts faded while visual supports stay; natural consequences; examples from this child's goals.",
-    "Maintenance: probes after mastery (weekly); reinforcement thinned from continuous to intermittent; if performance drops, the removed reinforcement and prompts are reinstated and removed again once the level is regained. Coordination with other providers, with the caregiver's authorization, may appear here.",
+    "Maintenance: probes after mastery (weekly); reinforcement thinned from continuous to intermittent; if performance drops, the removed reinforcement and prompts are reinstated and removed again once the level is regained. Care coordination has its own field in ABA Matrix.",
   ],
   "discharge-and-service-fading-plan": [
-    "Two or three paragraphs (the three-phase table is hers, in ABA Matrix, and is not described).",
+    "Two or three paragraphs (the phases are only in her table in ABA Matrix and are not described). The criteria's numbers in the text, as her inputs give them; zero only for dangerous behaviors; caregiver training that increases as fading nears; community resources only when the sources name some (no marker otherwise).",
     "Discharge grounds as the payer gives them (see the payer facts), then criteria tied to this child's behaviors, skills and caregivers, how services step down, and the transition with other providers. When her standing instructions give her standard criteria and thresholds, they are her structure; otherwise a number none of the inputs gives is marked missing. (Her standard criteria are pending her confirmation.)",
   ],
   "risk-assessment": [
-    "Three or four paragraphs, no risk rating: first the risks to carrying out the plan (cues that differ across people and settings, prompt dependence); then the behavior risks in prose, from the most dangerous to those that only interfere, each with its evidence and source; then that least-restrictive, function-based procedures answer them, pointing to the Crisis Plan by name; then training, fidelity checks and how the plan is adjusted.",
-    "No crisis responses (those are the Crisis Plan's).",
+    "Three or four paragraphs, no risk rating: first the risks to carrying out the plan (cues that differ across people and settings, prompt dependence); then the behavior risks in prose, from the most dangerous to those that only interfere, each with its evidence and source, and the non-behavioral risks the sources report (pica, seizures, allergies, water, a very limited diet, medication side effects); then what the family does today in a crisis, as reported, in ABA terms, and that least-restrictive, function-based procedures answer the risks, pointing to the Crisis Plan by name; then caregiver training referred to by name only (its method is Family/Caregiver Involvement's), how implementation fidelity is checked and how the plan is adjusted.",
+    "The protocol from now on is the Crisis Plan's; the family's current crisis responses belong here. Saying that the plan keeps the family's own strategies wherever it can is her standard practice (her questionnaire answers of 2026-11-27): it is not a proposal and needs no marker. Behavioral Skills Training given in person is also her standard practice, the same in every case: when a draft names it, it is not an unmarked proposal and is never scored as one; restating its method here is an ownership matter, not an invention.",
   ],
   "crisis-plan": [
-    "The child-specific part scales with the risk: for the highest-risk behavior a numbered protocol; when no behavior needs one, a plain statement that no behavior-specific crisis plan is needed, the non-crisis responses and one safety scenario (supervision distance, when to call 911); or the scope (behaviors covered, teaching suspended, line-of-sight distance, when to call 911 or Poison Control, who is notified), one paragraph per dangerous behavior and the follow-up.",
-    "No physical restraint or restrictive procedure. Monitoring: data per definition, weekly review of the data by the BCBA, fidelity observations of the RBT and the caregiver, whether the caregiver finds the plan practical, what changes when progress is slow, documentation. The family's current responses as reported. What only the agency gives is marked missing.",
+    "Always a child-specific text: the behaviors that can be dangerous; the antecedent strategies staff follow at all times (named from her plan, or marked missing while there is none); an adult always present in the home during sessions, and who may be the designated caregiver (a parent, a grandparent, a sibling aged 21 or older, a listed home health aide or babysitter); the RBT or caregiver calls 911 when the situation gets out of control; incidents reported as soon as possible. A protocol for mouthing, physical aggression, property destruction, self-injury or elopement, even with no past crisis.",
+    "Never restraint, seclusion or a physical hold. Early signs only as the caregivers report them, never from other sources and never marked missing. The family's current crisis responses are Risk Assessment's. The template blocks are not written. Monitoring as her standing instructions give it, otherwise marked missing; protocol steps, distances and de-escalation she has not given are marked missing.",
   ],
 };
 
@@ -346,12 +372,12 @@ export const SECTION_PAYER_FACTS: Record<ReportSectionId, readonly string[]> = {
 
 /** Habits across every section (her assessments), for the judge's "style" item. */
 export const STYLE_EXPECTATIONS: readonly string[] = [
-  "The child by first name; the BCBA as \"the BCBA\". (How caregivers are named is pending her answer: do not score it.)",
-  "Third person, active voice, plain clinical English: present tense for current functioning, past for history and observations, \"will\" for the plan.",
-  "Programs and strategies by the same exact names wherever they appear.",
-  "Repeated on purpose only: the family's priorities and the safety response. Never a score table again.",
+  "The child by first name; caregivers by relation or as \"the caregiver\", never by name; other professionals by role, never by name; the BCBA as \"the BCBA\", never as the one who observed (\"During direct observation, ... was observed\").",
+  "Third person, active voice, plain clinical English for a technical reviewer, no term explained in parentheses: present tense for current functioning, past for history and observations, \"will\" for the plan. Short sentences; nothing generic, sales-like or translated-sounding; no long dashes; never utilize, facilitate or leverage. Data in digits.",
+  "No dates in narrative: the source instead (\"During the parent interview\"). No quotes: paraphrase. Functions as \"is maintained by\", never \"hypothesized\". No severity level anywhere. An abbreviation spelled out the first time in each section, except BCBA, FAST, MAS, STO, LTO, BASC-3 and ABLLS-R.",
+  "Programs and strategies by the same exact names wherever they appear. Repeated on purpose only: the family's priorities and the safety response. Never a score table again.",
   "No bullets in narrative sections; no blame of the family; no promised outcomes; harmless movement is not a target; speech or eye contact never required.",
-  "Missing or conflicting information is stated, never guessed.",
+  "Missing information is stated, never guessed. Outside Background Information, two sources that disagree are not set side by side: a [CHECK] asks her which to keep.",
 ];
 
 /**

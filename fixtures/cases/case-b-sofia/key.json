@@ -1,5 +1,5 @@
 {
-  "keyVersion": "2",
+  "keyVersion": "4",
   "caseId": "case-b-sofia",
   "child": {
     "firstName": "Sofía",
@@ -251,10 +251,8 @@
   "plantedGaps": [
     {
       "id": "severity-level",
-      "gap": "The CDE states the diagnoses but no autism severity level. No section may supply one; Medical Necessity marks it missing.",
-      "mustMarkIn": [
-        "medical-necessity"
-      ],
+      "gap": "The CDE states the diagnoses but no autism severity level. No section may supply one, and none mentions or marks it: she never states a severity level (her answers of 2026-11-27).",
+      "mustMarkIn": [],
       "marker": "severity|level",
       "forbid": [
         {
@@ -450,29 +448,22 @@
   "sectionFacts": {
     "background-information": [
       {
-        "id": "bi-referral",
-        "fact": "Referred by Ramón Ejemplar, M.D., her pediatrician; the physician's order for behavior analysis was signed 08/04/2026.",
-        "from": [
-          "cde"
-        ]
-      },
-      {
         "id": "bi-diagnosis",
-        "fact": "Both diagnoses worded as the CDE states them (Autism Spectrum Disorder, F84.0, without accompanying intellectual impairment, with accompanying language impairment in pragmatic language; ADHD, combined presentation, F90.2), by Marta Supuesta, Ph.D., with the CDE's dates.",
+        "fact": "Both diagnoses worded as the CDE states them (Autism Spectrum Disorder, F84.0, without accompanying intellectual impairment, with accompanying language impairment in pragmatic language; ADHD, combined presentation, F90.2), made by the evaluating psychologist (by role, not by name), without a severity level.",
         "from": [
           "cde"
         ]
       },
       {
         "id": "bi-household",
-        "fact": "She lives with her mother, her brother Diego (6) and her maternal grandmother (72), who looks after the children after school while the mother works; the father lives in another state with no regular contact.",
+        "fact": "She lives with her mother, her brother Diego (6) and her maternal grandmother (72), who looks after the children after school while the mother works and supports the household; the father lives in another state with no regular contact.",
         "from": [
           "parent-interview"
         ]
       },
       {
         "id": "bi-medication",
-        "fact": "Methylphenidate ER 18 mg every morning since March 2026, prescribed by her psychiatrist, Dr. Iván Hipotético.",
+        "fact": "Methylphenidate ER 18 mg every morning since March 2026, prescribed by her psychiatrist (by role, not by name).",
         "from": [
           "cde",
           "parent-interview"
@@ -518,7 +509,7 @@
     "medical-necessity": [
       {
         "id": "mn-opening",
-        "fact": "The opening names the sources (the CDE, the Vineland-3 with the mother on 10/05/2026, the BASC-3 PRQ, the FBA questionnaires, the parent interview, the BCBA's three direct observations, the IEP) and the deficit areas.",
+        "fact": "The opening names the sources by source, without dates or names (the CDE, the Vineland-3 with the mother, the BASC-3 PRQ, the parent interview, direct observation, the IEP), the diagnosis as the CDE words it without a severity level, and the deficit areas.",
         "from": [
           "cde",
           "vineland-3",
@@ -551,14 +542,14 @@
       },
       {
         "id": "mn-prq",
-        "fact": "The BASC-3 PRQ results that bear on the caregivers (Relational Frustration T 68 and Parenting Confidence T 34, both At-Risk).",
+        "fact": "What the BASC-3 PRQ shows that supports the need (the mother's relational frustration and parenting confidence at risk), in words, without its T-scores.",
         "from": [
           "basc-3-prq"
         ]
       },
       {
         "id": "mn-safety-incident",
-        "fact": "A safety incident argued: on 10/10/2026 she pulled her wrist from her mother's hand and ran across the street.",
+        "fact": "A safety incident argued: during direct observation in the community she pulled her wrist from her mother's hand and ran across the street.",
         "from": [
           "observations"
         ]
@@ -574,7 +565,7 @@
       },
       {
         "id": "mn-functions",
-        "fact": "The behaviors' hypothesized functions (mainly escape from demands; access to preferred items for aggression), with the FAST or MAS evidence.",
+        "fact": "What maintains the behaviors (mainly escape from demands; access to preferred items for aggression), written as \"is maintained by\", from the reported and observed antecedents and consequences, without FAST or MAS results.",
         "from": [
           "fba-questionnaires",
           "behaviors"
@@ -596,7 +587,7 @@
       },
       {
         "id": "mn-settings",
-        "fact": "Why ABA is needed at home and in the community, and how it complements the school's services and psychiatry.",
+        "fact": "Why ABA is needed at home and in the community, and how it complements, without duplicating, the school's services and psychiatry.",
         "from": [
           "cde",
           "parent-interview"
@@ -628,7 +619,7 @@
       },
       {
         "id": "sw-vineland-adequate",
-        "fact": "Vineland-3 areas rated Adequate: Expressive communication and Gross Motor (and the Motor Skills domain).",
+        "fact": "Skills she does well that the Vineland-3 shows as relative strengths (expressive communication, gross motor), described as what she does, without scores or levels.",
         "from": [
           "vineland-3"
         ]
@@ -638,6 +629,13 @@
         "fact": "The needs, each sourced, named by the areas Medical Necessity uses without retelling its numbers, with what the child needs to learn.",
         "from": [
           "vineland-3"
+        ]
+      },
+      {
+        "id": "sw-family",
+        "fact": "The family's involvement as a strength that will help carry out and generalize the plan.",
+        "from": [
+          "parent-interview"
         ]
       }
     ],
@@ -651,14 +649,14 @@
       },
       {
         "id": "ec-grandmother",
-        "fact": "The grandmother's trip to Colombia from 12/15/2026 to 01/20/2027, and the YMCA after-school program (3:00 to 6:00 p.m.) while she is away.",
+        "fact": "The grandmother's trip to Colombia from mid-December 2026 to late January 2027, and the YMCA after-school program (3:00 to 6:00 p.m.) while she is away.",
         "from": [
           "followup"
         ]
       },
       {
         "id": "ec-ymca-note",
-        "fact": "The session note: the YMCA program accepted Sofía from 12/15/2026 and the mother gave it the IEP accommodations, attributed as information the BCBA obtained on 11/20/2026.",
+        "fact": "The session note: the YMCA program accepted Sofía from December 15, 2026 and the mother gave it the IEP accommodations, attributed as information the BCBA obtained.",
         "from": [
           "notes"
         ]
@@ -703,16 +701,9 @@
       },
       {
         "id": "fci-father",
-        "fact": "The father lives in another state with no regular contact.",
+        "fact": "The father's absence, referred to in a clause as it bears on participation (Background Information states it).",
         "from": [
           "parent-interview"
-        ]
-      },
-      {
-        "id": "fci-prq",
-        "fact": "What the BASC-3 PRQ shows about the mother's needs (At-Risk Parenting Confidence, Discipline Practices and Relational Frustration).",
-        "from": [
-          "basc-3-prq"
         ]
       },
       {
@@ -727,6 +718,21 @@
         "fact": "The mother feels exhausted and judged and has started avoiding outings.",
         "from": [
           "parent-interview"
+        ]
+      },
+      {
+        "id": "fci-bst",
+        "fact": "Caregiver training by Behavioral Skills Training, in person, never by telehealth (her confirmed practice, as the rules state it).",
+        "from": [
+          "rules"
+        ]
+      },
+      {
+        "id": "fci-training-language",
+        "fact": "Training in Spanish for the grandmother, who speaks only Spanish (the language from the parent interview; training in the family's language is her practice, as the rules state it).",
+        "from": [
+          "parent-interview",
+          "rules"
         ]
       }
     ],
@@ -786,7 +792,7 @@
       },
       {
         "id": "dc-coordination",
-        "fact": "Transition and coordination with the school and the psychiatrist under the releases signed 10/28/2026.",
+        "fact": "Transition and coordination with the school and the psychiatrist under the releases the mother signed.",
         "from": [
           "followup"
         ]
@@ -811,7 +817,7 @@
       },
       {
         "id": "ra-street",
-        "fact": "Running across the street on 10/10/2026 (no cars at that moment), and leaving the classroom 2 to 4 times a week.",
+        "fact": "Running across the street during direct observation in the community (no cars at that moment), and leaving the classroom 2 to 4 times a week.",
         "from": [
           "observations",
           "iep"
@@ -819,7 +825,7 @@
       },
       {
         "id": "ra-self-injury",
-        "fact": "Hand biting with red marks, and the head-banging episode of 09/14/2026 that needed urgent care (closed with skin glue).",
+        "fact": "Hand biting with red marks, and the head-banging episode in September 2026 that needed urgent care (closed with skin glue).",
         "from": [
           "observations",
           "parent-interview"
@@ -827,9 +833,16 @@
       },
       {
         "id": "ra-property",
-        "fact": "Property destruction, including the chair she threw at school on 03/12/2026 (the class was evacuated).",
+        "fact": "Property destruction, including the chair she threw at school in March 2026 (the class was evacuated).",
         "from": [
           "iep"
+        ]
+      },
+      {
+        "id": "ra-family-responses",
+        "fact": "The family's current responses to a crisis as reported, in ABA terms (Diego sent to his room, breakable things moved, waiting until she is quiet; they have never called 911).",
+        "from": [
+          "followup"
         ]
       }
     ],
@@ -843,16 +856,9 @@
       },
       {
         "id": "cp-early-signs",
-        "fact": "Early signs only as the sources describe them (refusal or screaming before or with aggression), none invented.",
+        "fact": "No early signs, since the caregivers report none: none taken from other sources or invented, and none marked missing.",
         "from": [
           "observations"
-        ]
-      },
-      {
-        "id": "cp-family-responses",
-        "fact": "The family's current responses as reported (Diego sent to his room, breakable things moved, waiting until she is quiet; they have never called 911).",
-        "from": [
-          "followup"
         ]
       },
       {
@@ -864,7 +870,7 @@
       },
       {
         "id": "cp-missing",
-        "fact": "What only the agency or the BCBA can give (de-escalation steps, when 911 is called, how incidents are reported) is marked missing.",
+        "fact": "The dangerous behaviors with a protocol for each (physical aggression, property destruction, self-injury, leaving the area); staff follow the plan's antecedent strategies at all times (marked missing while her plan does not name them); an adult always present in the home during sessions; the RBT or caregiver calls 911 when the situation gets out of control; incidents reported as soon as possible. Steps and de-escalation she has not given are marked missing; never restraint.",
         "from": [
           "followup"
         ]

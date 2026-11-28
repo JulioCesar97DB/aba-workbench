@@ -26,11 +26,14 @@ test("every section of the report has writing rules, and only those sections", a
   }
 });
 
-test("sections whose rules the decisions file does not settle say so instead of inventing guidance", () => {
-  for (const id of ["background-information", "strengths-and-weaknesses", "environmental-changes", "family-caregiver-involvement", "discharge-and-service-fading-plan", "risk-assessment", "crisis-plan"]) {
-    const text = readFileSync(path.join("rules", SECTIONS[id as SectionId].file), "utf8");
+test("every section's rules say whether her questionnaire answers confirmed them, and those with open points name them instead of inventing guidance", () => {
+  for (const id of Object.keys(SECTIONS) as SectionId[]) {
+    const text = readFileSync(path.join("rules", SECTIONS[id].file), "utf8");
+    assert.match(text, /^confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27$/m, id);
+  }
+  for (const id of ["background-information", "environmental-changes", "discharge-and-service-fading-plan", "risk-assessment", "crisis-plan", "medical-necessity"] as SectionId[]) {
+    const text = readFileSync(path.join("rules", SECTIONS[id].file), "utf8");
     assert.match(text, /## Not yet settled with the BCBA/, id);
-    assert.match(text, /confirmed: no/, id);
   }
 });
 

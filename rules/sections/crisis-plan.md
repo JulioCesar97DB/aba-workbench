@@ -1,32 +1,42 @@
 ---
 id: section-crisis-plan
-version: 9
-updated: 2026-11-23
-sources: The ABA Matrix template as exported by her agency (section 20, read 2026-11-21), the payer facts (Florida Medicaid policy 5.2), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the owner's decision that clinical proposals live only in the case formulation (2026-11-23).
-confirmed: no, pending review by the BCBA
+version: 11
+updated: 2026-11-27
+sources: The BCBA's questionnaire answers of 2026-11-27 (in our own words), the ABA Matrix template as exported by her agency (section 20, read 2026-11-21), the payer facts (Florida Medicaid policy 5.2), the owner's notes on three of her assessments (2026-11-23; patterns only, in our own words), and the owner's decision that clinical proposals live only in the case formulation (2026-11-23).
+confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27
 ---
 
 # Section 20: Crisis Plan
 
 ## What this section is for
 
-In the agency's assessments this section holds the protocol the team and the caregivers follow when a behavior puts the child or others at risk. In ABA Matrix it has a child-specific narrative first, then template blocks (risk factors to check, what caregivers must do to prevent a crisis, questions on risk of harm to self or others, and techniques for ending a crisis), then a monitoring part she writes. Write only the two narrative parts; the blocks are forms.
+In the agency's assessments this section holds what the team and the caregivers do when a behavior puts the child or others at risk. In ABA Matrix it has a child-specific text first, then template blocks (the risk-factor checklist, the caregiver requirements for prevention, suicidality and homicidality, the techniques to resolve a crisis), which she ticks in ABA Matrix, then a monitoring part she writes. Write only the child-specific text and the monitoring part; never the blocks.
 
-## The child-specific part
+## The child-specific text
 
-In her assessments it scales with the risk the assessment found:
+Every child gets it, even one with no crisis history. It always says:
 
-- For a child with a high-risk behavior: a step-by-step protocol for that behavior.
-- For a child whose behaviors interfere but do not endanger anyone: a plain statement that the child does not need a crisis protocol for any one behavior, the ordinary responses to the behaviors, and one safety situation with the supervision it needs and when emergency services are called.
-- For a child with several dangerous behaviors: a paragraph on scope (which behaviors the plan covers, that teaching stops during a crisis, how close the adult stays, when emergency services or poison control are called, who is notified), a paragraph for each dangerous behavior, and what follows a crisis.
+- which of the child's behaviors can be dangerous, as the assessment names them, with the times and triggers the sources describe;
+- that staff follow the plan's antecedent strategies at all times, naming them as her plan gives them; while the plan is not written, keep the sentence and mark the names [MISSING: the antecedent strategies staff follow at all times, from her plan];
+- that during sessions in the home an adult is always present: a parent, a grandparent, a sibling aged 21 or older, or a home health aide or babysitter, only when that person has been reported and listed among the designated caregivers;
+- that the RBT or the caregiver calls 911 when the situation gets out of control;
+- that incidents are reported as soon as possible.
 
-Which of these fits, and every step, distance and threshold in it, is hers to decide (see the four kinds of content).
+These points are her confirmed practice and the agency's requirements: write them as hers, without a marker. Do not add a recipient or a channel for incident reports unless her standing instructions give one.
 
-The early signs of escalation are facts, not part of her protocol. Every precursor the sources record (in the BCBA's observations, ABC data, the caregivers' reports, the IEP or the CDE) is stated in prose and called what it is: an early sign that a dangerous behavior may follow, with its source, what the child did or said, and what came after it. For example: "During the home observation on 03/02/2026, the BCBA observed that humming loudly and rocking in her chair came before each episode of spitting; her grandfather reported the same early signs before spitting at the dinner table." State an order between behaviors (a sign before an escalation) only when the source records that order, for example an observation or a report that says one came before the other. When a source records behaviors together without their order, name them as signs of that episode without ordering them, and do not infer which came first. Do not say that a sign was absent before an incident unless a source records it; when a source records that an incident came without warning, state it with its source. Mark early signs [MISSING: ...] only when no source records any.
+When the child engages in mouthing, physical aggression, property destruction, self-injury or elopement, the text also gives a protocol for each of those behaviors, whether or not a crisis has happened before. Each protocol says what makes the behavior dangerous for this child and what the adult does, in order, as sentences (the format for pasting into ABA Matrix allows no numbered list). Its steps, distances and thresholds are her choice (see the four kinds of content): give them only as her standing instructions, her sections or the sources give them; where the protocol needs one that they do not give, keep the sentence and mark it [MISSING: ...]. Do not supply de-escalation techniques of your own.
 
-Write what else the sources give for this child: the dangerous behaviors as the assessment names them, the times and triggers the sources describe, and what the family does now during a dangerous episode (blocking, carrying the child away, calling for help), described plainly and without blame. The everyday responses that caregiver training will change belong to Family/Caregiver Involvement. Give a protocol step, a supervision distance or the point at which emergency services are called only as her standing instructions, her sections or the sources give it. Where the plan needs one that they do not give, keep the sentence and mark it [MISSING: ...]. In this section, a [MISSING] marker never replaces an early sign a source records; it stands for her protocol, its thresholds and distances, the monitoring part, an early sign only when no source records one, and any other missing fact. Do not supply de-escalation techniques of your own. Write the steps of a protocol as sentences in order, not as a numbered list (the format for pasting into ABA Matrix allows no lists).
+## The family's safety measures
 
-Never propose seclusion or manual, mechanical or chemical restraint: they are not covered services, and nothing in the sources authorizes them. When you write a protocol from her instructions, include one sentence stating that no form of restraint and no restrictive procedure will be used.
+The environmental safety measures the family has already taken always stay in this section, stated as the sources give them: knives or medicines kept out of reach, no firearms in the home (or how they are stored), locks, door alarms, a gate, a car seat lock. They are part of keeping the child safe now. What the family does during a crisis (its responses) belongs to Risk Assessment; its measures do not move with them.
+
+## Early signs
+
+Early signs of escalation are written only when the caregivers report them: what the child does before the dangerous behavior, as the caregiver described it. Do not take them from other sources, do not infer them, and do not mark them missing when the caregivers report none.
+
+## Restraint
+
+Never restraint or seclusion of any kind, and no physical hold or physical procedure to stop a behavior: when a situation cannot be made safe, emergency services are called instead. They are not covered services, and she never uses them.
 
 ## The monitoring part
 
@@ -34,4 +44,4 @@ How the plan is monitored is her standard practice (see the four kinds of conten
 
 ## Not yet settled with the BCBA
 
-The shapes above come from her texts, not from her answers, and she has not confirmed these rules. Not settled: her standard protocol wording, her monitoring routine and the agency's requirements for caregivers during sessions (her standing instructions for this section are the place for them; a draft is prepared for her to confirm); how and how fast incidents are reported; and whether she wants protocol steps numbered when ABA Matrix's field accepts it.
+Her standard protocol wording and her monitoring routine (her standing instructions for this section are the place for them), and to whom incidents are reported.

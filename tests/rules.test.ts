@@ -110,10 +110,12 @@ test("the case map's definition example lives in the behaviors rules, sent with 
   const behaviors = readFileSync("rules/behaviors.md", "utf8");
   assert.match(behaviors, /## An example[\s\S]*Climbing furniture/);
   assert.match(behaviors, /Never reuse its sentences, names, dates or numbers/);
-  // examples.md is in the cached prefix of every section request: it stays as it was before the case map.
+  // examples.md is in the cached prefix of every section request: the case map's example stays out of it.
+  // Version 4 (2026-11-27) rewrote its examples to her questionnaire answers, still without the case map's;
+  // version 5 (review round 1 of T1) stops its Strengths and Weaknesses example restating who is willing.
   const examples = readFileSync("rules/examples.md", "utf8");
   assert.doesNotMatch(examples, /Climbing furniture|Case map/);
-  assert.match(examples, /^version: 3$/m);
+  assert.match(examples, /^version: 5$/m);
 });
 
 test("the examples stay labeled as invented, with the rule never to reuse them", () => {
@@ -127,4 +129,86 @@ test("the whole-assessment rules keep the four kinds of content and the line on 
   assert.match(text, /## Four kinds of content/);
   assert.match(text, /Her standard practice/);
   assert.match(text, /you never write a proposal into a section/);
+});
+
+test("the interventions rules wait for the Plan step: listed in the README, sent with no request yet (2026-11-27)", async () => {
+  const text = readFileSync("rules/interventions.md", "utf8");
+  assert.match(text, /^id: interventions$/m);
+  assert.match(text, /No request loads this file yet/);
+  assert.match(readFileSync("rules/README.md", "utf8"), /`interventions.md`/);
+  for (const section of ["medical-necessity", "crisis-plan", "family-caregiver-involvement"] as const) {
+    const { prompt, rulesVersions } = await buildPrompt(section, [{ id: "a", title: "A", kind: "text", text: "x" }]);
+    assert.equal("interventions" in rulesVersions, false, section);
+    assert.doesNotMatch(prompt.system + prompt.task, /# Interventions: what she uses/, section);
+  }
+});
+
+test("the points of her answers that bear on sections drafted today are in those sections' rules (2026-11-27)", () => {
+  const read = (file: string) => readFileSync(`rules/${file}`, "utf8");
+  assert.match(read("sections/family-caregiver-involvement.md"), /never given by telehealth/);
+  assert.match(read("sections/crisis-plan.md"), /Never restraint or seclusion/);
+  assert.match(read("sections/medical-necessity.md"), /never name extinction or a punishment procedure/);
+  assert.match(read("sections/medical-necessity.md"), /Never state, mark or mention a DSM-5 severity level/);
+  const style = read("style.md");
+  for (const rule of [/No dates in narrative text/, /Never quote anyone/, /by their role only/, /Never "the BCBA observed"/, /"utilize", "facilitate", "leverage"/, /Never "hypothesized"/]) assert.match(style, rule);
+});
+
+test("fix round 1 of T1: the family's safety measures stay in the Crisis Plan, her practice in Risk Assessment, the Florida checklist from the official text", () => {
+  const read = (file: string) => readFileSync(`rules/${file}`, "utf8");
+  assert.match(read("sections/crisis-plan.md"), /## The family's safety measures[\s\S]*no firearms in the home/);
+  assert.match(read("sections/risk-assessment.md"), /her standard practice, confirmed by her questionnaire answers of 2026-11-27, so write it as hers, not as a proposal/);
+  const mn = read("sections/medical-necessity.md");
+  assert.match(mn, /applies only to recipients aged 21 or older/);
+  assert.match(mn, /how progress will be measured/);
+  const fci = read("sections/family-caregiver-involvement.md");
+  assert.match(fci, /Name no procedure, routine or starting point for training/);
+  assert.match(fci, /a caregiver who is absent/);
+  assert.match(read("sections/discharge-and-service-fading-plan.md"), /releases as the basis for the coordination, without their date/);
+});
+
+test("fix round 2 of T1: Risk Assessment names caregiver training only; Discharge keeps training that increases near fading (her answers, 2026-11-27)", async () => {
+  const ra = readFileSync("rules/sections/risk-assessment.md", "utf8");
+  assert.match(ra, /Refer to caregiver training by name only/);
+  assert.match(ra, /never restate them here/);
+  assert.match(readFileSync("rules/sections/discharge-and-service-fading-plan.md", "utf8"), /caregiver training continuing as direct hours decrease and increasing as the child nears the discharge criteria/);
+  const { SECTION_EXPECTATIONS } = await import("../eval/rubric.ts");
+  assert.match(SECTION_EXPECTATIONS["risk-assessment"].join(" "), /Behavioral Skills Training given in person is also her standard practice/);
+  assert.match(SECTION_EXPECTATIONS["discharge-and-service-fading-plan"].join(" "), /caregiver training that increases as fading nears/);
+});
+
+test("review round 1 of T1: one owner per household fact, whole sentences, her own lists", () => {
+  const read = (file: string) => readFileSync(`rules/${file}`, "utf8");
+  assert.doesNotMatch(read("sections/background-information.md"), /how the caregivers are involved/);
+  assert.match(read("sections/background-information.md"), /a parent who lives elsewhere or has no regular contact/);
+  assert.match(read("sections/family-caregiver-involvement.md"), /referred to in a clause because Background Information states it/);
+  assert.doesNotMatch(read("examples.md"), /both want to take part/);
+  assert.match(read("sections/generalization-and-maintenance.md"), /beyond settings and people\) is her standard practice: add it only/);
+  assert.match(read("sections/environmental-changes.md"), /as she chose them: a change of school or grade, a change of who cares for the child, a new sibling, a change of medication, a change of RBT or BCBA\. A move/);
+  assert.match(read("assessment.md"), /The reviewer is technical: the BCBA writes for that reader/);
+  assert.match(read("style.md"), /after "to say" or "to request"/);
+  assert.match(read("payers/florida-medicaid-molina.md"), /1\. The diagnosis stated by a qualified clinician, and the physician's order for behavior analysis, which is one of her documents/);
+  assert.doesNotMatch(read("guide.md"), /the monitoring part she writes/);
+});
+
+test("owner's decision of 2026-11-27: her questionnaire-confirmed practice is kind 3 in the rules, not a proposal; procedures for the child stay proposals", async () => {
+  const text = readFileSync("rules/assessment.md", "utf8");
+  const kind3 = /3\. Her standard practice:[\s\S]*?(?=\n4\. Proposals:)/.exec(text)?.[0] ?? "";
+  const kind4 = /4\. Proposals:[^\n]*/.exec(text)?.[0] ?? "";
+  for (const point of [/Behavioral Skills Training, in person, never by telehealth, in the family's language/, /an adult always present/, /who may be the designated caregiver \(a parent, a grandparent, a sibling aged 21 or older, or a home health aide or babysitter/, /calling 911/, /incidents reported as soon as possible/, /keeping the family's own strategies/, /caregiver training that increases as fading nears/]) assert.match(kind3, point);
+  assert.doesNotMatch(kind4, /behavioral skills training|how caregiver training is delivered|in what language/i);
+  assert.match(kind4, /differential reinforcement of alternative behavior, functional communication training/);
+  assert.match(kind4, /named procedures for the child stay proposals until her plan exists/);
+  const { SECTION_EXPECTATIONS } = await import("../eval/rubric.ts");
+  const mn = SECTION_EXPECTATIONS["medical-necessity"].join(" ");
+  assert.doesNotMatch(mn, /NCR, BST/);
+  assert.match(mn, /Behavioral Skills Training, in person, in the family's language, is her confirmed practice/);
+  for (const dir of ["case-a-mateo", "case-b-sofia"]) {
+    const key = JSON.parse(readFileSync(`fixtures/cases/${dir}/key.json`, "utf8")) as { sectionFacts: Record<string, Array<{ id: string; from: string[] }>> };
+    const bst = key.sectionFacts["family-caregiver-involvement"].find((fact) => fact.id === "fci-bst");
+    assert.deepEqual(bst?.from, ["rules"], `${dir}: BST in person comes from the rules, not a case document`);
+  }
+});
+
+test("review round 2 (nit 4): the case map's rules name both ways her practice reaches the model", () => {
+  assert.match(readFileSync("rules/case-map.md", "utf8"), /only from `<standing-instructions>`, or as the whole-assessment rules list it as confirmed/);
 });

@@ -1,5 +1,5 @@
 {
-  "keyVersion": "2",
+  "keyVersion": "3",
   "caseId": "case-a-mateo",
   "child": {
     "firstName": "Mateo",
@@ -245,10 +245,8 @@
     },
     {
       "id": "prq-undated",
-      "gap": "The BASC-3 PRQ report shows no administration date. No section may give it one; Medical Necessity marks it missing.",
-      "mustMarkIn": [
-        "medical-necessity"
-      ],
+      "gap": "The BASC-3 PRQ report shows no administration date. No section may give it one; since narrative sections give no dates (her answers of 2026-11-27), none needs to mark it.",
+      "mustMarkIn": [],
       "marker": "date|administ|undated",
       "forbid": [
         {
@@ -387,15 +385,8 @@
   "sectionFacts": {
     "background-information": [
       {
-        "id": "bi-referral",
-        "fact": "Referred by Ramón Ejemplar, M.D., his pediatrician; the physician's order was signed 08/25/2026.",
-        "from": [
-          "cde"
-        ]
-      },
-      {
         "id": "bi-diagnosis",
-        "fact": "The diagnosis as the CDE gives it (Autism Spectrum Disorder, F84.0, with accompanying language impairment; intellectual functioning not formally assessed), by Elena Placeholder, Psy.D., on 08/14/2026; her Background gives no severity level and no scores.",
+        "fact": "The diagnosis as the CDE gives it (Autism Spectrum Disorder, F84.0, with accompanying language impairment; intellectual functioning not formally assessed), made by the evaluating psychologist (by role, not by name); her Background gives no severity level and no scores.",
         "from": [
           "cde"
         ]
@@ -448,7 +439,7 @@
     "medical-necessity": [
       {
         "id": "mn-opening",
-        "fact": "The diagnosis as the CDE states it, with its support levels (Level 2 for social communication and for restricted, repetitive behaviors). The opening names the sources (the CDE, the Vineland-3 with the mother on 10/02/2026 in Spanish, the BASC-3 PRQ, the FBA questionnaires, the parent interview, the BCBA's three direct observations) and the deficit areas.",
+        "fact": "The diagnosis as the CDE words it, without its support levels (she never states a severity level). The opening names the sources by source, without dates or names (the CDE, the Vineland-3 with the mother in Spanish, the BASC-3 PRQ, the parent interview, direct observation) and the deficit areas.",
         "from": [
           "cde",
           "vineland-3",
@@ -480,14 +471,14 @@
       },
       {
         "id": "mn-prq",
-        "fact": "The BASC-3 PRQ results that bear on the caregivers (Parenting Confidence T 29 and Relational Frustration T 71, both Clinically Significant), with its administration date marked missing.",
+        "fact": "What the BASC-3 PRQ shows that supports the need (the mother's parenting confidence and relational frustration), in words, without its T-scores.",
         "from": [
           "basc-3-prq"
         ]
       },
       {
         "id": "mn-elopement",
-        "fact": "Elopement into traffic argued with an incident (the 09/20 parking lot or the 09/28 front door) and its baseline.",
+        "fact": "Elopement into traffic argued with an incident (the parking lot or the front door) and its baseline.",
         "from": [
           "parent-interview",
           "behaviors"
@@ -542,7 +533,7 @@
       },
       {
         "id": "sw-gross-motor",
-        "fact": "Gross Motor rated Adequate on the Vineland-3.",
+        "fact": "Gross motor skills as a strength, described as what he does, without a score or level.",
         "from": [
           "vineland-3"
         ]
@@ -609,16 +600,10 @@
       },
       {
         "id": "fci-language",
-        "fact": "Training in Spanish, the home language.",
+        "fact": "Training in Spanish, the home language (the language from the parent interview; training in the family's language is her practice, as the rules state it).",
         "from": [
-          "parent-interview"
-        ]
-      },
-      {
-        "id": "fci-prq",
-        "fact": "What the BASC-3 PRQ shows about the mother's needs (Parenting Confidence and Relational Frustration Clinically Significant; Communication and Discipline Practices At-Risk).",
-        "from": [
-          "basc-3-prq"
+          "parent-interview",
+          "rules"
         ]
       },
       {
@@ -626,6 +611,13 @@
         "fact": "The caregivers' current responses that keep the behaviors going (the tablet given back, dressing stopped, leaving the store, carrying him), as what training addresses.",
         "from": [
           "fba-questionnaires"
+        ]
+      },
+      {
+        "id": "fci-bst",
+        "fact": "Caregiver training by Behavioral Skills Training, in person, never by telehealth (her confirmed practice, as the rules state it).",
+        "from": [
+          "rules"
         ]
       }
     ],
@@ -688,7 +680,7 @@
     "risk-assessment": [
       {
         "id": "ra-elopement",
-        "fact": "The two September elopement incidents in traffic (09/20 parking lot, a car had to brake; 09/28 out the front door, caught by a neighbor) and the 40-foot run toward a parking lot on 10/09.",
+        "fact": "The two September elopement incidents in traffic (the parking lot, where a car had to brake; out the front door, caught by a neighbor) and the 40-foot run toward a parking lot during direct observation.",
         "from": [
           "parent-interview",
           "observations",
@@ -697,7 +689,7 @@
       },
       {
         "id": "ra-bites",
-        "fact": "Bites to his mother's forearm (bruises on both forearms; teeth marks on 10/13) and to his sister's shoulder in August.",
+        "fact": "Bites to his mother's forearm (bruises on both forearms; teeth marks seen during direct observation) and to his sister's shoulder in August.",
         "from": [
           "parent-interview",
           "observations"
@@ -744,14 +736,14 @@
       },
       {
         "id": "cp-early-signs",
-        "fact": "Early signs only as the sources describe them, none invented.",
+        "fact": "Early signs only as the caregivers report them, none taken from other sources or invented.",
         "from": [
           "observations"
         ]
       },
       {
         "id": "cp-missing",
-        "fact": "What only the agency or the BCBA can give (de-escalation steps, when 911 is called, how incidents are reported) is marked missing.",
+        "fact": "Protocols for elopement, physical aggression, property destruction and self-injury; staff follow the plan's antecedent strategies at all times (marked missing while her plan does not name them); an adult always present; 911 when the situation gets out of control; incidents reported as soon as possible; steps she has not given marked missing; never restraint.",
         "from": [
           "behaviors"
         ]

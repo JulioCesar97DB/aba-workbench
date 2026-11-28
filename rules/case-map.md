@@ -1,9 +1,9 @@
 ---
 id: case-map
-version: 3
-updated: 2026-11-23
+version: 5
+updated: 2026-11-27
 sources: The owner's decisions D1 to D35 on the case map (2026-11-23), the assessment guide's section map, and the four kinds of content of the whole-assessment rules. Written for these rules; no text from any real assessment.
-confirmed: no, pending review by the BCBA
+confirmed: in part, by the BCBA's questionnaire answers of 2026-11-27 (no severity level; caregivers and professionals by role); the rest is pending her review
 ---
 
 # Drafting the case map
@@ -42,20 +42,20 @@ The rule outranks everything else in this request.
 - A value comes from her sections, her notes or the sources, or it is `ai-drafted` from facts you cite. When the case needs something nobody gives, leave the value empty (or the list empty) and add an open item that says what is missing and which section of the assessment needs it.
 - Never compute, estimate, average or round a number the sources do not give. The app computes the baseline mean itself.
 - Never move evidence between settings: what a parent reports about school is a report, not a school observation.
-- Never write a severity level, a diagnosis or a score the documents do not state.
+- Never write a diagnosis or a score the documents do not state.
 - Intensity is hers to rate: never fill it.
 
 ## The four kinds of content, in the map
 
 - **Facts** (scores, incidents, people, settings, services): `extracted` or `her`, with quotes.
 - **Clinical reasoning** (what the facts mean): only in the fields made for it, a definition, a function's reasoning, a group's reason; `ai-drafted` or `hypothesis`, citing the facts it rests on.
-- **Her standard practice**: only from `<standing-instructions>`. Never supply it from what behavior analysts usually do.
+- **Her standard practice**: only from `<standing-instructions>`, or as the whole-assessment rules list it as confirmed. Never supply it from what behavior analysts usually do.
 - **Proposals** (her clinical choices): marked `proposed`, never presented as a fact. Before her plan is approved there are few: barrier tags, and a mitigation for a caregiver's limits when the sources give none.
 
 ## The parts
 
-- **Client**: age as the sources give it; the diagnosis worded exactly as the evaluation words it; the severity level only if the evaluation states one, otherwise empty with an open item; the evaluator and the date; medications; school, grade, schedule and the IEP; each other service with its provider and whether it is a paid service (a school service under an education plan is not a separate paid service); languages.
-- **Caregivers**: each caregiver's role (never a given name unless her sections use it), language, availability, participation, limits, and a mitigation for the limits: `extracted` when a source states it, otherwise `proposed`.
+- **Client**: age as the sources give it; the diagnosis worded exactly as the evaluation words it; the severity level always empty, with no open item, even when the evaluation states one (she never uses it); the evaluator and the date; medications; school, grade, schedule and the IEP; each other service with its provider and whether it is a paid service (a school service under an education plan is not a separate paid service); languages.
+- **Caregivers**: each caregiver's role (never a given name), language, availability, participation, limits, and a mitigation for the limits: `extracted` when a source states it, otherwise `proposed`.
 - **Settings**: each setting where behavior was observed by the BCBA or reported, which of the two, by whom, and the dates.
 - **Deficits**: each area in the payer's terms (communication, daily living skills, socialization, safety, and so on), the scores exactly as the score report prints them, the evidence (incidents, reports), and the impact on the child's daily life. Each score row is one claim: its instrument, scale, score, percentile and level, as the report prints them, under the quote of that row's line (empty fields "" when the report leaves them blank). Every number of the row, the instrument's name included ("Vineland-3"), is written in one of the row's quotes: when the row's line does not name the instrument, add a second ref that quotes the report's title.
 - **Strengths**: strengths, interests, preferences and reinforcers, each sourced, with the setting when known.

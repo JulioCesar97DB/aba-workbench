@@ -14,9 +14,9 @@ import { lookupKey, normalize, numberIndex, sentences, splitParagraphs, statedNu
  * current checks again on the baseline's stored texts anyway (review B3), so it is
  * recorded to read old results, not to gate the comparison.
  */
-export const CHECKS_VERSION = "2";
+export const CHECKS_VERSION = "6";
 
-export const CHECK_IDS = ["markers", "shape", "numbers", "names", "repetition", "data-density", "banned-patterns", "examples", "payer-readiness"] as const;
+export const CHECK_IDS = ["markers", "shape", "numbers", "names", "repetition", "data-density", "banned-patterns", "examples", "payer-readiness", "wording", "quotes", "dates-names"] as const;
 export type CheckId = (typeof CHECK_IDS)[number];
 
 export interface Finding {
@@ -111,6 +111,9 @@ export function checkShape(section: ReportSectionId, text: string, shape: Sectio
 /** Numbers that need no source: emergency services and the ABA billing codes. */
 export const ALWAYS_ALLOWED_NUMBERS = ["911", "97151", "97152", "97153", "97154", "97155", "97156", "97157", "97158"];
 
+/** The one number her rules give a section: the designated caregiver's minimum age. */
+const SIBLING_AGE = /\b(?:aged |age )?21(?: years)?(?: of age)? or older\b|\bover (?:the age of )?21\b/iu;
+
 /**
  * Every number in the text exists in a source or in her inputs (notes, instructions,
  * her sections). Numbers inside a [MISSING: ...] or [CHECK: ...] marker are checked too: a
@@ -123,6 +126,8 @@ export function checkNumbers(section: ReportSectionId, text: string, index: Read
     for (const number of statedNumbers(sentence.text)) {
       const lookup = lookupKey(number);
       if (number.kind === "value" && ALWAYS_ALLOWED_NUMBERS.includes(number.value)) continue;
+      // Her confirmed practice in the Crisis Plan's rules (2026-11-27): a sibling aged 21 or older may be the designated caregiver.
+      if (number.kind === "value" && number.value === "21" && SIBLING_AGE.test(sentence.text)) continue;
       if (index.has(lookup) || seen.has(lookup)) continue;
       // A date written without its year is found by month and day; a dated one needs its year to match too.
       seen.add(lookup);
@@ -171,8 +176,7 @@ export function checkNames(section: ReportSectionId, text: string, key: CaseKey)
         check: "names",
         section,
         severity: "major",
-        provisional: true,
-        message: `The ${person.role} is called by her or his given name (${count} times): provisional, pending her answer, not scored.`,
+        message: `The ${person.role} is called by her or his given name (${count} times); she never names a caregiver (her answers of 2026-11-27).`,
       });
     }
   }
@@ -336,13 +340,6 @@ export const BANNED_PATTERNS: Array<{
     sections: ["background-information"],
   },
   {
-    id: "severity-in-background",
-    pattern: /\blevel\s*[123]\b|\brequiring (?:very substantial |substantial )?support\b/iu,
-    unless: /\[(?:MISSING|CHECK)/u,
-    what: "a severity level in Background Information (hers gives none)",
-    sections: ["background-information"],
-  },
-  {
     id: "restraint",
     pattern: /\b(?:restrain\w*|restraint|seclusion|secluded|physical hold\w*|prone hold|basket hold)\b/iu,
     // The negation must govern the restraint itself (review S5), within a few words; "not hesitate
@@ -453,10 +450,10 @@ export const PAYER_ITEMS: PayerItem[] = [
     id: "mn-complements",
     section: "medical-necessity",
     what: "ABA complements, and does not duplicate, the other services",
-    test: (text, key) => ({ ok: key.payer.otherServices.length === 0 || /\b(?:complement\w*|not duplicat\w*|does not duplicate|without duplicating|in addition to|coordinat\w*)\b/iu.test(text) }),
+    test: (text, key) => ({ ok: key.payer.otherServices.length === 0 || /\b(?:complement\w*|(?:not|never|rather than|instead of|without) (?:\w+ ){0,2}duplicat\w*|in addition to|coordinat\w*)\b/iu.test(text) }),
   },
   { id: "mn-caregiver-training", section: "medical-necessity", what: "Caregiver training as part of the treatment", test: has(/\b(?:caregiver|parent|family)\s+training\b|\b(?:train\w*|coach\w*)\b[^.]{0,80}\b(?:mother|father|grandmother|parents?|caregivers?)\b|\b(?:mother|father|grandmother|parents?|caregivers?)\b[^.]{0,80}\b(?:train\w*|coach\w*|rehears\w*)\b/iu) },
-  { id: "mn-measurement", section: "medical-necessity", what: "How progress will be measured", test: has(/\b(?:measur\w*|monitor\w*|track\w*|data collection|collect\w* data|record\w* (?:data|each|every|the number|counts?|frequency|duration))\b/iu) },
+  { id: "mn-measurement", section: "medical-necessity", what: "How progress will be measured", test: has(/\b(?:measur\w*|monitor\w*|track\w*|data collection|collect\w* data|record\w* (?:data|each|every|the number|counts?|frequency|duration))\b|\b(?:progress|gains?)\b[^.]{0,60}\b(?:judged|evaluated|assessed|reviewed)\b[^.]{0,40}\bdata\b|\b(?:judge|evaluate|assess|review)s?\b[^.]{0,20}\b(?:progress|gains?)\b[^.]{0,40}\bdata\b/iu) },
   { id: "sw-strengths", section: "strengths-and-weaknesses", what: "Strengths documented from the sources", test: has(/\bstrength\w*|\b(?:enjoys|likes|loves|interest\w*)\b/iu) },
   { id: "ec-supports", section: "environmental-changes", what: "Supports planned for the changes, or a marker where none is named", test: hasMarkerOr(/\bsupport\w*\b/iu, /\bsupport/iu) },
   { id: "fci-caregivers", section: "family-caregiver-involvement", what: "Each caregiver who takes part, named by role", test: (text, key) => allOf(key.payer.caregivers, text) },
@@ -483,8 +480,20 @@ export const PAYER_ITEMS: PayerItem[] = [
   { id: "ra-behaviors", section: "risk-assessment", what: "Every target behavior's risk", test: (text, key) => allOf(key.behaviors.map((b) => ({ name: b.name, pattern: [escape(b.name), ...b.accepted].join("|") })), text) },
   { id: "ra-injury", section: "risk-assessment", what: "Injuries and near misses as the sources give them", test: has(/\b(?:injur\w*|urgent care|bruis\w*|marks?|near miss|cut)\b/iu) },
   { id: "cp-emergency", section: "crisis-plan", what: "When emergency services are called (or a marker)", test: hasMarkerOr(/\b(?:911|emergency services|emergency)\b/iu, /\b(?:911|emergency)\b/iu) },
-  { id: "cp-signs", section: "crisis-plan", what: "Early signs of escalation", test: has(/\b(?:early|warning|precursor\w*|signs?|escalat\w*)\b/iu) },
+  // Early signs only when the caregivers report them (her answers of 2026-11-27), so the item is the dangerous behaviors themselves.
+  // Named as ra-behaviors names them: each of the case's behaviors in her protocol list (review round 1, finding 9).
+  { id: "cp-dangerous", section: "crisis-plan", what: "The behaviors that can be dangerous, named", test: (text, key) => dangerousNamed(text, key) },
 ];
+
+/** Her protocol list in the Crisis Plan: mouthing, physical aggression, property destruction, self-injury, elopement. */
+const PROTOCOL_BEHAVIOR = /aggress|destruct|self-injur|elop|mouth/iu;
+
+/** Every behavior of the case that is in her protocol list, by its name or an accepted form; with none, the dangerous behaviors are still said to be dangerous. */
+function dangerousNamed(text: string, key: CaseKey): { ok: boolean; detail?: string } {
+  const dangerous = key.behaviors.filter((b) => [b.name, ...b.accepted].some((form) => PROTOCOL_BEHAVIOR.test(form)));
+  if (dangerous.length === 0) return { ok: /\b(?:dangerous|danger|unsafe|harm|injur\w*)\b/iu.test(text) };
+  return allOf(dangerous.map((b) => ({ name: b.name, pattern: [escape(b.name), ...b.accepted].join("|") })), text);
+}
 
 function escape(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -497,6 +506,96 @@ export function checkPayerReadiness(section: ReportSectionId, text: string, key:
     const result = item.test(prose, key);
     return result.ok ? [] : [{ check: "payer-readiness", section, severity: "major", message: `Missing payer item (${item.id}): ${item.what}${result.detail ? `; ${result.detail}` : ""}.` }];
   });
+}
+
+
+/* 10. Her wording (her answers of 2026-11-27) ------------------------------------------ */
+
+/** Wording she never uses, checked outside markers and quotes (the severity level inside markers too). */
+export const WORDING_PATTERNS: Array<{ id: string; pattern: RegExp; what: string; inMarkers?: boolean }> = [
+  { id: "long-dash", pattern: /—|\s–\s/u, what: "a long dash inside a sentence" },
+  // "Support facilitation" is the name of a Florida ESE service, written as the sources write it (review round 1, finding 6).
+  { id: "banned-word", pattern: /\b(?:utiliz\w*|(?<!\bsupport\s)facilitat\w*|leverag\w*)\b/iu, what: "a word she does not use (utilize, facilitate, leverage)" },
+  {
+    id: "bcba-observed",
+    pattern: /\bBCBA(?:'s)?\s+(?:\w+\s+){0,2}?(?:observed|saw|noticed|watched|noted)\b|\b(?:observed|seen|noted) by the BCBA\b/iu,
+    what: "\"the BCBA observed\" or \"saw\" (she writes \"During direct observation, ... was observed\")",
+  },
+  { id: "hypothesized", pattern: /\bhypothes(?:i[sz]ed|is|es|i[sz]e)\b|\bhypothetical(?:ly)?\b/iu, what: "\"hypothesized\" (she writes \"is maintained by\")" },
+  {
+    id: "severity-level",
+    // The DSM-5 forms only: a behavior's severity (the payer's discharge grounds) and a curriculum's Level 1 are not it (review round 1, finding 6).
+    pattern: /\bseverity\s+levels?\b|\b(?:autism|ASD|spectrum disorder)\b[^.]{0,40}\blevel\s*[123]\b|\blevel\s*[123]\b[^.]{0,15}\b(?:autism|ASD|requiring|support)\b|\brequiring (?:very substantial |substantial )?support\b/iu,
+    what: "a DSM-5 severity level, or a mention of one (she never states it, in any section)",
+    inMarkers: true,
+  },
+];
+
+/** Her wording: long dashes, her banned words, "the BCBA observed", "hypothesized", a severity level. */
+export function checkWording(section: ReportSectionId, text: string): Finding[] {
+  const findings: Finding[] = [];
+  const prose = sentences(withoutQuotes(withoutMarkers(text)));
+  const whole = sentences(withoutQuotes(text));
+  for (const wording of WORDING_PATTERNS) {
+    for (const sentence of wording.inMarkers ? whole : prose) {
+      if (!wording.pattern.test(sentence.text)) continue;
+      findings.push({ check: "wording", section, severity: "major", message: `Her wording (${wording.id}): ${wording.what}.`, excerpt: clip(sentence.text) });
+    }
+  }
+  return findings;
+}
+
+/* 11. Quoted speech --------------------------------------------------------------------- */
+
+/** Never quotes (her answers of 2026-11-27): every quoted span outside a marker, straight or curly. */
+export function checkQuotes(section: ReportSectionId, text: string): Finding[] {
+  const findings: Finding[] = [];
+  for (const match of withoutMarkers(text).matchAll(/"([^"\n]{1,300})"|“([^”\n]{1,300})”/gu)) {
+    const quoted = match[1] ?? match[2] ?? "";
+    if (!/\p{L}/u.test(quoted)) continue;
+    // A short phrase the plan teaches the child to say is not quoted speech (review round 1, finding 13).
+    const before = withoutMarkers(text).slice(Math.max(0, (match.index ?? 0) - 40), match.index ?? 0);
+    if (/\bto (?:say|request)\s*$/iu.test(before) && quoted.trim().split(/\s+/u).length <= 4) continue;
+    findings.push({ check: "quotes", section, severity: "major", message: "Quoted speech (she always paraphrases).", excerpt: clip(match[0]) });
+  }
+  return findings;
+}
+
+/* 12. Dates and names in narrative ------------------------------------------------------- */
+
+const MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December";
+/**
+ * A coming change may give the day it starts ("will start on December 15, 2026"): the date is let
+ * through only when a future verb governs it ("will", "starts", "is scheduled", or "beginning" inside
+ * the sentence, as in "accepted her beginning December 15, 2026"), with the end of its span ("to
+ * January 20, 2027"). A bare "from", "until", "through" or "to" never does: "Prior to
+ * October 10, 2026" is a past date (review round 1, finding 7; review round 2, finding 2).
+ */
+const COMING_DATE = new RegExp(`\\b(?:will\\s+(?:[\\w,]+\\s+){0,6}?(?:on|from|by|in|starting|beginning|until|through|to)|(?:starts|begins|is (?:scheduled|planned|expected)(?: to \\w+)?)(?:\\s+(?:on|for|by|from))?|(?<=\\S\\s+)(?:beginning|starting)(?:\\s+on)?)\\s+(?:${MONTHS})\\s+\\d{1,2}(?:,\\s*\\d{4})?(?:,?\\s+(?:to|until|through)\\s+(?:${MONTHS})\\s+\\d{1,2})?`, "iu");
+const CREDENTIALS = "Ph\\.?\\s?D|Psy\\.?\\s?D|M\\.?\\s?D|Ed\\.?\\s?D|D\\.?\\s?O|BCBA(?:-D)?|BCaBA|LMHC|LCSW|CCC-SLP|OTR/L|ARNP|APRN";
+
+export const DATE_NAME_PATTERNS: Array<{ id: string; pattern: RegExp; what: string; unless?: RegExp }> = [
+  // Not a fraction of trials ("2/10 opportunities") or "24/7".
+  { id: "numeric-date", pattern: /\b(?!24\/7\b)\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b(?!\s+(?:opportunities|trials|items|attempts|probes|steps|sessions)\b)/u, what: "a numeric date (she gives the source, not the date; a needed date reads \"October 5, 2026\")" },
+  { id: "full-date", pattern: new RegExp(`\\b(?:${MONTHS})\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`, "u"), what: "a date in narrative (only a coming change may give its day)", unless: COMING_DATE },
+  { id: "doctor-name", pattern: /\bDr\.?\s+\p{Lu}/u, what: "a professional named by name (she names the role)" },
+  { id: "credentials", // A credential or role before another one ("the RBT, BCaBA, and BCBA levels") is not a name.
+    pattern: new RegExp(`\\b(?!(?:The|A|An|This|That|Each|Every|Any|No|Her|His|Their|Our|Your|RBTs?|${CREDENTIALS})\\b)\\p{Lu}[\\p{L}'’-]+,?\\s+(?:${CREDENTIALS})\\b`, "u"), what: "a person named with credentials (she names the role)" },
+  { id: "honorific-name", pattern: /\b(?:Mr|Mrs|Ms|Miss)\.?\s+\p{Lu}/u, what: "a person named by title and surname (caregivers by relation, professionals by role)" },
+];
+
+/** Dates in narrative sections, and people named by name, where code can tell. */
+export function checkDatesNames(section: ReportSectionId, text: string): Finding[] {
+  const findings: Finding[] = [];
+  for (const sentence of sentences(withoutQuotes(withoutMarkers(text)))) {
+    for (const rule of DATE_NAME_PATTERNS) {
+      // A date the exemption governs is taken out first, so another date in the same sentence is still found.
+      const rest = rule.unless ? sentence.text.replace(new RegExp(rule.unless.source, `${rule.unless.flags.replace("g", "")}g`), " ") : sentence.text;
+      if (!rule.pattern.test(rest)) continue;
+      findings.push({ check: "dates-names", section, severity: "major", message: `${rule.id}: ${rule.what}.`, excerpt: clip(sentence.text) });
+    }
+  }
+  return findings;
 }
 
 /* All of them ------------------------------------------------------------------------- */
@@ -528,6 +627,9 @@ export function runChecks(texts: Partial<Record<ReportSectionId, string>>, conte
       ...checkBannedPatterns(id, text),
       ...checkExamples(id, text, context.examples),
       ...checkPayerReadiness(id, text, context.key),
+      ...checkWording(id, text),
+      ...checkQuotes(id, text),
+      ...checkDatesNames(id, text),
     );
   }
   findings.push(...checkRepetition(texts, context.key, context.loadedSources));

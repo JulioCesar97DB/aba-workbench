@@ -49,14 +49,16 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 - **Not compared, and said so:** an item the baseline could not score is listed under "Not compared: the baseline could not score these", never skipped in silence. The checks of a section that some baseline run has no draft of are not compared either (the failing count would be read against runs that never had a text) and are listed under "Checks not compared". The verdict line names both.
 - **Run counts:** `--runs` takes 1, 3 or 5, an odd count, so a median and a majority never tie (owner's choice). A baseline with another run count is still compared, each side on its own medians, with a note; results from before runs (such as `dev-2026-11-23`) are read as a single run.
   - **Fewer runs than the baseline:** a 1-run comparison with a 3-run baseline carries one run's drafting and judging noise, which the medians were brought in to absorb. Its hard verdict is not reliable, and the note says so: each single run of `dev-step0-2026-11-23`, compared with that baseline's own medians, reads REGRESSION. Run as many runs as the baseline to decide.
-- **NOT COMPARED** (exit code 3): another rubric version, another provider (a rehearsal against a real run) or another drafting mode.
+- **NOT COMPARED** (exit code 3): another rubric version, another provider (a rehearsal against a real run) or another drafting mode. A baseline of another rubric version is compared after all when this run checked and judged every one of its stored drafts again (below).
 - **INVALID** (exit code 1): a window, the Dock icon or the focus showed, or the app asked for a dialog.
 
 **The same judge.** A judge record carries a fingerprint: the judge's prompt version and code, its inputs for the section (rubric, expectations, payer facts, key facts and notes, her notes and instructions), the model and the number of samples. The drafts it judges are not part of it.
 - Judge items are compared only between sections whose runs all carry the same fingerprint, on both sides.
 - When the baseline's fingerprint differs, the run first judges the baseline's drafts again with this judge, which costs 9 requests per case for each of the baseline's runs.
 
-**Findings under a rule pending her answer** (a caregiver called by her given name) are listed as provisional and never scored. Key facts that rest on her unconfirmed standard practice are left out of the judge's list.
+**A baseline of another rubric version** (owner's approval, 2026-11-27). When the rubric version goes up, a baseline accepted under the old one counts as scored by the new one only when every stored draft of every case this run compares was checked again and judged again in this same run, with a valid answer for every sample (`adoptRubricWhenRescored` in `eval/results.ts`). Then its arm is its stored drafts, re-judged, not drafted again, and the summary's notes say so. A baseline judged again only in part (a case, a run or a section left out, or a judge error) is still not compared. The rubric's fingerprint is part of the judge's, so a new rubric always judges the baseline's drafts again: 9 requests per case and baseline run.
+
+**Findings under a rule pending her answer** are listed as provisional and never scored (a caregiver called by her given name was one until her answers of 2026-11-27; it is scored now). Key facts that rest on her unconfirmed standard practice are left out of the judge's list. A key fact that rests on her confirmed practice as the rules state it (owner's decision, 2026-11-27: Behavioral Skills Training in person, in the family's language) names `rules` as its source, a reserved source that is always loaded (`RULES_SOURCE` in `eval/key.ts`).
 
 ## Commands
 
@@ -73,6 +75,7 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 | `pnpm eval --cases case-b-sofia` | Only these cases |
 | `pnpm eval --mode independent` | Drafts without approving, so no consistency checks |
 | `pnpm eval --baseline <name>` | Compares with `eval/baselines/<name>/` instead of the newest |
+| `pnpm eval --baseline-run <run folder>` | Compares with the baseline as that earlier run compared it (its `baseline-as-compared.json`): every draft is checked again, and only the sections whose judge changed are judged again. Use it to measure a rules fix against the same dev arm without paying for every baseline judgement again. Its note says in which run the baseline's drafts were all judged again, and that this run judged them again only where the judge changed |
 | `pnpm eval --accept <name>` | Also saves the run as `eval/baselines/<name>/`, with every path stripped (commit it). Refused for an invalid run, a rehearsal, a checkout with uncommitted changes in `rules/`, `src/` or `eval/`, and a run with a failed draft, a judge error or an unscored item in any run (fill it with `--from-run`, or run again for a failed draft) |
 | `pnpm eval --label <text>`, `--no-build` | Names the run folder; uses the apps as already built |
 
@@ -86,6 +89,13 @@ Both sides are compared on their medians (owner's decision, 2026-11-23).
 - **plus** one free model-list call to check the sign-in before anything is spent.
 
 `--rejudge` costs 9 judge requests per case and run (27 with 3 runs) and drafts nothing. `--from-run` costs only the missing judge answers. The writing and the judge both spend the owner's ChatGPT Pro plan (no money).
+
+**Saved as it goes:**
+- The run writes `results.json` once every run of a case is drafted, and again after each of its runs is judged. Until the run ends, that file carries `partial: true`: a partial run is never compared or accepted.
+- Each answer on the baseline's drafts is written to `baseline-judged.json` as it comes.
+- So a run that fails while judging, its own drafts or the baseline's, keeps every judge answer already paid for. Resume it with `pnpm eval --from-run <that run folder>` and the same baseline option: it drafts nothing, judges only what has no answer from this judge yet, and reuses a saved baseline answer when it is for the same baseline, draft (by its text) and judge.
+- **What is not kept:** a case's drafts are saved only once all its runs are drafted, because `--from-run` cannot draft the missing runs. A failure while drafting loses that case's drafts so far, and the run is started again. A multi-case run that fails in a later case resumes only the cases its partial `results.json` holds.
+- A partial `results.json` has no `summary.md` next to it.
 
 **Reproducible from the stored drafts:** `results.json` keeps every run's texts, so `--from-run` and `--rejudge` check and judge them again run by run without drafting, and the compare checks every stored run of the baseline again.
 

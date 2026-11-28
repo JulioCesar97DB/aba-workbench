@@ -110,11 +110,17 @@ const Incident = z.strictObject({
   from: z.array(z.string()).min(1),
 });
 
+/**
+ * The reserved source of a fact that rests on her practice as the rules state it (confirmed by her
+ * questionnaire answers; owner's decision, 2026-11-27), not on a case document. Always counted as loaded.
+ */
+export const RULES_SOURCE = "rules";
+
 const Fact = z.strictObject({
   id: z.string().regex(/^[a-z0-9-]+$/),
   /** What must be there, in words the judge can check. */
   fact: z.string().min(1),
-  /** Sources it comes from: a fact whose source is not loaded is skipped. */
+  /** Sources it comes from: a fact whose source is not loaded is skipped. "rules" (RULES_SOURCE) is her practice as the rules state it. */
   from: z.array(z.string()).min(1),
   /**
    * A fact that rests on a rule pending her answer (her standard practice, not yet given to
@@ -200,7 +206,7 @@ export function keyProblems(caseFile: z.infer<typeof CaseFileSchema>, key: CaseK
   if (key.inputs.notes) all.add("notes");
   for (const incident of key.incidents) for (const id of incident.from) if (!all.has(id)) problems.push(`incident ${incident.id} comes from unknown source ${id}`);
   for (const [section, facts] of Object.entries(key.sectionFacts)) {
-    for (const fact of facts ?? []) for (const id of fact.from) if (!all.has(id)) problems.push(`fact ${section}/${fact.id} comes from unknown source ${id}`);
+    for (const fact of facts ?? []) for (const id of fact.from) if (!all.has(id) && id !== RULES_SOURCE) problems.push(`fact ${section}/${fact.id} comes from unknown source ${id}`);
   }
   return problems;
 }

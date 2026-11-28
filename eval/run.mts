@@ -20,6 +20,7 @@
  *   pnpm eval --cases case-b-sofia      only these cases (comma-separated)
  *   pnpm eval --mode independent        draft without approving (default: chained, each draft approved before the next)
  *   pnpm eval --baseline <name>         compare with eval/baselines/<name>/ (default: the newest)
+ *   pnpm eval --baseline-run <run folder>  compare with the baseline as that run compared it (its baseline-as-compared.json): checked again, and judged again only where its judge differs
  *   pnpm eval --accept <name>           also save this run as eval/baselines/<name>/ (paths stripped; refused if dirty or invalid)
  *   pnpm eval --label <text>            names the run's folder
  *   pnpm eval --no-build                use the apps as they are built (default: pnpm build in each checkout first)
@@ -36,13 +37,15 @@ import { homedir, tmpdir, userInfo } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { JUDGE_PROMPT_VERSION, parseJudgeAnswer, type JudgeAnswer, type JudgeFormat, type JudgeInput } from "../src/lib/judge.ts";
-import type { AbaApi, GenerationUpdateEvent } from "../src/shared/api.ts";
+import { MAX_CASE_LABEL_LENGTH, type AbaApi, type GenerationUpdateEvent } from "../src/shared/api.ts";
 import { REPORT_SECTIONS, type ReportSectionId } from "../src/shared/report-sections.ts";
 import { countWords, findMarkers, splitParagraphs } from "../src/shared/section-text.ts";
 import { CHECKS_VERSION, extractExamples, numberIndex, runChecks, type Finding } from "./checks/checks.ts";
-import { loadCase, type LoadedCase } from "./key.ts";
+import { loadCase, RULES_SOURCE, type LoadedCase } from "./key.ts";
 import {
   addUsage,
+  adoptRubricWhenRescored,
+  baselineCaseLabel,
   baselineCopy,
   compareRuns,
   caseMedians,
@@ -52,7 +55,9 @@ import {
   normalizeRun,
   RESULTS_VERSION,
   RUN_COUNTS,
+  rejudgedBaselineName,
   rescoreRun,
+  reusableBaselineJudge,
   scoreSection,
   summaryMarkdown,
   type CaseResult,
@@ -61,6 +66,7 @@ import {
   type JudgeRecord,
   type LaunchCheck,
   type RunResult,
+  type SavedBaselineJudge,
   type SectionResult,
   type Usage,
 } from "./results.ts";
@@ -101,6 +107,7 @@ const { values: args } = parseArgs({
     cases: { type: "string" },
     mode: { type: "string", default: "chained" },
     baseline: { type: "string" },
+    "baseline-run": { type: "string" },
     accept: { type: "string" },
     label: { type: "string" },
     "no-build": { type: "boolean", default: false },
@@ -121,6 +128,8 @@ interface Options {
   draftCheckout: string;
   /** --from-run or --rejudge: an earlier run whose drafts are taken instead of drafting. */
   prior: RunResult | null;
+  /** That run's folder (its baseline-judged.json is reused with --from-run). */
+  priorDir: string | null;
   rejudgeAll: boolean;
   /** How many times each case is run (with --from-run or --rejudge: that run's count). */
   runs: number;
@@ -157,6 +166,7 @@ function readOptions(): Options {
     provider: rehearse ? "anthropic" : "openai",
     draftCheckout,
     prior,
+    priorDir: priorDir ? path.resolve(priorDir) : null,
     rejudgeAll: args.rejudge !== undefined,
     runs,
     samples,
@@ -567,7 +577,7 @@ function judgeInputFor(loaded: LoadedCase, section: ReportSectionId, loadedSourc
     rubricVersion: RUBRIC_VERSION,
     items,
     expectations: [...SECTION_EXPECTATIONS[section], ...STYLE_EXPECTATIONS.map((habit) => `Habit: ${habit}`)],
-    keyFacts: (key.sectionFacts[section] ?? []).filter((fact) => !fact.provisional && fact.from.every((id) => loadedSources.has(id))).map(({ id, fact }) => ({ id, fact })),
+    keyFacts: (key.sectionFacts[section] ?? []).filter((fact) => !fact.provisional && fact.from.every((id) => id === RULES_SOURCE || loadedSources.has(id))).map(({ id, fact }) => ({ id, fact })),
     caseNotes: caseNotes.slice(0, 30),
     payerFacts: [...SECTION_PAYER_FACTS[section]],
     format,
@@ -708,6 +718,24 @@ function checkCase(loaded: LoadedCase, plan: LoadPlan[], loadedSources: Readonly
 /* ---------------------------------------------------------------------------------- */
 /* The run                                                                             */
 
+/**
+ * The baseline as an earlier run compared it (its baseline-as-compared.json): the accepted
+ * baseline's stored drafts with that run's checks and judge records. Its judge records are
+ * reused only where their fingerprint is this judge's; every other section is judged again and
+ * every draft is checked again, as for any baseline. It is named after the accepted baseline
+ * and the run, so the summary says which drafts the baseline arm is.
+ */
+function baselineAsCompared(runDir: string, rehearsal: boolean): { name: string; run: RunResult } {
+  const dir = path.resolve(runDir);
+  const file = path.join(dir, "baseline-as-compared.json");
+  if (!existsSync(file)) fail(`no ${file}: --baseline-run takes a run folder that was compared with a baseline.`);
+  const comparison = JSON.parse(readFileSync(path.join(dir, "comparison.json"), "utf8")) as { baseline?: string };
+  const run = normalizeRun(JSON.parse(readFileSync(file, "utf8")));
+  if (run.provider.startsWith("rehearsal") !== rehearsal) fail("--baseline-run takes a run of the same kind (real or rehearsal).");
+  // Short: the name goes into a case label in the judge app, which takes a limited length.
+  return { name: rejudgedBaselineName(comparison.baseline), run };
+}
+
 /** The baseline named, or the newest accepted one of the same kind (real or rehearsal), read as this version reads results. */
 function findBaseline(name: string | null, rehearsal: boolean): { name: string; run: RunResult } | null {
   if (!existsSync(BASELINES_DIR)) return null;
@@ -728,7 +756,8 @@ async function main(options: Options, home: string, profile: string): Promise<nu
   const { prior } = options;
   const cases = selectedCases(prior);
   const startedAt = new Date().toISOString();
-  const baseline = findBaseline(args.baseline ?? null, options.rehearse);
+  if (args.baseline && args["baseline-run"]) fail("--baseline and --baseline-run name two baselines: give one.");
+  const baseline = args["baseline-run"] ? baselineAsCompared(args["baseline-run"], options.rehearse) : findBaseline(args.baseline ?? null, options.rehearse);
   console.log(
     `Evaluation run ${options.label}: ${cases.map((c) => c.key.caseId).join(", ")}; ${options.runs} run(s) per case; ${options.mode} drafting; ${options.samples} judge sample(s) per run; ${options.rehearse ? "REHEARSAL with a fake provider (no request leaves the computer)" : "ChatGPT sign-in of the eval profile"}${prior ? `; drafts from run ${prior.label} (${options.rejudgeAll ? "every section judged again" : "judged where this judge has no answer"})` : ""}${baseline ? `; baseline ${baseline.name}` : ""}.`,
   );
@@ -745,6 +774,67 @@ async function main(options: Options, home: string, profile: string): Promise<nu
   let model: string | null = prior?.model ?? null;
   let judgeModel: string | null = null;
   let rulesVersions: Record<string, string> | null = prior?.drafting.rulesVersions ?? null;
+
+  /** The run as recorded: the final one, or a partial one saved as the run goes (results.json, resumable with --from-run). */
+  const buildRun = (caseList: CaseResult[], versions: Record<string, string> | null, partial = false): RunResult => {
+    const judging = checkoutRecord(ROOT);
+    return {
+    resultsVersion: RESULTS_VERSION,
+    label: options.label,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    rubricVersion: RUBRIC_VERSION,
+    judgePromptVersion: JUDGE_PROMPT_VERSION,
+    checksVersion: CHECKS_VERSION,
+    runs: options.runs,
+    judgeSamples: options.samples,
+    drafting: prior ? prior.drafting : { ...checkoutRecord(options.draftCheckout), rulesVersions: versions ?? {} },
+    judging: { ...judging, model: judgeModel },
+    provider: prior ? prior.provider : options.rehearse ? "rehearsal (fake provider)" : "openai (ChatGPT sign-in)",
+    model,
+    mode: options.mode,
+    judgeFormat: judgeFormat ?? prior?.judgeFormat ?? null,
+    requests: prior
+      ? {
+          drafts: prior.requests.drafts + requests.drafts,
+          checks: prior.requests.checks + requests.checks,
+          judges: prior.requests.judges + requests.judges,
+          repairs: prior.requests.repairs + requests.repairs,
+          baselineJudges: prior.requests.baselineJudges + requests.baselineJudges,
+          total: prior.requests.total + requests.total,
+        }
+      : requests,
+    launches: [...(prior?.launches ?? []), ...launches],
+    windowChecksDuring,
+    valid: invalidReason === null && (prior?.valid ?? true),
+    invalidReason: invalidReason ?? prior?.invalidReason ?? null,
+    ...(prior ? { fromRun: prior.label, rejudged: options.rejudgeAll } : {}),
+    ...(partial ? { partial: true } : {}),
+    cases: caseList,
+    };
+  };
+  /** Writes results.json as the run goes, so a run that fails late keeps every draft and judge answer already paid for. */
+  const savePartialRun = (caseList: CaseResult[], madeNow: ReadonlyArray<{ texts: Map<ReportSectionId, { detail: unknown }> }>) => {
+    let versions = rulesVersions;
+    if (!versions) {
+      versions = {};
+      for (const { texts } of madeNow) for (const { detail } of texts.values()) Object.assign(versions, (detail as { generation?: { rulesVersions?: Record<string, string> } } | undefined)?.generation?.rulesVersions ?? {});
+    }
+    mkdirSync(options.runDir, { recursive: true });
+    writeFileSync(path.join(options.runDir, "results.json"), JSON.stringify(buildRun(caseList, versions, true), null, 2));
+  };
+  /** Every judge answer on the baseline's drafts so far, saved as each one comes (baseline-judged.json), for a resumed run to reuse. */
+  const savedBaselineJudges: SavedBaselineJudge[] = [];
+  const priorBaselineJudges: SavedBaselineJudge[] =
+    options.priorDir && !options.rejudgeAll && existsSync(path.join(options.priorDir, "baseline-judged.json"))
+      ? (JSON.parse(readFileSync(path.join(options.priorDir, "baseline-judged.json"), "utf8")) as SavedBaselineJudge[])
+      : [];
+  const saveBaselineJudge = (entry: SavedBaselineJudge) => {
+    savedBaselineJudges.push(entry);
+    mkdirSync(options.runDir, { recursive: true });
+    writeFileSync(path.join(options.runDir, "baseline-judged.json"), JSON.stringify(savedBaselineJudges, null, 2));
+  };
+  const textHash = (text: string) => createHash("sha256").update(text).digest("hex").slice(0, 32);
 
   for (const loaded of cases) {
     console.log(`\n${loaded.key.caseId}`);
@@ -781,6 +871,45 @@ async function main(options: Options, home: string, profile: string): Promise<nu
       if (!priorCase && options.draftCheckout !== ROOT) await closeApp(current.app, "draft", current.stopWatching);
     }
 
+    /** This case's record from what is drafted and judged so far (the final one, or a partial one saved as it goes). */
+    const recordCase = (madeNow: typeof made, judgedNow: ReadonlyArray<Map<ReportSectionId, JudgeRecord>>): CaseResult => {
+      const caseRuns: CaseRun[] = madeNow.map(({ texts, drafted }, r): CaseRun => {
+        const sectionTexts = Object.fromEntries([...texts].map(([id, entry]) => [id, entry.text])) as Partial<Record<ReportSectionId, string>>;
+        const findings = checkCase(loaded, plan, loadedSources, sectionTexts, examples);
+        const sections: SectionResult[] = REPORT_SECTIONS.map(({ id }): SectionResult => {
+          const entry = texts.get(id) ?? null;
+          const detail = entry?.detail as { generation?: { usage?: Usage; servedModel?: string; rulesVersions?: Record<string, string> }; consistency?: { status: string; items: string[] } | null } | undefined;
+          const mine = findings.filter((finding) => finding.section === id);
+          const judge = judgedNow[r]?.get(id) ?? null;
+          const before = priorCase?.runs[r].sections.find((section) => section.id === id) ?? null;
+          if (before) return { ...before, findings: mine, scores: scoreSection(id, mine, judge?.answers ?? [], before.text !== null), judge };
+          return {
+            id,
+            version: entry?.version ?? null,
+            text: entry?.text ?? null,
+            words: entry ? countWords(entry.text) : 0,
+            paragraphs: entry ? splitParagraphs(entry.text).length : 0,
+            markers: entry ? findMarkers(entry.text).map(({ kind, note }) => ({ kind, note })) : [],
+            generation: detail?.generation ? { seconds: drafted.get(id)?.seconds ?? 0, usage: detail.generation.usage ?? null, servedModel: detail.generation.servedModel ?? null, rulesVersions: detail.generation.rulesVersions ?? {} } : null,
+            consistency: detail?.consistency ? { status: detail.consistency.status, items: detail.consistency.items } : null,
+            draftError: drafted.get(id)?.error ?? null,
+            findings: mine,
+            scores: scoreSection(id, mine, judge?.answers ?? [], entry !== null),
+            judge,
+          };
+        });
+        return { run: r + 1, sections };
+      });
+      const keyNotes = [
+        ...loaded.key.incidents.filter((incident) => incident.provisional && incident.from.every((id) => loadedSources.has(id))).map((incident) => `"${incident.description}" belongs to ${incident.home} (step 0's section map)`),
+        ...Object.entries(loaded.key.sectionFacts).flatMap(([section, facts]) => (facts ?? []).filter((fact) => fact.provisional).map((fact) => `fact ${fact.id} (${section}) is not scored: it rests on her standard practice`)),
+      ];
+      return { caseId: loaded.key.caseId, keyVersion: loaded.key.keyVersion, sourcesLoaded: [...loadedSources], inputs: { notes: loaded.key.inputs.notes ?? "", instructions: instructionsFor(loaded) }, keyNotes, runs: caseRuns, medians: caseMedians(caseRuns) };
+    };
+    /** Saves results.json with every case so far, so a failure later in the run loses no request already spent (resume with --from-run). */
+    const savePartial = (judgedNow: ReadonlyArray<Map<ReportSectionId, JudgeRecord>>) => savePartialRun([...caseResults, recordCase(made, judgedNow)], made);
+    savePartial([]);
+
     // Judge with this branch's app (the same one when no --draft-app was given).
     if (!priorCase && options.draftCheckout !== ROOT) {
       current = await launch(ROOT, "judge", profile, home);
@@ -810,6 +939,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
           console.log(record.error ? `FAILED (${record.error})` : `${record.format}${record.repaired ? ", repaired" : ""}, ${record.seconds.toFixed(1)} s`);
         }
         judgedRuns.push(judged);
+        savePartial(judgedRuns);
       }
 
       // Review B3: every run of the baseline is checked again with the current checks, and its
@@ -824,14 +954,26 @@ async function main(options: Options, home: string, profile: string): Promise<nu
             return section.judge?.fingerprint !== fingerprint || (section.judge?.answers.length ?? 0) < options.samples;
           });
           const rejudged = new Map<ReportSectionId, JudgeRecord>();
-          if (stale.length > 0) {
-            console.log(`  the baseline's run ${baseRun.run} was judged by another judge: judging ${stale.length} of its drafts again with this one`);
-            const baseCaseId = await loadIntoApp(current.page, loaded, plan, `${loaded.key.child.fullName} (baseline ${baseline!.name}, run ${baseRun.run})`);
+          // A resumed run (--from-run) reuses what the run it resumes already paid for on these same drafts (finding 11).
+          const toJudge = stale.filter((section) => {
+            const wanted = { baseline: baseline!.name, caseId: loaded.key.caseId, run: baseRun.run, section: section.id, textHash: textHash(section.text as string) };
+            const fingerprint = judgeFingerprint(judgeInputFor(loaded, section.id, loadedSources, "json-schema"), loaded, section.id, judgeModel, options.samples);
+            const reused = reusableBaselineJudge(priorBaselineJudges, { ...wanted, fingerprint, samples: options.samples });
+            if (!reused) return true;
+            rejudged.set(section.id, reused);
+            saveBaselineJudge({ ...wanted, record: reused });
+            return false;
+          });
+          if (stale.length > toJudge.length) console.log(`  the baseline's run ${baseRun.run}: ${stale.length - toJudge.length} answer(s) reused from run ${prior?.label ?? "unknown"}`);
+          if (toJudge.length > 0) {
+            console.log(`  the baseline's run ${baseRun.run} was judged by another judge: judging ${toJudge.length} of its drafts again with this one`);
+            const baseCaseId = await loadIntoApp(current.page, loaded, plan, baselineCaseLabel(loaded.key.child.fullName, baseline!.name, baseRun.run, MAX_CASE_LABEL_LENGTH));
             await putDrafts(current.page, baseCaseId, baseRun.sections);
-            for (const section of stale) {
+            for (const section of toJudge) {
               process.stdout.write(`  judge baseline run ${baseRun.run} ${section.id} ... `);
               const record = await judgeSection(current.page, baseCaseId, loaded, section.id, loadedSources, options, judgeModel, true);
               rejudged.set(section.id, record);
+              if (record.error === null) saveBaselineJudge({ baseline: baseline!.name, caseId: loaded.key.caseId, run: baseRun.run, section: section.id, textHash: textHash(section.text as string), record });
               console.log(record.error ? `FAILED (${record.error})` : `${record.format}, ${record.seconds.toFixed(1)} s`);
             }
           }
@@ -847,78 +989,14 @@ async function main(options: Options, home: string, profile: string): Promise<nu
     }
 
     // The checks, the scores, the record of every run.
-    const caseRuns: CaseRun[] = made.map(({ texts, drafted }, r): CaseRun => {
-      const sectionTexts = Object.fromEntries([...texts].map(([id, entry]) => [id, entry.text])) as Partial<Record<ReportSectionId, string>>;
-      const findings = checkCase(loaded, plan, loadedSources, sectionTexts, examples);
-      const sections: SectionResult[] = REPORT_SECTIONS.map(({ id }): SectionResult => {
-        const entry = texts.get(id) ?? null;
-        const detail = entry?.detail as { generation?: { usage?: Usage; servedModel?: string; rulesVersions?: Record<string, string> }; consistency?: { status: string; items: string[] } | null } | undefined;
-        const mine = findings.filter((finding) => finding.section === id);
-        const judge = judgedRuns[r]?.get(id) ?? null;
-        const before = priorCase?.runs[r].sections.find((section) => section.id === id) ?? null;
-        if (before) return { ...before, findings: mine, scores: scoreSection(id, mine, judge?.answers ?? [], before.text !== null), judge };
-        return {
-          id,
-          version: entry?.version ?? null,
-          text: entry?.text ?? null,
-          words: entry ? countWords(entry.text) : 0,
-          paragraphs: entry ? splitParagraphs(entry.text).length : 0,
-          markers: entry ? findMarkers(entry.text).map(({ kind, note }) => ({ kind, note })) : [],
-          generation: detail?.generation ? { seconds: drafted.get(id)?.seconds ?? 0, usage: detail.generation.usage ?? null, servedModel: detail.generation.servedModel ?? null, rulesVersions: detail.generation.rulesVersions ?? {} } : null,
-          consistency: detail?.consistency ? { status: detail.consistency.status, items: detail.consistency.items } : null,
-          draftError: drafted.get(id)?.error ?? null,
-          findings: mine,
-          scores: scoreSection(id, mine, judge?.answers ?? [], entry !== null),
-          judge,
-        };
-      });
-      return { run: r + 1, sections };
-    });
-    const keyNotes = [
-      ...loaded.key.incidents.filter((incident) => incident.provisional && incident.from.every((id) => loadedSources.has(id))).map((incident) => `"${incident.description}" belongs to ${incident.home} (step 0's section map)`),
-      ...Object.entries(loaded.key.sectionFacts).flatMap(([section, facts]) => (facts ?? []).filter((fact) => fact.provisional).map((fact) => `fact ${fact.id} (${section}) is not scored: it rests on her standard practice`)),
-    ];
-    caseResults.push({ caseId: loaded.key.caseId, keyVersion: loaded.key.keyVersion, sourcesLoaded: [...loadedSources], inputs: { notes: loaded.key.inputs.notes ?? "", instructions: instructionsFor(loaded) }, keyNotes, runs: caseRuns, medians: caseMedians(caseRuns) });
+    caseResults.push(recordCase(made, judgedRuns));
     if (!rulesVersions) {
       rulesVersions = {};
       for (const { texts } of made) for (const { detail } of texts.values()) Object.assign(rulesVersions, (detail as { generation?: { rulesVersions?: Record<string, string> } }).generation?.rulesVersions ?? {});
     }
   }
 
-  const judging = checkoutRecord(ROOT);
-  const run: RunResult = {
-    resultsVersion: RESULTS_VERSION,
-    label: options.label,
-    startedAt,
-    finishedAt: new Date().toISOString(),
-    rubricVersion: RUBRIC_VERSION,
-    judgePromptVersion: JUDGE_PROMPT_VERSION,
-    checksVersion: CHECKS_VERSION,
-    runs: options.runs,
-    judgeSamples: options.samples,
-    drafting: prior ? prior.drafting : { ...checkoutRecord(options.draftCheckout), rulesVersions: rulesVersions ?? {} },
-    judging: { ...judging, model: judgeModel },
-    provider: prior ? prior.provider : options.rehearse ? "rehearsal (fake provider)" : "openai (ChatGPT sign-in)",
-    model,
-    mode: options.mode,
-    judgeFormat: judgeFormat ?? prior?.judgeFormat ?? null,
-    requests: prior
-      ? {
-          drafts: prior.requests.drafts + requests.drafts,
-          checks: prior.requests.checks + requests.checks,
-          judges: prior.requests.judges + requests.judges,
-          repairs: prior.requests.repairs + requests.repairs,
-          baselineJudges: prior.requests.baselineJudges + requests.baselineJudges,
-          total: prior.requests.total + requests.total,
-        }
-      : requests,
-    launches: [...(prior?.launches ?? []), ...launches],
-    windowChecksDuring,
-    valid: invalidReason === null && (prior?.valid ?? true),
-    invalidReason: invalidReason ?? prior?.invalidReason ?? null,
-    ...(prior ? { fromRun: prior.label, rejudged: options.rejudgeAll } : {}),
-    cases: caseResults,
-  };
+  const run = buildRun(caseResults, rulesVersions);
 
   // The baseline as this run's checks and judge see it (review B3), then the comparison.
   let comparedBaseline: RunResult | null = null;
@@ -937,6 +1015,8 @@ async function main(options: Options, home: string, profile: string): Promise<nu
       });
       c.medians = caseMedians(c.runs);
     }
+    // A baseline of another rubric version is compared only when this run checked and judged every one of its drafts again.
+    comparedBaseline = adoptRubricWhenRescored(comparedBaseline, run, baselineJudged);
   }
   const comparison = comparedBaseline ? compareRuns(run, comparedBaseline) : null;
   const summary = summaryMarkdown(run, comparison, baseline?.name ?? null, comparedBaseline);
@@ -964,6 +1044,7 @@ async function main(options: Options, home: string, profile: string): Promise<nu
 /** Saves a run as an accepted baseline: never an invalid or incomplete run or one from a dirty checkout, and never with a local path (review B4, S9, S10; 3-run review S1). */
 function accept(run: RunResult, name: string, summary: string): void {
   if (!run.valid) fail(`an invalid run is never accepted (${run.invalidReason}).`);
+  if (run.partial) fail("a partial run (saved while it was still going) is never accepted.");
   if (run.drafting.dirty || run.judging.dirty) fail("a run from a checkout with uncommitted changes in rules/, src/ or eval/ is never accepted: commit them and run again.");
   // Review S1 (3-run evaluation): a run with a failed draft, a judge error or an unscored item never becomes the bar.
   const incomplete = incompleteParts(run);

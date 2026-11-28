@@ -176,6 +176,20 @@ export interface RunResult {
   fromRun?: string;
   /** --rejudge: every section was judged again, not only those without an answer. */
   rejudged?: boolean;
+  /**
+   * Set only on a baseline as a comparison saw it (adoptRubricWhenRescored): it was scored by
+   * another rubric version, and every one of its stored drafts was checked and judged again in
+   * this run, so it is compared under this run's rubric. The version it was accepted with.
+   */
+  rescoredFromRubric?: string;
+  /**
+   * With rescoredFromRubric: the run in which every stored draft was judged again (review round 1
+   * of T1, finding 10). A baseline taken from an earlier run's comparison (--baseline-run) keeps
+   * it, so its note never says that this run judged what an earlier one did.
+   */
+  rejudgedIn?: string;
+  /** Saved while the run is still going (results.json written as it goes): not final, never accepted or compared. */
+  partial?: boolean;
   cases: CaseResult[];
 }
 
@@ -356,6 +370,75 @@ export function rescoreRun(run: RunResult, findingsByCase: ReadonlyMap<string, R
   return copy;
 }
 
+/**
+ * A baseline accepted under another rubric version counts as scored by this run's version only
+ * when every stored draft of every case this run compares was checked again (rescoreRun) and
+ * judged again in this same run by this judge, with a valid answer for every sample. Anything
+ * less (a case, a run or a section left unjudged, a judge error) leaves it as it was, so the
+ * compare still refuses it (owner's approval, 2026-11-27). The baseline arm is then its stored
+ * drafts, re-judged, not drafted again; the comparison says so.
+ */
+export function adoptRubricWhenRescored(baseline: RunResult, current: RunResult, rejudged: ReadonlyMap<string, ReadonlyArray<ReadonlyMap<ReportSectionId, JudgeRecord>>>): RunResult {
+  if (baseline.rubricVersion === current.rubricVersion) return baseline;
+  let compared = 0;
+  for (const c of current.cases) {
+    const baseCase = baseline.cases.find((b) => b.caseId === c.caseId);
+    if (!baseCase) continue;
+    const records = rejudged.get(c.caseId);
+    if (!records || records.length < baseCase.runs.length) return baseline;
+    for (const [index, r] of baseCase.runs.entries()) {
+      for (const s of r.sections) {
+        if (s.text === null) continue;
+        const record = records[index]?.get(s.id);
+        if (!record || record.error !== null || record.answers.length < current.judgeSamples) return baseline;
+      }
+    }
+    compared++;
+  }
+  if (compared === 0) return baseline;
+  return { ...baseline, rubricVersion: current.rubricVersion, rescoredFromRubric: baseline.rubricVersion, rejudgedIn: current.label };
+}
+
+/** The note on a baseline compared under another rubric version than the one it was accepted with: where its drafts were judged again (finding 10). */
+export function rescoredBaselineNote(baseline: RunResult, current: RunResult): string {
+  const here = baseline.rejudgedIn === current.label;
+  const where = here ? "in this run" : baseline.rejudgedIn ? `in run ${baseline.rejudgedIn}` : "in an earlier run";
+  return `The baseline was accepted under rubric version ${baseline.rescoredFromRubric}. Every one of its stored drafts was checked and judged again ${where}, so it is compared under rubric version ${baseline.rubricVersion}${here ? "" : "; in this run its drafts were checked again, and judged again only where the judge changed"}: the baseline arm is its stored drafts, re-judged, not drafted again.`;
+}
+
+/** The name of a baseline taken from an earlier run's comparison (--baseline-run): " re-judged" added once, however often it is taken again. */
+export function rejudgedBaselineName(name: string | undefined): string {
+  const base = name ?? "unknown";
+  return base.endsWith(" re-judged") ? base : `${base} re-judged`;
+}
+
+/** The label of a case that holds one baseline run's drafts in the judge app, within the app's limit (fc748f6). */
+export function baselineCaseLabel(childName: string, baselineName: string, run: number, limit: number): string {
+  return `${childName} (baseline ${baselineName}, run ${run})`.slice(0, limit);
+}
+
+/** One judge answer on a baseline draft, saved as the run goes (baseline-judged.json), so a resumed run does not pay for it again (finding 11). */
+export interface SavedBaselineJudge {
+  baseline: string;
+  caseId: string;
+  run: number;
+  section: ReportSectionId;
+  /** A hash of the draft's text: the answer is reused only for the same draft. */
+  textHash: string;
+  record: JudgeRecord;
+}
+
+/** A saved answer on the same baseline draft by this same judge, with every sample and no error; otherwise null. */
+export function reusableBaselineJudge(
+  saved: readonly SavedBaselineJudge[],
+  wanted: { baseline: string; caseId: string; run: number; section: ReportSectionId; textHash: string; fingerprint: string; samples: number },
+): JudgeRecord | null {
+  const found = saved.find((s) => s.baseline === wanted.baseline && s.caseId === wanted.caseId && s.run === wanted.run && s.section === wanted.section && s.textHash === wanted.textHash);
+  if (!found) return null;
+  const { record } = found;
+  return record.fingerprint === wanted.fingerprint && record.error === null && record.answers.length >= wanted.samples ? record : null;
+}
+
 /* The comparison ----------------------------------------------------------------------- */
 
 export type CompareStatus = "pass" | "regression" | "not-compared" | "invalid";
@@ -411,6 +494,7 @@ export function compareRuns(current: RunResult, baseline: RunResult): Comparison
     return comparison;
   }
   if (!baseline.valid) blockers.push("the baseline run is marked invalid");
+  if (current.partial || baseline.partial) blockers.push("a partial run (saved while it was still going) is never compared");
   if (current.rubricVersion !== baseline.rubricVersion) blockers.push(`the baseline used rubric version ${baseline.rubricVersion} and this run ${current.rubricVersion}`);
   if (current.provider !== baseline.provider) blockers.push(`the baseline was drafted by ${baseline.provider} and this run by ${current.provider}`);
   if (current.mode !== baseline.mode) blockers.push(`the baseline drafted ${baseline.mode} and this run ${current.mode}`);
@@ -419,6 +503,7 @@ export function compareRuns(current: RunResult, baseline: RunResult): Comparison
     comparison.notes.push(...blockers.map((reason) => `Not compared: ${reason}.`));
     return comparison;
   }
+  if (baseline.rescoredFromRubric !== undefined) comparison.notes.push(rescoredBaselineNote(baseline, current));
   if (current.model !== baseline.model) comparison.notes.push(`The drafting model differs: ${baseline.model ?? "unknown"} in the baseline, ${current.model ?? "unknown"} now.`);
   if (current.judgeFormat !== baseline.judgeFormat) comparison.notes.push(`The judge format differs: ${baseline.judgeFormat ?? "none"} in the baseline, ${current.judgeFormat ?? "none"} now.`);
   if (current.judgeSamples !== baseline.judgeSamples) comparison.notes.push(`Judge samples per run differ: ${baseline.judgeSamples} in the baseline, ${current.judgeSamples} now.`);
