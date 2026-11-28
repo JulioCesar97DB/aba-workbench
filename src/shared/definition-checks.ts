@@ -70,7 +70,7 @@ const EXPECTED_ES = "(?:respond|inici|comenz|comienz|comienc|empez|empiez|empiec
 const ABSENCE = new RegExp(
   [
     // English
-    `${START}(?:not|n't|never)\\s+(?:${L}+ly\\s+|even\\s+|yet\\s+)?${EXPECTED_EN}${L}*`,
+    `(?:${START}(?:not|never)|n't)\\s+(?:${L}+ly\\s+|even\\s+|yet\\s+)?${EXPECTED_EN}${L}*`,
     `${START}fail(?:s|ed|ing|ure)?\\s+to\\s+${L}+`,
     `${START}(?:stop|stops|stopped|stopping|cease|ceases|ceased)\\s+(?:to\\s+)?${EXPECTED_EN}${L}*`,
     `${START}(?:does|do|did|doing)\\s+nothing${END}`,
@@ -173,8 +173,26 @@ function namesOf(name: string): string[] {
   return [...new Set([base, short].filter(meaningful))];
 }
 
+/** Words before a name that make it an exclusion's ("counted as tantrum", "under self injury", "se cuenta como berrinche"). */
+const NAME_CUE = /(?:as|under|see|than|into|como|con|de)\s+(?:(?:a|an|the|la|el|un|una|los|las)\s+)?$/u;
+
+/**
+ * Whether a behavior's own text names the other behavior, as an exclusion does: the name
+ * written as a name (its first letter capitalized, as her names are) or after "as", "under",
+ * "como"… ("counted as self injury"). The name's word written plainly, as a form of this
+ * behavior ("crying, screaming and dropping to the floor"), is not an exclusion.
+ */
 function names(text: string, other: string): boolean {
-  return namesOf(other).some((name) => containsPhrase(text, name) || containsPhrase(text, `${name}s`) || containsPhrase(text, `${name}es`));
+  const original = text.normalize("NFC").replace(/[-_\u{2010}-\u{2015}]/gu, " ").replace(/\s+/gu, " ");
+  for (const name of namesOf(other)) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&").replace(/ /gu, "\\s+");
+    for (const match of original.matchAll(new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?:s|es)?(?![\\p{L}\\p{N}])`, "giu"))) {
+      const first = match[0][0];
+      if (first !== first.toLowerCase()) return true;
+      if (NAME_CUE.test(original.slice(Math.max(0, match.index - 30), match.index).toLowerCase())) return true;
+    }
+  }
+  return false;
 }
 
 /* The AI review (one request per map draft) */
@@ -236,8 +254,8 @@ export function definitionWarnings(behaviors: readonly CheckedBehavior[]): Map<s
     onset: textOf(behavior.onset),
     topographies: textsOf(behavior.topographies).map(phraseOf).filter(meaningful),
     examples: textsOf(behavior.examples).map(phraseOf).filter((example) => example !== ""),
-    // Where a behavior names another one: its exclusions are in its definition, onset, offset or non-examples.
-    own: phraseOf([textOf(behavior.definition), textOf(behavior.onset), textOf(behavior.offset), ...textsOf(behavior.nonExamples)].join(" \n ")),
+    // Where a behavior names another one: its exclusions are in its definition, onset, offset or non-examples (as written: a name is capitalized).
+    own: [textOf(behavior.definition), textOf(behavior.onset), textOf(behavior.offset), ...textsOf(behavior.nonExamples)].join(" \n "),
     body: phraseOf([textOf(behavior.definition), textOf(behavior.onset), ...textsOf(behavior.topographies)].join(" \n ")),
   }));
   for (const behavior of read) {
