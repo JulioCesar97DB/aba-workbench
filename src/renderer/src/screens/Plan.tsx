@@ -906,7 +906,9 @@ function CountRail({ caseId, data, plan, target, programs }: { caseId: string; d
         ? t("planStep.count.hours", { hours: target.hours ?? 0 })
         : target.rule === "override"
           ? t("planStep.count.override")
-          : t("planStep.count.default");
+          : target.rule === "unreadable-hours"
+            ? t("planStep.count.unreadable")
+            : t("planStep.count.default");
   return (
     <RailSection title={t("planStep.count.heading")} testId="plan-count-rail">
       {inputs ? (

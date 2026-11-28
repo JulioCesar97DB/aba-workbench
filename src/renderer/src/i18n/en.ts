@@ -539,6 +539,7 @@ export const en = {
       under5: "under 5 ({{age}} years): about 25, by your rule.",
       hours: "one per weekly hour ({{hours}}), replacements included, by your rule.",
       default: "with no hours, the app counts 30, your usual plan.",
+      unreadable: "the app could not read the hours you typed: it counts 30 meanwhile.",
       override: "your number.",
       openItem: "No weekly hours yet: the app counts 30 and leaves it marked.",
       so: "{{count}} programs so far, of ~{{target}}.",
@@ -602,6 +603,10 @@ export const en = {
       replacementOutcomeOther: {
         title: "Check what {{item}} gets the child",
         body: "It is marked “something else”: check that it gets the same as the behavior.",
+      },
+      replacementNoOutcome: {
+        title: "Say what {{item}} gets the child",
+        body: "Choose what it gets: the app checks that it is what the behavior gets.",
       },
       aversive: {
         title: "{{term}}",

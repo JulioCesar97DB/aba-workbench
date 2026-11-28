@@ -52,6 +52,7 @@ export type PlanFinding = { view: PlanViewId; function: FunctionName | null } & 
   | { kind: "no-replacement" }
   | { kind: "no-equivalent-replacement"; programs: Array<{ item: ItemRef; name: string; outcome: string | null }> }
   | { kind: "replacement-outcome-other"; item: ItemRef; itemName: string }
+  | { kind: "replacement-no-outcome"; item: ItemRef; itemName: string }
   | { kind: "aversive"; item: ItemRef; itemName: string; term: string }
   | { kind: "no-management"; unitName: string }
   | { kind: "two-management"; unitName: string; items: ItemRef[] }
@@ -74,7 +75,7 @@ export type FindingGroup = (typeof FINDING_GROUPS)[number];
 
 export function findingGroup(kind: PlanFindingKind): FindingGroup {
   if (kind === "prompt-before-latency" || kind === "delivery-before-offset" || kind === "proximity-beyond-elopement") return "clash";
-  if (kind === "no-replacement" || kind === "no-equivalent-replacement" || kind === "replacement-outcome-other") return "replacement";
+  if (kind === "no-replacement" || kind === "no-equivalent-replacement" || kind === "replacement-outcome-other" || kind === "replacement-no-outcome") return "replacement";
   if (kind === "aversive") return "aversive";
   return "other";
 }
@@ -107,8 +108,14 @@ const text = (claim: { value: string } | null | undefined) => claim?.value ?? ""
 
 /* Thresholds of a behavior, read only when plain */
 
+/**
+ * A latency is read only from a clause that says the child does not start: "does not begin
+ * within 5 seconds", "no empieza en 5 s". A bare "within 10 seconds" is no latency: it may be a
+ * rate window ("3 or more times within 10 seconds") or when the behavior starts ("begins within
+ * 5 seconds of a demand"), so it gives none (review of PR 1, finding 3).
+ */
 const LATENCY_CUE =
-  /(?:\b(?:within|after|in)\s+\d|\bwithout\s+(?:starting|beginning|responding|initiating|complying)|\b(?:does\s+not|doesn't|did\s+not|fails?\s+to|no)\s+(?:begin|start|respond|initiat|comply)|\blatency\b|\bdentro\s+de\b|\ben\s+(?:los\s+)?\d|\bsin\s+(?:empezar|iniciar|responder|comenzar)|\bno\s+(?:empieza|inicia|comienza|responde))/iu;
+  /(?<!\p{L})(?:(?:does\s+not|doesn't|did\s+not|do\s+not|fails?\s+to|failing\s+to|no)\s+(?:begin|start|respond|initiat|comply|follow)\p{L}*|without\s+(?:starting|beginning|responding|initiating|complying)|latency|no\s+(?:empieza|inicia|comienza|responde|cumple)|sin\s+(?:empezar|iniciar|responder|comenzar|cumplir))(?!\p{L})/iu;
 const OFFSET_CUE = /\b(?:stopped|stops|ceased|ceases|no\s+longer|has\s+not\s+occurred|without\s+the\s+behavior|in\s+a\s+row|consecutive|ends?\s+when|termina|ha\s+parado|sin\s+la\s+conducta|seguidos)\b/iu;
 const ELOPEMENT = /\b(?:elop\w*|runs?\s+away|running\s+away|ran\s+away|bolt\w*|fuga\w*|se\s+escapa|escaparse)\b/iu;
 
@@ -160,14 +167,15 @@ const E = "(?!\\p{L})";
 const AVERSIVE_TERMS: ReadonlyArray<{ term: string; pattern: RegExp }> = [
   ["extinction", `(?:escape\\s+|sensory\\s+|attention\\s+|automatic\\s+)?extinction`],
   ["punishment", `punish(?:ment|ments|ing|ed|es)?`],
-  ["time-out", `time[\\s-]?outs?`],
+  // "Each time out in the community" is no time-out (review nit 11).
+  ["time-out", `time[\\s-]?outs?(?!\\s+(?:in|on|at|with)(?!\\p{L}))`],
   ["response cost", `response[\\s-]+cost`],
   ["overcorrection", `over[\\s-]?correct(?:ion|ing|ed)?`],
   ["planned ignoring", `planned[\\s-]+ignoring`],
   ["response blocking", `response[\\s-]+blocking`],
   ["hand-over-hand", `hand[\\s-]+over[\\s-]+hand`],
   ["physical guidance to force", `physical(?:ly)?\\s+guid(?:e|ed|es|ing|ance)[^.;:]{0,40}?\\bforc(?:e|es|ed|ing)`],
-  ["restraint", `(?<!self[\\s-])restrain(?:t|ts|ed|ing|s)?`],
+  ["restraint", `(?<!self[\\s-])restrain(?:t|ts|ed|ing|s)?(?![\\s-]?free)`],
   ["seclusion", `seclu(?:sion|de|ded)`],
   ["reprimand", `reprimand(?:s|ed|ing)?`],
   ["ignore the behavior", `ignor(?:e|es|ed|ing)\\s+(?:the|his|her|their|this)\\s+(?:behavior|tantrums?|crying|screaming|whining)`],
@@ -182,18 +190,33 @@ const AVERSIVE_TERMS: ReadonlyArray<{ term: string; pattern: RegExp }> = [
   ["bloqueo de respuesta", `bloqueo\\s+de\\s+(?:la\\s+)?respuesta`],
   ["mano sobre mano", `mano\\s+sobre\\s+mano`],
   ["restricción física", `(?:restricci[oó]n|contenci[oó]n|sujeci[oó]n)\\s+f[ií]sica`],
-  ["aislamiento", `aislamiento`],
+  // "Aislamiento social" is a deficit, not a procedure: only seclusion as a consequence (review nit 11).
+  ["aislamiento", `seclusi[oó]n|aislamiento\\s+(?:como\\s+consecuencia|en\\s+(?:un|una|el|la)\\s+(?:cuarto|sala|habitaci[oó]n|espacio))`],
   ["reprimenda", `reprimenda|rega[nñ](?:o|os|ar|arlo|arla)`],
   ["ignorar la conducta", `ignorar\\s+(?:la|su)\\s+(?:conducta|rabieta|berrinche)`],
   ["no permitir el escape", `no\\s+(?:permitir|dejar)\\b[^.;:]{0,30}?\\bescap\\p{L}*`],
   ["quitar privilegios", `(?:quit|retir)(?:ar|a|an|ó|aron|ará|arán)(?:le|les)?\\s+(?:el|los|un|sus)?\\s*privilegios?|p[eé]rdida\\s+de\\s+privilegios?`],
 ].map(([term, source]) => ({ term, pattern: new RegExp(`${B}(?:${source})${E}`, "giu") }));
 
-/** A negation just before a name in its clause: the name is said not to be used. */
-const NEGATION_BEFORE =
-  /(?:\b(?:no|not|never|without|avoid|avoids|avoided|avoiding|instead\s+of|rather\s+than|other\s+than|excluding|except|nor|neither|nunca|sin|ni|evita|evitar|evitando|en\s+lugar\s+de|en\s+vez\s+de|excepto)\b|n't)[^.;:!?]{0,40}$/iu;
-/** A negation right after it: "extinction is not used", "time-out will never be used", "no se usa". */
-const NEGATION_AFTER = /^[\s,)"']*(?:(?:is|are|was|were|will|would|should|shall|must|can|may)\s+)?(?:not|never|no)\s+(?:be\s+)?(?:used|implemented|applied|included|recommended|part|an?\s+option|considered)|^[\s,)"']*(?:is|are)\s+(?:never|not)\b|^[\s,)"']*(?:no|nunca)\s+(?:se\s+)?(?:usa|utiliza|aplica|emplea|incluye|recomienda)/iu;
+/**
+ * A negation that governs the name: right before it, with at most three small words between
+ * ("does not use planned ignoring", "no extinction", "instead of time-out", "nunca se usa
+ * castigo"). Only whole words count, with Unicode boundaries, so the "ni" of "niño" is no
+ * negation; and a negation of the child's behavior earlier in the clause ("If he does not stop
+ * within 10 seconds, the RBT uses planned ignoring") does not reach the name (review of PR 1,
+ * findings 1 and 2).
+ */
+const NEGATION_BEFORE = new RegExp(
+  [
+    "(?<!\\p{L})(?:no|not|never|without|nor|neither|avoid|avoids|avoided|avoiding|instead\\s+of|rather\\s+than|other\\s+than|except|excluding",
+    "|nunca|sin|ni|jam[aá]s|evita|evitar|evitando|en\\s+lugar\\s+de|en\\s+vez\\s+de|excepto)(?!\\p{L})",
+    "(?:\\s+(?:the|any|a|an|use|uses|used|using|of|planned|apply|applies|applied|applying|be|is|are|will|el|la|los|las|un|una|uso|usar|usa|usan|usará|aplica|aplicar|aplicará|se|de|del|ning[uú]n|ninguna)(?!\\p{L})){0,3}\\s*$",
+  ].join(""),
+  "iu",
+);
+/** Or right after it, with at most one word between: "extinction is not used", "time-out procedures will never be used", "hand over hand prompting is avoided", "no se usa". */
+const NEGATION_AFTER =
+  /^[\s,)"']*(?:\p{L}+\s+)?(?:(?:is|are|was|were|will|would|should|shall|must|can|may)\s+)?(?:not|never|no)\s+(?:be\s+)?(?:used|implemented|applied|included|recommended|part|an?\s+option|considered)|^[\s,)"']*(?:\p{L}+\s+)?(?:is|are)\s+(?:never|not)(?!\p{L})|^[\s,)"']*(?:\p{L}+\s+)?(?:(?:is|are|will\s+be)\s+)?avoided(?!\p{L})|^[\s,)"']*(?:no|nunca)\s+(?:se\s+)?(?:usa|utiliza|aplica|emplea|incluye|recomienda)/iu;
 
 /** The first name of her never-list a text uses, not inside a negation; null when none. */
 export function aversiveTerm(value: string): string | null {
@@ -202,8 +225,8 @@ export function aversiveTerm(value: string): string | null {
     for (const match of value.matchAll(pattern)) {
       const at = match.index ?? 0;
       const before = value.slice(0, at);
-      const clauseStart = Math.max(before.lastIndexOf("."), before.lastIndexOf(";"), before.lastIndexOf(":"), before.lastIndexOf("\n"), before.lastIndexOf("!"), before.lastIndexOf("?"));
-      const clause = before.slice(clauseStart + 1);
+      // The clause that names it: after a sentence's end, a colon, a comma, "then" or "entonces".
+      const clause = before.split(/[.;:,!?\n]|(?<!\p{L})(?:then|entonces)(?!\p{L})/iu).at(-1) ?? "";
       // "Do not allow escape" carries its own "not": only what comes before it can negate it.
       if (NEGATION_BEFORE.test(clause)) continue;
       if (NEGATION_AFTER.test(value.slice(at + match[0].length))) continue;
@@ -279,12 +302,14 @@ export function planChecks(input: PlanCheckInput): PlanFinding[] {
     const fitting = content.replacements.filter((program) => program.outcome !== null && (EQUIVALENT_OUTCOMES[fn] as readonly string[]).includes(program.outcome));
     if (content.replacements.length === 0) findings.push({ view, function: fn, kind: "no-replacement" });
     else if (fitting.length === 0) {
-      const others = content.replacements.filter((program) => program.outcome !== "other");
+      // A replacement whose outcome is not chosen yet says so on its own; it is not "another function's" (review nit 14).
+      const others = content.replacements.filter((program) => program.outcome !== "other" && program.outcome !== null);
       if (others.length > 0)
         findings.push({ view, function: fn, kind: "no-equivalent-replacement", programs: others.map((program) => ({ item: { part: "programs", id: program.id }, name: nameOf(program.title, program.id), outcome: program.outcome })) });
     }
     for (const program of content.replacements) {
       if (program.outcome === "other") findings.push({ view, function: fn, kind: "replacement-outcome-other", item: { part: "programs", id: program.id }, itemName: nameOf(program.title, program.id) });
+      if (program.outcome === null) findings.push({ view, function: fn, kind: "replacement-no-outcome", item: { part: "programs", id: program.id }, itemName: nameOf(program.title, program.id) });
     }
 
     // One management entry per behavior or group, the safety step first for a dangerous one (§5.4).
@@ -325,7 +350,9 @@ export function planChecks(input: PlanCheckInput): PlanFinding[] {
   for (const goal of plan.parts.caregiverGoals.items.filter((item) => !isRejected(item))) scan("caregiverGoals", goal.id, nameOf(goal.title, goal.id), "goals", null, [text(goal.title), text(goal.procedure)]);
   if (input.hbiIntro) {
     const term = aversiveTerm(input.hbiIntro);
-    if (term) findings.push({ view: "glossary", function: null, kind: "aversive", item: { part: "planInputs", id: "plan" }, itemName: "Hypothesis Based Interventions", term });
+    // The intro is on the rail of the function views: "Ver" opens the first block (review nit 17).
+    const first = blocks[0]?.function ?? null;
+    if (term) findings.push({ view: first ? `fn:${first}` : "glossary", function: first, kind: "aversive", item: { part: "planInputs", id: "plan" }, itemName: "Hypothesis Based Interventions", term });
   }
 
   // The glossary (D13, D15; §5.4).

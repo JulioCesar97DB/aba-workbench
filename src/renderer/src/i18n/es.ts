@@ -528,6 +528,7 @@ export const es: Messages = {
       under5: "menor de 5 ({{age}} años): unos 25, por tu regla.",
       hours: "uno por hora semanal ({{hours}}), reemplazos incluidos, por tu regla.",
       default: "sin horas, la app cuenta con 30, como tu plan habitual.",
+      unreadable: "la app no pudo leer las horas que escribiste: mientras tanto cuenta con 30.",
       override: "tu número.",
       openItem: "Aún sin horas semanales: la app cuenta con 30 y lo deja marcado.",
       so: "{{count}} programas por ahora, de ~{{target}}.",
@@ -591,6 +592,10 @@ export const es: Messages = {
       replacementOutcomeOther: {
         title: "Revisa lo que consigue {{item}}",
         body: "Está marcado como «otra cosa»: revisa que consiga lo mismo que la conducta.",
+      },
+      replacementNoOutcome: {
+        title: "Di lo que consigue {{item}}",
+        body: "Elige lo que consigue: la app revisa que sea lo mismo que consigue la conducta.",
       },
       aversive: {
         title: "{{term}}",

@@ -17,7 +17,7 @@
  */
 
 import { FUNCTION_NAMES, type FunctionName } from "./case-map.ts";
-import { byName, caregiverBaseline, masteryPercent, CAREGIVER_MASTERY, skillBaseline } from "./plan-compute.ts";
+import { byName, caregiverBaseline, caregiverMastery, masteryPercent, skillBaseline } from "./plan-compute.ts";
 import { acceptedPlan, entryCovers, fingerprint, functionBlocks, HBI_INTRO_DRAFT, isAccepted, type PlanMapInput, type PlanView, type ProgramItem } from "./plan.ts";
 
 /** Her functions' names as ABA Matrix writes them. */
@@ -74,7 +74,10 @@ const field = (id: string, label: string, text: string): CopyField => ({ id, lab
 /** A program's baseline as the sentence she pastes. */
 export function baselineSentence(program: ProgramItem): string {
   const baseline = skillBaseline(program.baseline);
-  if (baseline.percent === null) return baseline.unreadable ? "[MISSING: baseline; a session's counts are not plain numbers]" : "[MISSING: baseline]";
+  if (baseline.percent === null) {
+    if (baseline.unreadable) return "[MISSING: baseline; a session's counts are not plain numbers]";
+    return baseline.noOpportunity ? "[MISSING: baseline; the sessions gave no opportunity and the caregiver's report gives no percent]" : "[MISSING: baseline]";
+  }
   if (baseline.source === "caregiver") return `A baseline of ${baseline.percent}%, per the caregiver's report. [CHECK: not measured in session]`;
   return `A baseline of ${baseline.percent}%.`;
 }
@@ -153,7 +156,7 @@ export function planCopy(input: PlanCopyInput): CopyGroup[] {
 
   for (const goal of accepted.caregiverGoals) {
     const baseline = caregiverBaseline(goal.baselinePercent?.value);
-    const mastery = masteryPercent("general", goal.masteryOverride?.value ?? String(CAREGIVER_MASTERY));
+    const mastery = { percent: caregiverMastery(goal.masteryOverride?.value) };
     groups.push({
       id: goal.id,
       section: 16,

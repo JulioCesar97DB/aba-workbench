@@ -27,7 +27,8 @@ export function plainCount(text: string | null | undefined): number | null {
 
 /** Rounded to the nearest 10% (D11): her baselines are multiples of 10, from 10 opportunities. A half rounds up. */
 export function roundToTen(percent: number): number {
-  return Math.min(100, Math.max(0, Math.round(percent / 10) * 10));
+  // A hair above, so an exact half that floating point left a hair below still rounds up (review of PR 1, finding 5).
+  return Math.min(100, Math.max(0, Math.round(percent / 10 + 1e-9) * 10));
 }
 
 /**
@@ -41,7 +42,7 @@ export function ageInYears(mapAge: string | null | undefined, caseAge: ClientAge
   return caseAge ? caseAge.years : null;
 }
 
-export type TargetRule = "under-5" | "hours" | "default" | "override";
+export type TargetRule = "under-5" | "hours" | "default" | "unreadable-hours" | "override";
 
 export interface ProgramTarget {
   target: number;
@@ -56,9 +57,10 @@ export interface ProgramTarget {
 export const DEFAULT_PROGRAMS = 30;
 export const UNDER_FIVE_PROGRAMS = 25;
 
-/** Weekly hours of 97153 she typed: a plain number from 1 to 60, or null. */
+/** Weekly hours of 97153 she typed: a number from 1 to 60, alone or with its unit ("20", "20 h", "20 horas"), or null. */
 export function weeklyHours(text: string | null | undefined): number | null {
-  const hours = plainNumber(text);
+  const match = /^(\d+(?:[.,]\d+)?)\s*(?:h|hrs?|hours?|horas?)?\.?$/iu.exec((text ?? "").trim());
+  const hours = match ? Number(match[1].replace(",", ".")) : null;
   return hours !== null && hours >= 1 && hours <= 60 ? hours : null;
 }
 
@@ -73,15 +75,42 @@ export function programTarget(input: { ageYears: number | null; hoursText: strin
   if (override !== null && override >= 1 && override <= 99) return { target: override, rule: "override", openItem: false, ageYears: input.ageYears, hours };
   if (input.ageYears !== null && input.ageYears < 5) return { target: UNDER_FIVE_PROGRAMS, rule: "under-5", openItem: false, ageYears: input.ageYears, hours };
   if (hours !== null) return { target: Math.round(hours), rule: "hours", openItem: false, ageYears: input.ageYears, hours };
-  return { target: DEFAULT_PROGRAMS, rule: "default", openItem: true, ageYears: input.ageYears, hours: null };
+  // Hours she typed that the app cannot read are said so, not taken for none (review nit 12).
+  const typed = (input.hoursText ?? "").trim() !== "";
+  return { target: DEFAULT_PROGRAMS, rule: typed ? "unreadable-hours" : "default", openItem: true, ageYears: input.ageYears, hours: null };
 }
 
 /** One session's percent, correct over opportunities; null when either is not a plain count, there is no opportunity, or more correct than opportunities. */
 export function sessionPercent(correct: string | null | undefined, opportunities: string | null | undefined): number | null {
+  const read = sessionCounts(correct, opportunities);
+  return read === "none" || read === null ? null : (read.correct / read.opportunities) * 100;
+}
+
+/**
+ * One session's counts: "none" when the session gave no opportunity (0 of 0: the skill did
+ * not come up), null when it cannot be read (not plain whole numbers, or more correct than
+ * opportunities).
+ */
+export function sessionCounts(correct: string | null | undefined, opportunities: string | null | undefined): { correct: number; opportunities: number } | "none" | null {
   const right = plainCount(correct);
   const chances = plainCount(opportunities);
-  if (right === null || chances === null || chances === 0 || right > chances) return null;
-  return (right / chances) * 100;
+  if (right === null || chances === null || right > chances) return null;
+  return chances === 0 ? "none" : { correct: right, opportunities: chances };
+}
+
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+
+/**
+ * The mean of sessions' percents rounded to the nearest 10%, exactly: as a fraction over a
+ * common denominator, with a half rounding up, so no floating point error rounds 25% down
+ * (review of PR 1, finding 5).
+ */
+function meanToTen(sessions: ReadonlyArray<{ correct: number; opportunities: number }>): number {
+  const common = sessions.reduce((lcm, session) => (lcm * session.opportunities) / gcd(lcm, session.opportunities), 1);
+  // mean percent / 10 = (sum of correct * (common / opportunities)) * 10 / (common * n)
+  const numerator = sessions.reduce((sum, session) => sum + session.correct * (common / session.opportunities), 0) * 10;
+  const denominator = common * sessions.length;
+  return Math.min(100, Math.floor((2 * numerator + denominator) / (2 * denominator)) * 10);
 }
 
 export interface SkillBaseline {
@@ -94,26 +123,31 @@ export interface SkillBaseline {
   sessions: Array<number | null>;
   /** Sessions were entered, but one cannot be read: no mean (the app never guesses). */
   unreadable: boolean;
+  /** Every session entered gave no opportunity: the caregiver's report stands in (proposal §9.3). */
+  noOpportunity: boolean;
 }
 
 /**
- * A skill's baseline (D11): the mean of its sessions' percents, rounded to the nearest 10%.
- * With no sessions, the caregiver's report gives it, rounded the same way, with a [CHECK].
- * When a session cannot be read, there is no baseline from the sessions and the report is
- * not used in their place: she fixes the session. Her override wins.
+ * A skill's baseline (D11): the mean of its sessions' percents, rounded to the nearest 10%. A
+ * session that gave no opportunity (0 of 0) is left out of the mean; when every session gave
+ * none, or there are none, the caregiver's report gives it, rounded the same way, with a
+ * [CHECK] (proposal §9.3; review of PR 1, finding 4). When a session cannot be read, there is
+ * no baseline from the sessions and the report is not used in their place: she fixes the
+ * session. Her override wins.
  */
 export function skillBaseline(baseline: ProgramItem["baseline"]): SkillBaseline {
-  const sessions = baseline.sessions.map((session) => sessionPercent(session.correct?.value, session.opportunities?.value));
+  const counts = baseline.sessions.map((session) => sessionCounts(session.correct?.value, session.opportunities?.value));
+  const sessions = counts.map((read) => (read === null || read === "none" ? null : (read.correct / read.opportunities) * 100));
+  const base = { sessions, unreadable: false, noOpportunity: false };
   const override = plainNumber(baseline.override?.value, { percent: true });
-  if (override !== null && override <= 100) return { percent: override, source: "override", check: false, sessions, unreadable: false };
-  if (sessions.length > 0) {
-    if (sessions.some((value) => value === null)) return { percent: null, source: "none", check: false, sessions, unreadable: true };
-    const mean = (sessions as number[]).reduce((sum, value) => sum + value, 0) / sessions.length;
-    return { percent: roundToTen(mean), source: "sessions", check: false, sessions, unreadable: false };
-  }
+  if (override !== null && override <= 100) return { ...base, percent: override, source: "override", check: false };
+  if (counts.some((read) => read === null)) return { ...base, percent: null, source: "none", check: false, unreadable: true };
+  const readable = counts.filter((read): read is { correct: number; opportunities: number } => read !== null && read !== "none");
+  if (readable.length > 0) return { ...base, percent: meanToTen(readable), source: "sessions", check: false };
+  const noOpportunity = counts.length > 0;
   const reported = plainNumber(baseline.caregiverPercent?.value, { percent: true });
-  if (reported !== null && reported <= 100) return { percent: roundToTen(reported), source: "caregiver", check: true, sessions, unreadable: false };
-  return { percent: null, source: "none", check: false, sessions, unreadable: false };
+  if (reported !== null && reported <= 100) return { ...base, noOpportunity, percent: roundToTen(reported), source: "caregiver", check: true };
+  return { ...base, noOpportunity, percent: null, source: "none", check: false };
 }
 
 export const MASTERY_PERCENT: Readonly<Record<MasteryCategory, number>> = { general: 90, safety: 95, "street-crossing": 100 };
@@ -125,6 +159,12 @@ export function masteryPercent(category: string, overrideText?: string | null): 
   const override = plainNumber(overrideText, { percent: true });
   if (override !== null && override > 0 && override <= 100) return { percent: override, source: "override" };
   return { percent: MASTERY_PERCENT[category as MasteryCategory] ?? MASTERY_PERCENT.general, source: "category" };
+}
+
+/** A caregiver goal's mastery: her override when it reads, otherwise 95% (review nit 15). */
+export function caregiverMastery(overrideText?: string | null): number {
+  const override = plainNumber(overrideText, { percent: true });
+  return override !== null && override > 0 && override <= 100 ? override : CAREGIVER_MASTERY;
 }
 
 /** A caregiver goal's baseline: 0, 10 or 20 (programs.md). Above 0 means earlier training, marked [CHECK]. Null when not given. */

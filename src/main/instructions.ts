@@ -76,7 +76,11 @@ export function confirmHbiIntro(file: InstructionsFile, raw: string, now: Date):
   const text = normalizeLineEndings(raw).trim();
   if (text === "" || text.length > MAX_INSTRUCTIONS_LENGTH) throw new Error("Refused: the intro must be text, and not that long.");
   const current = file.sections.plan ?? { text: "", updatedAt: now.toISOString(), history: [] };
-  return { ...file, sections: { ...file.sections, plan: { ...current, hbiIntro: { text, confirmedAt: now.toISOString() } } } };
+  // The intro she confirmed before is kept, as every earlier text is (review of PR 1, finding 9).
+  const earlier: unknown = current.hbiIntro;
+  const history: unknown[] = Array.isArray(current.hbiIntroHistory) ? current.hbiIntroHistory : [];
+  const hbiIntroHistory = earlier && typeof earlier === "object" ? [...history, earlier].slice(-MAX_HISTORY) : history;
+  return { ...file, sections: { ...file.sections, plan: { ...current, hbiIntro: { text, confirmedAt: now.toISOString() }, ...(hbiIntroHistory.length > 0 ? { hbiIntroHistory } : {}) } } };
 }
 
 /** The plan's standing instructions and the intro she confirmed, as the interface shows them. */

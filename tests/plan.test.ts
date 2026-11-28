@@ -205,8 +205,11 @@ test("compute: the program count by her rule, and her override", () => {
   assert.deepEqual(programTarget({ ageYears: 4, hoursText: "20" }), { target: 25, rule: "under-5", openItem: false, ageYears: 4, hours: 20 });
   assert.deepEqual(programTarget({ ageYears: 6, hoursText: "20" }), { target: 20, rule: "hours", openItem: false, ageYears: 6, hours: 20 });
   assert.deepEqual(programTarget({ ageYears: 6, hoursText: "" }), { target: 30, rule: "default", openItem: true, ageYears: 6, hours: null });
-  assert.equal(programTarget({ ageYears: null, hoursText: "about 20" }).rule, "default", "an unreadable number is no hours");
-  assert.equal(programTarget({ ageYears: 6, hoursText: "0" }).rule, "default");
+  // Hours she typed that cannot be read are said so (review nit 12); a unit is read.
+  assert.deepEqual(programTarget({ ageYears: null, hoursText: "about 20" }), { target: 30, rule: "unreadable-hours", openItem: true, ageYears: null, hours: null });
+  assert.equal(programTarget({ ageYears: 6, hoursText: "0" }).rule, "unreadable-hours");
+  assert.equal(programTarget({ ageYears: 6, hoursText: "20 h" }).target, 20);
+  assert.equal(programTarget({ ageYears: 6, hoursText: "25 horas" }).target, 25);
   assert.deepEqual(programTarget({ ageYears: 6, hoursText: "20", overrideText: "28" }).target, 28);
   assert.equal(programTarget({ ageYears: 6, hoursText: "20", overrideText: "lots" }).rule, "hours", "an unreadable override is ignored");
 });
@@ -234,6 +237,17 @@ test("compute: a skill's baseline is the mean of its sessions, rounded to the ne
   const mine = skillBaseline({ ...base, sessions: [session("1")], override: { value: "30", refs: [], origin: "her", check: null } });
   assert.deepEqual([mine.percent, mine.source], [30, "override"]);
   assert.equal(skillBaseline(base).percent, null);
+  // Exact halves round up: 1 of 6 and 2 of 6 are 25% (review of PR 1, finding 5).
+  assert.equal(skillBaseline({ ...base, sessions: [session("1", "6"), session("2", "6")] }).percent, 30);
+  assert.equal(skillBaseline({ ...base, sessions: [session("1", "6"), session("3", "9")] }).percent, 30);
+  assert.equal(skillBaseline({ ...base, sessions: [session("2", "6"), session("2", "12")] }).percent, 30);
+  // A session with no opportunity is left out; with none at all, the caregiver's report stands in (finding 4).
+  assert.equal(skillBaseline({ ...base, sessions: [session("0", "0"), session("3")] }).percent, 30);
+  const none = skillBaseline({ ...base, sessions: [session("0", "0")], caregiverPercent: { value: "10", refs: [], origin: "her", check: null } });
+  assert.deepEqual([none.percent, none.source, none.check, none.unreadable], [10, "caregiver", true, false]);
+  const nothing = skillBaseline({ ...base, sessions: [session("0", "0")] });
+  assert.deepEqual([nothing.percent, nothing.noOpportunity, nothing.unreadable], [null, true, false]);
+  assert.equal(skillBaseline({ ...base, sessions: [session("2", "0")] }).unreadable, true, "correct answers with no opportunity cannot be read");
   assert.equal(sessionPercent("2", "0"), null);
   assert.equal(roundToTen(44.9), 40);
 });
@@ -270,6 +284,17 @@ test("checks: her never-list and extinction or punishment, in English and Spanis
     "Se usa tiempo fuera después de pegar.",
     "El RBT aplica extinción de escape.",
     "Se le quitan los privilegios.",
+    // Spanish text that names the child: the "ni" of "niño" is no negation (review of PR 1, finding 1).
+    "Cuando el niño grita, el RBT usa tiempo fuera.",
+    "Si la niña tira objetos, se aplica un castigo.",
+    "Con el niño, el RBT aplica extinción.",
+    "Cuando los niños pelean, el RBT aplica costo de respuesta.",
+    // A negation of the child's behavior does not reach the procedure (review of PR 1, finding 2).
+    "If Tomás does not stop within 10 seconds, the RBT uses planned ignoring.",
+    "If he does not comply, escape extinction is used and the task is presented again.",
+    "When he screams without a clear trigger, the RBT applies time-out for 2 minutes.",
+    "Si el niño no termina la tarea, se usa extinción de escape.",
+    "Cuando no hay un adulto cerca, el RBT usa bloqueo de respuesta.",
   ];
   for (const text of fail) assert.ok(aversiveTerm(text), `should flag: ${text}`);
   const pass = [
@@ -283,6 +308,18 @@ test("checks: her never-list and extinction or punishment, in English and Spanis
     "He shows self-restraint when waiting.",
     "The RBT gives a full physical prompt, then fades it.",
     "The RBT ignores nothing: every request is honored.",
+    // A negation that governs the procedure, in English and Spanish, with the child named.
+    "The RBT does not use planned ignoring.",
+    "The RBT will not apply time-out.",
+    "Never use response blocking.",
+    "El RBT no usa extinción con el niño.",
+    "Con la niña, el RBT nunca aplica castigo.",
+    "Time-out procedures are never used.",
+    "Hand over hand prompting is avoided.",
+    // Words that are not the procedure (review nit 11).
+    "Each time out in the community, the RBT reviews the safety rules.",
+    "The RBT teaches restraint-free calm-down strategies.",
+    "Deficits in aislamiento social with peers.",
   ];
   for (const text of pass) assert.equal(aversiveTerm(text), null, `should pass: ${text}`);
 });
@@ -292,6 +329,10 @@ test("checks: a behavior's thresholds are read only when plain", () => {
   assert.equal(latencySeconds(behavior("Tomás does not begin a task within 5 seconds of an instruction.")), 5);
   assert.equal(latencySeconds(behavior("Tomás hits with an open hand.")), null);
   assert.equal(latencySeconds(behavior("He does not begin within 5 seconds, or within 10 seconds at school.")), null, "two values: none");
+  // A rate window or when a behavior starts is no latency (review of PR 1, finding 3).
+  assert.equal(latencySeconds(behavior("Tomás hits his head 3 or more times within 10 seconds.")), null);
+  assert.equal(latencySeconds(behavior("Crying and screaming that begins within 5 seconds of a demand.")), null);
+  assert.equal(latencySeconds(behavior("Tomás no empieza la tarea en 5 s.")), 5);
   assert.equal(offsetSeconds(behavior("x", "The behavior has stopped for 10 consecutive seconds.")), 10);
   assert.equal(offsetSeconds(behavior("x", "He calms down.")), null);
   assert.equal(elopementFeet(behavior("Moving more than 6 feet away from the adult.", null, "Elopement")), 6);
@@ -538,6 +579,11 @@ test("the HBI intro: our draft until she confirms it once; kept in the plan's st
   const confirmed = confirmHbiIntro(empty.file, "  Her intro, in two sentences. The second one.  ", new Date(T1));
   assert.deepEqual(planInstructionsOf(confirmed), { text: "", hbiIntro: { text: "Her intro, in two sentences. The second one.", confirmedAt: T1 } });
   assert.throws(() => confirmHbiIntro(empty.file, "   ", new Date(T1)), /Refused/);
+  // Replaced later, the one she confirmed before is kept in its history (review of PR 1, finding 9).
+  const again = confirmHbiIntro(confirmed, "Her second intro.", new Date(T2));
+  assert.deepEqual(planInstructionsOf(again).hbiIntro, { text: "Her second intro.", confirmedAt: T2 });
+  assert.deepEqual((again.sections.plan as unknown as { hbiIntroHistory: unknown[] }).hbiIntroHistory, [{ text: "Her intro, in two sentences. The second one.", confirmedAt: T1 }]);
+  assert.ok(readInstructionsFile(JSON.stringify(again)).ok, "it reads back whole");
   // A section's instructions are untouched, and an unknown key a newer app writes in the plan's entry is kept.
   assert.deepEqual(Object.keys(confirmed.sections), ["plan"]);
 });
