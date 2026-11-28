@@ -244,9 +244,9 @@ export function MapWays({ caseId, onByHand }: { caseId: string; onByHand: () => 
 }
 
 /**
- * Her thresholds for behavior definitions (D16): offered once from what her assessments
- * show, confirmed by her, and from then on her standing instructions for the map. Until
- * she confirms them, the AI leaves each threshold as [MISSING] in the definitions.
+ * Her thresholds for behavior definitions (D16). Her defaults from the questionnaire are in
+ * the rules for every user (owner's decision, 2026-11-28); what she saves here becomes her
+ * standing instructions for the map and overrides them. "confirmed" means she saved her own.
  */
 export function ThresholdsBlock({ caseId, instructions, onSaved }: { caseId: string; instructions: string; onSaved: (text: string) => void }) {
   const { t } = useTranslation();

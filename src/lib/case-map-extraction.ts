@@ -20,6 +20,7 @@ import { BARRIER_TAGS, EVIDENCE_TOOLS, FUNCTION_NAMES, MAP_PART_LIMITS, MAP_TEXT
 
 export { MAP_REQUEST_KINDS, type MapRequestKind } from "../shared/case-map.ts";
 import type { MapRequestKind } from "../shared/case-map.ts";
+import { DEFAULT_THRESHOLDS } from "../shared/case-map-thresholds.ts";
 
 /** The parts each request returns. Risks name behaviors, so they come with the behaviors. */
 export const PARTS_OF_REQUEST = {
@@ -400,7 +401,7 @@ export interface CheckContext {
   settingIds: ReadonlySet<string>;
   /** Behaviors already in the map (on an update): a group or a risk may name them by id. */
   behaviorIds?: ReadonlySet<string>;
-  /** Her confirmed thresholds, as sent (behaviors only): an AI-drafted value may take its numbers from them (D16). */
+  /** Her own thresholds, as sent (behaviors only): an AI-drafted value may take its numbers from them (D16), as from her defaults. */
   instructions?: string;
 }
 
@@ -547,7 +548,7 @@ const LISTS = ["caregivers", "settings", "deficits", "strengths", "facts", "repo
  * The checks after Zod: every ref names a place that was sent and quotes it word for word
  * in at least three words (a PDF's quotes are not checked yet); every claim with a source's
  * value has a ref; every number of a claim is written in one of its quotes (an AI-drafted
- * value may also take it from her confirmed thresholds); every link between items is
+ * behavior value may also take it from her default thresholds or her own); every link between items is
  * known; keys are unique; a group's members share its function and measure.
  */
 export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context: CheckContext): CheckResult {
@@ -583,7 +584,9 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   const sourceTexts = new Map(context.sources.filter((source) => source.text !== null).map((source) => [source.id, normalizeForQuote(source.text ?? "")]));
   const sectionTexts = new Map(context.sections.map((section) => [section.id, normalizeForQuote(section.text)]));
   const notes = normalizeForQuote(context.notes);
-  const thresholdNumbers = new Set(numbersIn(context.instructions ?? ""));
+  // An AI-drafted behavior value may take a number from her default thresholds (owner's decision,
+  // 2026-11-28) or from her own, sent as the map's standing instructions (D16).
+  const thresholdNumbers = new Set(kind === "map-behaviors" ? numbersIn([...DEFAULT_THRESHOLDS, context.instructions ?? ""].join("\n")) : []);
   const knownBehaviors = context.behaviorIds ?? new Set<string>();
 
   /** A problem, located: "settings[2].kind" marks settings item 2 as failing; "client.age" the client. */
@@ -698,8 +701,8 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     if (missing.length === 0) return;
     numbers.add(claim);
     unquotedNumbers.set(claim, missing);
-    if (options.threshold && THRESHOLD.test(claim.value) && thresholdNumbers.size === 0) {
-      problem(where, `"${claim.value.slice(0, 80)}" gives a threshold that no standing instruction gives: write [MISSING: your threshold for …] in its place.`, "threshold");
+    if (options.threshold && THRESHOLD.test(claim.value)) {
+      problem(where, `"${claim.value.slice(0, 80)}" gives a threshold that no quote, default or standing instruction gives: use her default, or write [MISSING: your threshold for …] in its place.`, "threshold");
     } else {
       problem(where, `the number ${missing.map((number) => number.replace(/^d:/u, "")).join(", ")} in "${claim.value.slice(0, 80)}" is not written in any of its quotes.`, "number-not-quoted");
     }

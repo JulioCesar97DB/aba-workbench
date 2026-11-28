@@ -409,17 +409,30 @@ test("S1: a value with no ref, a quote too short to prove anything, a number in 
   first.name = claim("Spitting", []);
   first.antecedents = [claim("A worksheet set down in 6 of 8 episodes", [ref("o", "she set the reading worksheet on the table")])];
   (first.baseline as { observations: Array<Record<string, unknown>> }).observations[0].value = claim("3", [ref("o", "3")]);
-  first.offset = claim("The child has not spat for 10 seconds.", [ref("o", "spat toward his mother's forearm")], "ai-drafted");
+  first.offset = claim("The child has not spat for 15 seconds.", [ref("o", "spat toward his mother's forearm")], "ai-drafted");
   const result = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext());
   const has = (pattern: RegExp) => assert.ok(result.problems.some((problem) => pattern.test(problem)), `${pattern} in ${result.problems.join(" | ")}`);
   has(/behaviors\[0\]\.name: a value a source or her text states needs a ref/);
   has(/behaviors\[0\]\.antecedents\[0\]: the number 6, 8 in/);
   has(/observations\[0\]\.value\.refs\[0\]: the quote "3" is too short/);
-  has(/behaviors\[0\]\.offset: .*gives a threshold that no standing instruction gives/);
+  has(/behaviors\[0\]\.offset: .*gives a threshold that no quote, default or standing instruction gives/);
   assert.deepEqual([...result.failing.get("behaviors")!], [0], "the problems point at the one behavior");
-  // With her confirmed thresholds, an AI-drafted offset may take its number from them (D16).
-  const withThresholds = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext({ instructions: "End of an episode: the behavior has stopped for 10 seconds in a row." }));
+  // With her own thresholds, an AI-drafted offset may take its number from them (D16).
+  const withThresholds = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext({ instructions: "End of an episode: the behavior has stopped for 15 seconds in a row." }));
   assert.ok(!withThresholds.problems.some((problem) => /offset/.test(problem)));
+});
+
+test("her default thresholds (owner's decision, 2026-11-28): an AI-drafted behavior value may take their numbers with no standing instruction; a value she or a source states may not", () => {
+  const answer = behaviorsAnswer({ obs: "o", interview: "i" }, []);
+  const [first] = answer.behaviors as Array<Record<string, unknown>>;
+  first.offset = claim("The child has not spat for 10 seconds in a row.", [ref("o", "spat toward his mother's forearm")], "ai-drafted");
+  first.onset = claim("The child is more than 6 feet from the supervising adult.", [ref("o", "spat toward his mother's forearm")], "ai-drafted");
+  const result = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext());
+  assert.ok(!result.problems.some((problem) => /offset|onset/.test(problem)), result.problems.join(" | "));
+  // An extracted value still needs its number in a quote.
+  first.offset = claim("The child has not spat for 10 seconds in a row.", [ref("o", "spat toward his mother's forearm")], "extracted");
+  const extracted = checkMapAnswer("map-behaviors", parsedBehaviors(answer), checkContext());
+  assert.ok(extracted.problems.some((problem) => /offset/.test(problem)), extracted.problems.join(" | "));
 });
 
 test("S2 and S3: 'her' needs a found quote of her section or notes; a mitigation no source states is a proposal", () => {
@@ -634,13 +647,13 @@ test("R2-S1: a PDF ref next to a found text quote does not turn off the number a
   // The review's probe: a count in neither quote, one quote found in the notes, one a PDF's.
   first.antecedents = [claim("7 of 8 episodes followed a demand", [ref("o", "she set the reading worksheet on the table"), ref("p", "demands at home")])];
   // A threshold nobody gave, cited with a text quote and a PDF.
-  first.offset = claim("The child has not spat for 10 seconds.", [ref("o", "spat toward his mother's forearm"), ref("p", "spitting episodes")], "ai-drafted");
+  first.offset = claim("The child has not spat for 15 seconds.", [ref("o", "spat toward his mother's forearm"), ref("p", "spitting episodes")], "ai-drafted");
   // A score only in the PDF's quote, next to a found text quote: passes, marked [CHECK].
   first.consequences = [claim("Communication standard score 68", [ref("o", "she stopped the worksheet to clean up"), ref("p", "Communication 68")])];
   const parsed = parsedBehaviors(answer);
   const result = checkMapAnswer("map-behaviors", parsed, withPdf());
   assert.ok(result.problems.some((problem) => /antecedents\[0\]: the number 7, 8 in/.test(problem)), result.problems.join(" | "));
-  assert.ok(result.problems.some((problem) => /offset: .*gives a threshold that no standing instruction gives/.test(problem)));
+  assert.ok(result.problems.some((problem) => /offset: .*gives a threshold that no quote, default or standing instruction gives/.test(problem)));
   assert.ok(!result.problems.some((problem) => /consequences\[0\]/.test(problem)));
   const score = parsed.behaviors[0].consequences[0];
   assert.ok(result.pdfNumbers.has(score));
