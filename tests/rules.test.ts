@@ -164,3 +164,13 @@ test("fix round 1 of T1: the family's safety measures stay in the Crisis Plan, h
   assert.match(fci, /a caregiver who is absent/);
   assert.match(read("sections/discharge-and-service-fading-plan.md"), /releases as the basis for the coordination, without their date/);
 });
+
+test("fix round 2 of T1: Risk Assessment names caregiver training only; Discharge keeps training that increases near fading (her answers, 2026-11-27)", async () => {
+  const ra = readFileSync("rules/sections/risk-assessment.md", "utf8");
+  assert.match(ra, /Refer to caregiver training by name only/);
+  assert.match(ra, /never restate them here/);
+  assert.match(readFileSync("rules/sections/discharge-and-service-fading-plan.md", "utf8"), /caregiver training continuing as direct hours decrease and increasing as the child nears the discharge criteria/);
+  const { SECTION_EXPECTATIONS } = await import("../eval/rubric.ts");
+  assert.match(SECTION_EXPECTATIONS["risk-assessment"].join(" "), /Behavioral Skills Training given in person is also her standard practice/);
+  assert.match(SECTION_EXPECTATIONS["discharge-and-service-fading-plan"].join(" "), /caregiver training that increases as fading nears/);
+});
