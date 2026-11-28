@@ -140,6 +140,40 @@ test("dead-man: the definition and the onset are checked; a latency onset passes
   assert.equal(warnings.has("beh-3"), false);
 });
 
+/*
+ * What the code leaves to the AI review (owner's decision after review round 2, 2026-11-28):
+ * the code check stays cautious, with few false alarms. It flags only a definition made of
+ * absences and framing words. An absence-only definition that also names a setting, an object
+ * or an adjective ("verbal", "academic", "table") passes the code and is the AI review's to
+ * catch, after each draft and with "Review the definitions again" after an edit. These are the
+ * review's probes; the record says which the code flags today.
+ */
+const FLAGGED_BY_CODE: Array<[string, string]> = [
+  ["not begin", "Any instance in which Sofía does not begin a presented task within 5 seconds of an instruction from an adult."],
+  ["not follow", "Any instance in which the child does not follow an instruction within 5 seconds."],
+  ["refuses", "Any instance in which the child refuses a demand."],
+];
+const LEFT_TO_THE_AI_REVIEW: string[] = [
+  "Any instance in which Sofía does not begin a presented task within 5 seconds of a verbal instruction from an adult.",
+  "Any instance in which the child does not start an academic task within 5 seconds of the teacher's instruction.",
+  "Any instance in which the child does not follow a one step instruction within 5 seconds.",
+  "Any instance in which the child stops working on the assigned worksheet at the table for 10 seconds or longer.",
+  "Any instance in which the child does not respond to a greeting or to his name within 5 seconds.",
+  "The child is not engaged in the classroom activity for 3 seconds or more during circle time.",
+  "Any instance in which the child refuses a non preferred task at home or at school.",
+  "Any instance in which the child does not transition to the next activity within 5 seconds of the cue.",
+  "Any instance in which the child ignores the adult's directions during the session.",
+  "Off task: the child is not attending to the task or the speaker for 3 consecutive seconds.",
+  "Cualquier ocasión en que el niño no sigue una instrucción verbal del adulto dentro de 5 segundos.",
+  "Cualquier ocasión en que la niña no inicia la tarea académica en la mesa en 5 segundos.",
+  "El niño deja de trabajar en la hoja de actividades durante 10 segundos o más.",
+];
+
+test("dead-man, the record of the review's probes: the code flags the plainest absence-only definitions, and leaves the rest to the AI review", () => {
+  for (const [phrase, text] of FLAGGED_BY_CODE) assert.equal(onlyAbsence(text, new Set(["sofía"])), phrase, text);
+  for (const text of LEFT_TO_THE_AI_REVIEW) assert.equal(onlyAbsence(text, new Set(["sofía"])), null, "left to the AI review: " + text);
+});
+
 /* Overlap */
 
 test("overlap: the same example in two behaviors, with no exclusion naming the other, flags both", () => {
@@ -206,6 +240,21 @@ test("overlap: a name mentioned as a form, after such as, or after de is not an 
     behavior("beh-2", { name: "Gritos", definition: "Cualquier grito por encima del volumen de conversación. Un grito dentro de un episodio se cuenta como Berrinche.", topographies: ["gritos"] }),
   ]);
   assert.equal(spanish.size, 0);
+});
+
+test("overlap: a form after instead is not an exclusion, so the side that holds the shared response is flagged (review of T3, round 2, finding 2)", () => {
+  const warnings = definitionWarnings([
+    behavior("beh-1", { name: "Task refusal", definition: "Any instance in which Leo does not begin a task within 5 seconds of the instruction and instead starts screaming." }),
+    behavior("beh-2", { name: "Screaming", definition: "Any instance in which Leo screams above conversational volume. A scream when a demand is presented is counted as Screaming; see Task refusal.", topographies: ["screaming"] }),
+  ]);
+  assert.deepEqual(warnings.get("beh-1"), [{ kind: "overlap", via: "topography", phrase: "screaming", otherId: "beh-2", otherName: "Screaming" }]);
+  assert.equal(warnings.has("beh-2"), false, "Screaming names Task refusal in an exclusion clause (see)");
+  // "rather than" and "en lugar de" introduce a form the same way.
+  const rather = definitionWarnings([
+    behavior("beh-1", { name: "Berrinche", definition: "Episodio de llanto en lugar de gritos." }),
+    behavior("beh-2", { name: "Gritos", definition: "Cualquier grito.", topographies: ["gritos"] }),
+  ]);
+  assert.equal(rather.get("beh-1")?.length, 1);
 });
 
 test("overlap: distinct behaviors stay quiet, a short word is not a topography, and a behavior with no name is skipped", () => {

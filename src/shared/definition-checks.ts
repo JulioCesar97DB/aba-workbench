@@ -215,9 +215,10 @@ function namesOf(name: string): string[] {
 /**
  * What makes a clause an exclusion: it says where a response is (or is not) scored
  * ("Exclusions: …", "is counted as Tantrum", "belongs to Property destruction", "score it as
- * Elopement instead", "do not also count", "se cuenta como Berrinche", "en lugar de"). A name
- * mentioned anywhere else ("screaming, crying and dropping", "forms such as screaming",
- * "episodio de gritos") is not an exclusion (review of T3, finding 3).
+ * Elopement", "do not also count", "se cuenta como Berrinche"). A name mentioned anywhere else
+ * ("screaming, crying and dropping", "forms such as screaming", "episodio de gritos", and a
+ * form after "instead": "does not begin and instead starts screaming") is not an exclusion
+ * (review of T3, finding 3; round 2, finding 2).
  */
 const EXCLUSION_CUE = new RegExp(
   [
@@ -225,15 +226,12 @@ const EXCLUSION_CUE = new RegExp(
     "not\\s+(?:be\\s+)?(?:counted|scored|recorded|coded|included)",
     "(?:does|do|did)\\s+not\\s+(?:also\\s+)?(?:include|count|score)",
     "not\\s+also",
-    "instead",
-    "rather\\s+than",
     "belongs?\\s+to",
     "(?:counted|scored|recorded|coded|tallied)\\s+(?:as|under|toward|towards|in)",
     "(?:count|score|record|code)\\s+(?:it|them|this|these|that)?\\s*(?:as|under)",
     "see",
     "no\\s+se\\s+(?:cuentan?|registran?|incluyen?)",
     "no\\s+(?:cuenta|incluye)",
-    "en\\s+lugar\\s+de",
     "pertenece\\s+a",
     "se\\s+(?:cuentan?|registran?)\\s+como",
     "(?:cuentan?|registran?)\\s+como",
