@@ -84,7 +84,11 @@ export function notApprovedLine(part: CaseMapBlockPart): string {
   return `${PART_LABELS[part]}: not approved yet; use her sections and the sources.`;
 }
 
-type Quote = (text: string) => string;
+/** Makes text unable to break out of a tag (quoteForPrompt), and knows the block's source names. */
+type Quote = ((text: string) => string) & { sources?: SourceNames };
+
+/** How the block names the sources sent: S1, S2, ... in the order they are sent, each defined once at the top (D10: source ids, compactly). */
+type SourceNames = ReadonlyMap<string, string>;
 
 /** One line of text: values she typed may hold line breaks, which would break "one line per field". */
 function oneLine(text: string, quote: Quote): string {
@@ -98,10 +102,11 @@ function attribute(text: string, quote: Quote): string {
 const SECTION_TITLES = new Map<string, string>(REPORT_SECTIONS.map(({ id, title }) => [id, title]));
 
 /** Where a value came from, without its quote. A kind a newer app writes is left out. */
-function refLabel(ref: MapRef): string | null {
+function refLabel(ref: MapRef, sources: SourceNames): string | null {
   switch (ref.kind) {
     case "source":
-      return ref.sourceId ? `source ${ref.sourceId}` : null;
+      // A source no longer sent (she removed it) is named by its id, so nothing reads as a source it is not.
+      return ref.sourceId ? (sources.get(ref.sourceId) ?? `a source not sent (${ref.sourceId})`) : null;
     case "section": {
       const title = ref.sectionId ? SECTION_TITLES.get(ref.sectionId) : undefined;
       return title ? `her section "${title}"` : "her section";
@@ -118,7 +123,7 @@ function refLabel(ref: MapRef): string | null {
 }
 
 function fromText(refs: ReadonlyArray<MapRef>, quote: Quote): string {
-  const labels = [...new Set(refs.map(refLabel).filter((label): label is string => label !== null))];
+  const labels = [...new Set(refs.map((ref) => refLabel(ref, quote.sources ?? new Map())).filter((label): label is string => label !== null))];
   return labels.length > 0 ? ` [from: ${attribute(labels.join("; "), quote)}]` : "";
 }
 
@@ -281,8 +286,10 @@ function names<T extends { id: string }>(items: ReadonlyArray<T>, name: (item: T
 /**
  * The block, from the map's parts. `quote` makes text unable to break out of a tag
  * (quoteForPrompt in src/lib/rules.ts); every value goes through it.
+ * `sources` are the sources the request sends, in its order: S1, S2, ... name them.
  */
-export function renderCaseMapBlock(input: CaseMapBlockInput, quote: Quote): string {
+export function renderCaseMapBlock(input: CaseMapBlockInput, quoteText: (text: string) => string, sources: ReadonlyArray<{ id: string; title: string }>): string {
+  const quote: Quote = Object.assign((text: string) => quoteText(text), { sources: new Map(sources.map((source, index) => [source.id, `S${index + 1}`])) });
   const settings = input.settings.approved ? names(input.settings.items, (item) => item.name) : new Map<string, string>();
   const behaviors = input.behaviors.approved ? names(input.behaviors.items, (item) => item.name) : new Map<string, string>();
   const sections = CASE_MAP_BLOCK_PARTS.map((part) => {
@@ -327,10 +334,9 @@ export function renderCaseMapBlock(input: CaseMapBlockInput, quote: Quote): stri
     for (const group of groups) items.push(element("group", ` id="${attribute(group.id, quote)}"`, groupLines(group, behaviors, quote)));
     return element(part, version, items);
   });
-  return [
-    "<case-map>",
-    "The case map, approved by the BCBA part by part and rendered by the app. Ids in [from: ...] name the sources above.",
-    ...sections,
-    "</case-map>",
-  ].join("\n\n");
+  const anyApproved = CASE_MAP_BLOCK_PARTS.some((part) => input[part].approved);
+  const legend = anyApproved && sources.length > 0
+    ? [["Sources, by the short names [from: ...] uses below:", ...sources.map((source, index) => `S${index + 1} = ${attribute(source.id, quote)} (${attribute(source.title, quote)})`)].join("\n")]
+    : [];
+  return ["<case-map>", "The case map, approved by the BCBA part by part and rendered by the app.", ...legend, ...sections, "</case-map>"].join("\n\n");
 }

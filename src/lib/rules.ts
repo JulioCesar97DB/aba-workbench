@@ -288,7 +288,7 @@ export async function buildSectionPrompt(
   }
   // The approved case map: its own cached block after the sources (step 1's D8 to D11), the same for every section.
   const caseMap = input.caseMap ?? NO_APPROVED_MAP;
-  return { prompt: { system, sources: input.sources, caseMap: renderCaseMapBlock(caseMap, quoteForPrompt), task: parts.join("\n\n") }, rulesVersions, mapUsed: mapUsedOf(caseMap) };
+  return { prompt: { system, sources: input.sources, caseMap: renderCaseMapBlock(caseMap, quoteForPrompt, input.sources), task: parts.join("\n\n") }, rulesVersions, mapUsed: mapUsedOf(caseMap) };
 }
 
 /* The case map's requests (step 1, pull request 2: D12 to D15) */

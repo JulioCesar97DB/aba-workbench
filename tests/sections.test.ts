@@ -8,7 +8,7 @@ import type { GenerateEvent, GenerateOptions, Provider, ProviderCredential } fro
 import { CASE_FILE_NAME, CASE_SCHEMA_VERSION, readCaseFile, serializeCaseFile } from "../src/main/case-file.ts";
 import { contextSections, finalVersion, saveOwnText, startNewSession, setNotes } from "../src/main/case-sections.ts";
 import { herSectionsOf } from "../src/main/case-map-draft.ts";
-import { addMapItem } from "../src/main/case-map.ts";
+import { addMapItem, approveMapPart } from "../src/main/case-map.ts";
 import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
 import { hasLinesInParagraphs, isParagraphAnswer, linesAsParagraphs, paragraphSpans, replaceParagraph, splitParagraphs } from "../src/shared/section-text.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
@@ -866,6 +866,15 @@ test("nit: an answer longer than a section can be is not saved, with its own rea
 
 /* The owner's decision on M4 (2026-11-23): one cache for every request */
 
+/** An approved case map part, typed by hand as she would (invented), so section requests carry it. */
+async function approveInventedMap(cases: CaseLibrary, caseId: string) {
+  const result = await cases.changeCase(caseId, (data, _folder, now) => {
+    const added = addMapItem(data, "behaviors", "items", { name: { value: "Invented spitting", check: null } }, null, now);
+    return { save: approveMapPart(added.data, "behaviors", added.version, now), value: added.version };
+  });
+  assert.equal(result.kind, "saved");
+}
+
 function claudeAnswer(text: string, model: string) {
   const usage = { input_tokens: 100, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
   return sseResponse([
@@ -901,8 +910,10 @@ test("M4: every kind of section request sends Claude the same settings and the s
     return claudeAnswer(text, request.model);
   });
   const claude = createAnthropicProvider({ fetch: fetchStub });
-  const { service, caseId } = await setup({}, { provider: claude });
+  const { service, caseId, cases, caseFile } = await setup({}, { provider: claude });
   saved(await service.saveText(caseId, "background-information", "Her own background text.", null));
+  // Plan step, PR 0: the approved map is part of the cached prefix, the same for every request.
+  await approveInventedMap(cases, caseId);
   await generate(service, caseId, "medical-necessity", { kind: "draft" });
   await generate(service, caseId, "medical-necessity", { kind: "paragraph", fromVersion: 1, paragraphIndex: 1, request: "clearer" });
   await generate(service, caseId, "medical-necessity", { kind: "change", fromVersion: 2, request: "shorter" });
@@ -927,6 +938,13 @@ test("M4: every kind of section request sends Claude the same settings and the s
   for (const [index, body] of requests.entries()) {
     assert.deepEqual(cachedPrefix(body), first, `request ${index + 1} (${tasks[index].split("\n").at(-1)?.slice(0, 40)}) has the draft's settings and cached prefix`);
   }
+  const content = (first.messages as Array<{ content: Array<{ text?: string; cache_control?: unknown }> }>)[0].content;
+  assert.match(content.at(-1)?.text ?? "", /^<case-map>[\s\S]*Client: not approved yet[\s\S]*<behavior id="beh-1" name="Invented spitting">/, "the map is the last cached block");
+  assert.equal(content.filter((block) => block.cache_control).length, 2, "sources and map in the messages; the system is the third breakpoint");
+  // Each version and each check records which approved map it was sent.
+  const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections["medical-necessity"].versions[0];
+  assert.deepEqual(stored.generation.mapUsed, [{ part: "behaviors", version: 1 }]);
+  assert.deepEqual(stored.consistency.mapUsed, [{ part: "behaviors", version: 1 }]);
 });
 
 /** An OpenAI answer, streamed as the Responses API does. */
@@ -950,6 +968,7 @@ test("ChatGPT sign-in: every kind of section request sends the same settings and
   });
   const { service, caseId, caseFile, cases } = await setup({}, { provider: createOpenAIProvider({ fetch: fetchStub }), credential: { kind: "chatgpt", accessToken: "chatgpt-access-token-not-real" } });
   saved(await service.saveText(caseId, "background-information", "Her own background text.", null));
+  await approveInventedMap(cases, caseId);
   await generate(service, caseId, "medical-necessity", { kind: "draft" });
   await generate(service, caseId, "medical-necessity", { kind: "paragraph", fromVersion: 1, paragraphIndex: 1, request: "clearer" });
   await generate(service, caseId, "medical-necessity", { kind: "change", fromVersion: 2, request: "shorter" });
@@ -980,6 +999,10 @@ test("ChatGPT sign-in: every kind of section request sends the same settings and
   assert.equal(last.prompt_cache_key, caseCacheKey(other.case.id));
   assert.notEqual(last.prompt_cache_key, key);
   assert.deepEqual(first.reasoning, { effort: "high" });
+  // Plan step, PR 0: the approved map is the latest user message, so the implicit cache ends with it.
+  const input = first.input as Array<{ role: string; content: Array<{ text?: string }> }>;
+  assert.deepEqual(input.map((message) => message.role), ["developer", "user", "user"]);
+  assert.match(input[2].content[0].text ?? "", /^<case-map>[\s\S]*Invented spitting/);
   for (const [index, body] of requests.entries()) {
     const { instructions, ...rest } = body;
     assert.equal(typeof instructions, "string");
