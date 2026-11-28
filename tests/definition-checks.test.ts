@@ -251,10 +251,15 @@ test("overlap: a form after instead is not an exclusion, so the side that holds 
   assert.equal(warnings.has("beh-2"), false, "Screaming names Task refusal in an exclusion clause (see)");
   // "rather than" and "en lugar de" introduce a form the same way.
   const rather = definitionWarnings([
+    behavior("beh-1", { name: "Task refusal", definition: "Any instance in which Leo does not begin a task within 5 seconds, screaming rather than starting." }),
+    behavior("beh-2", { name: "Screaming", definition: "Any instance in which Leo screams.", topographies: ["screaming"] }),
+  ]);
+  assert.equal(rather.get("beh-1")?.length, 1);
+  const enLugar = definitionWarnings([
     behavior("beh-1", { name: "Berrinche", definition: "Episodio de llanto en lugar de gritos." }),
     behavior("beh-2", { name: "Gritos", definition: "Cualquier grito.", topographies: ["gritos"] }),
   ]);
-  assert.equal(rather.get("beh-1")?.length, 1);
+  assert.equal(enLugar.get("beh-1")?.length, 1);
 });
 
 test("overlap: distinct behaviors stay quiet, a short word is not a topography, and a behavior with no name is skipped", () => {
