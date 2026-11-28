@@ -14,6 +14,12 @@ Each folder here is one accepted run of `pnpm eval` (owner's decision, 2026-11-2
 
 ## Known gaps
 
+- **`t1-rules-2026-11-27`:**
+  - **Risk Assessment drafted with v5:** its drafts are those of T1 fix round 1 (cc1864d). Risk Assessment was re-judged under v6's expectations (7da80cb) but not drafted again, so its drafts were written with Risk Assessment rule v5.
+  - **What v6 changes:** it only stops that section restating the caregiver training method and naming a procedure.
+  - **Every other section** was drafted with the rules as they are at 7da80cb.
+  - **The doubled name:** the baseline it compares with is named "dev-step0-2026-11-23 re-judged re-judged" (the dev arm re-judged twice through `--baseline-run`; fixed in 6b62b5d).
+
 - **`dev-2026-11-23`:**
   - **One run:** it is from before runs, one run of case B. It is read as a single run, whose medians are its own scores, and a comparison with it notes that the run counts differ.
   - **`generation` is `null`** in every section: the model that served each draft, its tokens and the rules versions it was drafted with.
