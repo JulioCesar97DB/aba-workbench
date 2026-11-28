@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { DraftingProvider, GenerationUpdate, MapSaveResult, StartSectionResult } from "../../../shared/api.ts";
-import type { MapPartId, MapRequestKind } from "../../../shared/case-map.ts";
+import { freshDraft, reduceDraft, reduceReview, type MapDraft, type MapReviewRun } from "./draft-state.ts";
 
 /*
  * "Draft the map" / "Update the map" (step 1, pull request 2), one store for the whole
@@ -11,63 +11,10 @@ import type { MapPartId, MapRequestKind } from "../../../shared/case-map.ts";
  * shown read-only until its request saves; the previews go when it saves or the draft ends.
  */
 
-/** An item of the answer that passed its checks, not saved yet (case map speed, 2026-11-23). */
-export interface MapPreview {
-  step: MapRequestKind;
-  part: MapPartId;
-  /** The preview's own id ("preview:…"), never an item id of the map. */
-  id: string;
-  item: Record<string, unknown>;
-  /** The saved item it is a new version of (an update), shown with it; null for a new item. */
-  replaces: string | null;
-}
-
-export type MapDraftOutcome =
-  /** Both requests saved their parts. */
-  | { kind: "saved" }
-  /**
-   * Stopped (or failed) after the first request saved its parts. A failure keeps the
-   * provider's error code (src/renderer/src/ai-errors.ts says what it means) and its English
-   * message, which the screen shows only under "Technical details" (owner's decision T11).
-   */
-  | { kind: "partial"; message: string | null; code: string | null }
-  | { kind: "stopped" }
-  | { kind: "failed"; message: string; code: string | null }
-  | { kind: "refused" };
-
-export interface MapDraft {
-  id: string;
-  caseId: string;
-  provider: DraftingProvider;
-  /** The request at work, once it started. */
-  step: MapRequestKind | null;
-  phase: "starting" | "writing" | "repairing" | "plain-json" | "done";
-  /** How much of the answer has arrived. */
-  characters: number;
-  /** When the draft started and when the request at work started (Date.now()), for the time shown. */
-  startedAt: number;
-  stepStartedAt: number;
-  /** Of the answer being written: the items that arrived, and those that passed their checks. */
-  arrived: number;
-  shown: number;
-  /** While a repair runs: how many values it is asked to fix, and what it asks for again (S5). */
-  values: number;
-  scope: "values" | "items" | "whole";
-  /** The items that passed their checks and are not saved yet. */
-  previews: MapPreview[];
-  /** The requests that showed items as they arrived: one that did not save showed items that were not saved (M5). */
-  previewed: MapRequestKind[];
-  /** The requests whose parts are saved. */
-  saved: MapRequestKind[];
-  /** The parts written, over both requests, and the approved ones left as they were. */
-  written: MapPartId[];
-  kept: MapPartId[];
-  /** How many problems the code checks still found after the repair (each value marked [CHECK]). */
-  problems: number;
-  outcome: MapDraftOutcome | null;
-}
+export type { MapDraft, MapDraftOutcome, MapPreview, MapReviewRun } from "./draft-state.ts";
 
 const byCase = new Map<string, MapDraft>();
+const reviewsByCase = new Map<string, MapReviewRun>();
 const notStarted = new Set<string>();
 const stopRequested = new Set<string>();
 const listeners = new Set<() => void>();
@@ -86,65 +33,24 @@ function findById(id: string): MapDraft | undefined {
   return undefined;
 }
 
+function notify() {
+  snapshot++;
+  for (const listener of listeners) listener();
+}
+
+function setReview(next: MapReviewRun) {
+  reviewsByCase.set(next.caseId, next);
+  notify();
+}
+
 function apply(update: GenerationUpdate) {
-  const current = findById(update.generationId);
-  if (!current) return;
-  const event = update.event;
-  switch (event.type) {
-    case "map-progress": {
-      const newStep = event.step !== current.step;
-      // A new answer (the plain-JSON resend) replaces what the last one showed; a repair keeps it.
-      const newAnswer = newStep || (event.phase !== "repairing" && event.characters === 0);
-      set({
-        ...current,
-        step: event.step,
-        phase: event.phase,
-        characters: event.characters,
-        stepStartedAt: newStep ? Date.now() : current.stepStartedAt,
-        arrived: event.arrived ?? (newAnswer ? 0 : current.arrived),
-        shown: event.shown ?? (newAnswer ? 0 : current.shown),
-        values: event.values ?? current.values,
-        scope: event.scope ?? current.scope,
-        previews: newAnswer ? current.previews.filter((preview) => preview.step !== event.step) : current.previews,
-      });
-      return;
-    }
-    case "map-preview":
-      set({ ...current, previewed: current.previewed.includes(event.step) ? current.previewed : [...current.previewed, event.step], previews: [...current.previews.filter((preview) => preview.id !== event.id), { step: event.step, part: event.part, id: event.id, item: event.item, replaces: event.replaces ?? null }] });
-      return;
-    case "map-saved":
-      if (event.result.outcome === "saved") {
-        const result = event.result;
-        for (const listener of savedListeners) listener(current.caseId, result);
-        set({
-          ...current,
-          saved: [...current.saved, event.step],
-          written: [...current.written, ...event.written],
-          kept: [...current.kept, ...event.kept],
-          problems: current.problems + event.problems,
-          // The saved map now holds them: the previews of this request go.
-          previews: current.previews.filter((preview) => preview.step !== event.step),
-        });
-      } else {
-        set({ ...current, outcome: { kind: "failed", message: "", code: null } });
-      }
-      return;
-    case "refusal":
-      set({ ...current, outcome: { kind: "refused" } });
-      return;
-    case "error":
-      set({ ...current, outcome: current.saved.length > 0 ? { kind: "partial", message: event.message, code: event.code } : { kind: "failed", message: event.message, code: event.code } });
-      return;
-    case "finished": {
-      const outcome: MapDraftOutcome =
-        current.outcome ?? (current.saved.length === 2 ? { kind: "saved" } : current.saved.length > 0 ? { kind: "partial", message: null, code: null } : event.cancelled ? { kind: "stopped" } : { kind: "failed", message: "", code: null });
-      // Nothing more is saved: whatever was only previewed goes.
-      set({ ...current, phase: "done", outcome, previews: [] });
-      return;
-    }
-    default:
-      return;
-  }
+  const review = [...reviewsByCase.values()].find((run) => run.id === update.generationId);
+  const current = review ? undefined : findById(update.generationId);
+  const { next, saved } = review ? reduceReview(review, update.event) : current ? reduceDraft(current, update.event, Date.now()) : { next: null, saved: null };
+  const caseId = review?.caseId ?? current?.caseId;
+  if (saved && caseId) for (const listener of savedListeners) listener(caseId, saved);
+  if (next && review) setReview(next as MapReviewRun);
+  else if (next) set(next as MapDraft);
 }
 
 let subscribed = false;
@@ -160,8 +66,7 @@ function subscribe(listener: () => void) {
 }
 
 function fresh(id: string, caseId: string, provider: DraftingProvider): MapDraft {
-  const now = Date.now();
-  return { id, caseId, provider, step: null, phase: "starting", characters: 0, startedAt: now, stepStartedAt: now, arrived: 0, shown: 0, values: 0, scope: "values", previews: [], previewed: [], saved: [], written: [], kept: [], problems: 0, outcome: null };
+  return freshDraft(id, caseId, provider, Date.now());
 }
 
 /** Starts a draft (or an update) of the case's map; the outcome says why it did not start. */
@@ -192,7 +97,7 @@ export async function startMapDraft(caseId: string, provider: DraftingProvider):
   }
 }
 
-export function stopMapDraft(draft: MapDraft): void {
+export function stopMapDraft(draft: Pick<MapDraft, "id">): void {
   if (notStarted.has(draft.id)) stopRequested.add(draft.id);
   void window.aba.cancelGeneration(draft.id);
 }
@@ -229,6 +134,31 @@ export function useOnMapSaved(listener: SavedListener): void {
  */
 export function previewsNotSaved(draft: Pick<MapDraft, "previewed" | "saved">): boolean {
   return draft.previewed.some((step) => !draft.saved.includes(step));
+}
+
+/** Starts "Review the definitions again"; the outcome says why it did not start. */
+export async function startMapReview(caseId: string, provider: DraftingProvider): Promise<StartSectionResult["outcome"] | "error"> {
+  ensureSubscribed();
+  const id = crypto.randomUUID();
+  setReview({ id, caseId, phase: "running", outcome: null });
+  try {
+    const result = await window.aba.startMapReview(caseId, id, provider);
+    if (result.outcome !== "started") {
+      reviewsByCase.delete(caseId);
+      notify();
+    }
+    return result.outcome;
+  } catch {
+    setReview({ id, caseId, phase: "done", outcome: "not-run" });
+    return "error";
+  }
+}
+
+/** The case's review run on its own, under way or last finished, or null. */
+export function useMapReview(caseId: string): MapReviewRun | null {
+  useEffect(ensureSubscribed, []);
+  useSyncExternalStore(subscribe, () => snapshot);
+  return reviewsByCase.get(caseId) ?? null;
 }
 
 export function isDrafting(draft: MapDraft | null): boolean {

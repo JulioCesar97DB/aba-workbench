@@ -10,9 +10,15 @@
  *   pnpm build && pnpm map-verify                 a real draft on the ChatGPT sign-in of the eval profile
  *   pnpm build && pnpm map-verify --rehearse      the same with a fake provider: nothing leaves the computer
  *   --case case-b-sofia                           the invented case (default; behaviors.md is left out: raw behaviors only)
+ *   --planted file.json                           no draft: the behaviors in the file typed in by hand, then
+ *                                                 "Review the definitions again" (T3) on them
  *
- * Requests on the real route: 2 (the facts, then the behaviors); at most 6 if both are
- * asked again as plain JSON and both need their one repair.
+ * Requests on the real route: 3 (the facts, the behaviors, then the review of the definitions,
+ * T3); at most 8 if all three are asked again as plain JSON and both map requests need their
+ * one repair. With --planted: 1 (2 if asked again as plain JSON).
+ *
+ * The summary also gives the review's findings and the code's checks before QA on the
+ * behaviors saved (src/shared/definition-checks.ts).
  */
 import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -20,9 +26,10 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import type { AbaApi, GenerationUpdateEvent } from "../src/shared/api.ts";
+import { definitionWarnings, type CheckedBehavior } from "../src/shared/definition-checks.ts";
 import { installRehearsalProvider, REHEARSAL_CLAUDE_KEY } from "../eval/rehearsal.ts";
 
-const { values: args } = parseArgs({ options: { case: { type: "string", default: "case-b-sofia" }, rehearse: { type: "boolean", default: false } } });
+const { values: args } = parseArgs({ options: { case: { type: "string", default: "case-b-sofia" }, rehearse: { type: "boolean", default: false }, planted: { type: "string" } } });
 const root = process.cwd();
 const WINDOW_CHECK_MS = 5_000;
 /** The real route took about 15 minutes for the facts request alone (with its repair) on 2026-11-23. */
@@ -132,7 +139,19 @@ if (args.rehearse) {
 const created = await aba(page, (api, label) => api.createCase({ label: label as string, clientAge: null }), `Map verify, ${args.case} (invented)`);
 if ((created as { outcome: string }).outcome !== "created") fail(`could not create the case (${JSON.stringify(created)}).`);
 const caseId = (created as unknown as { case: { id: string } }).case.id;
-for (const source of caseJson.sources) {
+// --planted: the behaviors of the file, typed in by hand as hers, and no sources: only the review runs.
+const planted = args.planted ? (JSON.parse(readFileSync(path.resolve(args.planted), "utf8")) as { behaviors: Array<Record<string, string | string[]>> }).behaviors : null;
+for (const behavior of planted ?? []) {
+  const value = (text: unknown) => ({ value: typeof text === "string" ? text : "", check: null });
+  const list = (texts: unknown) => (Array.isArray(texts) ? texts : []).map(value);
+  const input = { name: value(behavior.name), definition: value(behavior.definition), onset: value(behavior.onset), offset: value(behavior.offset), topographies: list(behavior.topographies), examples: list(behavior.examples), nonExamples: list(behavior.nonExamples) };
+  const added = await aba(page, (api, item) => {
+    const { caseId: id, text } = item as { caseId: string; text: string };
+    return api.addMapItem(id, "behaviors", "items", text, null);
+  }, { caseId, text: JSON.stringify(input) });
+  if ((added as { outcome: string }).outcome !== "saved") fail(`could not add the planted behavior ${String(behavior.name)}.`);
+}
+for (const source of planted ? [] : caseJson.sources) {
   if (source.file === "behaviors.md") continue;
   const load = keyJson.sources.find((entry) => entry.id === source.id);
   if (!load) continue;
@@ -158,9 +177,9 @@ for (const source of caseJson.sources) {
 }
 if (keyJson.inputs?.notes) await aba(page, (api, input) => api.saveSessionNotes((input as { caseId: string }).caseId, (input as { notes: string }).notes), { caseId, notes: keyJson.inputs.notes });
 
-console.log(`Drafting the map with ${provider === "openai" ? "ChatGPT (eval profile)" : "the rehearsal's fake provider"}…`);
+console.log(`${planted ? "Reviewing the planted definitions" : "Drafting the map"} with ${provider === "openai" ? "ChatGPT (eval profile)" : "the rehearsal's fake provider"}…`);
 const outcome = (await page.evaluate(
-  async ({ caseId: id, provider: chosen, timeoutMs }) => {
+  async ({ caseId: id, provider: chosen, timeoutMs, reviewOnly }) => {
     const api = (globalThis as unknown as { aba: AbaApi }).aba;
     const generationId = crypto.randomUUID();
     const started = performance.now();
@@ -176,11 +195,11 @@ const outcome = (await page.evaluate(
       });
       setTimeout(() => void api.cancelGeneration(generationId), timeoutMs);
     });
-    const start = await api.startMapDraft(id, generationId, chosen);
+    const start = reviewOnly ? await api.startMapReview(id, generationId, chosen) : await api.startMapDraft(id, generationId, chosen);
     if (start.outcome === "started") await done;
     return { start, events, seconds: (performance.now() - started) / 1000 };
   },
-  { caseId, provider, timeoutMs: DRAFT_TIMEOUT_MS },
+  { caseId, provider, timeoutMs: DRAFT_TIMEOUT_MS, reviewOnly: planted !== null },
 )) as { start: { outcome: string }; events: GenerationUpdateEvent[]; seconds: number };
 
 const atEnd = await windowState(app).catch(() => null);
@@ -228,6 +247,19 @@ const summary = {
   })),
   parts: map ? Object.fromEntries(Object.entries(map.parts as Record<string, { versions: Array<{ content: { items: unknown[]; groups?: unknown[] } }> }>).map(([part, stored]) => [part, { items: stored.versions.at(-1)?.content.items.length ?? 0, groups: stored.versions.at(-1)?.content.groups?.length ?? 0 }])) : null,
   quotes: counts,
+  // The checks before QA (T3): the code's on the behaviors saved, and the newest review's, by behavior name.
+  checksBeforeQa: (() => {
+    const stored = map?.parts?.behaviors as { currentVersion?: number; versions: Array<{ number: number; content: { items: Array<CheckedBehavior & Record<string, unknown>> } }> } | undefined;
+    const items = stored?.versions.find((version) => version.number === stored.currentVersion)?.content.items ?? [];
+    const nameOf = (id: string) => ((items.find((item) => item.id === id)?.name as { value?: string } | null)?.value ?? id);
+    const reviews = ((map?.extractions ?? []) as Array<Record<string, unknown>>).filter((record) => record.kind === "map-review");
+    const review = reviews.at(-1)?.review as { status: string; failure: string | null; findings: Array<Record<string, unknown>> } | undefined;
+    return {
+      behaviors: items.map((item) => nameOf(item.id)),
+      code: [...definitionWarnings(items)].map(([id, warnings]) => ({ behavior: nameOf(id), warnings })),
+      review: review ? { status: review.status, failure: review.failure, findings: review.findings.map((finding) => ({ ...finding, names: finding.kind === "overlap" ? (finding.behaviorIds as string[]).map(nameOf) : [nameOf(finding.behaviorId as string)] })) } : null,
+    };
+  })(),
   windows: { launch: atLaunch, end: atEnd, stopped: stoppedBecause },
 };
 const outDir = path.join(root, "eval-results", `map-verify-${new Date().toISOString().replace(/[:.]/g, "-")}`);

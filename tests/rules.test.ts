@@ -233,7 +233,7 @@ test("T2 (owner's decision, 2026-11-28): her default thresholds are in the behav
   assert.match(behaviors, /first to last: a threshold her sections give for this child, then one the sources give for this child, then one in `<standing-instructions>`/);
   assert.match(behaviors, /one threshold at a time/);
   assert.doesNotMatch(behaviors, /passive or precursor form/);
-  assert.match(behaviors, /^version: 4$/m);
+  assert.match(behaviors, /^version: 5$/m);
 });
 
 test("T2: the behaviors rules carry her confirmed defaults: 8 to 14 behaviors, examples across functions, three non-examples, precursors inside, frequency first, the caregiver's count", () => {

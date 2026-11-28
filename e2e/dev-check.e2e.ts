@@ -94,6 +94,7 @@ test("the interface has window.aba and no Node.js", async ({ app }) => {
       "signInToChatGpt",
       "signOutOfChatGpt",
       "startMapDraft",
+      "startMapReview",
       "startMockGeneration",
       "startNewSession",
       "startOverConnections",

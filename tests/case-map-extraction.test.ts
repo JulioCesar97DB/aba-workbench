@@ -9,9 +9,10 @@ import { CHATGPT_MAP_TASK_PREAMBLE, CHATGPT_TASK_PREAMBLE, responsesRequest } fr
 import { ProviderError, type GenerateEvent, type GenerateOptions, type Provider } from "../src/lib/providers/types.ts";
 import { buildSectionPrompt } from "../src/lib/rules.ts";
 import { CASE_FILE_NAME } from "../src/main/case-file.ts";
-import { applyMapAnswer, approveMapPart, saveMapItem } from "../src/main/case-map.ts";
+import { applyMapAnswer, approveMapPart, definitionReviewView, saveMapItem } from "../src/main/case-map.ts";
 import { refusedFormat, resetMapFormats, toAnswerParts } from "../src/main/case-map-draft.ts";
 import { CaseMapService } from "../src/main/case-map-service.ts";
+import { resetReviewFormats } from "../src/main/definition-review.ts";
 import { saveOwnText } from "../src/main/case-sections.ts";
 import { CaseLibrary } from "../src/main/cases.ts";
 import type { GenerationUpdateEvent } from "../src/shared/api.ts";
@@ -29,7 +30,10 @@ const folders: string[] = [];
 after(() => {
   for (const folder of folders) rmSync(folder, { recursive: true, force: true });
 });
-beforeEach(() => resetMapFormats());
+beforeEach(() => {
+  resetMapFormats();
+  resetReviewFormats();
+});
 
 const OBSERVATIONS = [
   "BCBA direct observation notes, invented case.",
@@ -126,12 +130,22 @@ interface Turn {
 }
 
 /** A provider that answers each request from a script, by kind, and records what it was sent. */
-function scriptedModel(script: { facts: Turn[]; behaviors: Turn[] }, limits: { claudeUnions?: boolean } = {}) {
+function scriptedModel(script: { facts: Turn[]; behaviors: Turn[]; review?: Turn[] }, limits: { claudeUnions?: boolean } = {}) {
   const sent: GenerateOptions[] = [];
+  /** The definitions reviews (T3), kept apart from the map's requests; each answers with no findings unless scripted. */
+  const reviews: GenerateOptions[] = [];
   const provider: Provider = {
     ...mockProvider,
     id: "anthropic",
     async *generate(options): AsyncIterable<GenerateEvent> {
+      if (options.prompt.kind === "definition-review") {
+        reviews.push(options);
+        const turn: Turn = script.review?.shift() ?? { answer: { deadMan: [], overlaps: [] } };
+        if (turn.error) throw turn.error;
+        yield { type: "text", delta: typeof turn.answer === "string" ? turn.answer : JSON.stringify(turn.answer) };
+        yield { type: "done", complete: true, stopReason: "end_turn", servedModel: options.model, usage: { uncachedInputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 5, reasoningTokens: null }, attempts: null };
+        return;
+      }
       sent.push(options);
       // Claude refuses a request whose strict schemas hold more than 16 parameters with a union.
       if (limits.claudeUnions && options.outputFormat && unionCount(options.outputFormat.schema) > 16) {
@@ -146,10 +160,10 @@ function scriptedModel(script: { facts: Turn[]; behaviors: Turn[] }, limits: { c
       yield { type: "done", complete: true, stopReason: "end_turn", servedModel: options.model, usage: { uncachedInputTokens: 100, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 50, reasoningTokens: null }, attempts: null };
     },
   };
-  return { provider, sent };
+  return { provider, sent, reviews };
 }
 
-async function setup(script: { facts: Turn[]; behaviors: Turn[] } | ((ids: { obs: string; interview: string; pdf: string }) => { facts: Turn[]; behaviors: Turn[] }), options: { instructions?: string; herSection?: string; claudeUnions?: boolean } = {}) {
+async function setup(script: { facts: Turn[]; behaviors: Turn[]; review?: Turn[] } | ((ids: { obs: string; interview: string; pdf: string }) => { facts: Turn[]; behaviors: Turn[]; review?: Turn[] }), options: { instructions?: string; herSection?: string; claudeUnions?: boolean } = {}) {
   const folder = mkdtempSync(path.join(tmpdir(), "aba-map-draft-test-"));
   folders.push(folder);
   let n = 0;
@@ -270,14 +284,18 @@ test("a draft: two requests on the sections' cached prefix, then each request's 
   assert.equal(score.refs[0].checked, "not-checked", "a PDF's quote is not checked yet");
   assert.equal(score.check, null);
   assert.equal(map.parts.openItems.versions.at(-1).content.items.length, 1);
-  assert.equal(map.extractions.length, 2);
+  // The draft's two requests, then its one review of the definitions (T3), all of one run.
+  assert.equal(map.extractions.length, 3);
   assert.deepEqual(
     map.extractions.map((record: { kind: string; format: string; repaired: boolean }) => [record.kind, record.format, record.repaired]),
     [
       ["map-facts", "json-schema", false],
       ["map-behaviors", "json-schema", false],
+      ["map-review", "json-schema", false],
     ],
   );
+  assert.equal(new Set(map.extractions.map((record: { run: string }) => record.run)).size, 1, "one run");
+  assert.equal(model.reviews.length, 1, "one review per draft");
   assert.equal(map.extractions[0].problemsBeforeRepair, undefined, "no repair, no first-attempt problems");
   assert.equal(map.extractions[0].run, map.extractions[1].run, "one run");
   assert.equal(map.extractions[0].generation.provider, "anthropic");
@@ -301,7 +319,8 @@ test("B3: the schemas hold no union, so Claude takes them as they are and never 
   await draft(service, caseId);
   assert.equal(model.sent.length, 2);
   assert.ok(model.sent.every((options) => options.outputFormat !== null));
-  assert.deepEqual(stored(caseFile).extractions.map((record: { format: string }) => record.format), ["json-schema", "json-schema"]);
+  assert.deepEqual(stored(caseFile).extractions.map((record: { format: string }) => record.format), ["json-schema", "json-schema", "json-schema"]);
+  assert.equal(unionCount(model.reviews[0].outputFormat?.schema), 0, "the review's schema has no union either");
 });
 
 test("a quote not found word for word gets one repair request about that item only; the fixed item replaces it by key", async () => {
@@ -1334,4 +1353,123 @@ test("review S4: an update shows nothing of a part she approved or of an item sh
   assert.ok(writing?.type === "map-progress");
   assert.equal(writing.shown, previews.filter((event) => event.step === "map-behaviors").length);
   assert.equal(stored(caseFile).parts.behaviors.versions.length, 1, "the approved part is left as it is");
+});
+
+/* The review of the definitions (T3, owner's decisions of 2026-11-28; 1A and 2A) */
+
+test("T3: each draft ends with one review of the definitions, stored as a map-review record that the map's view reads", async () => {
+  const { service, caseId, caseFile, model } = await setup((found) => ({
+    facts: [{ answer: factsAnswer(found) }],
+    behaviors: [{ answer: behaviorsAnswer(found, []) }],
+    review: [
+      {
+        answer: {
+          deadMan: [{ behavior: "beh-9", why: "A behavior the review was not sent." }],
+          overlaps: [{ first: "beh-1", second: "beh-2", response: "The child spits on the floor next to his mother.", exclusion: "Decide which behavior spitting toward the floor belongs to, and have each definition name the other." }],
+        },
+      },
+    ],
+  }));
+  const events = await draft(service, caseId);
+  assert.equal(model.reviews.length, 1);
+  const review = model.reviews[0];
+  assert.equal(review.prompt.kind, "definition-review");
+  assert.deepEqual(review.prompt.sources, [], "no sources: the definitions alone");
+  assert.match(review.prompt.system, /# Reviewing the behaviors' definitions before QA/);
+  assert.match(review.prompt.task, /<behaviors>[\s\S]*"id": "beh-1"[\s\S]*"name": "Spitting"/);
+  assert.doesNotMatch(review.prompt.task, /refs|quote|origin/, "values only: no refs, quotes or origins");
+  assert.equal(review.outputFormat?.name, "definition_review");
+  assert.ok(events.some((event) => event.type === "map-review"));
+  const saved = events.find((event) => event.type === "map-review-saved");
+  assert.ok(saved?.type === "map-review-saved" && saved.status === "done" && saved.findings === 1);
+  assert.ok(!events.some((event) => event.type === "error"));
+
+  const map = stored(caseFile);
+  const record = map.extractions.at(-1);
+  assert.equal(record.kind, "map-review");
+  assert.equal(record.run, map.extractions[0].run, "the draft's run");
+  assert.equal(record.review.status, "done");
+  assert.equal(record.review.behaviorsVersion, 1);
+  assert.deepEqual(Object.keys(record.review.fingerprints), ["beh-1", "beh-2"]);
+  assert.equal(record.problems.length, 1, "the finding about an unknown behavior was left out and recorded");
+  assert.equal(record.generation.costUsd !== undefined && record.generation.usage.outputTokens, 5);
+  const view = definitionReviewView({ caseMap: map } as never);
+  assert.ok(view);
+  assert.deepEqual(view.findings, [{ kind: "overlap", behaviorIds: ["beh-1", "beh-2"], response: "The child spits on the floor next to his mother.", exclusion: "Decide which behavior spitting toward the floor belongs to, and have each definition name the other." }]);
+  assert.equal(map.parts.behaviors.versions.length, 1, "the review never touches the map");
+});
+
+test("T3: a review that cannot run is recorded as failed; the draft's parts stay saved and the draft does not fail", async () => {
+  for (const turn of [{ error: new ProviderError("rate_limited", "Too many requests", 429) }, { answer: "not JSON at all" }, { answer: { deadMan: [{ behavior: "beh-1" }], overlaps: [] } }]) {
+    const { service, caseId, caseFile } = await setup((found) => ({ facts: [{ answer: factsAnswer(found) }], behaviors: [{ answer: behaviorsAnswer(found, []) }], review: [turn] }));
+    const events = await draft(service, caseId);
+    assert.ok(!events.some((event) => event.type === "error"), "no error for the draft");
+    assert.equal(events.filter((event) => event.type === "map-saved").length, 2);
+    const saved = events.find((event) => event.type === "map-review-saved");
+    assert.ok(saved?.type === "map-review-saved" && saved.status === "failed");
+    const map = stored(caseFile);
+    assert.equal(map.parts.behaviors.versions.length, 1);
+    const view = definitionReviewView({ caseMap: map } as never);
+    assert.equal(view?.status, "failed");
+    assert.equal(view?.failure, "error" in turn ? "rate_limited" : "unreadable_answer");
+  }
+});
+
+test("T3: a route that refuses the review's schema is asked once more for plain JSON", async () => {
+  const { service, caseId, caseFile, model } = await setup((found) => ({
+    facts: [{ answer: factsAnswer(found) }],
+    behaviors: [{ answer: behaviorsAnswer(found, []) }],
+    review: [{ error: new ProviderError("bad_request", "output_config.format: this schema is not supported", 400) }, { answer: { deadMan: [], overlaps: [] } }],
+  }));
+  await draft(service, caseId);
+  assert.equal(model.reviews.length, 2);
+  assert.equal(model.reviews[1].outputFormat, null);
+  assert.match(model.reviews[1].prompt.task, /following this JSON schema exactly/);
+  const record = stored(caseFile).extractions.at(-1);
+  assert.equal(record.format, "plain-json");
+  assert.equal(record.review.status, "done");
+});
+
+test("T3 (2A): Review the definitions again runs the review on its own, one request, on the behaviors as they are now", async () => {
+  const { service, caseId, caseFile, model, cases } = await setup((found) => ({
+    facts: [{ answer: factsAnswer(found) }],
+    behaviors: [{ answer: behaviorsAnswer(found, []) }],
+    review: [{ answer: { deadMan: [], overlaps: [] } }, { answer: { deadMan: [{ behavior: "beh-1", why: "Spitting now names only that the child does not stop." }], overlaps: [] } }],
+  }));
+  await draft(service, caseId);
+  // She edits a definition by hand: the review's fingerprint of it no longer matches.
+  await cases.changeCase(caseId, (data, _folder, now) => {
+    const changed = saveMapItem(data, "behaviors", "items", "beh-1", { definition: { value: "Any instance in which the child does not stop when told.", check: null } }, null, now);
+    assert.ok(changed && changed !== "item-not-found");
+    return { save: changed.data, value: null };
+  });
+  const before = definitionReviewView({ caseMap: stored(caseFile) } as never);
+  const ready = await service.prepareReview(caseId, "anthropic");
+  assert.ok(ready.outcome === "ready");
+  const events = [];
+  for await (const event of ready.run(new AbortController().signal)) events.push(event);
+  assert.equal(model.sent.length, 2, "no map request");
+  assert.equal(model.reviews.length, 2);
+  assert.match(model.reviews[1].prompt.task, /does not stop when told/);
+  const after = definitionReviewView({ caseMap: stored(caseFile) } as never);
+  assert.ok(before && after);
+  assert.notEqual(after.fingerprints["beh-1"], before.fingerprints["beh-1"]);
+  assert.equal(after.fingerprints["beh-2"], before.fingerprints["beh-2"]);
+  assert.deepEqual(after.findings, [{ kind: "dead-man", behaviorId: "beh-1", why: "Spitting now names only that the child does not stop." }]);
+  assert.equal(stored(caseFile).extractions.filter((record: { kind: string }) => record.kind === "map-review").length, 2);
+  assert.equal((await service.prepareReview(caseId, "openai")).outcome, "ready");
+});
+
+test("T3: no review runs on a map with no behaviors, and the view leaves out a finding in a shape it does not know", async () => {
+  assert.equal(definitionReviewView({} as never), null);
+  const view = definitionReviewView({
+    caseMap: {
+      parts: {},
+      extractions: [
+        { id: "a", kind: "map-review", at: "2026-11-28T10:00:00.000Z", review: { status: "done", failure: null, behaviorsVersion: 1, fingerprints: { "beh-1": "0000aaaa" }, findings: [{ kind: "dead-man", behaviorId: "beh-1", why: "Only an absence." }, { kind: "newer-kind", text: "?" }] } },
+        { id: "b", kind: "map-behaviors" },
+      ],
+    },
+  } as never);
+  assert.deepEqual(view?.findings, [{ kind: "dead-man", behaviorId: "beh-1", why: "Only an absence." }]);
 });

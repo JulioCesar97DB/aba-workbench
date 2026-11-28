@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PromptParts, SourceDocument } from "../lib/providers/types.ts";
+import { buildReviewPrompt, REVIEW_RULES_FILE, type reviewedBehaviors, type ReviewFormat } from "../lib/definition-review.ts";
 import { buildJudgePrompt, JUDGE_PROMPT_VERSION, type JudgedSection, type JudgeInput } from "../lib/judge.ts";
-import { buildCaseMapPrompt, buildSectionPrompt, type ContextSection, type MapPromptInput, type SectionId, type SectionRequest } from "../lib/rules.ts";
+import { buildCaseMapPrompt, buildSectionPrompt, loadRulesFile, type ContextSection, type MapPromptInput, type SectionId, type SectionRequest } from "../lib/rules.ts";
 import { isSourceType, SOURCE_TYPE_NAMES } from "../shared/sources.ts";
 import type { CaseData } from "./case-file.ts";
 
@@ -95,6 +96,23 @@ async function loadSources(input: readonly OutgoingSource[]): Promise<SourceDocu
     }
   }
   return sources;
+}
+
+/**
+ * The review of the map's definitions (T3): the behaviors' names, topographies, definitions,
+ * onsets, offsets, examples and non-examples, and its own rules; no sources. Built here like
+ * every request about a case, so de-identification, when it plugs in, covers it too.
+ */
+export async function prepareDefinitionReviewRequest(input: { behaviors: ReturnType<typeof reviewedBehaviors>; format: ReviewFormat; rulesDir: string }): Promise<PreparedRequest> {
+  const rules = await loadRulesFile(input.rulesDir, REVIEW_RULES_FILE);
+  return {
+    [prepared]: true,
+    prompt: buildReviewPrompt(rules.body, input.behaviors, input.format),
+    rulesVersions: { [rules.id]: rules.version },
+    sourcesUsed: [],
+    deidentified: false,
+    restore: restoreNothing,
+  };
 }
 
 /**

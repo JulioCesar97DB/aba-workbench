@@ -32,6 +32,8 @@
     "src/renderer/src/next-thing.ts",
     "src/renderer/src/bulk-paste.ts",
     "src/renderer/src/components/chip-state.ts",
+    "src/renderer/src/case-map/warnings.ts",
+    "src/renderer/src/case-map/draft-state.ts",
     "scripts/**/*",
     "eval/**/*",
     "tests/**/*",

@@ -12,6 +12,8 @@ import { MapFields, type MapFormContext } from "../case-map/CaseMapFields.tsx";
 import { MapAiButton, MapDraftPanel, MapWays, ThresholdsBlock } from "../case-map/MapDraft.tsx";
 import { isDrafting, useMapDraft, useOnMapSaved, type MapPreview } from "../case-map/draft.ts";
 import { checksOf, countChecks, fieldsOf, itemInput, itemTitle } from "../case-map/specs.ts";
+import { BehaviorWarnings, LineParts, ReviewStatus } from "../case-map/definition-warnings.tsx";
+import { warningLines, type WarningLine, type WarningPart } from "../case-map/warnings.ts";
 import { MAP_TERMS } from "../i18n/terms.ts";
 import { Button } from "../components/Button.tsx";
 import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
@@ -205,6 +207,8 @@ export function CaseMapScreen() {
   }
 
   const map = state.map;
+  // The checks before QA, on the behaviors only (T3): the code's and the AI review's.
+  const warnings: ReadonlyMap<string, WarningLine[]> = part === "behaviors" ? warningLines(t, map) : new Map();
   const context: MapFormContext = {
     part,
     behaviors: map.parts.behaviors.items.map((item) => ({ id: item.id, title: itemTitle("behaviors", item as unknown as Record<string, unknown>) ?? t("caseMap.untitled") })),
@@ -241,6 +245,7 @@ export function CaseMapScreen() {
       collection={editorCollection}
       item={editorItem as unknown as Record<string, unknown>}
       context={editorCollection === "groups" ? groupContext(editorItem.id) : context}
+      warnings={editorCollection === "items" ? (warnings.get(editorItem.id) ?? []) : []}
       autoFocus={focusItem === editorItem.id}
       onFocused={clearFocus}
       editingFor={() => editing.current[part] ?? null}
@@ -264,7 +269,8 @@ export function CaseMapScreen() {
       header={header}
       rail={
         <>
-          <PartRail view={view} part={part} onShow={(version) => void show(version)} onSelect={(id) => select(part, id)} />
+          {part === "behaviors" ? <ReviewStatus caseId={caseId} map={map} /> : null}
+          <PartRail view={view} part={part} warnings={warnings} onShow={(version) => void show(version)} onSelect={(id) => select(part, id)} />
           <ThresholdsBlock caseId={caseId} instructions={state.instructions} onSaved={(text) => setState((previous) => (previous.status === "ready" ? { ...previous, instructions: text } : previous))} />
         </>
       }
@@ -311,7 +317,7 @@ export function CaseMapScreen() {
           )
         ) : showWays && part === "behaviors" ? null : (
           <div className="grid items-start gap-5 @3xl:grid-cols-[15rem_1fr]">
-            <ItemList view={view} part={part} previews={previews} selectedId={selectedId} addRef={addButton} onAdd={(collection) => void add(collection)} onSelect={(id) => select(part, id)} />
+            <ItemList view={view} part={part} warnings={warnings} previews={previews} selectedId={selectedId} addRef={addButton} onAdd={(collection) => void add(collection)} onSelect={(id) => select(part, id)} />
             <div className="min-w-0">{previewView ?? editor ?? <p className="text-md text-fg-muted">{view.items.length === 0 && previews.length === 0 ? t("caseMap.emptyPart") : t("caseMap.chooseItem")}</p>}</div>
           </div>
         )}
@@ -398,6 +404,7 @@ function PartBar({ map, part }: { map: CaseMapView; part: MapPartId }) {
 function ItemList({
   view,
   part,
+  warnings,
   previews,
   selectedId,
   addRef,
@@ -406,6 +413,8 @@ function ItemList({
 }: {
   view: MapPartView;
   part: MapPartId;
+  /** The checks before QA of each behavior (T3), counted with its [CHECK]s. */
+  warnings: ReadonlyMap<string, WarningLine[]>;
   previews: readonly MapPreview[];
   selectedId: string | null;
   addRef: RefObject<HTMLButtonElement | null>;
@@ -441,7 +450,7 @@ function ItemList({
   const replacing = new Map(previews.filter((preview) => preview.replaces !== null && savedIds.has(preview.replaces)).map((preview) => [preview.replaces!, preview]));
   const added = previews.filter((preview) => preview.replaces === null || !savedIds.has(preview.replaces));
   const row = (item: Record<string, unknown> & { id: string; editedAt: string | null }, collection: MapCollection) => {
-    const checks = countChecks(item);
+    const checks = countChecks(item) + (collection === "items" ? (warnings.get(item.id)?.length ?? 0) : 0);
     const next = collection === "items" ? replacing.get(item.id) : undefined;
     return (
       <Fragment key={item.id}>
@@ -508,6 +517,7 @@ function ItemEditor({
   collection,
   item,
   context,
+  warnings,
   autoFocus,
   onFocused,
   editingFor,
@@ -519,6 +529,8 @@ function ItemEditor({
   collection: MapCollection;
   item: Record<string, unknown>;
   context: MapFormContext;
+  /** Its checks before QA (T3): shown above its fields, never offering to rewrite them. */
+  warnings: readonly WarningLine[];
   autoFocus: boolean;
   /** The first field took the focus: it never takes it again (review round 2, R2-4). */
   onFocused: () => void;
@@ -584,6 +596,7 @@ function ItemEditor({
         ) : null}
       </div>
       {part === "report" ? <ReportText item={item} /> : null}
+      <BehaviorWarnings lines={warnings} />
       {box.status === "failed" ? (
         <p role="alert" className="flex flex-wrap items-center gap-2 text-sm font-medium text-danger">
           {t("caseMap.actionFailed")}
@@ -643,12 +656,28 @@ function ReportText({ item }: { item: Record<string, unknown> }) {
 }
 
 /** The rail: what approving means, what is still to check in this part, and its versions, newest first, to show another one. */
-function PartRail({ view, part, onShow, onSelect }: { view: MapPartView; part: MapPartId; onShow: (version: number) => void; onSelect: (id: string) => void }) {
+function PartRail({
+  view,
+  part,
+  warnings,
+  onShow,
+  onSelect,
+}: {
+  view: MapPartView;
+  part: MapPartId;
+  warnings: ReadonlyMap<string, WarningLine[]>;
+  onShow: (version: number) => void;
+  onSelect: (id: string) => void;
+}) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const when = (iso: string) => new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short" }).format(new Date(iso));
   const toCheck = [...view.items.map((item) => ({ item: item as unknown as Record<string, unknown> & { id: string }, list: part })), ...view.groups.map((group) => ({ item: group as unknown as Record<string, unknown> & { id: string }, list: "groups" as const }))].flatMap(({ item, list }) =>
-    checksOf(item).map((text, index) => ({ key: `${item.id}-${index}`, id: item.id, title: itemTitle(list, item) ?? t("caseMap.untitled"), text })),
+    [
+      ...checksOf(item).map((text, index) => ({ key: `${item.id}-${index}`, id: item.id, title: itemTitle(list, item) ?? t("caseMap.untitled"), parts: [{ text, lang: "en" as const }] as WarningPart[] })),
+      // The checks before QA of a behavior (T3), after its [CHECK]s.
+      ...(list === "groups" ? [] : (warnings.get(item.id) ?? [])).map((line) => ({ key: `${item.id}-${line.key}`, id: item.id, title: itemTitle(list, item) ?? t("caseMap.untitled"), parts: line.stale ? [...line.parts, { text: t("caseMap.qa.stale"), lang: undefined }] : line.parts })),
+    ],
   );
   return (
     <>
@@ -669,7 +698,7 @@ function PartRail({ view, part, onShow, onSelect }: { view: MapPartView; part: M
                   <span lang="en" className="font-semibold">
                     {entry.title}
                   </span>
-                  : <span lang="en">{entry.text}</span>
+                  : <LineParts parts={entry.parts} />
                 </button>
               </li>
             ))}

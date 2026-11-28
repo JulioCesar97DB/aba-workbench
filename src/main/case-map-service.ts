@@ -3,6 +3,7 @@ import type { Provider, ProviderCredential } from "../lib/providers/types.ts";
 import type { DraftingProvider, GenerationUpdateEvent, GetCaseMapResult, MapSaveResult, StartSectionResult } from "../shared/api.ts";
 import { defaultModel } from "../shared/models.ts";
 import { runMapDraft } from "./case-map-draft.ts";
+import { runDefinitionReview } from "./definition-review.ts";
 import type { InstructionsStore } from "./instructions.ts";
 import { isMapPartId, MAP_ITEM_ID, type MapCollection, type MapPartId } from "../shared/case-map.ts";
 import type { CaseData } from "./case-file.ts";
@@ -109,6 +110,30 @@ export class CaseMapService {
     return {
       outcome: "ready",
       run: (signal) => runMapDraft({ cases: this.cases, caseId: caseId as string, rulesDir: ai.rulesDir, providerId, provider, credential, model, instructions, signal, log }),
+    };
+  }
+
+  /**
+   * "Review the definitions again" (T3; owner's decision 2A): the review of the behaviors'
+   * definitions on its own, one request, run like any generation.
+   */
+  async prepareReview(
+    caseId: unknown,
+    providerId: unknown,
+  ): Promise<{ outcome: Exclude<StartSectionResult["outcome"], "started" | "busy"> } | { outcome: "ready"; run: (signal: AbortSignal) => AsyncIterable<Exclude<GenerationUpdateEvent, { type: "finished" }>> }> {
+    const ai = this.ai;
+    if (!ai) refuse("the AI is not set up.");
+    if (providerId !== "anthropic" && providerId !== "openai") refuse("unknown provider.");
+    const credential = await ai.credential(providerId);
+    if (!credential) return { outcome: "not-connected" };
+    const read = await this.cases.changeCase(caseId, () => ({ save: null, value: null }));
+    if (read.kind !== "saved" && read.kind !== "unchanged") return { outcome: "case-unavailable" };
+    const model = (await ai.chosenModel(providerId)) ?? defaultModel(providerId);
+    const provider = ai.provider(providerId);
+    const log = ai.log ?? ((message: string) => console.warn(message));
+    return {
+      outcome: "ready",
+      run: (signal) => runDefinitionReview({ cases: this.cases, caseId: caseId as string, rulesDir: ai.rulesDir, providerId, provider, credential, model, signal, log }),
     };
   }
 

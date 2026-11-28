@@ -46,6 +46,8 @@ function applyEvent(run: Run, event: GenerationUpdateEvent): Run {
     case "map-progress":
     case "map-preview":
     case "map-saved":
+    case "map-review":
+    case "map-review-saved":
       return run;
   }
 }

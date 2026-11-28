@@ -10,6 +10,8 @@
  * content it is (origin) and the [CHECK: ...] text on it, if any.
  */
 
+import type { DefinitionReviewView } from "./definition-checks.ts";
+
 /** The AI's two requests of a draft (D12): the case facts (with the report on her sections), then the behaviors. */
 export const MAP_REQUEST_KINDS = ["map-facts", "map-behaviors"] as const;
 export type MapRequestKind = (typeof MAP_REQUEST_KINDS)[number];
@@ -368,6 +370,8 @@ export interface MapPartView {
 
 export interface CaseMapView {
   parts: Record<MapPartId, MapPartView>;
+  /** The newest AI review of the behaviors' definitions (T3), or null when none ran. */
+  definitionReview: DefinitionReviewView | null;
   /** The case's save time this was read at (see SectionDetail.revision). */
   revision: string;
 }
