@@ -20,7 +20,7 @@ import { BARRIER_TAGS, EVIDENCE_TOOLS, FUNCTION_NAMES, MAP_PART_LIMITS, MAP_TEXT
 
 export { MAP_REQUEST_KINDS, type MapRequestKind } from "../shared/case-map.ts";
 import type { MapRequestKind } from "../shared/case-map.ts";
-import { DEFAULT_THRESHOLDS } from "../shared/case-map-thresholds.ts";
+import { allowedThresholds, withoutAllowedThresholds, type ThresholdField } from "../shared/case-map-thresholds.ts";
 
 /** The parts each request returns. Risks name behaviors, so they come with the behaviors. */
 export const PARTS_OF_REQUEST = {
@@ -401,7 +401,7 @@ export interface CheckContext {
   settingIds: ReadonlySet<string>;
   /** Behaviors already in the map (on an update): a group or a risk may name them by id. */
   behaviorIds?: ReadonlySet<string>;
-  /** Her own thresholds, as sent (behaviors only): an AI-drafted value may take its numbers from them (D16), as from her defaults. */
+  /** Her own thresholds, as sent (behaviors only): each line takes the place of the default it changes (D16; review of T2, finding 3). */
   instructions?: string;
 }
 
@@ -488,6 +488,12 @@ export function sameNumber(wanted: string, quoted: string): boolean {
 
 const THRESHOLD = /\d+(?:\.\d+)?\s*(?:-\s*)?(?:seconds?|secs?|s\b|feet|foot|ft\b|minutes?|mins?\b|meters?|m\b)/iu;
 
+/** A definition, onset or offset: the field, and whether the behavior is a tantrum (her 30 s offset). */
+interface ThresholdOptions {
+  threshold?: ThresholdField;
+  tantrum?: boolean;
+}
+
 export interface CheckResult {
   /** What the repair request says; empty when the answer passes. */
   problems: string[];
@@ -548,7 +554,8 @@ const LISTS = ["caregivers", "settings", "deficits", "strengths", "facts", "repo
  * The checks after Zod: every ref names a place that was sent and quotes it word for word
  * in at least three words (a PDF's quotes are not checked yet); every claim with a source's
  * value has a ref; every number of a claim is written in one of its quotes (an AI-drafted
- * behavior value may also take it from her default thresholds or her own); every link between items is
+ * definition, onset or offset may also state her default thresholds or her own, each as the
+ * threshold it is, in its place); every link between items is
  * known; keys are unique; a group's members share its function and measure.
  */
 export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context: CheckContext): CheckResult {
@@ -584,9 +591,11 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
   const sourceTexts = new Map(context.sources.filter((source) => source.text !== null).map((source) => [source.id, normalizeForQuote(source.text ?? "")]));
   const sectionTexts = new Map(context.sections.map((section) => [section.id, normalizeForQuote(section.text)]));
   const notes = normalizeForQuote(context.notes);
-  // An AI-drafted behavior value may take a number from her default thresholds (owner's decision,
-  // 2026-11-28) or from her own, sent as the map's standing instructions (D16).
-  const thresholdNumbers = new Set(kind === "map-behaviors" ? numbersIn([...DEFAULT_THRESHOLDS, context.instructions ?? ""].join("\n")) : []);
+  // An AI-drafted definition, onset or offset may state her default thresholds (owner's decision,
+  // 2026-11-28) or her own (D16), each only as the threshold it is: the number with its unit, in
+  // the field it belongs in, 30 s only for a tantrum (review of T2, finding 1). Nothing else is
+  // allowed a number no quote gives.
+  const instructions = kind === "map-behaviors" ? (context.instructions ?? "") : "";
   const knownBehaviors = context.behaviorIds ?? new Set<string>();
 
   /** A problem, located: "settings[2].kind" marks settings item 2 as failing; "client.age" the client. */
@@ -646,7 +655,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     return fail(`the quote "${ref.quote.slice(0, 80)}" is not found word for word in ${place}.`, "quote-not-found");
   };
 
-  const visitClaim = (claim: AnswerClaim | null, where: string, options: { threshold?: boolean } = {}) => {
+  const visitClaim = (claim: AnswerClaim | null, where: string, options: ThresholdOptions = {}) => {
     if (!claim) return;
     const before = problems.length;
     inClaim = true;
@@ -654,7 +663,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     inClaim = false;
     if (problems.length > before) failedClaims.add(claim);
   };
-  const checkOneClaim = (claim: AnswerClaim, where: string, options: { threshold?: boolean }) => {
+  const checkOneClaim = (claim: AnswerClaim, where: string, options: ThresholdOptions) => {
     claim.refs.forEach((ref, index) => checkRef(ref, `${where}.refs[${index}]`));
     // Longer than its field allows: the value's own problem (owner's decision, 2026-11-23). A score row's fields each have their own limit.
     if (isScoreRow(claim)) {
@@ -670,8 +679,9 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     const quotedIn = (state: QuoteCheck, strip: (quote: string) => string = (quote) => quote) => claim.refs.filter((ref) => quotes.get(ref) === state).flatMap((ref) => numbersIn(strip(ref.quote)));
     /** The numbers of a text that no found quote gives, and of those the ones no PDF's quote gives either. */
     const judge = (text: string, found: readonly string[], inPdf: readonly string[]) => {
-      const allowed = (number: string) => found.some((quoted) => sameNumber(number, quoted)) || (claim.origin === "ai-drafted" && [...thresholdNumbers].some((quoted) => sameNumber(number, quoted)));
-      const unchecked = numbersIn(text).filter((number) => !allowed(number));
+      const allowed = (number: string) => found.some((quoted) => sameNumber(number, quoted));
+      const own = options.threshold && claim.origin === "ai-drafted" ? withoutAllowedThresholds(text, allowedThresholds(instructions, options.threshold, options.tantrum ?? false)) : text;
+      const unchecked = numbersIn(own).filter((number) => !allowed(number));
       // A number only in a PDF's quote next to a text quote passes, marked [CHECK] on the value (review round 2, S1).
       return { unchecked, missing: unchecked.filter((number) => !inPdf.some((quoted) => sameNumber(number, quoted))) };
     };
@@ -702,7 +712,7 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
     numbers.add(claim);
     unquotedNumbers.set(claim, missing);
     if (options.threshold && THRESHOLD.test(claim.value)) {
-      problem(where, `"${claim.value.slice(0, 80)}" gives a threshold that no quote, default or standing instruction gives: use her default, or write [MISSING: your threshold for …] in its place.`, "threshold");
+      problem(where, `"${claim.value.slice(0, 80)}" gives a threshold that no quote gives and that is not her default or her own for this place: use her threshold for it, or write [MISSING: your threshold for …] in its place.`, "threshold");
     } else {
       problem(where, `the number ${missing.map((number) => number.replace(/^d:/u, "")).join(", ")} in "${claim.value.slice(0, 80)}" is not written in any of its quotes.`, "number-not-quoted");
     }
@@ -778,7 +788,8 @@ export function checkMapAnswer(kind: MapRequestKind, answer: MapAnswer, context:
       visitClaim(behavior.name, `${where}.name`);
       visitClaim(behavior.measure, `${where}.measure`);
       oneOf(behavior.measure, MEASURES, `${where}.measure`);
-      for (const key of ["definition", "onset", "offset"] as const) visitClaim(behavior[key], `${where}.${key}`, { threshold: true });
+      const tantrum = /tantrum/iu.test(behavior.name?.value ?? "");
+      for (const key of ["definition", "onset", "offset"] as const) visitClaim(behavior[key], `${where}.${key}`, { threshold: key, tantrum });
       for (const key of ["topographies", "examples", "nonExamples", "antecedents", "consequences", "risks"] as const) visitAll(behavior[key], `${where}.${key}`);
       behavior.baseline.observations.forEach((observation, at) => {
         const place = `${where}.baseline.observations[${at}]`;

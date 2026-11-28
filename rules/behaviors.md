@@ -2,15 +2,15 @@
 id: behaviors
 version: 4
 updated: 2026-11-28
-sources: The owner's notes on three of the BCBA's assessments (patterns only, in our own words, 2026-11-23), the instruments file's guidance on FBA tools, and the owner's decisions D16 to D19, the BCBA's questionnaire answers of 2026-11-27 (parts 6 and 10, in our own words), and the owner's decision of 2026-11-28 that her confirmed practice is the default in these rules for every user. The example is about an invented child and shares nothing with the invented evaluation cases. No text from any real assessment.
-confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27 (the wording of definitions, examples and functions; her default thresholds, the number of behaviors, examples and non-examples, precursors, the measure, and the caregiver's count); a standing instruction or a source for this child overrides a default
+sources: The owner's notes on three of the BCBA's assessments (patterns only, in our own words, 2026-11-23), the instruments file's guidance on FBA tools, and the owner's decisions D16 to D19, the BCBA's questionnaire answers of 2026-11-27 (part 6, in our own words), and the owner's decision of 2026-11-28 that her confirmed practice is the default in these rules for every user. The example is about an invented child and shares nothing with the invented evaluation cases. No text from any real assessment.
+confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27 (the wording of definitions, examples and functions; her default thresholds, the number of behaviors, examples and non-examples, precursors, the measure, and the caregiver's count); her sections, then the sources for this child, then her standing instructions override a default, one threshold at a time
 ---
 
 # Target behaviors: definitions, functions and groups
 
 ## Which behaviors
 
-The behaviors are the ones her list, her sections or the BCBA's documents name or report: every behavior the sources report goes in, not only the ones that interfere most. Never add a behavior no source reports; if the observations show something worrying that no source names as a concern, add an open item instead.
+Every behavior that a caregiver, a teacher, her notes, her sections, her list or the BCBA's documents report as a concern goes in, not only the ones that interfere most. A behavior that only the observations show, and that nobody names as a concern, is an open item, not a target. Never add a behavior no source reports.
 
 - **How many.** She writes 8 to 14 behaviors.
 - **Names.** Use her names first (the ones her sections and her list use: elopement, non-compliant behavior, tantrum, off task behavior, repetitive motor behavior, screaming, mouthing, self injury behavior, physical aggression, property destruction, invading personal space, echolalia, and the like), first word capitalized. Prefer the generic name that covers the most responses of this child: throwing, knocking over and overturning things are one Property destruction. Propose another name only when none of hers fits.
@@ -30,7 +30,7 @@ A reviewer and an RBT must be able to count the behavior from the definition alo
 - **Exclusions.** When two of the target behaviors could catch the same event, write in each definition which one it belongs to, so a single event never counts toward two behaviors.
 - **Wording.** The name, the definition, the examples and the non-examples are pasted into ABA Matrix as they are, so they follow the style guide: no dates, no names of caregivers or professionals, no quoted speech (paraphrase what the child said), no long dashes.
 - **Examples.** Two or three short scenes of this child from the sources, each opening with the child's name, each with its quote in the claim's ref (the example itself paraphrases). Together they cover the functions the behavior may serve (a behavior usually has one to three): when the behavior is maintained by escape and by attention, one example shows each. Fewer when the sources record fewer incidents; never invent one to reach the number.
-- **Non-examples.** Three, from what the sources show of this child: the appropriate alternative (a request for help or a break, going with permission), and accidental or harmless forms. A repetitive movement during free time that interrupts nothing is a non-example. Fewer when the sources do not give three; never invent one to reach the number.
+- **Non-examples.** Three. One may be the appropriate alternative the plan will teach (a request for help or a break, going with permission): it marks the behavior's boundary, not an incident, so the sources need not show it. The others come from what the sources show of this child: accidental or harmless forms. A repetitive movement during free time that interrupts nothing is a non-example. Fewer when the sources do not give them; never invent an incident to reach the number.
 - **Measure.** Frequency by default, for every behavior, because it keeps the plan simple to carry out. Duration only for a tantrum whose episodes are long. Time sampling only for a behavior whose rate is so high that it cannot be counted; the measure list has no time sampling yet, so keep frequency and write the proposal as the measure's `check`. Latency is not one of her defaults.
 
 ### Thresholds
@@ -43,7 +43,7 @@ The timing and distance thresholds in a definition (how many seconds count as no
 - Repetitive movements (stereotypy): counted only when they interrupt a task, a transition or play with others for 3 seconds or longer; when they interrupt nothing, they are not counted.
 - End of an episode: the behavior has stopped for 10 seconds in a row; for a tantrum, 30 seconds.
 
-What overrides a default, first to last: a threshold in `<standing-instructions>`, then one her sections or the sources give for this child. Every threshold is adapted to the child's age and level of functioning: when the sources show that a default does not fit this child (a very young child, or a child whose instructions take longer to process), keep the default and write in the definition's `check` what the sources show and that she may want to adapt it. Never pick a number of your own. When a definition needs a threshold that neither her defaults nor the other places give (how far from the assigned spot counts as leaving the task area, for example), write a marker in its place, `[MISSING: your threshold for …]`. The app refuses a number of seconds, feet or minutes in a definition, onset or offset that no quote, default or standing instruction gives.
+What overrides a default, first to last: a threshold her sections give for this child, then one the sources give for this child, then one in `<standing-instructions>`. Her standing instructions override one threshold at a time: a line of hers takes the place of the default it changes (the same label, such as "Off task"), and every default she does not change still applies. Every threshold is adapted to the child's age and level of functioning: when the sources show that a default does not fit this child (a very young child, or a child whose instructions take longer to process), keep the default and write in the definition's `check` what the sources show and that she may want to adapt it. Never pick a number of your own. When a definition needs a threshold that neither her defaults nor the other places give (how far from the assigned spot counts as leaving the task area, for example), write a marker in its place, `[MISSING: your threshold for …]`. The app refuses a number of seconds, feet or minutes in a definition, onset or offset that no quote gives, unless it is her default or her own threshold for that place, with its unit: 5 seconds or 3 seconds or 6 feet for the start, 10 seconds for the end, 30 seconds for the end of a tantrum. A default's number is never a count.
 
 ## Baseline
 
@@ -72,7 +72,7 @@ Use her five functions: tangibles, attention, escape, sensory, automatic.
 
 A group gathers behaviors that will share one consequence procedure later. Her rule: **the behaviors share a response class, a function and a measure.** The group's function is a primary function of every member, and its measure is every member's measure; the app checks both.
 
-- Keep behaviors apart when the measure differs (a counted behavior and a timed one), when they need different safety responses (a dangerous behavior and a mild one), or when one is a passive or precursor form of another.
+- Keep behaviors apart when the measure differs (a counted behavior and a timed one), when they need different safety responses (a dangerous behavior and a mild one), or when one is a passive form of another.
 - Never group across functions.
 - A behavior belongs to one group at most; a behavior alone needs no group.
 - Each group gives its nature, its function, its measure and a reason of one sentence ("none" for a function or a measure that cannot be named). Groups are hypotheses: she approves them.
@@ -98,4 +98,4 @@ One behavior from a case map, for an invented child, Nadia. Her default gives th
 >
 > Measure: frequency. Baseline: 3 climbs in the observation of 05/14/2026 (length: 2 hours).
 
-What makes it work: every form of the behavior in the definition is one the sources record for Nadia; onset, offset and the counting rule can be observed; the exclusions keep it apart from play that is safe; the examples are her own incidents, each opening with her name, and the first non-example is the request the plan will teach; the threshold is her default, not a number of the model's own.
+What makes it work: every form of the behavior in the definition is one the sources record for Nadia; onset, offset and the counting rule can be observed; the exclusions keep it apart from play that is safe; the examples are her own incidents, each opening with her name, and the first non-example is the request the plan will teach, which marks the boundary; the threshold is her default, not a number of the model's own.

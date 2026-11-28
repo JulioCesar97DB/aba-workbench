@@ -27,7 +27,7 @@ Programs are the replacements and the skills acquisition goals together.
 ## Which skills
 
 - Choose from the behavior cusps for the child's age, and from what the child needs to function as independently as children of that age do.
-- Draw on, and name for each skill: low items of the Vineland-3, the ABLLS-R (only for a child under 5), the VB-MAPP, the family's priorities and her direct observation.
+- Draw on: low items of the Vineland-3, the ABLLS-R (only for a child under 5), the VB-MAPP, the family's priorities and her direct observation.
 - Usual areas: communication (mands, tacts, intraverbals), daily living and self-care, toileting, safety, social and play skills, waiting and tolerance, community skills.
 
 ## How a program is written
@@ -44,7 +44,7 @@ Programs are the replacements and the skills acquisition goals together.
 ## Mastery criteria
 
 - Most skills: 90%, as her goals usually end.
-- Safety skills, personal information and skills for recognizing danger in the community: 95%.
+- Safety skills, such as personal information, safety in the community and recognizing dangerous situations: 95%.
 - Crossing the street: 100%.
 
 ## Caregiver goals

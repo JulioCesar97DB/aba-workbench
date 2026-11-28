@@ -70,3 +70,34 @@ test("the case map by hand: add a behavior, type it, approve the part, correct i
   await parts.getByRole("link", { name: /Report on your sections/ }).click();
   await expect(page.getByText(/This part fills in when the AI reads the sections you already wrote/)).toBeVisible();
 });
+
+test("the intensity her rule suggests (owner's decision 2A, 2026-11-28): shown next to the mean for a frequency behavior, saved as hers only when she clicks Use it", async ({ launch, home }) => {
+  const casesFolder = defaultCasesFolder(home);
+  seedCase(casesFolder);
+  const caseFile = path.join(casesFolder, SAMPLE_CASE.label, "aba-case.json");
+  const page = await firstScreen(await launch());
+  await goTo(page, `/cases/${SAMPLE_CASE.id}/case-map`);
+  await expect(heading(page)).toHaveText("Case map");
+  await page.getByRole("button", { name: "Add a behavior" }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Off task behavior");
+  await page.getByLabel("Measure", { exact: true }).selectOption("frequency");
+  const observations = page.getByRole("group", { name: "Observations", exact: true });
+  for (const [index, count] of ["12", "11", "10"].entries()) {
+    await observations.getByRole("button", { name: "Add a row" }).click();
+    await page.getByRole("textbox", { name: `Count or minutes ${index + 1}`, exact: true }).fill(count);
+  }
+  // A mean of 11: more than 10 is 3.
+  await expect(page.getByText(/^Suggested intensity: 3, by your rule/)).toBeVisible();
+  const item = () => caseMapOf(caseFile)?.parts?.behaviors?.versions?.at(-1)?.content?.items?.[0];
+  await expect.poll(() => item()?.baseline?.observations?.length ?? 0).toBe(3);
+  // Nothing is saved until she clicks.
+  expect(item()?.intensity ?? null).toBe(null);
+  await page.getByRole("button", { name: "Use it", exact: true }).click();
+  await expect(page.getByLabel("Intensity", { exact: true })).toHaveValue("3");
+  await expect.poll(() => item()?.intensity).toEqual({ value: "3", refs: [{ kind: "her" }], origin: "her", check: null });
+  // Already used: the suggestion stays, the button goes.
+  await expect(page.getByRole("button", { name: "Use it", exact: true })).toHaveCount(0);
+  // A duration behavior gets none: she rates it.
+  await page.getByLabel("Measure", { exact: true }).selectOption("duration");
+  await expect(page.getByText(/^Suggested intensity:/)).toHaveCount(0);
+});

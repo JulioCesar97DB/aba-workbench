@@ -214,7 +214,12 @@ test("review round 2 (nit 4): the case map's rules name both ways her practice r
 });
 
 test("T2 (owner's decision, 2026-11-28): her default thresholds are in the behaviors rules word for word, as the case map's check and the screen hold them", async () => {
-  const { DEFAULT_THRESHOLDS, THRESHOLDS_DRAFT } = await import("../src/shared/case-map-thresholds.ts");
+  const { DEFAULTS, DEFAULT_THRESHOLDS, THRESHOLDS_DRAFT, thresholdPairs } = await import("../src/shared/case-map-thresholds.ts");
+  // What the check allows of each default is what its line says, number and unit.
+  for (const threshold of DEFAULTS) {
+    const said = thresholdPairs(threshold.text).map((pair) => `${pair.value} ${pair.unit}`);
+    for (const allow of threshold.allows) assert.ok(said.includes(`${allow.value} ${allow.unit}`), `${threshold.label}: ${allow.value} ${allow.unit}`);
+  }
   const behaviors = readFileSync("rules/behaviors.md", "utf8");
   for (const line of DEFAULT_THRESHOLDS) {
     assert.ok(behaviors.includes(`- ${line}\n`), `rules/behaviors.md lists "${line.slice(0, 50)}…"`);
@@ -224,6 +229,10 @@ test("T2 (owner's decision, 2026-11-28): her default thresholds are in the behav
   const listed = /### Thresholds[\s\S]*?confirmed in her questionnaire answers:\n\n((?:- .*\n)+)/.exec(behaviors)?.[1].trim().split("\n") ?? [];
   assert.deepEqual(listed, DEFAULT_THRESHOLDS.map((line) => `- ${line}`));
   assert.doesNotMatch(behaviors, /Take them only from/);
+  // Review of T2, finding 2: what is specific to the case comes first.
+  assert.match(behaviors, /first to last: a threshold her sections give for this child, then one the sources give for this child, then one in `<standing-instructions>`/);
+  assert.match(behaviors, /one threshold at a time/);
+  assert.doesNotMatch(behaviors, /passive or precursor form/);
   assert.match(behaviors, /^version: 4$/m);
 });
 
@@ -231,8 +240,9 @@ test("T2: the behaviors rules carry her confirmed defaults: 8 to 14 behaviors, e
   const behaviors = readFileSync("rules/behaviors.md", "utf8");
   assert.match(behaviors, /She writes 8 to 14 behaviors/);
   assert.match(behaviors, /Together they cover the functions the behavior may serve/);
-  assert.match(behaviors, /\*\*Non-examples\.\*\* Three, from what the sources show/);
+  assert.match(behaviors, /\*\*Non-examples\.\*\* Three\. One may be the appropriate alternative the plan will teach/);
   assert.match(behaviors, /never invent one to reach the number/);
+  assert.match(behaviors, /never invent an incident to reach the number/);
   assert.match(behaviors, /\*\*Precursors\*\*[^\n]*inside the definition/);
   assert.match(behaviors, /Frequency by default/);
   assert.match(behaviors, /its baseline is the caregiver's count/);
