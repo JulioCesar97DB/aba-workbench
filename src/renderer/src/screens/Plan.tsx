@@ -269,11 +269,8 @@ function nextStep(t: TFunction, plan: PlanView, blocks: readonly FunctionBlock[]
 /** The plan's views: one tab per function block (a function with no behavior is dashed), then programs, glossary, goals, checks and copy. */
 function ViewTabs({ t, plan, blocks, view, findings, copied, fields, onGo }: { t: TFunction; plan: PlanView; blocks: readonly FunctionBlock[]; view: View; findings: number; copied: number; fields: number; onGo: (view: View) => void }) {
   const present = new Set(blocks.map((block) => block.function));
-  // A function the plan has items for but the map no longer has: shown dashed, "sin conductas".
-  const withItems = new Set([...plan.parts.strategies.items.flatMap((item) => item.functions), ...plan.parts.interventions.items.map((item) => item.function), ...plan.parts.programs.items.map((item) => item.function ?? "")]);
   // Every function has its tab; one with no behavior of the map is dashed, "sin conductas" (proposal §2.1; review nit 13).
   const functions = FUNCTION_NAMES;
-  void withItems;
   const tab = (id: View, label: ReactNode, detail: string | null, lang?: string, dashed = false) => (
     <li key={id}>
       <button
@@ -913,7 +910,8 @@ function CountRail({ caseId, data, plan, target, programs }: { caseId: string; d
       <p className="text-sm" data-testid="plan-target">
         <span className="font-mono font-semibold">~{target.target}</span> · {rule}
       </p>
-      {target.openItem ? <p className="text-sm text-warning">{t("planStep.count.openItem")}</p> : null}
+      {/* "No weekly hours yet" only when she gave none; unreadable hours are said on the line above (review round 2, finding 2). */}
+      {target.openItem && target.rule === "default" ? <p className="text-sm text-warning">{t("planStep.count.openItem")}</p> : null}
       <p className="text-xs text-fg-muted">{t("planStep.count.so", { count: programs, target: target.target })}</p>
     </RailSection>
   );

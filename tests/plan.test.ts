@@ -297,6 +297,12 @@ test("checks: her never-list and extinction or punishment, in English and Spanis
     "When he screams without a clear trigger, the RBT applies time-out for 2 minutes.",
     "Si el niño no termina la tarea, se usa extinción de escape.",
     "Cuando no hay un adulto cerca, el RBT usa bloqueo de respuesta.",
+    // A time-out described with its place or its people (review round 2, finding 1).
+    "Tomás goes to time-out in the corner for 1 minute.",
+    "Time-out on a chair follows each hit.",
+    "The RBT uses time out at the table.",
+    "Time-out with the caregiver present.",
+    "Time-out in his room is used for aggression.",
   ];
   for (const text of fail) assert.ok(aversiveTerm(text), `should flag: ${text}`);
   const pass = [
@@ -320,6 +326,7 @@ test("checks: her never-list and extinction or punishment, in English and Spanis
     "Hand over hand prompting is avoided.",
     // Words that are not the procedure (review nit 11).
     "Each time out in the community, the RBT reviews the safety rules.",
+    "Every time out of his seat, the RBT redirects him.",
     "The RBT teaches restraint-free calm-down strategies.",
     "Deficits in aislamiento social with peers.",
   ];
