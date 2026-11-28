@@ -210,5 +210,44 @@ test("owner's decision of 2026-11-27: her questionnaire-confirmed practice is ki
 });
 
 test("review round 2 (nit 4): the case map's rules name both ways her practice reaches the model", () => {
-  assert.match(readFileSync("rules/case-map.md", "utf8"), /only from `<standing-instructions>`, or as the whole-assessment rules list it as confirmed/);
+  assert.match(readFileSync("rules/case-map.md", "utf8"), /only from `<standing-instructions>`, or as these rules, the behaviors rules and the whole-assessment rules give it as her confirmed default/);
+});
+
+test("T2 (owner's decision, 2026-11-28): her default thresholds are in the behaviors rules word for word, as the case map's check and the screen hold them", async () => {
+  const { DEFAULT_THRESHOLDS, THRESHOLDS_DRAFT } = await import("../src/shared/case-map-thresholds.ts");
+  const behaviors = readFileSync("rules/behaviors.md", "utf8");
+  for (const line of DEFAULT_THRESHOLDS) {
+    assert.ok(behaviors.includes(`- ${line}\n`), `rules/behaviors.md lists "${line.slice(0, 50)}…"`);
+    assert.ok(THRESHOLDS_DRAFT.includes(line));
+  }
+  // The thresholds list in the rules has no line the constant lacks.
+  const listed = /### Thresholds[\s\S]*?confirmed in her questionnaire answers:\n\n((?:- .*\n)+)/.exec(behaviors)?.[1].trim().split("\n") ?? [];
+  assert.deepEqual(listed, DEFAULT_THRESHOLDS.map((line) => `- ${line}`));
+  assert.doesNotMatch(behaviors, /Take them only from/);
+  assert.match(behaviors, /^version: 4$/m);
+});
+
+test("T2: the behaviors rules carry her confirmed defaults: 8 to 14 behaviors, examples across functions, three non-examples, precursors inside, frequency first, the caregiver's count", () => {
+  const behaviors = readFileSync("rules/behaviors.md", "utf8");
+  assert.match(behaviors, /She writes 8 to 14 behaviors/);
+  assert.match(behaviors, /Together they cover the functions the behavior may serve/);
+  assert.match(behaviors, /\*\*Non-examples\.\*\* Three, from what the sources show/);
+  assert.match(behaviors, /never invent one to reach the number/);
+  assert.match(behaviors, /\*\*Precursors\*\*[^\n]*inside the definition/);
+  assert.match(behaviors, /Frequency by default/);
+  assert.match(behaviors, /its baseline is the caregiver's count/);
+  assert.match(behaviors, /seconds or minutes per incident[^\n]*total minutes per session/);
+});
+
+test("T2: the programs rules wait for the Plan step: listed in the README, sent with no request", async () => {
+  const text = readFileSync("rules/programs.md", "utf8");
+  assert.match(text, /^id: programs$/m);
+  assert.match(text, /No request loads this file yet/);
+  for (const needle of [/about 25 programs/, /4 to 6 steps/, /10 opportunities/, /Crossing the street: 100%/, /10% or 20%/, /written in English/, /One set of goals for all the caregivers/, /functionally equivalent replacement/]) assert.match(text, needle);
+  assert.match(readFileSync("rules/README.md", "utf8"), /`programs\.md`/);
+  for (const section of ["medical-necessity", "family-caregiver-involvement"] as const) {
+    const { prompt, rulesVersions } = await buildPrompt(section, [{ id: "a", title: "A", kind: "text", text: "x" }]);
+    assert.equal("programs" in rulesVersions, false, section);
+    assert.doesNotMatch(prompt.system + prompt.task, /# Programs: replacements/, section);
+  }
 });

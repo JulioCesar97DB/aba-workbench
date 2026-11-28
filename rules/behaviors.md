@@ -1,16 +1,23 @@
 ---
 id: behaviors
-version: 3
-updated: 2026-11-27
-sources: The owner's notes on three of the BCBA's assessments (patterns only, in our own words, 2026-11-23), the instruments file's guidance on FBA tools, and the owner's decisions D16 to D19. The example is about an invented child and shares nothing with the invented evaluation cases. No text from any real assessment.
-confirmed: in part, by the BCBA's questionnaire answers of 2026-11-27 (the wording of definitions, examples and functions); her thresholds and defaults reach the app through her standing instructions
+version: 4
+updated: 2026-11-28
+sources: The owner's notes on three of the BCBA's assessments (patterns only, in our own words, 2026-11-23), the instruments file's guidance on FBA tools, and the owner's decisions D16 to D19, the BCBA's questionnaire answers of 2026-11-27 (parts 6 and 10, in our own words), and the owner's decision of 2026-11-28 that her confirmed practice is the default in these rules for every user. The example is about an invented child and shares nothing with the invented evaluation cases. No text from any real assessment.
+confirmed: yes, by the BCBA's questionnaire answers of 2026-11-27 (the wording of definitions, examples and functions; her default thresholds, the number of behaviors, examples and non-examples, precursors, the measure, and the caregiver's count); a standing instruction or a source for this child overrides a default
 ---
 
 # Target behaviors: definitions, functions and groups
 
 ## Which behaviors
 
-The behaviors are the ones her list, her sections or the BCBA's documents name as targets. Use her name for each, first word capitalized. Never add a behavior nobody named as a target; if the observations show something worrying that no list names, add an open item instead. Never merge two behaviors she listed separately into one, and never split one of hers: if you think two of hers are one response class, say so in a group (below), not by merging them.
+The behaviors are the ones her list, her sections or the BCBA's documents name or report: every behavior the sources report goes in, not only the ones that interfere most. Never add a behavior no source reports; if the observations show something worrying that no source names as a concern, add an open item instead.
+
+- **How many.** She writes 8 to 14 behaviors.
+- **Names.** Use her names first (the ones her sections and her list use: elopement, non-compliant behavior, tantrum, off task behavior, repetitive motor behavior, screaming, mouthing, self injury behavior, physical aggression, property destruction, invading personal space, echolalia, and the like), first word capitalized. Prefer the generic name that covers the most responses of this child: throwing, knocking over and overturning things are one Property destruction. Propose another name only when none of hers fits.
+- **Fewer than 8.** Split a generic behavior by her split rule (a different measure, a different safety response, a passive form) until there are 8, and only into behaviors the sources show this child doing. When the sources do not give 8, keep what they give and add an open item; never add a behavior to reach the number.
+- **More than 14.** Merge by her merge rule (the same function and the same measure) until there are 14 at most; when that is not enough, add an open item asking her which to keep.
+- **Her list is final.** Never merge two behaviors she listed separately into one, and never split one of hers: if you think two of hers are one response class, say so in a group (below), not by merging them. The splitting and merging above apply only to the behaviors you name from the sources.
+- **Precursors** (whining before a tantrum, for example) are never a target of their own: when the sources show one, write it inside the definition of the behavior it leads to. The sessions are usually too short to show precursors, so do not look for one the sources do not give.
 
 ## A definition is what this child does
 
@@ -22,17 +29,28 @@ A reviewer and an RBT must be able to count the behavior from the definition alo
 - **Counting.** Whether each discrete instance counts on its own, or a continuous episode counts once; say which.
 - **Exclusions.** When two of the target behaviors could catch the same event, write in each definition which one it belongs to, so a single event never counts toward two behaviors.
 - **Wording.** The name, the definition, the examples and the non-examples are pasted into ABA Matrix as they are, so they follow the style guide: no dates, no names of caregivers or professionals, no quoted speech (paraphrase what the child said), no long dashes.
-- **Examples.** Short scenes of this child from the sources, each opening with the child's name, each with its quote in the claim's ref (the example itself paraphrases). Two or three when the sources record that many incidents of this child; never invent one to reach the number.
-- **Non-examples.** Two or three: the replacement the plan will teach (for example a request for help, a request for a break, or going with permission), plus accidental or harmless forms. A repetitive movement during free time that interrupts nothing is a non-example.
-- **Measure.** frequency for counted instances, duration for timed episodes, latency when the time to start matters.
+- **Examples.** Two or three short scenes of this child from the sources, each opening with the child's name, each with its quote in the claim's ref (the example itself paraphrases). Together they cover the functions the behavior may serve (a behavior usually has one to three): when the behavior is maintained by escape and by attention, one example shows each. Fewer when the sources record fewer incidents; never invent one to reach the number.
+- **Non-examples.** Three, from what the sources show of this child: the appropriate alternative (a request for help or a break, going with permission), and accidental or harmless forms. A repetitive movement during free time that interrupts nothing is a non-example. Fewer when the sources do not give three; never invent one to reach the number.
+- **Measure.** Frequency by default, for every behavior, because it keeps the plan simple to carry out. Duration only for a tantrum whose episodes are long. Time sampling only for a behavior whose rate is so high that it cannot be counted; the measure list has no time sampling yet, so keep frequency and write the proposal as the measure's `check`. Latency is not one of her defaults.
 
 ### Thresholds
 
-The timing and distance thresholds in a definition (how many seconds count as not following an instruction, how far from the adult counts as leaving, how long without the behavior ends an episode) are her standard practice. Take them only from `<standing-instructions>`. When no standing instruction gives the threshold a definition needs, write the definition with a marker in its place, `[MISSING: your threshold for …]`, and never pick a number yourself. The app refuses a number of seconds, feet or minutes in a definition, onset or offset that neither a quote nor a standing instruction gives.
+The timing and distance thresholds in a definition (how many seconds count as not following an instruction, how far from the adult counts as leaving, how long without the behavior ends an episode) are her standard practice. Her defaults, confirmed in her questionnaire answers:
+
+- Following an instruction: the child starts what was asked within 5 seconds; no start within 5 seconds counts as not following it.
+- Leaving the supervising adult (elopement): more than 6 feet away from the supervising adult without permission.
+- Off task: 3 seconds or more without attending to the task.
+- Repetitive movements (stereotypy): counted only when they interrupt a task, a transition or play with others for 3 seconds or longer; when they interrupt nothing, they are not counted.
+- End of an episode: the behavior has stopped for 10 seconds in a row; for a tantrum, 30 seconds.
+
+What overrides a default, first to last: a threshold in `<standing-instructions>`, then one her sections or the sources give for this child. Every threshold is adapted to the child's age and level of functioning: when the sources show that a default does not fit this child (a very young child, or a child whose instructions take longer to process), keep the default and write in the definition's `check` what the sources show and that she may want to adapt it. Never pick a number of your own. When a definition needs a threshold that neither her defaults nor the other places give (how far from the assigned spot counts as leaving the task area, for example), write a marker in its place, `[MISSING: your threshold for …]`. The app refuses a number of seconds, feet or minutes in a definition, onset or offset that no quote, default or standing instruction gives.
 
 ## Baseline
 
 The baseline is the count (or minutes) in each of her direct observations, each with its date, setting and length, exactly as the notes give them. The length is written as the notes write it ("3:30 to 5:30 p.m.", "2 hours"); the app works out the minutes. Report-based estimates (a parent's "several a day", a school's weekly count) go in `other`, attributed. Never compute a mean or a rate: the app does that from the counts.
+
+- **Duration.** A duration baseline is given either as seconds or minutes per incident (the length of each episode) or as total minutes per session; write which one, as the notes give it.
+- **Reported but not observed.** A behavior the caregiver reports that did not occur in any of the three sessions has no observations; its baseline is the caregiver's count, in `other`, attributed to the caregiver, with the period the caregiver gave ("about 4 a week"), and its `check` says that it did not occur in the three sessions. When the caregiver gives no count, add an open item asking for it.
 
 ## Antecedents and consequences
 
@@ -66,7 +84,7 @@ A group gathers behaviors that will share one consequence procedure later. Her r
 
 ## An example
 
-One behavior from a case map, for an invented child, Nadia. Her standing instructions give the offset threshold (10 seconds); the counts and incidents come from her father's interview and the direct observation of 05/14/2026. Never reuse its sentences, names, dates or numbers.
+One behavior from a case map, for an invented child, Nadia. Her default gives the offset threshold (10 seconds); the counts and incidents come from her father's interview and the direct observation of 05/14/2026. Never reuse its sentences, names, dates or numbers.
 
 > Name: Climbing furniture
 >
@@ -80,4 +98,4 @@ One behavior from a case map, for an invented child, Nadia. Her standing instruc
 >
 > Measure: frequency. Baseline: 3 climbs in the observation of 05/14/2026 (length: 2 hours).
 
-What makes it work: every form of the behavior in the definition is one the sources record for Nadia; onset, offset and the counting rule can be observed; the exclusions keep it apart from play that is safe; the examples are her own incidents, each opening with her name, and the first non-example is the request the plan will teach; the threshold comes from her standing instructions, not from habit.
+What makes it work: every form of the behavior in the definition is one the sources record for Nadia; onset, offset and the counting rule can be observed; the exclusions keep it apart from play that is safe; the examples are her own incidents, each opening with her name, and the first non-example is the request the plan will teach; the threshold is her default, not a number of the model's own.
