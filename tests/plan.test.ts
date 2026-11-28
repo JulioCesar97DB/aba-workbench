@@ -303,6 +303,10 @@ test("checks: her never-list and extinction or punishment, in English and Spanis
     "The RBT uses time out at the table.",
     "Time-out with the caregiver present.",
     "Time-out in his room is used for aggression.",
+    // The hyphenated and closed forms are always the procedure, after "each" or "this" too (check 3).
+    "Each time-out lasts 1 minute.",
+    "This time-out lasts 1 minute after each hit.",
+    "Every timeout is logged by the RBT.",
   ];
   for (const text of fail) assert.ok(aversiveTerm(text), `should flag: ${text}`);
   const pass = [

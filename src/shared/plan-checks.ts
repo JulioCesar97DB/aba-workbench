@@ -167,8 +167,9 @@ const E = "(?!\\p{L})";
 const AVERSIVE_TERMS: ReadonlyArray<{ term: string; pattern: RegExp }> = [
   ["extinction", `(?:escape\\s+|sensory\\s+|attention\\s+|automatic\\s+)?extinction`],
   ["punishment", `punish(?:ment|ments|ing|ed|es)?`],
-  // "Each time out in the community" is the occasion sense of "time", no time-out: excluded by what comes before (review round 2, finding 1).
-  ["time-out", `(?<!(?:each|every|any|one|first|next|last|this|that|some)\\s+)time[\\s-]?outs?`],
+  // "Each time out in the community" is the occasion sense of "time", no time-out: excluded by what comes before, for the spaced form only;
+  // "time-out" and "timeout" are always the procedure (review round 2, finding 1; check 3).
+  ["time-out", `time-outs?|timeouts?|(?<!(?:each|every|any|one|first|next|last|this|that|some)\\s+)time\\s+outs?`],
   ["response cost", `response[\\s-]+cost`],
   ["overcorrection", `over[\\s-]?correct(?:ion|ing|ed)?`],
   ["planned ignoring", `planned[\\s-]+ignoring`],
