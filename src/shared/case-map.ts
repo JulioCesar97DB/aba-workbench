@@ -405,6 +405,42 @@ export function baselineMean(observations: ReadonlyArray<Pick<BaselineObservatio
   return Math.round((sum / observations.length) * 100) / 100;
 }
 
+/** The unit of a duration mean, and what it is a mean of when every value says so. */
+export interface DurationMean {
+  mean: number;
+  unit: "seconds" | "minutes";
+  /** "incident" when every value says per incident (or episode), "session" when every value says total or per session, null when none says. */
+  per: "incident" | "session" | null;
+}
+
+/**
+ * The mean of a duration behavior's baseline observations (owner's decision of 2026-11-28): a
+ * duration only. Each value must start with a plain number followed by a time unit ("12 minutes",
+ * "9 min per incident", "45 s"); its unit is seconds (s, sec, seconds) or minutes (min, minutes),
+ * and every value of the behavior must give the same unit, and say per incident, total or per
+ * session alike (or none of them say it). A value with no unit ("2 episodes"), a range, a missing
+ * value, or mixed units gives no mean: the app never converts or guesses.
+ */
+export function baselineDurationMean(observations: ReadonlyArray<Pick<BaselineObservation, "value">>): DurationMean | null {
+  if (observations.length === 0) return null;
+  let sum = 0;
+  let unit: DurationMean["unit"] | undefined;
+  let per: DurationMean["per"] | undefined;
+  for (const observation of observations) {
+    const match = /^(\d+(?:\.\d+)?)\s*(s|secs?|seconds?|mins?|minutes?)(?=$|[\s.,;:)])(.*)$/isu.exec((observation.value?.value ?? "").trim());
+    if (!match) return null;
+    const rest = (match[3] ?? "").trim();
+    if (/^(?:[-–—/]|(?:to|or)\b)/iu.test(rest)) return null;
+    const own: DurationMean["unit"] = /^s|^sec/iu.test(match[2] ?? "") ? "seconds" : "minutes";
+    const ownPer: DurationMean["per"] = /\bper (?:incident|episode)\b/iu.test(rest) ? "incident" : /\b(?:total|per session)\b/iu.test(rest) ? "session" : null;
+    if ((unit !== undefined && unit !== own) || (per !== undefined && per !== ownPer)) return null;
+    unit = own;
+    per = ownPer;
+    sum += Number(match[1]);
+  }
+  return { mean: Math.round((sum / observations.length) * 100) / 100, unit: unit ?? "minutes", per: per ?? null };
+}
+
 /**
  * The plain number a count's value starts with, or null. The number must end the value or be
  * followed by a space, and what follows must not make it a range ("3 - 4", "3 to 4", "3 or 4").

@@ -100,4 +100,6 @@ test("the intensity her rule suggests (owner's decision 2A, 2026-11-28): shown n
   // A duration behavior gets none: she rates it.
   await page.getByLabel("Measure", { exact: true }).selectOption("duration");
   await expect(page.getByText(/^Suggested intensity:/)).toHaveCount(0);
+  // And its mean is a duration: counts with no unit give none.
+  await expect(page.getByText(/every duration must be a number with the same unit/)).toBeVisible();
 });

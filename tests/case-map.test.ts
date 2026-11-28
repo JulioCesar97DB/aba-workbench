@@ -9,7 +9,7 @@ import { CaseLibrary } from "../src/main/cases.ts";
 import { writeFileDurably } from "../src/main/durable-write.ts";
 import { FailedSaves, runSaves } from "../src/main/failed-saves.ts";
 import { addMapItem, approveMapPart, caseMapSummary, caseMapView, mapPartView, mergeInput, parseItemInput, removeMapItem, saveMapItem, setMapPartVersion, type StoredCaseMap } from "../src/main/case-map.ts";
-import { baselineMean, MAP_PART_LIMITS, mapPartStatus, suggestedIntensity } from "../src/shared/case-map.ts";
+import { baselineDurationMean, baselineMean, MAP_PART_LIMITS, mapPartStatus, suggestedIntensity } from "../src/shared/case-map.ts";
 
 /*
  * The case map inside the case's data file (schema version 4): the migration from version
@@ -420,6 +420,38 @@ test("case map: a count is the plain number its value starts with, or none (owne
   }
   assert.equal(suggestedIntensity(baselineMean([obs("12 contacts"), obs("11 contacts"), obs("10 contacts")]), "frequency"), "3");
   assert.equal(suggestedIntensity(baselineMean([obs("about 12"), obs("11"), obs("10")]), "frequency"), null);
+});
+
+test("case map: a duration behavior's mean is a duration in one unit, or none (owner's decision, 2026-11-28)", () => {
+  const obs = (value: string | null) => ({ value: value === null ? null : { value, refs: [], origin: "her" as const, check: null } });
+  const mean = (...values: Array<string | null>) => baselineDurationMean(values.map(obs));
+  assert.deepEqual(mean("12 minutes", "7 minutes", "11 min"), { mean: 10, unit: "minutes", per: null });
+  assert.deepEqual(mean("45 s", "30 sec", "15 seconds"), { mean: 30, unit: "seconds", per: null });
+  assert.deepEqual(mean("9 minutes per incident", "6.5 minutes per episode"), { mean: 7.75, unit: "minutes", per: "incident" });
+  assert.deepEqual(mean("40 minutes in total", "20 minutes per session"), { mean: 30, unit: "minutes", per: "session" });
+  assert.deepEqual(mean("12min"), { mean: 12, unit: "minutes", per: null }, "no space before the unit");
+  // No unit, a count of episodes, a range, mixed units or mixed bases, a missing value: no mean.
+  for (const values of [
+    ["2 episodes: 12 and 7 minutes", "1 episode: 9 minutes per incident"],
+    ["12", "7"],
+    ["12 minutes", "7"],
+    ["12 minutes", "30 seconds"],
+    ["9 minutes per incident", "40 minutes in total"],
+    ["9 minutes per incident", "7 minutes"],
+    ["12-15 minutes"],
+    ["12 to 15 minutes"],
+    ["12 minutes - 15 minutes"],
+    ["about 12 minutes"],
+    ["12 mins", null],
+    ["3:30"],
+    ["12 hours"],
+    ["12 m"],
+  ]) {
+    assert.equal(mean(...values), null, JSON.stringify(values));
+  }
+  assert.equal(mean(), null);
+  // Frequency stays as it was: a count reads its leading number.
+  assert.equal(baselineMean([obs("2 episodes"), obs("4 episodes")]), 3);
 });
 
 /* The service, on a real case in a temporary folder: every change through the case's save queue, and a change she typed kept when the disk refuses it. */

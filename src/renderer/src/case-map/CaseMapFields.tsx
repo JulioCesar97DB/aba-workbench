@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { baselineMean, FUNCTION_NAMES, MAX_MAP_LIST, suggestedIntensity, TEMPLATE_SECTIONS, type Claim, type ClaimInput, type MapPartId, type MapRef } from "../../../shared/case-map.ts";
+import { baselineDurationMean, baselineMean, FUNCTION_NAMES, MAX_MAP_LIST, suggestedIntensity, TEMPLATE_SECTIONS, type Claim, type ClaimInput, type MapPartId, type MapRef } from "../../../shared/case-map.ts";
 import { REPORT_SECTIONS } from "../../../shared/report-sections.ts";
 import { Button } from "../components/Button.tsx";
 import { Tooltip } from "../components/Tooltip.tsx";
@@ -524,26 +524,31 @@ function PlainChoice({ label, spec, value, onChange }: { label: string; spec: Ex
 /**
  * The section 8 baseline: the mean of the observations' counts, computed by the app from what the form holds (D20; review round 1, S2).
  * Next to it, the intensity her rule gives for that mean (design 2A, 2026-11-28), with "Use it", which puts it in the
- * behavior's intensity as hers; nothing is suggested for a duration behavior or one with no mean.
+ * behavior's intensity as hers; nothing is suggested for a duration behavior or one with no mean. For a duration behavior
+ * the mean is a duration, in the unit the values give, or none (owner's decision of 2026-11-28).
  */
 function BaselineMean({ value, measure, intensity, onUseIntensity }: { value: unknown; measure?: unknown; intensity?: unknown; onUseIntensity?: (level: string) => void }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const observations = (typeof value === "object" && value !== null && Array.isArray((value as Values).observations) ? (value as Values).observations : []) as Array<{ value: ClaimInput | null }>;
   if (observations.length === 0) return null;
-  const mean = baselineMean(observations.map((observation) => ({ value: observation.value ? { value: observation.value.value, refs: [], origin: "her", check: null } : null })));
+  const claims = observations.map((observation) => ({ value: observation.value ? { value: observation.value.value, refs: [], origin: "her" as const, check: null } : null }));
+  const measured = asClaim(measure)?.value ?? null;
+  const duration = measured === "duration" ? baselineDurationMean(claims) : null;
+  const mean = measured === "duration" ? (duration?.mean ?? null) : baselineMean(claims);
+  const shown = mean === null ? "" : new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(mean);
   return (
     <p className="flex flex-wrap items-center gap-2 text-sm">
       <span className="font-semibold text-fg-muted">{t("caseMap.mean")}</span>
       {mean === null ? (
-        <span className="text-fg-muted">{t("caseMap.meanNone")}</span>
+        <span className="text-fg-muted">{t(measured === "duration" ? "caseMap.meanNoneDuration" : "caseMap.meanNone")}</span>
       ) : (
         <>
-          <span className="font-mono">{new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(mean)}</span>
+          <span className="font-mono">{duration ? t(`caseMap.meanDuration.${duration.unit}${duration.per === "incident" ? "PerIncident" : duration.per === "session" ? "PerSession" : ""}`, { mean: shown }) : shown}</span>
           <Provenance claim={{ refs: [{ kind: "app" }], origin: "app" }} context={{ part: "behaviors", behaviors: [], settings: [], sourceLabel: () => null }} />
         </>
       )}
-      <IntensitySuggestion mean={mean} measure={asClaim(measure)?.value ?? null} intensity={asClaim(intensity)?.value ?? ""} onUse={onUseIntensity} />
+      <IntensitySuggestion mean={mean} measure={measured} intensity={asClaim(intensity)?.value ?? ""} onUse={onUseIntensity} />
     </p>
   );
 }
