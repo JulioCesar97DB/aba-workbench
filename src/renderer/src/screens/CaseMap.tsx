@@ -12,8 +12,8 @@ import { MapFields, type MapFormContext } from "../case-map/CaseMapFields.tsx";
 import { MapAiButton, MapDraftPanel, MapWays, ThresholdsBlock } from "../case-map/MapDraft.tsx";
 import { isDrafting, useMapDraft, useOnMapSaved, type MapPreview } from "../case-map/draft.ts";
 import { checksOf, countChecks, fieldsOf, itemInput, itemTitle } from "../case-map/specs.ts";
-import { BehaviorWarnings, ReviewStatus } from "../case-map/definition-warnings.tsx";
-import { warningLines, type WarningLine } from "../case-map/warnings.ts";
+import { BehaviorWarnings, LineParts, ReviewStatus } from "../case-map/definition-warnings.tsx";
+import { warningLines, type WarningLine, type WarningPart } from "../case-map/warnings.ts";
 import { MAP_TERMS } from "../i18n/terms.ts";
 import { Button } from "../components/Button.tsx";
 import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
@@ -674,9 +674,9 @@ function PartRail({
   const when = (iso: string) => new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short" }).format(new Date(iso));
   const toCheck = [...view.items.map((item) => ({ item: item as unknown as Record<string, unknown> & { id: string }, list: part })), ...view.groups.map((group) => ({ item: group as unknown as Record<string, unknown> & { id: string }, list: "groups" as const }))].flatMap(({ item, list }) =>
     [
-      ...checksOf(item).map((text, index) => ({ key: `${item.id}-${index}`, id: item.id, title: itemTitle(list, item) ?? t("caseMap.untitled"), text, lang: "en" as "en" | undefined })),
+      ...checksOf(item).map((text, index) => ({ key: `${item.id}-${index}`, id: item.id, title: itemTitle(list, item) ?? t("caseMap.untitled"), parts: [{ text, lang: "en" as const }] as WarningPart[] })),
       // The checks before QA of a behavior (T3), after its [CHECK]s.
-      ...(list === "groups" ? [] : (warnings.get(item.id) ?? [])).map((line) => ({ key: `${item.id}-${line.key}`, id: item.id, title: itemTitle(list, item) ?? t("caseMap.untitled"), text: line.stale ? `${line.text} ${t("caseMap.qa.stale")}` : line.text, lang: line.lang })),
+      ...(list === "groups" ? [] : (warnings.get(item.id) ?? [])).map((line) => ({ key: `${item.id}-${line.key}`, id: item.id, title: itemTitle(list, item) ?? t("caseMap.untitled"), parts: line.stale ? [...line.parts, { text: t("caseMap.qa.stale"), lang: undefined }] : line.parts })),
     ],
   );
   return (
@@ -698,7 +698,7 @@ function PartRail({
                   <span lang="en" className="font-semibold">
                     {entry.title}
                   </span>
-                  : <span lang={entry.lang}>{entry.text}</span>
+                  : <LineParts parts={entry.parts} />
                 </button>
               </li>
             ))}

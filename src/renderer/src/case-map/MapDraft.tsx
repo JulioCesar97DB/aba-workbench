@@ -11,7 +11,8 @@ import { TwoWays } from "../components/TwoWays.tsx";
 import { ButtonLink, TextLink } from "../components/Link.tsx";
 import { PROVIDER_NAMES, useProviders } from "../drafting-provider.tsx";
 import { Eyebrow } from "../shell/WorkArea.tsx";
-import { dismissMapDraft, isDrafting, previewsNotSaved, startMapDraft, stopMapDraft, useMapDraft, type MapDraft } from "./draft.ts";
+import { draftOffered } from "./draft-state.ts";
+import { dismissMapDraft, isDrafting, previewsNotSaved, startMapDraft, stopMapDraft, useMapDraft, useMapReview, type MapDraft } from "./draft.ts";
 
 /*
  * The case map's AI way (step 1, pull request 2): the action that drafts or updates the
@@ -31,6 +32,8 @@ export function MapAiButton({ caseId, hasMap, align = "end" }: { caseId: string;
   const providers = useProviders();
   const draft = useMapDraft(caseId);
   const running = isDrafting(draft);
+  // Never while a review she started runs: the draft ends with its own review (review of T3, nit 10).
+  const offered = draftOffered({ connected: providers.provider !== null, drafting: running, reviewing: useMapReview(caseId)?.phase === "running" });
   const [refused, setRefused] = useState<string | null>(null);
   const noteId = useId();
   async function start() {
@@ -43,7 +46,7 @@ export function MapAiButton({ caseId, hasMap, align = "end" }: { caseId: string;
   return (
     <span className={align === "end" ? "inline-flex flex-col items-end gap-1" : "inline-flex flex-col items-start gap-1"}>
       <span className="inline-flex items-center gap-2">
-        <Button variant="ai" disabled={running || providers.provider === null} onClick={() => void start()} aria-describedby={noteId}>
+        <Button variant="ai" disabled={!offered} onClick={() => void start()} aria-describedby={noteId}>
           <Icon name="sparkle" />
           {hasMap ? t("caseMap.ai.update") : t("caseMap.ai.draft")}
         </Button>

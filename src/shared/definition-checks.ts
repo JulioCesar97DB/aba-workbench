@@ -62,83 +62,122 @@ export function plainText(text: string): string {
 /* The dead-man test */
 
 /** What the child is expected to do, so that its negation is an absence (English stems). */
-const EXPECTED_EN = "(?:respond|begin|began|begun|start|initiat|comply|complie|complied|complet|follow|attend|engag|interact|participat|work|answer|do|does|make|try|tries|tried|attempt|perform|move|look|focus|pay|use|pick|get|go|play|stay|remain|on task|react|reply|repl|transition|join|sit|listen|respon)";
+const EXPECTED_EN = "(?:respond|begin|began|begun|start|initiat|comply|complie|complied|complian|complet|follow|attend|engag|interact|participat|work|answer|do|does|make|try|tries|tried|attempt|perform|move|look|focus|pay|use|pick|get|go|play|stay|remain|on task|take part|react|reply|repl|transition|join|sit|listen|respon)";
 /** The same in Spanish. */
-const EXPECTED_ES = "(?:respond|inici|comenz|comienz|comienc|empez|empiez|empiec|sigu|segu|cumpl|complet|atiend|atend|prest|particip|interact|contest|realiz|intent|hac|hag|trabaj|mir|obedec|obedez|reaccion|escuch|jug|jueg|se muev|mov)";
+const EXPECTED_ES = "(?:respond|inici|comenz|comienz|comienc|empez|empiez|empiec|sigu|segu|cumpl|complet|atiend|atend|prest|particip|interact|contest|realiz|intent|hac|hag|trabaj|mir|obedec|obedez|reaccion|escuch|jug|jueg|se muev|mov|quier)";
 
 /** Absences and negations: a dead man could "do" each of them. */
-const ABSENCE = new RegExp(
+const ABSENCE_CORE = [
+  // English
+  `(?:${START}(?:not|never|cannot|unable\\s+to)|n't)\\s+(?:${L}+ly\\s+|even\\s+|yet\\s+|be\\s+)?${EXPECTED_EN}${L}*`,
+  `${START}fail(?:s|ed|ing|ure)?\\s+to\\s+${L}+`,
+  `${START}(?:stop|stops|stopped|stopping|cease|ceases|ceased)\\s+(?:to\\s+)?${EXPECTED_EN}${L}*`,
+  `${START}(?:does|do|did|doing)\\s+nothing${END}`,
+  `${START}no\\s+(?:response|responses|attempt|attempts|initiation|start|answer|movement|engagement|interaction|participation|eye contact|reply)${END}`,
+  `${START}without\\s+(?:any\\s+)?${EXPECTED_EN}${L}*`,
+  `${START}without\\s+(?:any\\s+)?(?:response|attempt|reply)${END}`,
+  `${START}refus(?:e|es|ed|ing|al)${END}`,
+  `${START}ignor(?:e|es|ed|ing)${END}`,
+  `${START}(?:un|non\\s?)responsive${END}`,
+  `${START}non\\s?complian(?:t|ce)${END}`,
+  `${START}(?:inattentive|disengaged|passive|inactive|idle)${END}`,
+  `${START}(?:remains?|remained|remaining|stays?|stayed|staying)\\s+(?:seated|still|silent|quiet|idle|in\\s+(?:his|her|their)\\s+seat)${END}`,
+  `${START}off task${END}`,
+  `${START}(?:lack|absence) of${END}`,
+  // Spanish
+  `${START}(?:no\\s+)?(?:hace|hacer|haciendo)\\s+nada${END}`,
+  `${START}no\\s+quiere\\s+${L}+`,
+  `${START}no\\s+(?:se\\s+)?${EXPECTED_ES}${L}*`,
+  `${START}sin\\s+hacer\\s+nada${END}`,
+  `${START}(?:deja|dejar|deje|dejando|dejó)\\s+de\\s+${EXPECTED_ES}${L}*`,
+  `${START}deja\\s+de\\s+interactuar${END}`,
+  `${START}sin\\s+${EXPECTED_ES}${L}*`,
+  `${START}sin\\s+(?:respuesta|intento)${END}`,
+  `${START}(?:se\\s+)?nieg${L}*|${START}neg(?:arse|ándose|andose|ó|aba|arse)${END}`,
+  `${START}(?:se\\s+)?(?:rehús|rehus)${L}*`,
+  `${START}(?:negativa|rechaz${L}*|ignor${L}*|incumpl${L}*|desobedien${L}*)`,
+  `${START}(?:falta|ausencia)\\s+de${END}`,
+  `${START}fuera\\s+de\\s+(?:la\\s+)?tarea${END}`,
+].join("|");
+const ABSENCE = new RegExp(ABSENCE_CORE, "giu");
+/** An absence with the verb or noun it governs ("refuses to complete", "se niega a hacer", "lack of engagement"). */
+const ABSENCE_WITH_OBJECT = new RegExp(`(?:${ABSENCE_CORE})(?:\\s+(?:to|of|a|de|para)\\s+${L}+)?`, "giu");
+
+/**
+ * What the adult does, never the child's response: an instruction and what it asks for
+ * ("asked to put the toys away", "the instruction to sit down", "se le pide que recoja").
+ */
+const ADULT_PART = new RegExp(
   [
-    // English
-    `(?:${START}(?:not|never)|n't)\\s+(?:${L}+ly\\s+|even\\s+|yet\\s+)?${EXPECTED_EN}${L}*`,
-    `${START}fail(?:s|ed|ing|ure)?\\s+to\\s+${L}+`,
-    `${START}(?:stop|stops|stopped|stopping|cease|ceases|ceased)\\s+(?:to\\s+)?${EXPECTED_EN}${L}*`,
-    `${START}(?:does|do|did|doing)\\s+nothing${END}`,
-    `${START}no\\s+(?:response|responses|attempt|attempts|initiation|start|answer|movement|engagement|interaction|participation|eye contact|reply)${END}`,
-    `${START}without\\s+(?:any\\s+)?${EXPECTED_EN}${L}*`,
-    `${START}without\\s+(?:any\\s+)?(?:response|attempt|reply)${END}`,
-    `${START}refus(?:e|es|ed|ing|al)${END}`,
-    `${START}ignor(?:e|es|ed|ing)${END}`,
-    `${START}(?:un|non\\s?)responsive${END}`,
-    `${START}non\\s?complian(?:t|ce)${END}`,
-    `${START}(?:inattentive|disengaged|passive|inactive|idle)${END}`,
-    `${START}off task${END}`,
-    `${START}(?:lack|absence) of${END}`,
-    // Spanish
-    `${START}no\\s+(?:se\\s+)?${EXPECTED_ES}${L}*`,
-    `${START}(?:no\\s+)?(?:hace|hacer|haciendo)\\s+nada${END}`,
-    `${START}sin\\s+hacer\\s+nada${END}`,
-    `${START}(?:deja|dejar|deje|dejando|dejó)\\s+de\\s+${EXPECTED_ES}${L}*`,
-    `${START}deja\\s+de\\s+interactuar${END}`,
-    `${START}sin\\s+${EXPECTED_ES}${L}*`,
-    `${START}sin\\s+(?:respuesta|intento)${END}`,
-    `${START}se\\s+nieg${L}*`,
-    `${START}(?:negativa|rechaz${L}*|ignor${L}*)`,
-    `${START}(?:falta|ausencia)\\s+de${END}`,
-    `${START}fuera\\s+de\\s+(?:la\\s+)?tarea${END}`,
+    `${START}(?:asked|told|instructed|directed|requested|prompted|expected|required)\\s+to\\s+[^,.;:]*?(?=\\s+(?:and|or|but)\\s|[,.;:]|$)`,
+    `${START}(?:instructions?|directions?|requests?|demands?|prompts?|commands?)\\s+to\\s+[^,.;:]*?(?=\\s+(?:and|or|but)\\s|[,.;:]|$)`,
+    `${START}se\\s+le\\s+(?:pide|pidió|indica|indicó|dice|dijo|da|dio|presenta|presentó)(?:\\s+que)?[^,.;:]*?(?=\\s+(?:y|o|pero)\\s|[,.;:]|$)`,
   ].join("|"),
   "giu",
 );
 
 /**
- * Observable responses the child makes: inflected forms only (third person, past, gerund), so
- * an instruction's infinitive ("asked to sit down", "told to put the toys away") is never read
- * as the child's response.
+ * The words that frame a definition without naming a response: articles, prepositions,
+ * pronouns and auxiliaries; the instance, the time and the threshold; the task, the
+ * instruction and the people around the child; the counting words. Whatever else is left
+ * once the absences are taken out may be a response, so the definition passes: the code
+ * catches the obvious cases only (owner's decision, 2026-11-28; review of T3, finding 1).
  */
-const ACTIVE = new RegExp(
-  [
-    // Words and sounds
-    "say(?:s|ing)|said|stat(?:es|ed|ing)|argu(?:es|ed|ing)|declin(?:es|ed|ing)|recit(?:es|ed|ing)|repeat(?:s|ed|ing)|yell(?:s|ed|ing)|scream(?:s|ed|ing)|shout(?:s|ed|ing)|cr(?:ies|ied|ying)|whin(?:es|ed|ing)|vocaliz(?:es|ed|ing)|hum(?:s|med|ming)|laugh(?:s|ed|ing)|talk(?:s|ed|ing)|speak(?:s|ing)|spoke|sing(?:s|ing)|sang|growl(?:s|ed|ing)|grunt(?:s|ed|ing)|curs(?:es|ed|ing)|swear(?:s|ing)|swore|protest(?:s|ed|ing)|whimper(?:s|ed|ing)|squeal(?:s|ed|ing)",
-    // Moving away and the body
-    "walk(?:s|ed|ing)|run(?:s|ning)|ran|leav(?:es|ing)|left|exit(?:s|ed|ing)|elop(?:es|ed|ing)|bolt(?:s|ed|ing)|mov(?:es|ed|ing)\\s+away|turn(?:s|ed|ing)\\s+(?:away|around|his|her|their|back)|look(?:s|ed|ing)\\s+away|avert(?:s|ed|ing)|put(?:s|ting)|lay(?:s|ing)|laid|lies\\s+down|lying|drop(?:s|ped|ping)|fall(?:s|ing)|fell|flop(?:s|ped|ping)|sits\\s+(?:down|on)|sitting\\s+(?:down|on)|sat\\s+(?:down|on)|lock(?:s|ed|ing)|stands\\s+up|stood\\s+up|climb(?:s|ed|ing)|crawl(?:s|ed|ing)|hid(?:es|ing)?|hidden|clos(?:es|ed|ing)\\s+(?:his|her|their)\\s+eyes|cross(?:es|ed|ing)\\s+(?:his|her|their)\\s+arms|fold(?:s|ed|ing)\\s+(?:his|her|their)\\s+arms|cover(?:s|ed|ing)|shak(?:es|ing)|shook|nod(?:s|ded|ding)|gestur(?:es|ed|ing)|point(?:s|ed|ing)\\s+(?:at|to)|flap(?:s|ped|ping)|rock(?:s|ed|ing)|spin(?:s|ning)|spun|jump(?:s|ed|ing)|pac(?:es|ed|ing)|stomp(?:s|ed|ing)|tens(?:es|ed|ing)",
-    // Objects and people
-    "push(?:es|ed|ing)|pull(?:s|ed|ing)|throw(?:s|ing)|threw|thrown|toss(?:es|ed|ing)|swip(?:es|ed|ing)|sweep(?:s|ing)|swept|knock(?:s|ed|ing)|hit(?:s|ting)|kick(?:s|ed|ing)|bit(?:es|ing)|scratch(?:es|ed|ing)|pinch(?:es|ed|ing)|slap(?:s|ped|ping)|grab(?:s|bed|bing)|snatch(?:es|ed|ing)|tear(?:s|ing)|tore|torn|rip(?:s|ped|ping)|break(?:s|ing)|broke|bang(?:s|ed|ing)|slam(?:s|med|ming)|spit(?:s|ting)|spat|head\\s?butt(?:s|ed|ing)|hand(?:s|ed|ing)\\s+(?:back|away)|mouth(?:s|ed|ing)|lick(?:s|ed|ing)|chew(?:s|ed|ing)|touch(?:es|ed|ing)|rub(?:s|bed|bing)|tap(?:s|ped|ping)|squeez(?:es|ed|ing)|tug(?:s|ged|ging)|play(?:s|ed|ing)|keep(?:s|ing)|kept|continu(?:es|ed|ing)|reach(?:es|ed|ing)|tak(?:es|ing)|took|draw(?:s|ing)|drew|scribbl(?:es|ed|ing)",
+const FRAMING = new Set(
+  (
+    // English
+    "a an the any each every all some one this that these those it its in on at of to for from with within by during after before until when whenever while which who whom whose what where or and nor but either neither if than then as so not no " +
+    "instance instances episode episodes period periods occurrence occurrences occasion occasions time times event events moment more less least most longer second seconds sec secs s minute minutes min mins hour hours feet foot ft " +
+    "is are was were be been being am does do did doing has have had will would shall should can could may might must he she they him her his hers their theirs them himself herself themselves " +
+    "child student client learner boy girl task tasks activity activities group demand demands instruction instructions direction directions request requests prompt prompts command commands materials material worksheet assignment part " +
+    "adult adults teacher teachers parent parents caregiver caregivers mother father peer peers therapist staff rbt bcba person people name " +
+    "presented given assigned delivered issued asked told instructed directed requested placed provided made pass passes passed elapse elapses elapsed " +
+    "count counts counted counting once separately onset offset exclusion exclusions behavior behaviors behaviour target attention engagement participation compliance response responses expected required appropriate related same following " +
     // Spanish
-    "dice|dijo|diciendo|grit(?:a|ó|ando)|llor(?:a|ó|ando)|chill(?:a|ó|ando)|habl(?:a|ó|ando)|protest(?:a|ó|ando)|camin(?:a|ó|ando)|corr(?:e|ió|iendo)|sale|salió|saliendo|se\\s+va|se\\s+fue|se\\s+alej(?:a|ó)|alejándose|se\\s+tir(?:a|ó)|se\\s+acuest(?:a)|se\\s+levant(?:a|ó)|se\\s+escond(?:e|ió)|cierr(?:a)\\s+los\\s+ojos|cruz(?:a|ó)\\s+los\\s+brazos|tap(?:a|ó)\\s+(?:sus|los)\\s+oídos|sacud(?:e|ió)|señal(?:a|ó)|salt(?:a|ó|ando)|gir(?:a|ó|ando)|balance(?:a|ó|ándose)|empuj(?:a|ó|ando)|tir(?:a|ó|ando)|lanz(?:a|ó|ando)|arroj(?:a|ó|ando)|golpe(?:a|ó|ando)|pate(?:a|ó|ando)|muerde|mordió|mordiendo|araña|arañó|arañando|pellizc(?:a|ó|ando)|agarr(?:a|ó|ando)|arrebat(?:a|ó|ando)|romp(?:e|ió|iendo)|escup(?:e|ió|iendo)|sigue\\s+jugando|continúa|continuó|jueg(?:a)|jugando|toc(?:a|ó|ando)|muev(?:e)|se\\s+mete|se\\s+lleva",
-  ]
-    .map((group) => `${START}(?:${group})${END}`)
-    .join("|"),
-  "iu",
+    "un una unos unas el la los las lo le les se su sus cualquier cada todo toda todos todas en de del al a por para con que quien cual cuando mientras durante dentro después antes hasta o u y e ni pero si como más menos " +
+    "instancia instancias ocasión ocasiones episodio episodios periodo período periodos vez veces momento evento segundo segundos minuto minutos hora horas pie pies " +
+    "es son está están era fue ser estar ha han hay él ella ellos ellas niño niña niños alumno alumna estudiante cliente tarea tareas actividad actividades grupo demanda demandas instrucción instrucciones indicación indicaciones petición orden órdenes materiales material " +
+    "adulto adultos maestro maestra maestros padre madre padres cuidador cuidadora compañero compañeros terapeuta persona nombre presentada presentado dada dado asignada asignado indicada indicado pedida pedido solicitada pasan pasa transcurren transcurre " +
+    "cuenta cuentan contada inicio fin exclusión exclusiones conducta conductas atención participación respuesta mismo misma nada"
+  ).split(" "),
 );
 
+/** Capitalized words inside a sentence (never its first word): names, such as the child's, which frame like a pronoun. */
+function namesIn(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const match of text.matchAll(/(?<=[\p{L}\p{N},)]\s+)(\p{Lu}\p{L}*)/gu)) out.add(match[1].toLowerCase());
+  return out;
+}
+
+/** The words of a text once its absences and the adult's part are taken out, that do not frame it: what may be a response. */
+function responseWords(text: string, known: ReadonlySet<string> = new Set()): string[] {
+  const names = new Set([...known, ...namesIn(text)]);
+  const rest = plainText(text).replace(ADULT_PART, " ").replace(ABSENCE_WITH_OBJECT, " ");
+  return (rest.match(/\p{L}+(?:'\p{L}+)?/gu) ?? []).map((word) => word.replace(/'s$/u, "")).filter((word) => !FRAMING.has(word) && !names.has(word));
+}
+
 /**
- * The first absence the text names, as written, when the text names only absences: no
- * observable response is left once every absence (with the verb it negates) is taken out.
- * Null when the text names no absence, or names an observable response besides.
+ * The first absence the text names, as written, when that is all it names: once every
+ * absence (with what it governs) and the adult's instruction are taken out, nothing but
+ * framing words is left. Null when the text names no absence, or names anything else that
+ * could be a response: when in doubt, it passes.
  */
-export function onlyAbsence(text: string): string | null {
+export function onlyAbsence(text: string, names: ReadonlySet<string> = new Set()): string | null {
   const plain = plainText(text);
   if (plain === "") return null;
   const found = [...plain.matchAll(ABSENCE)];
   if (found.length === 0) return null;
-  const rest = plain.replace(ABSENCE, " ");
-  if (ACTIVE.test(rest)) return null;
-  return found[0][0];
+  return responseWords(text, names).length === 0 ? found[0][0] : null;
 }
 
-/** Whether the text names an observable response, outside its absences. */
-export function namesResponse(text: string): boolean {
-  return ACTIVE.test(plainText(text).replace(ABSENCE, " "));
+/** Whether the text names anything, outside its absences and its framing, that could be a response. */
+export function namesResponse(text: string, names: ReadonlySet<string> = new Set()): boolean {
+  return responseWords(text, names).length > 0;
+}
+
+/** The names a behavior's texts use inside their sentences (the child's), so an onset that opens with the name reads it as one. */
+export function namesOfBehavior(texts: readonly string[]): Set<string> {
+  return namesIn(texts.join(" \n "));
 }
 
 /* Overlap */
@@ -173,26 +212,45 @@ function namesOf(name: string): string[] {
   return [...new Set([base, short].filter(meaningful))];
 }
 
-/** Words before a name that make it an exclusion's ("counted as tantrum", "under self injury", "se cuenta como berrinche"). */
-const NAME_CUE = /(?:as|under|see|than|into|como|con|de)\s+(?:(?:a|an|the|la|el|un|una|los|las)\s+)?$/u;
-
 /**
- * Whether a behavior's own text names the other behavior, as an exclusion does: the name
- * written as a name (its first letter capitalized, as her names are) or after "as", "under",
- * "como"… ("counted as self injury"). The name's word written plainly, as a form of this
- * behavior ("crying, screaming and dropping to the floor"), is not an exclusion.
+ * What makes a clause an exclusion: it says where a response is (or is not) scored
+ * ("Exclusions: …", "is counted as Tantrum", "belongs to Property destruction", "score it as
+ * Elopement instead", "do not also count", "se cuenta como Berrinche", "en lugar de"). A name
+ * mentioned anywhere else ("screaming, crying and dropping", "forms such as screaming",
+ * "episodio de gritos") is not an exclusion (review of T3, finding 3).
  */
+const EXCLUSION_CUE = new RegExp(
+  [
+    "exclu\\p{L}*",
+    "not\\s+(?:be\\s+)?(?:counted|scored|recorded|coded|included)",
+    "(?:does|do|did)\\s+not\\s+(?:also\\s+)?(?:include|count|score)",
+    "not\\s+also",
+    "instead",
+    "rather\\s+than",
+    "belongs?\\s+to",
+    "(?:counted|scored|recorded|coded|tallied)\\s+(?:as|under|toward|towards|in)",
+    "(?:count|score|record|code)\\s+(?:it|them|this|these|that)?\\s*(?:as|under)",
+    "see",
+    "no\\s+se\\s+(?:cuentan?|registran?|incluyen?)",
+    "no\\s+(?:cuenta|incluye)",
+    "en\\s+lugar\\s+de",
+    "pertenece\\s+a",
+    "se\\s+(?:cuentan?|registran?)\\s+como",
+    "(?:cuentan?|registran?)\\s+como",
+    "ver",
+  ]
+    .map((cue) => "(?<!\\p{L})" + cue + "(?!\\p{L})")
+    .join("|"),
+  "iu",
+);
+
+/** Whether a behavior's own text names the other behavior in an explicit exclusion: a clause that says where a response is scored, and holds the other's name. */
 function names(text: string, other: string): boolean {
-  const original = text.normalize("NFC").replace(/[-_\u{2010}-\u{2015}]/gu, " ").replace(/\s+/gu, " ");
-  for (const name of namesOf(other)) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&").replace(/ /gu, "\\s+");
-    for (const match of original.matchAll(new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?:s|es)?(?![\\p{L}\\p{N}])`, "giu"))) {
-      const first = match[0][0];
-      if (first !== first.toLowerCase()) return true;
-      if (NAME_CUE.test(original.slice(Math.max(0, match.index - 30), match.index).toLowerCase())) return true;
-    }
-  }
-  return false;
+  const variants = namesOf(other);
+  return text
+    .split(/[.;\n]+/u)
+    .map(phraseOf)
+    .some((clause) => EXCLUSION_CUE.test(clause) && variants.some((name) => containsPhrase(clause, name) || containsPhrase(clause, name + "s") || containsPhrase(clause, name + "es")));
 }
 
 /* The AI review (one request per map draft) */
@@ -252,18 +310,19 @@ export function definitionWarnings(behaviors: readonly CheckedBehavior[]): Map<s
     name: textOf(behavior.name).trim(),
     definition: textOf(behavior.definition),
     onset: textOf(behavior.onset),
+    names: namesOfBehavior([textOf(behavior.definition), textOf(behavior.onset), textOf(behavior.offset), ...textsOf(behavior.examples), ...textsOf(behavior.nonExamples)]),
     topographies: textsOf(behavior.topographies).map(phraseOf).filter(meaningful),
     examples: textsOf(behavior.examples).map(phraseOf).filter((example) => example !== ""),
-    // Where a behavior names another one: its exclusions are in its definition, onset, offset or non-examples (as written: a name is capitalized).
+    // Where a behavior names another one: its exclusions are in its definition, onset, offset or non-examples.
     own: [textOf(behavior.definition), textOf(behavior.onset), textOf(behavior.offset), ...textsOf(behavior.nonExamples)].join(" \n "),
     body: phraseOf([textOf(behavior.definition), textOf(behavior.onset), ...textsOf(behavior.topographies)].join(" \n ")),
   }));
   for (const behavior of read) {
-    const definition = onlyAbsence(behavior.definition);
+    const definition = onlyAbsence(behavior.definition, behavior.names);
     if (definition !== null) add(behavior.id, { kind: "dead-man", field: "definition", phrase: definition });
-    // A latency onset ("no start within 5 seconds") is allowed when the definition names the observable forms.
-    const onset = onlyAbsence(behavior.onset);
-    if (onset !== null && !namesResponse(behavior.definition)) add(behavior.id, { kind: "dead-man", field: "onset", phrase: onset });
+    // A latency onset ("no start within 5 seconds") is allowed when the definition names anything that may be a form.
+    const onset = onlyAbsence(behavior.onset, behavior.names);
+    if (onset !== null && !namesResponse(behavior.definition, behavior.names)) add(behavior.id, { kind: "dead-man", field: "onset", phrase: onset });
   }
   for (const a of read) {
     for (const b of read) {

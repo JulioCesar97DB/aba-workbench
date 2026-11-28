@@ -5,7 +5,8 @@ import { Button } from "../components/Button.tsx";
 import { useProviders } from "../drafting-provider.tsx";
 import { useLanguage } from "../language.tsx";
 import { Eyebrow } from "../shell/WorkArea.tsx";
-import type { WarningLine } from "./warnings.ts";
+import { shownFindings, type WarningLine, type WarningPart } from "./warnings.ts";
+import { reviewOffered } from "./draft-state.ts";
 import { isDrafting, startMapReview, stopMapDraft, useMapDraft, useMapReview } from "./draft.ts";
 
 /*
@@ -14,6 +15,20 @@ import { isDrafting, startMapReview, stopMapDraft, useMapDraft, useMapReview } f
  * every edit, hers too) and the newest AI review's. They are warnings: she approves with
  * them open, as with any [CHECK], and none offers to rewrite her text.
  */
+
+/** A warning's parts, the AI's marked as English, so a screen reader reads each in its language. */
+export function LineParts({ parts }: { parts: readonly WarningPart[] }) {
+  return (
+    <>
+      {parts.map((part, index) => (
+        <span key={index} lang={part.lang}>
+          {index > 0 ? " " : ""}
+          {part.text}
+        </span>
+      ))}
+    </>
+  );
+}
 
 /** A behavior's warnings, in its form, above its fields. */
 export function BehaviorWarnings({ lines }: { lines: readonly WarningLine[] }) {
@@ -27,7 +42,7 @@ export function BehaviorWarnings({ lines }: { lines: readonly WarningLine[] }) {
       <ul className="flex flex-col gap-1.5">
         {lines.map((line) => (
           <li key={line.key} className="max-w-measure text-sm">
-            <span lang={line.lang}>{line.text}</span>
+            <LineParts parts={line.parts} />
             {line.stale ? <span className="text-fg-muted"> {t("caseMap.qa.stale")}</span> : null}
           </li>
         ))}
@@ -54,7 +69,7 @@ export function ReviewStatus({ caseId, map }: { caseId: string; map: CaseMapView
   if (!hasBehaviors && !review) return null;
   const running = run?.phase === "running";
   const drafting = isDrafting(draft);
-  const offered = hasBehaviors && providers.provider !== null && !drafting;
+  const offered = reviewOffered({ hasBehaviors, connected: providers.provider !== null, drafting });
   // Nothing to say and nothing to offer: no line at all.
   if (review === null && !running && !offered) return null;
   const when = review ? new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(new Date(review.at)) : "";
@@ -69,7 +84,7 @@ export function ReviewStatus({ caseId, map }: { caseId: string; map: CaseMapView
       <Eyebrow className="text-fg-muted">{t("caseMap.qa.heading")}</Eyebrow>
       {running || review !== null ? (
         <p className={review?.status === "failed" && !running ? "text-sm text-warning" : "text-sm"}>
-          {running ? t("caseMap.qa.reviewing") : review?.status === "failed" ? t("caseMap.qa.reviewFailed") : t("caseMap.qa.reviewed", { count: review?.findings.length ?? 0, when })}
+          {running ? t("caseMap.qa.reviewing") : review?.status === "failed" ? t("caseMap.qa.reviewFailed") : t("caseMap.qa.reviewed", { count: shownFindings(review, new Set(map.parts.behaviors.items.map((item) => item.id))).length, when })}
         </p>
       ) : null}
       {run?.phase === "done" && run.outcome === "stopped" ? <p className="text-sm text-fg-muted">{t("caseMap.qa.reviewStopped")}</p> : null}

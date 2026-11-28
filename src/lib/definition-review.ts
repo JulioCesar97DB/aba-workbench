@@ -37,7 +37,8 @@ export function reviewAnswerSchema(): Schema {
 
 const MAX_FINDINGS = 60;
 const Text = z.string().transform((text) => cutText(text.trim(), MAP_TEXT_LIMITS.text));
-const Key = z.string().max(40);
+/** An id field as the model wrote it: any length (a long name where an id belongs is dropped by its id, not a failure of the whole answer; review of T3, finding 4). */
+const Key = z.string().transform((key) => key.slice(0, 200));
 
 export const ReviewAnswerSchema = z.strictObject({
   deadMan: z.array(z.strictObject({ behavior: Key, why: Text })).max(MAX_FINDINGS),
@@ -52,13 +53,14 @@ function jsonOf(text: string): string {
   if (fenced) return fenced[1];
   const first = trimmed.indexOf("{");
   const last = trimmed.lastIndexOf("}");
-  return first > 0 && last > first ? trimmed.slice(first, last + 1) : trimmed;
+  return first >= 0 && last > first ? trimmed.slice(first, last + 1) : trimmed;
 }
 
 /**
  * The review's answer as findings, by the ids of the behaviors it was sent. A finding about a
- * behavior it was not sent, one with an empty reason, a pair of a behavior with itself, or a
- * pair given twice is left out and counted in `dropped`.
+ * behavior it was not sent (a name written where the id belongs, however long), one with an
+ * empty reason, response or exclusion, a pair of a behavior with itself, or a pair given twice
+ * is left out and counted in `dropped`.
  */
 export function parseReviewAnswer(text: string, ids: ReadonlySet<string>): { ok: true; findings: DefinitionReviewFinding[]; dropped: number } | { ok: false; problems: string[] } {
   let json: unknown;
@@ -84,7 +86,7 @@ export function parseReviewAnswer(text: string, ids: ReadonlySet<string>): { ok:
   for (const entry of parsed.data.overlaps) {
     const pair = [entry.first, entry.second].sort();
     const key = `overlap:${pair.join("|")}`;
-    if (!ids.has(entry.first) || !ids.has(entry.second) || entry.first === entry.second || entry.response === "" || seen.has(key)) {
+    if (!ids.has(entry.first) || !ids.has(entry.second) || entry.first === entry.second || entry.response === "" || entry.exclusion === "" || seen.has(key)) {
       dropped++;
       continue;
     }

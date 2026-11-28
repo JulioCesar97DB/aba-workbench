@@ -8,13 +8,29 @@ import { definitionWarnings, reviewFingerprint, type CheckedBehavior } from "../
  * newest AI review's, marked when the behavior changed after the review read it.
  */
 
-/** One warning as the screen shows it. The AI's texts are English on both screens. */
-export interface WarningLine {
-  key: string;
+/** A piece of a warning: the app's words (her language) or the AI's (English, marked so: review of T3, nit 8). */
+export interface WarningPart {
   text: string;
   lang: "en" | undefined;
+}
+
+/** One warning as the screen shows it. */
+export interface WarningLine {
+  key: string;
+  parts: WarningPart[];
   /** The behavior changed after the AI's review read it. */
   stale: boolean;
+}
+
+/** A warning's text as one string (the parts joined by a space). */
+export function lineText(line: Pick<WarningLine, "parts">): string {
+  return line.parts.map((part) => part.text).join(" ");
+}
+
+/** The findings of a review whose behaviors are all still in the map: what the screen shows and counts (review of T3, nit 9). */
+export function shownFindings(review: CaseMapView["definitionReview"], behaviorIds: ReadonlySet<string>) {
+  if (review?.status !== "done") return [];
+  return review.findings.filter((finding) => (finding.kind === "dead-man" ? behaviorIds.has(finding.behaviorId) : finding.behaviorIds.every((id) => behaviorIds.has(id))));
 }
 
 /** Every behavior's warnings, by its id: the code checks first, then the AI review's findings. */
@@ -29,24 +45,31 @@ export function warningLines(t: TFunction, map: CaseMapView): Map<string, Warnin
         warning.kind === "dead-man"
           ? t(warning.field === "definition" ? "caseMap.qa.deadManDefinition" : "caseMap.qa.deadManOnset", { phrase: warning.phrase })
           : t(warning.via === "example" ? "caseMap.qa.overlapExample" : "caseMap.qa.overlapTopography", { other: warning.otherName, phrase: warning.phrase });
-      add(id, { key: `code-${id}-${index}`, text, lang: undefined, stale: false });
+      add(id, { key: `code-${id}-${index}`, parts: [{ text, lang: undefined }], stale: false });
     });
   }
   const review = map.definitionReview;
-  if (review?.status === "done") {
+  if (review) {
     const current = new Map(items.map((item) => [item.id, reviewFingerprint(item)]));
     const stale = (id: string) => review.fingerprints[id] !== current.get(id);
-    review.findings.forEach((finding, index) => {
+    shownFindings(review, new Set(current.keys())).forEach((finding, index) => {
       if (finding.kind === "dead-man") {
-        if (!current.has(finding.behaviorId)) return;
-        add(finding.behaviorId, { key: `ai-${index}`, text: t("caseMap.qa.aiDeadMan", { why: finding.why }), lang: "en", stale: stale(finding.behaviorId) });
+        add(finding.behaviorId, { key: `ai-${index}`, parts: [{ text: t("caseMap.qa.aiDeadMan"), lang: undefined }, { text: finding.why, lang: "en" }], stale: stale(finding.behaviorId) });
         return;
       }
       const [first, second] = finding.behaviorIds;
-      if (!current.has(first) || !current.has(second)) return;
       const changed = stale(first) || stale(second);
       for (const [id, other] of [[first, second], [second, first]] as const) {
-        add(id, { key: `ai-${index}-${id}`, text: t("caseMap.qa.aiOverlap", { other: nameOf.get(other) ?? other, response: finding.response, exclusion: finding.exclusion }), lang: "en", stale: changed });
+        add(id, {
+          key: `ai-${index}-${id}`,
+          parts: [
+            { text: t("caseMap.qa.aiOverlap", { other: nameOf.get(other) ?? other }), lang: undefined },
+            { text: finding.response, lang: "en" },
+            { text: t("caseMap.qa.aiSeparate"), lang: undefined },
+            { text: finding.exclusion, lang: "en" },
+          ],
+          stale: changed,
+        });
       }
     });
   }
