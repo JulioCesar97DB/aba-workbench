@@ -898,6 +898,14 @@ function cachedPrefix(body: Record<string, unknown>) {
   return { ...body, messages: [{ ...messages[0], content: content.slice(0, last + 1) }] };
 }
 
+/** The part every section shares: the cached prefix without the map block, which is each section's own (D11, 2026-11-28). */
+function sharedPrefix(body: Record<string, unknown>) {
+  const prefix = cachedPrefix(body);
+  const content = prefix.messages[0].content as Array<{ text?: string }>;
+  assert.match(content.at(-1)?.text ?? "", /^<case-map>/, "the map is the last cached block");
+  return { ...prefix, messages: [{ ...prefix.messages[0], content: content.slice(0, -1) }] };
+}
+
 test("M4: every kind of section request sends Claude the same settings and the same cached prefix, so one cache serves them all", async () => {
   const { fetchStub, calls } = stubFetch(({ body }) => {
     const request = body as { model: string; messages: Array<{ content: Array<{ text?: string }> }> };
@@ -935,11 +943,16 @@ test("M4: every kind of section request sends Claude the same settings and the s
   }
   const first = cachedPrefix(requests[0]);
   assert.equal((first as unknown as { output_config: { effort: string } }).output_config.effort, "high");
+  const shared = sharedPrefix(requests[0]);
   for (const [index, body] of requests.entries()) {
-    assert.deepEqual(cachedPrefix(body), first, `request ${index + 1} (${tasks[index].split("\n").at(-1)?.slice(0, 40)}) has the draft's settings and cached prefix`);
+    const label = `request ${index + 1} (${tasks[index].split("\n").at(-1)?.slice(0, 40)})`;
+    assert.deepEqual(sharedPrefix(body), shared, `${label} has the draft's settings and the same rules and sources, whatever its section`);
+    // Requests 7 and 8 are Background Information's: its own map block. The others are Medical Necessity's: the draft's block.
+    if (index < 6 || index === 8) assert.deepEqual(cachedPrefix(body), first, `${label} has the draft's whole cached prefix, map included`);
+    else assert.notDeepEqual(cachedPrefix(body), first, `${label}: another section, another map block`);
   }
   const content = (first.messages as Array<{ content: Array<{ text?: string; cache_control?: unknown }> }>)[0].content;
-  assert.match(content.at(-1)?.text ?? "", /^<case-map>[\s\S]*Client: not approved yet[\s\S]*<behavior id="beh-1" name="Invented spitting">/, "the map is the last cached block");
+  assert.match(content.at(-1)?.text ?? "", /^<case-map>[\s\S]*as section 4 Medical Necessity Criteria gets it[\s\S]*Client: not approved yet[\s\S]*<behaviors version="1">\nHome: section 8 Maladaptive Behaviors Summary, which states them in full; here by name only.\n- Invented spitting\n<\/behaviors>/, "the map is the last cached block; a behavior comes by name only outside its home");
   assert.equal(content.filter((block) => block.cache_control).length, 2, "sources and map in the messages; the system is the third breakpoint");
   // Each version and each check records which approved map it was sent.
   const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections["medical-necessity"].versions[0];
@@ -999,14 +1012,19 @@ test("ChatGPT sign-in: every kind of section request sends the same settings and
   assert.equal(last.prompt_cache_key, caseCacheKey(other.case.id));
   assert.notEqual(last.prompt_cache_key, key);
   assert.deepEqual(first.reasoning, { effort: "high" });
-  // Plan step, PR 0: the approved map is the latest user message, so the implicit cache ends with it.
+  // Plan step, PR 0, with D11 as changed on 2026-11-28: the map differs per section, so it goes in the
+  // instructions before the task, and the input (rules, then sources: the implicit cache) is the same for all.
   const input = first.input as Array<{ role: string; content: Array<{ text?: string }> }>;
-  assert.deepEqual(input.map((message) => message.role), ["developer", "user", "user"]);
-  assert.match(input[2].content[0].text ?? "", /^<case-map>[\s\S]*Invented spitting/);
+  assert.deepEqual(input.map((message) => message.role), ["developer", "user"]);
+  assert.match(String(firstTask), /^[^\n]+\n\n<case-map>[\s\S]*as section 4 Medical Necessity Criteria gets it[\s\S]*- Invented spitting\n[\s\S]*<\/case-map>\n\n[\s\S]*Draft request/);
+  const mapOf = (instructions: unknown) => String(instructions).match(/<case-map>[\s\S]*<\/case-map>/)?.[0];
   for (const [index, body] of requests.entries()) {
     const { instructions, ...rest } = body;
     assert.equal(typeof instructions, "string");
-    assert.deepEqual(rest, first, `request ${index + 1} sends the draft's settings and input`);
+    assert.deepEqual(rest, first, `request ${index + 1} sends the draft's settings and input, whatever its section`);
+    // Requests 7 and 8 are Background Information's, with its own map block.
+    if (index < 6 || index === 8) assert.equal(mapOf(instructions), mapOf(firstTask), `request ${index + 1}: the draft's map block`);
+    else assert.notEqual(mapOf(instructions), mapOf(firstTask), `request ${index + 1}: another section, another map block`);
   }
   // A ChatGPT plan has no price per request: no cost, but the tokens are kept, reasoning included.
   const stored = JSON.parse(readFileSync(caseFile, "utf8")).sections["medical-necessity"].versions[0];

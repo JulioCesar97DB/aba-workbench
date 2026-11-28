@@ -203,8 +203,8 @@ function currentTextBlock(text: string, markedIndex: number | null): string {
 /**
  * The prompt of one request of the section workspace. The cached prefix (system: the
  * assessment rules, the payer facts, the instruments and how requests work; then the
- * sources) is the same for every request of one case, and so is the approved case map after
- * it until she approves another part; everything that changes from one request to the next
+ * sources) is the same for every request of one case; the approved case map after it is the
+ * same for every request of one section until she approves another part; everything that changes from one request to the next
  * goes in the task, after them.
  */
 export async function buildSectionPrompt(
@@ -286,9 +286,9 @@ export async function buildSectionPrompt(
       break;
     }
   }
-  // The approved case map: its own cached block after the sources (step 1's D8 to D11), the same for every section.
+  // The approved case map: its own block after the sources (step 1's D8 to D11), in full only for the items this section owns.
   const caseMap = input.caseMap ?? NO_APPROVED_MAP;
-  return { prompt: { system, sources: input.sources, caseMap: renderCaseMapBlock(caseMap, quoteForPrompt, input.sources), task: parts.join("\n\n") }, rulesVersions, mapUsed: mapUsedOf(caseMap) };
+  return { prompt: { system, sources: input.sources, caseMap: renderCaseMapBlock(caseMap, quoteForPrompt, input.sources, section.templateNumber), task: parts.join("\n\n") }, rulesVersions, mapUsed: mapUsedOf(caseMap) };
 }
 
 /* The case map's requests (step 1, pull request 2: D12 to D15) */

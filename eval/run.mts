@@ -76,7 +76,7 @@ import { approveMapFromFixture, installMapFixtureProvider, MAP_FIXTURE_CLAUDE_KE
 import { outgoingSourceTitle } from "../src/main/outgoing.ts";
 import { caseMapBlockInput } from "../src/main/case-map.ts";
 import { renderCaseMapBlock } from "../src/lib/case-map-block.ts";
-import { quoteForPrompt } from "../src/lib/rules.ts";
+import { quoteForPrompt, SECTIONS } from "../src/lib/rules.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const CASES_DIR = path.join(ROOT, "fixtures", "cases");
@@ -724,8 +724,8 @@ function recordedVersions(home: string, caseId: string): Map<ReportSectionId, Ma
 }
 
 /**
- * The approved map block as the case's section requests get it, rendered by the app's own
- * code from the case's data file (--map): saved with the run for whoever reviews it.
+ * The approved map blocks as the case's section requests get them, one per section, rendered by
+ * the app's own code from the case's data file (--map): saved with the run for whoever reviews it.
  */
 function mapBlockOf(home: string, caseId: string): string | null {
   const folder = path.join(home, "ABA Workbench");
@@ -736,7 +736,8 @@ function mapBlockOf(home: string, caseId: string): string | null {
     const data = JSON.parse(readFileSync(file, "utf8")) as Parameters<typeof caseMapBlockInput>[0] & { id?: string; sources?: Array<{ id: string; type: string; title?: string; date?: string; file?: string; removedAt?: string }> };
     if (data.id !== caseId) continue;
     const sources = (data.sources ?? []).filter((source) => !source.removedAt).map((source) => ({ id: source.id, title: outgoingSourceTitle(source) }));
-    return renderCaseMapBlock(caseMapBlockInput(data), quoteForPrompt, sources);
+    const input = caseMapBlockInput(data);
+    return REPORT_SECTIONS.map(({ id }) => renderCaseMapBlock(input, quoteForPrompt, sources, SECTIONS[id].templateNumber)).join("\n\n");
   }
   return null;
 }

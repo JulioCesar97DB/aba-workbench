@@ -15,19 +15,23 @@ import { TEMPLATE_SECTIONS } from "../shared/case-map.ts";
 import { REPORT_SECTIONS } from "../shared/report-sections.ts";
 
 /*
- * The approved case map as section requests get it (step 1's D8 to D11, owner's decisions
- * of 2026-11-23; the Plan step's PR 0): one block of compact tagged text, rendered by code,
- * never the map's JSON. It goes after the sources as a third cached block on every route
- * (src/lib/providers/anthropic.ts and openai.ts), so the same map gives the same bytes:
- * the parts come in a fixed order, the fields of each item in a fixed order, and nothing
- * in it depends on the section asked for or on the time.
+ * The approved case map as section requests get it (step 1's D8 to D10, owner's decisions
+ * of 2026-11-23; the Plan step's PR 0; D11 as the owner changed it on 2026-11-28): one block
+ * of compact tagged text, rendered by code, never the map's JSON. It goes after the sources
+ * (src/lib/providers/anthropic.ts and openai.ts): the rules and the sources before it are the
+ * same for every section and stay cached across them, and the block is the part that differs
+ * per section. The same map and section give the same bytes: the parts come in a fixed order,
+ * the fields of each item in a fixed order, and nothing in it depends on the time.
  *
  * - Only approved parts are written out (D9). Every other part is named in one line, so the
  *   model never reads a missing part as "none".
  * - Each value carries where it came from (the source's id as the sources block names it,
  *   her section, her notes, her own typing), but never the verbatim quotes (D10).
- * - The whole approved map goes to every section (D11); each section's rules say which parts
- *   it uses.
+ * - Each section gets in full only the items whose home is that section (D11, 2026-11-28):
+ *   a fact's own home section, and for the other parts the guide's section map
+ *   (rules/guide.md, "Owns"; PART_HOMES below). Every other item comes by name only: its
+ *   name and nothing else, no examples, incidents, dates or wording. The one exception is a
+ *   number the guide's "Refers to" column gives a section (NAMED_WITH_NUMBERS below).
  *
  * The Plan step's PR 4 adds the accepted plan items to this block, after the map's parts:
  * CASE_MAP_BLOCK_PARTS is the place they join, and the block's order stays fixed.
@@ -284,22 +288,140 @@ function names<T extends { id: string }>(items: ReadonlyArray<T>, name: (item: T
 }
 
 /**
- * The block, from the map's parts. `quote` makes text unable to break out of a tag
+ * The home section of each part's items (template numbers), from the guide's section map
+ * (rules/guide.md, "Owns"). Facts carry their own home section. Settings are where the
+ * observations were made, which Assessments Conducted (13) owns; behaviors are the Maladaptive
+ * Behaviors Summary's (8), with their topography and baselines in 10 and their functions in 13.
+ */
+export const PART_HOMES: Readonly<Record<Exclude<CaseMapBlockPart, "facts">, number>> = {
+  client: 3,
+  caregivers: 16,
+  settings: 13,
+  deficits: 4,
+  strengths: 6,
+  behaviors: 8,
+  risks: 19,
+};
+
+/**
+ * The numbers a section gets with an item's name, from the guide's "Refers to" column: Discharge
+ * (18) refers to "behaviors and baselines by name and number". Taken from the guide, never case by case.
+ */
+export const NAMED_WITH_NUMBERS: Readonly<Partial<Record<number, ReadonlyArray<CaseMapBlockPart>>>> = {
+  18: ["behaviors"],
+};
+
+function sectionName(number: number): string {
+  return `section ${number} ${TEMPLATE_SECTIONS[number - 1] ?? ""}`.trim();
+}
+
+/** A name, alone on its line: "- name". */
+function nameLine(value: string | null | undefined, quote: Quote): string[] {
+  const text = value?.trim();
+  return text ? [`- ${oneLine(text, quote)}`] : [];
+}
+
+/**
+ * The name at the head of a value that says more ("Mother; lives with her and works during the day",
+ * "Home: homework, dinner", "Speech-language therapy, 60 minutes per week"): the text before its first
+ * colon, semicolon or comma, so the rest of the value stays with its home section.
+ */
+export function headName(value: string | null | undefined): string {
+  const text = (value ?? "").trim();
+  const cut = text.search(/[:;]|,\s/);
+  return (cut > 0 ? text.slice(0, cut) : text).trim().replace(/[.]$/, "");
+}
+
+/** A behavior's name and, where the guide gives the section its numbers, the baseline's numbers: no dates, settings or wording. */
+function behaviorNameLine(item: BehaviorItem, withNumbers: boolean, quote: Quote): string[] {
+  const name = item.name?.value.trim();
+  if (!name) return [];
+  if (!withNumbers) return [`- ${oneLine(name, quote)}`];
+  const values = item.baseline.observations.flatMap((observation) => {
+    const value = observation.value?.value.trim();
+    if (!value) return [];
+    const minutes = observation.minutes?.value.trim();
+    return [minutes ? `${value} in ${minutes} minutes` : value];
+  });
+  const measure = item.measure?.value.trim();
+  const numbers = [measure ? `measure ${measure}` : "", values.length > 0 ? `baseline ${values.join("; ")}` : ""].filter((text) => text !== "");
+  return [`- ${oneLine(name, quote)}${numbers.length > 0 ? `: ${oneLine(numbers.join(", "), quote)}` : ""}`];
+}
+
+/** One part, by name only: the names and nothing else. Parts whose items have no name (strengths, facts) are counted. */
+function namesOnly(part: CaseMapBlockPart, entry: Extract<BlockPart, { approved: true }>, withNumbers: boolean, behaviors: ReadonlyMap<string, string>, quote: Quote): string[] {
+  switch (part) {
+    case "client": {
+      const item = entry.items[0] as ClientItem | undefined;
+      if (!item) return [];
+      // The diagnosis is named as the CDE writes it (it must match everywhere); the other services by name.
+      // Medications, school and languages are Background's to state, and have no name apart from their wording.
+      return [
+        ...(item.diagnosis?.value.trim() ? [`- diagnosis: ${oneLine(item.diagnosis.value, quote)}`] : []),
+        ...item.otherServices.flatMap((service) => nameLine(headName(service.name?.value), quote).map((line) => line.replace(/^- /, "- other service: "))),
+      ];
+    }
+    case "caregivers":
+      return entry.items.flatMap((item) => nameLine(headName((item as CaregiverItem).role?.value), quote));
+    case "settings":
+      return entry.items.flatMap((item) => nameLine(headName((item as SettingItem).name?.value), quote));
+    case "deficits":
+      return entry.items.flatMap((item) => nameLine((item as DeficitItem).area?.value, quote));
+    case "behaviors":
+      return [
+        ...entry.items.flatMap((item) => behaviorNameLine(item as BehaviorItem, withNumbers, quote)),
+        ...(entry.groups ?? []).flatMap((group) => {
+          const named = group.behaviorIds.flatMap((id) => (behaviors.has(id) ? [behaviors.get(id) ?? ""] : []));
+          return named.length > 1 ? [`- a group: ${oneLine(named.join(", "), quote)}`] : [];
+        }),
+      ];
+    case "risks": {
+      // A risk has no name of its own: it is named by the behaviors it comes from; the others are counted.
+      const risks = entry.items as ReadonlyArray<RiskItem>;
+      const tied = risks.map((risk) => risk.behaviorIds.flatMap((id) => (behaviors.has(id) ? [behaviors.get(id) ?? ""] : [])));
+      const named = [...new Set(tied.filter((of) => of.length > 0).map((of) => `- a risk from ${oneLine(of.join(", "), quote)}`))];
+      const others = tied.filter((of) => of.length === 0).length;
+      return [...named, ...(others > 0 ? [`${others} other ${others === 1 ? "risk" : "risks"}, not tied to a behavior, not given here.`] : [])];
+    }
+    case "strengths":
+      return entry.items.length > 0 ? [`${entry.items.length} ${entry.items.length === 1 ? "strength" : "strengths"}, not given here.`] : [];
+    case "facts":
+      return [];
+  }
+}
+
+/** The facts of other sections, counted by home and never given: a fact has no name to refer to it by. */
+function otherFactsLine(facts: ReadonlyArray<FactItem>): string[] {
+  const counts = new Map<number | null, number>();
+  for (const fact of facts) {
+    const home = fact.homeSection !== null && fact.homeSection >= 1 && fact.homeSection <= TEMPLATE_SECTIONS.length ? fact.homeSection : null;
+    counts.set(home, (counts.get(home) ?? 0) + 1);
+  }
+  if (counts.size === 0) return [];
+  const homes = [...counts.entries()].sort(([a], [b]) => (a ?? 99) - (b ?? 99)).map(([home, count]) => `${count} in ${home === null ? "no home section" : sectionName(home)}`);
+  return [`Facts of other sections, not given here: ${homes.join("; ")}.`];
+}
+
+/**
+ * The block for one section, from the map's parts. `section` is the template number of the
+ * section asked for (1 to 22). `quote` makes text unable to break out of a tag
  * (quoteForPrompt in src/lib/rules.ts); every value goes through it.
  * `sources` are the sources the request sends, in its order: S1, S2, ... name them.
  */
-export function renderCaseMapBlock(input: CaseMapBlockInput, quoteText: (text: string) => string, sources: ReadonlyArray<{ id: string; title: string }>): string {
+export function renderCaseMapBlock(input: CaseMapBlockInput, quoteText: (text: string) => string, sources: ReadonlyArray<{ id: string; title: string }>, section: number): string {
   const quote: Quote = Object.assign((text: string) => quoteText(text), { sources: new Map(sources.map((source, index) => [source.id, `S${index + 1}`])) });
   const settings = input.settings.approved ? names(input.settings.items, (item) => item.name) : new Map<string, string>();
   const behaviors = input.behaviors.approved ? names(input.behaviors.items, (item) => item.name) : new Map<string, string>();
   const sections = CASE_MAP_BLOCK_PARTS.map((part) => {
     const entry = input[part];
     if (!entry.approved) return notApprovedLine(part);
-    const version = ` version="${entry.version}"`;
     const groups = part === "behaviors" ? (entry.groups ?? []) : [];
     if (entry.items.length === 0 && groups.length === 0) return `${PART_LABELS[part]}: approved; none.`;
+    const home = part === "facts" ? null : PART_HOMES[part];
+    const own = part === "facts" ? entry.items.filter((item) => (item as FactItem).homeSection === section) : home === section ? entry.items : [];
+    const ownGroups = home === section ? groups : [];
     const items: string[] = [];
-    for (const item of entry.items) {
+    for (const item of own) {
       const id = ` id="${attribute(item.id, quote)}"`;
       switch (part) {
         case "client":
@@ -331,12 +453,22 @@ export function renderCaseMapBlock(input: CaseMapBlockInput, quoteText: (text: s
           break;
       }
     }
-    for (const group of groups) items.push(element("group", ` id="${attribute(group.id, quote)}"`, groupLines(group, behaviors, quote)));
-    return element(part, version, items);
+    for (const group of ownGroups) items.push(element("group", ` id="${attribute(group.id, quote)}"`, groupLines(group, behaviors, quote)));
+    if (part === "facts") {
+      items.push(...otherFactsLine(entry.items.filter((item) => (item as FactItem).homeSection !== section) as FactItem[]));
+    } else if (home !== section && home !== null) {
+      const withNumbers = (NAMED_WITH_NUMBERS[section] ?? []).includes(part);
+      const lines = namesOnly(part, entry, withNumbers, behaviors, quote);
+      const how = withNumbers ? "by name, with the numbers this section refers to" : "by name only";
+      items.push(`Home: ${sectionName(home)}, which states them in full; here ${how}.`, ...lines);
+    }
+    const attributes = ` version="${entry.version}"${home === section ? ' home="this section"' : ""}`;
+    return element(part, attributes, items);
   });
-  const anyApproved = CASE_MAP_BLOCK_PARTS.some((part) => input[part].approved);
-  const legend = anyApproved && sources.length > 0
+  const anyFrom = sections.some((text) => text.includes("[from: "));
+  const legend = anyFrom && sources.length > 0
     ? [["Sources, by the short names [from: ...] uses below:", ...sources.map((source, index) => `S${index + 1} = ${attribute(source.id, quote)} (${attribute(source.title, quote)})`)].join("\n")]
     : [];
-  return ["<case-map>", "The case map, approved by the BCBA part by part and rendered by the app.", ...legend, ...sections, "</case-map>"].join("\n\n");
+  const intro = `The case map, approved by the BCBA part by part and rendered by the app, as ${sectionName(section)} gets it: in full, the items whose home is this section; every other item by name only.`;
+  return ["<case-map>", intro, ...legend, ...sections, "</case-map>"].join("\n\n");
 }
