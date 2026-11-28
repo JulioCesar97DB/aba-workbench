@@ -1147,3 +1147,12 @@ export function mergeRepair(kind: MapRequestKind, first: MapAnswer, repaired: Ma
     openItems: joinOpen(a.openItems, b.openItems),
   };
 }
+
+/**
+ * A route that refused the JSON schema: a 400 or an "unsupported" answer that names the
+ * schema or the output format (review round 1, M5). Any other refusal (a PDF over a page
+ * limit, a request too large) is reported as it is, and the route keeps its schema.
+ */
+export function refusedFormat(failure: { code: string; message: string }): boolean {
+  return /bad_request|unsupported|invalid_request/.test(failure.code) && /schema|json_schema|output_config|output.format|text\.format|response_format|structured/i.test(failure.message);
+}

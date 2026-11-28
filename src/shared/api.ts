@@ -323,6 +323,10 @@ export type GenerationUpdateEvent =
   | { type: "map-preview"; step: MapRequestKind; part: MapPartId; id: string; item: Record<string, unknown>; replaces: string | null }
   /** One request's parts saved: the whole map as saved, the parts written, and how many problems the checks still found. */
   | { type: "map-saved"; step: MapRequestKind; result: MapSaveResult; written: MapPartId[]; kept: MapPartId[]; problems: number }
+  /** The review of the behaviors' definitions at work (T3): after a draft's behaviors, or on its own; asked again as plain JSON when a route refuses its schema. */
+  | { type: "map-review"; phase: "reviewing" | "plain-json" }
+  /** The review's record saved (done, or failed: it could not run): the whole map, and how many findings it has. */
+  | { type: "map-review-saved"; result: MapSaveResult; status: "done" | "failed"; findings: number }
   | { type: "finished"; cancelled: boolean };
 
 export interface GenerationUpdate {
@@ -618,6 +622,12 @@ export interface AbaApi {
    * as "map-saved"; Stop is cancelGeneration.
    */
   startMapDraft(caseId: string, generationId: string, provider: DraftingProvider): Promise<StartSectionResult>;
+  /**
+   * "Review the definitions again" (T3): the AI's review of the behaviors' definitions on its
+   * own, one request. Progress arrives as "map-review", its saved record as "map-review-saved";
+   * Stop is cancelGeneration.
+   */
+  startMapReview(caseId: string, generationId: string, provider: DraftingProvider): Promise<StartSectionResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -680,6 +690,7 @@ export const IPC_CHANNELS = {
   setMapPartVersion: "case-map:set-current",
   approveMapPart: "case-map:approve",
   startMapDraft: "case-map:draft",
+  startMapReview: "case-map:review",
   getAiPreferences: "settings:get-ai",
   setModel: "settings:set-model",
 } as const;

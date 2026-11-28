@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { checkMapAnswer, cutText, limitOf, SCORE_LIMITS, TEXT_LIMITS, MAP_SCHEMA_NAMES, mapAnswerSchema, mergeRepair, numbersIn, parseMapAnswer, PARTS_OF_REQUEST, repairInput, sameNumber, SCORE_FIELDS, type AnswerClaim, type AnswerRef, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer, type MapAnswer, type MapAnswerFormat, type RepairScope, type ScoreRow } from "../lib/case-map-extraction.ts";
+import { checkMapAnswer, cutText, refusedFormat, limitOf, SCORE_LIMITS, TEXT_LIMITS, MAP_SCHEMA_NAMES, mapAnswerSchema, mergeRepair, numbersIn, parseMapAnswer, PARTS_OF_REQUEST, repairInput, sameNumber, SCORE_FIELDS, type AnswerClaim, type AnswerRef, type BehaviorsAnswer, type CheckContext, type CheckResult, type FactsAnswer, type MapAnswer, type MapAnswerFormat, type RepairScope, type ScoreRow } from "../lib/case-map-extraction.ts";
 import { JsonItemScanner, type ClosedItem } from "../lib/json-items.ts";
 import { generationCostUsd } from "../lib/pricing.ts";
 import type { Effort, Provider, ProviderCredential, TokenUsage } from "../lib/providers/types.ts";
@@ -12,6 +12,7 @@ import { finalVersion, sessionNotes } from "./case-sections.ts";
 import type { CaseLibrary } from "./cases.ts";
 import { caseCacheKey } from "./cache-key.ts";
 import { outgoingSourcesOf, prepareMapRequest, type OutgoingSource } from "./outgoing.ts";
+import { runDefinitionReview } from "./definition-review.ts";
 import { runSectionGeneration, type FinishedText } from "./section-generation.ts";
 
 /*
@@ -102,14 +103,7 @@ async function readCase(options: MapDraftOptions): Promise<{ data: CaseData; fol
   return read.kind === "saved" || read.kind === "unchanged" ? { data: read.data, folder: read.folder } : null;
 }
 
-/**
- * A route that refused the JSON schema: a 400 or an "unsupported" answer that names the
- * schema or the output format (review round 1, M5). Any other refusal (a PDF over a page
- * limit, a request too large) is reported as it is, and the route keeps its schema.
- */
-export function refusedFormat(failure: { code: string; message: string }): boolean {
-  return /bad_request|unsupported|invalid_request/.test(failure.code) && /schema|json_schema|output_config|output.format|text\.format|response_format|structured/i.test(failure.message);
-}
+export { refusedFormat };
 
 /** The whole draft: the facts, then the behaviors, each saved as soon as it passes. */
 export async function* runMapDraft(options: MapDraftOptions): AsyncGenerator<RunEvent> {
@@ -166,6 +160,9 @@ export async function* runMapDraft(options: MapDraftOptions): AsyncGenerator<Run
     yield { type: "map-saved", step: kind, result, written, kept, problems: problemsLeft };
     if (saved.kind === "failed") return;
   }
+  // One review of the definitions per draft (T3), once the behaviors are saved. It never fails the draft.
+  if (options.signal.aborted) return;
+  yield* runDefinitionReview({ ...options, run });
 }
 
 /** One request of the draft, with its plain-JSON resend and its one repair. Null when it failed (the error is reported). */

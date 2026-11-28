@@ -20,6 +20,7 @@ import {
   type MapPartView,
   type MapVersionKind,
 } from "../shared/case-map.ts";
+import type { DefinitionReviewFinding, DefinitionReviewView } from "../shared/definition-checks.ts";
 
 /*
  * The case map inside a case's data file (schema version 4; src/shared/case-map.ts says
@@ -400,7 +401,7 @@ export function mapPartView(data: WithCaseMap, part: MapPartId): MapPartView {
 }
 
 export function caseMapView(data: WithCaseMap): CaseMapView {
-  return { parts: Object.fromEntries(MAP_PARTS.map((part) => [part, mapPartView(data, part)])) as Record<MapPartId, MapPartView>, revision: data.updatedAt };
+  return { parts: Object.fromEntries(MAP_PARTS.map((part) => [part, mapPartView(data, part)])) as Record<MapPartId, MapPartView>, definitionReview: definitionReviewView(data), revision: data.updatedAt };
 }
 
 export function caseMapSummary(data: WithCaseMap): CaseMapSummary {
@@ -830,6 +831,8 @@ export interface MapExtractionRecord {
   repairValues?: number;
   /** How long the answer, and the repair when there was one, took, in seconds. */
   seconds?: { answer: number; repair?: number };
+  /** A review of the definitions (kind "map-review", T3): what it read and found (DefinitionReviewView). */
+  review?: Omit<DefinitionReviewView, "at">;
 }
 
 /** An item as the AI's answer gives it, already in the stored shape, with its key instead of an id. */
@@ -942,14 +945,55 @@ export function applyMapAnswer<D extends WithCaseMap>(
     next = withPart(next, part, withoutApproval({ ...stored, versions: [...stored.versions, version], currentVersion: number }));
     written.push(part);
   }
-  const map: StoredCaseMap = next.caseMap ?? { parts: {} };
-  const capped = (list: readonly string[]) => list.slice(0, MAX_EXTRACTION_PROBLEMS).map((problem) => problem.slice(0, 500));
+  next = appendMapExtraction(next, { ...record, problems });
+  return { data: next, written, kept, problems };
+}
+
+const capped = (list: readonly string[]) => list.slice(0, MAX_EXTRACTION_PROBLEMS).map((problem) => problem.slice(0, 500));
+
+/** Adds one AI request's record to caseMap.extractions, its problems capped; the oldest go past the limit. */
+export function appendMapExtraction<D extends WithCaseMap>(data: D, record: MapExtractionRecord): D {
+  const map: StoredCaseMap = data.caseMap ?? { parts: {} };
   const extractions = [
     ...(map.extractions ?? []),
-    { ...record, problems: capped(problems), ...(record.problemsBeforeRepair ? { problemsBeforeRepair: capped(record.problemsBeforeRepair) } : {}) },
+    { ...record, problems: capped(record.problems), ...(record.problemsBeforeRepair ? { problemsBeforeRepair: capped(record.problemsBeforeRepair) } : {}) },
   ].slice(-MAX_EXTRACTIONS);
-  next = { ...next, caseMap: { ...map, extractions } };
-  return { data: next, written, kept, problems };
+  return { ...data, caseMap: { ...map, extractions } };
+}
+
+const FindingSchema = z.union([
+  z.strictObject({ kind: z.literal("dead-man"), behaviorId: ItemIdSchema, why: z.string().max(T.text) }),
+  z.strictObject({ kind: z.literal("overlap"), behaviorIds: z.tuple([ItemIdSchema, ItemIdSchema]), response: z.string().max(T.text), exclusion: z.string().max(T.text) }),
+]);
+const ReviewRecordSchema = z.looseObject({
+  at: z.string().max(64),
+  review: z.looseObject({
+    status: z.enum(["done", "failed"]),
+    failure: z.string().max(64).nullable(),
+    behaviorsVersion: z.number().int().nullable(),
+    fingerprints: z.record(ItemIdSchema, z.string().max(16)),
+    findings: z.array(z.unknown()).max(200),
+  }),
+});
+
+/**
+ * The newest review of the definitions (T3; owner's decision 1A), or null when none ran. A
+ * finding a newer app writes in a shape this one does not know is left out of the view.
+ */
+export function definitionReviewView(data: WithCaseMap): DefinitionReviewView | null {
+  const extractions = data.caseMap?.extractions ?? [];
+  for (let index = extractions.length - 1; index >= 0; index--) {
+    if (extractions[index].kind !== "map-review") continue;
+    const read = ReviewRecordSchema.safeParse(extractions[index]);
+    if (!read.success) continue;
+    const { review, at } = read.data;
+    const findings = review.findings.flatMap((finding) => {
+      const parsed = FindingSchema.safeParse(finding);
+      return parsed.success ? [parsed.data as DefinitionReviewFinding] : [];
+    });
+    return { at, status: review.status, failure: review.failure, behaviorsVersion: review.behaviorsVersion, fingerprints: { ...review.fingerprints }, findings };
+  }
+  return null;
 }
 
 /** The ids of the settings the map holds now. */

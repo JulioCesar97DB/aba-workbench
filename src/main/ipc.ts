@@ -522,6 +522,11 @@ export function registerIpc(options: {
     return startSectionRun(event, generationId, () => options.caseMap.prepareDraft(caseId, provider));
   });
 
+  ipcMain.handle(IPC_CHANNELS.startMapReview, (event, caseId: unknown, generationId: unknown, provider: unknown): Promise<StartSectionResult> => {
+    assertTrusted(event);
+    return startSectionRun(event, generationId, () => options.caseMap.prepareReview(caseId, provider));
+  });
+
   if (options.judgeEnabled) {
     ipcMain.handle(IPC_CHANNELS.judgeSection, (event, caseId: unknown, sectionId: unknown, generationId: unknown, provider: unknown, input: unknown): Promise<StartSectionResult> => {
       assertTrusted(event);

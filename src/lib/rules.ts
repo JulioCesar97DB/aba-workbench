@@ -74,7 +74,7 @@ function parseRulesFile(raw: string, fileName: string): RulesFile {
 
 const cache = new Map<string, Promise<RulesFile>>();
 
-function loadRulesFile(rulesDir: string, relativePath: string): Promise<RulesFile> {
+export function loadRulesFile(rulesDir: string, relativePath: string): Promise<RulesFile> {
   const fullPath = path.join(rulesDir, relativePath);
   let pending = cache.get(fullPath);
   if (!pending) {

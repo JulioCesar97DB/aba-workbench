@@ -64,10 +64,23 @@ export interface MapDraft {
   kept: MapPartId[];
   /** How many problems the code checks still found after the repair (each value marked [CHECK]). */
   problems: number;
+  /** The review of the definitions that follows the behaviors (T3): running, and how it ended (null before it ends, or when it did not run). */
+  reviewing: boolean;
+  review: "done" | "failed" | null;
   outcome: MapDraftOutcome | null;
 }
 
+/** "Review the definitions again" (T3; owner's decision 2A): one request on its own, one per case at a time. */
+export interface MapReviewRun {
+  id: string;
+  caseId: string;
+  phase: "running" | "done";
+  /** How it ended: its record saved (done or failed), or it did not run (stopped, or an error before anything was saved). */
+  outcome: "done" | "failed" | "stopped" | "not-run" | null;
+}
+
 const byCase = new Map<string, MapDraft>();
+const reviewsByCase = new Map<string, MapReviewRun>();
 const notStarted = new Set<string>();
 const stopRequested = new Set<string>();
 const listeners = new Set<() => void>();
@@ -86,7 +99,33 @@ function findById(id: string): MapDraft | undefined {
   return undefined;
 }
 
+function notify() {
+  snapshot++;
+  for (const listener of listeners) listener();
+}
+
+function setReview(next: MapReviewRun) {
+  reviewsByCase.set(next.caseId, next);
+  notify();
+}
+
+/** The events of a review she asked for on its own. */
+function applyReview(run: MapReviewRun, update: GenerationUpdate) {
+  const event = update.event;
+  if (event.type === "map-review-saved") {
+    if (event.result.outcome === "saved") {
+      const result = event.result;
+      for (const listener of savedListeners) listener(run.caseId, result);
+    }
+    setReview({ ...run, outcome: event.result.outcome === "saved" ? event.status : "failed" });
+  } else if (event.type === "finished") {
+    setReview({ ...run, phase: "done", outcome: run.outcome ?? (event.cancelled ? "stopped" : "not-run") });
+  }
+}
+
 function apply(update: GenerationUpdate) {
+  const review = [...reviewsByCase.values()].find((run) => run.id === update.generationId);
+  if (review) return applyReview(review, update);
   const current = findById(update.generationId);
   if (!current) return;
   const event = update.event;
@@ -129,17 +168,30 @@ function apply(update: GenerationUpdate) {
         set({ ...current, outcome: { kind: "failed", message: "", code: null } });
       }
       return;
+    case "map-review":
+      set({ ...current, reviewing: true });
+      return;
+    case "map-review-saved":
+      if (event.result.outcome === "saved") {
+        const result = event.result;
+        for (const listener of savedListeners) listener(current.caseId, result);
+      }
+      set({ ...current, reviewing: false, review: event.result.outcome === "saved" ? event.status : "failed" });
+      return;
     case "refusal":
+      // A refusal of the review never takes the draft's saved parts away.
+      if (current.reviewing) return;
       set({ ...current, outcome: { kind: "refused" } });
       return;
     case "error":
+      if (current.reviewing) return;
       set({ ...current, outcome: current.saved.length > 0 ? { kind: "partial", message: event.message, code: event.code } : { kind: "failed", message: event.message, code: event.code } });
       return;
     case "finished": {
       const outcome: MapDraftOutcome =
         current.outcome ?? (current.saved.length === 2 ? { kind: "saved" } : current.saved.length > 0 ? { kind: "partial", message: null, code: null } : event.cancelled ? { kind: "stopped" } : { kind: "failed", message: "", code: null });
       // Nothing more is saved: whatever was only previewed goes.
-      set({ ...current, phase: "done", outcome, previews: [] });
+      set({ ...current, phase: "done", outcome, previews: [], reviewing: false });
       return;
     }
     default:
@@ -161,7 +213,7 @@ function subscribe(listener: () => void) {
 
 function fresh(id: string, caseId: string, provider: DraftingProvider): MapDraft {
   const now = Date.now();
-  return { id, caseId, provider, step: null, phase: "starting", characters: 0, startedAt: now, stepStartedAt: now, arrived: 0, shown: 0, values: 0, scope: "values", previews: [], previewed: [], saved: [], written: [], kept: [], problems: 0, outcome: null };
+  return { id, caseId, provider, step: null, phase: "starting", characters: 0, startedAt: now, stepStartedAt: now, arrived: 0, shown: 0, values: 0, scope: "values", previews: [], previewed: [], saved: [], written: [], kept: [], problems: 0, reviewing: false, review: null, outcome: null };
 }
 
 /** Starts a draft (or an update) of the case's map; the outcome says why it did not start. */
@@ -192,7 +244,7 @@ export async function startMapDraft(caseId: string, provider: DraftingProvider):
   }
 }
 
-export function stopMapDraft(draft: MapDraft): void {
+export function stopMapDraft(draft: Pick<MapDraft, "id">): void {
   if (notStarted.has(draft.id)) stopRequested.add(draft.id);
   void window.aba.cancelGeneration(draft.id);
 }
@@ -229,6 +281,31 @@ export function useOnMapSaved(listener: SavedListener): void {
  */
 export function previewsNotSaved(draft: Pick<MapDraft, "previewed" | "saved">): boolean {
   return draft.previewed.some((step) => !draft.saved.includes(step));
+}
+
+/** Starts "Review the definitions again"; the outcome says why it did not start. */
+export async function startMapReview(caseId: string, provider: DraftingProvider): Promise<StartSectionResult["outcome"] | "error"> {
+  ensureSubscribed();
+  const id = crypto.randomUUID();
+  setReview({ id, caseId, phase: "running", outcome: null });
+  try {
+    const result = await window.aba.startMapReview(caseId, id, provider);
+    if (result.outcome !== "started") {
+      reviewsByCase.delete(caseId);
+      notify();
+    }
+    return result.outcome;
+  } catch {
+    setReview({ id, caseId, phase: "done", outcome: "not-run" });
+    return "error";
+  }
+}
+
+/** The case's review run on its own, under way or last finished, or null. */
+export function useMapReview(caseId: string): MapReviewRun | null {
+  useEffect(ensureSubscribed, []);
+  useSyncExternalStore(subscribe, () => snapshot);
+  return reviewsByCase.get(caseId) ?? null;
 }
 
 export function isDrafting(draft: MapDraft | null): boolean {

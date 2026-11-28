@@ -142,8 +142,12 @@ function Running({ draft }: { draft: MapDraft }) {
             {draft.saved.includes(kind) ? t("caseMap.ai.done") : kind === step ? t("caseMap.ai.now") : t("caseMap.ai.next")} {t(PARTS_OF_STEP[kind])}
           </li>
         ))}
+        {/* The review of the definitions that follows the behaviors (T3): one short request. */}
+        <li className={draft.reviewing ? "font-semibold" : draft.review ? "text-success" : "text-fg-muted"}>
+          {draft.review ? t("caseMap.ai.done") : draft.reviewing ? t("caseMap.ai.now") : t("caseMap.ai.next")} {t("caseMap.ai.stepReview")}
+        </li>
       </ol>
-      <p className="text-sm">{phase}</p>
+      <p className="text-sm">{draft.reviewing ? t("caseMap.qa.reviewing") : phase}</p>
       {/* Two sentences, each with its own count, so each plural follows its own number (M3). */}
       {draft.arrived > 0 && draft.phase !== "repairing" ? (
         <p className="text-sm">
@@ -200,6 +204,7 @@ function Finished({ draft }: { draft: MapDraft }) {
       {outcome?.kind !== "saved" && previewsNotSaved(draft) ? <p className="text-sm">{t("caseMap.ai.previewsNotSaved")}</p> : null}
       {draft.problems > 0 ? <p className="text-sm text-warning">{t("caseMap.ai.problems", { count: draft.problems })}</p> : null}
       {draft.kept.length > 0 ? <p className="text-sm text-fg-muted">{t("caseMap.ai.kept")}</p> : null}
+      {draft.review === "failed" ? <p className="text-sm text-warning">{t("caseMap.qa.reviewFailed")}</p> : null}
       <div>
         <Button size="sm" onClick={() => dismissMapDraft(draft.caseId)}>
           {t("caseMap.ai.dismiss")}

@@ -21,7 +21,7 @@ export interface PromptParts {
   sources: SourceDocument[];
   task: string;
   /** What the task is: a section's (the default) or the case map's (its own preamble on the ChatGPT route; review round 1, M4). */
-  kind?: "section" | "case-map";
+  kind?: "section" | "case-map" | "definition-review";
 }
 
 /**

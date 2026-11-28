@@ -126,12 +126,22 @@ interface Turn {
 }
 
 /** A provider that answers each request from a script, by kind, and records what it was sent. */
-function scriptedModel(script: { facts: Turn[]; behaviors: Turn[] }, limits: { claudeUnions?: boolean } = {}) {
+function scriptedModel(script: { facts: Turn[]; behaviors: Turn[]; review?: Turn[] }, limits: { claudeUnions?: boolean } = {}) {
   const sent: GenerateOptions[] = [];
+  /** The definitions reviews (T3), kept apart from the map's requests; each answers with no findings unless scripted. */
+  const reviews: GenerateOptions[] = [];
   const provider: Provider = {
     ...mockProvider,
     id: "anthropic",
     async *generate(options): AsyncIterable<GenerateEvent> {
+      if (options.prompt.kind === "definition-review") {
+        reviews.push(options);
+        const turn: Turn = script.review?.shift() ?? { answer: { deadMan: [], overlaps: [] } };
+        if (turn.error) throw turn.error;
+        yield { type: "text", delta: typeof turn.answer === "string" ? turn.answer : JSON.stringify(turn.answer) };
+        yield { type: "done", complete: true, stopReason: "end_turn", servedModel: options.model, usage: { uncachedInputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 5, reasoningTokens: null }, attempts: null };
+        return;
+      }
       sent.push(options);
       // Claude refuses a request whose strict schemas hold more than 16 parameters with a union.
       if (limits.claudeUnions && options.outputFormat && unionCount(options.outputFormat.schema) > 16) {
@@ -146,7 +156,7 @@ function scriptedModel(script: { facts: Turn[]; behaviors: Turn[] }, limits: { c
       yield { type: "done", complete: true, stopReason: "end_turn", servedModel: options.model, usage: { uncachedInputTokens: 100, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 50, reasoningTokens: null }, attempts: null };
     },
   };
-  return { provider, sent };
+  return { provider, sent, reviews };
 }
 
 async function setup(script: { facts: Turn[]; behaviors: Turn[] } | ((ids: { obs: string; interview: string; pdf: string }) => { facts: Turn[]; behaviors: Turn[] }), options: { instructions?: string; herSection?: string; claudeUnions?: boolean } = {}) {
@@ -270,14 +280,18 @@ test("a draft: two requests on the sections' cached prefix, then each request's 
   assert.equal(score.refs[0].checked, "not-checked", "a PDF's quote is not checked yet");
   assert.equal(score.check, null);
   assert.equal(map.parts.openItems.versions.at(-1).content.items.length, 1);
-  assert.equal(map.extractions.length, 2);
+  // The draft's two requests, then its one review of the definitions (T3), all of one run.
+  assert.equal(map.extractions.length, 3);
   assert.deepEqual(
     map.extractions.map((record: { kind: string; format: string; repaired: boolean }) => [record.kind, record.format, record.repaired]),
     [
       ["map-facts", "json-schema", false],
       ["map-behaviors", "json-schema", false],
+      ["map-review", "json-schema", false],
     ],
   );
+  assert.equal(new Set(map.extractions.map((record: { run: string }) => record.run)).size, 1, "one run");
+  assert.equal(model.reviews.length, 1, "one review per draft");
   assert.equal(map.extractions[0].problemsBeforeRepair, undefined, "no repair, no first-attempt problems");
   assert.equal(map.extractions[0].run, map.extractions[1].run, "one run");
   assert.equal(map.extractions[0].generation.provider, "anthropic");
@@ -301,7 +315,8 @@ test("B3: the schemas hold no union, so Claude takes them as they are and never 
   await draft(service, caseId);
   assert.equal(model.sent.length, 2);
   assert.ok(model.sent.every((options) => options.outputFormat !== null));
-  assert.deepEqual(stored(caseFile).extractions.map((record: { format: string }) => record.format), ["json-schema", "json-schema"]);
+  assert.deepEqual(stored(caseFile).extractions.map((record: { format: string }) => record.format), ["json-schema", "json-schema", "json-schema"]);
+  assert.equal(unionCount(model.reviews[0].outputFormat?.schema), 0, "the review's schema has no union either");
 });
 
 test("a quote not found word for word gets one repair request about that item only; the fixed item replaces it by key", async () => {
